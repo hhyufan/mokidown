@@ -1,3 +1,6 @@
+/**
+ * Markdown 预览区样式，覆盖正文排版、块级内容与延迟渲染提示状态。
+ */
 .md-preview {
   flex: 1;
   overflow-y: auto;
@@ -5,12 +8,12 @@
   font-family: var(--font-app);
   line-height: 1.75;
   color: var(--text);
-  // GPU-accelerate scrolling/paint for long documents.
+  // 为长文档的滚动和绘制启用 GPU 加速。
   contain: content;
 
   &--stale {
-    // Very subtle hint that the preview is one step behind the editor
-    // while a deferred render is in flight. Costs nothing to paint.
+    // 当延迟渲染尚未完成时，给出一个非常轻微的提示，表示预览
+    // 比编辑器落后一步。几乎不会带来额外绘制成本。
     opacity: 0.985;
   }
 
@@ -401,7 +404,7 @@
       }
     }
 
-    // Copy button is hidden by request — language tag + optional preview toggle only.
+    // 按要求隐藏复制按钮，只保留语言标签和可选的预览切换按钮。
     .copy-button {
       display: none !important;
     }
@@ -559,6 +562,19 @@
       }
     }
 
+    .language-list-item.no-result {
+      cursor: default;
+      color: var(--text-secondary);
+      pointer-events: none;
+      user-select: none;
+
+      &:hover,
+      &[aria-selected='true'] {
+        background: transparent;
+        color: var(--text-secondary);
+      }
+    }
+
     .codemirror-host {
       overflow: auto;
     }
@@ -645,7 +661,7 @@
 }
 
 
-/* Mermaid */
+/* Mermaid 图表 */
 .md-preview__mermaid {
   margin: 1em 0;
   padding: 16px;
@@ -672,7 +688,7 @@
   }
 }
 
-/* Footnotes */
+/* 脚注 */
 .md-preview .footnotes {
   margin-top: 2em;
   font-size: 0.88em;
@@ -729,7 +745,7 @@
   transition: outline-color 0.25s ease, background-color 0.25s ease;
 }
 
-/* Keyboard key */
+/* 键盘按键 */
 .md-preview__kbd {
   display: inline-block;
   padding: 2px 6px;
@@ -743,7 +759,7 @@
   box-shadow: 0 1px 1px rgba(0,0,0,0.08), inset 0 -1px 0 rgba(0,0,0,0.06);
 }
 
-/* Details / Summary */
+/* 详情 / 摘要 */
 .md-preview details {
   margin: 0.5em 0;
   padding: 0.5em 1em;
@@ -760,14 +776,14 @@
   }
 }
 
-/* Mark / highlight */
+/* 高亮标记 */
 .md-preview mark {
   background: rgba(255, 213, 79, 0.4);
   padding: 1px 4px;
   border-radius: 2px;
 }
 
-/* Strikethrough (GFM) */
+/* 删除线（GFM） */
 .md-preview del {
   color: var(--text-dim);
 }
