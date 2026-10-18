@@ -1,5 +1,6 @@
 import { useMemo, useState } from 'react';
 import { Button, Input, Space } from 'antd';
+import { FolderOpenOutlined } from '@ant-design/icons';
 import { open } from '@tauri-apps/plugin-dialog';
 import { useTranslation } from 'react-i18next';
 import { invoke } from '@tauri-apps/api/core';
@@ -17,9 +18,9 @@ const DEFAULT_CONFIG = {
   fields: [
     { key: 'endpoint', type: 'url', label: '服务地址', placeholder: 'http://127.0.0.1:8787' },
     { key: 'credential', type: 'secret', label: '访问密钥（留空保留现有密钥）' },
-    { key: 'workspace', type: 'directory', label: '选择授权目录' },
+    { key: 'workspace', type: 'directory', label: '选择目录' },
   ],
-  actions: { save: '保存连接配置', test: '保存并测试连接' },
+  actions: { test: '保存并测试连接' },
 };
 
 export default function ExtensionSettings({ entry, act }) {
@@ -46,6 +47,16 @@ export default function ExtensionSettings({ entry, act }) {
   return (
     <Space direction="vertical" style={{ width: '100%' }}>
       {config.help && <p>{config.help}</p>}
+      {typeof config.html === 'string' && config.html.trim() && (
+        // Plugins may embed their own styled HTML. It runs inside a sandboxed
+        // frame without scripts, so it can style/describe but not touch the app.
+        <iframe
+          className="extension-settings__html"
+          sandbox=""
+          title="plugin configuration"
+          srcDoc={`<!doctype html><meta charset="utf-8"><style>${typeof config.css === 'string' ? config.css : ''}</style>${config.html}`}
+        />
+      )}
       {fields.map((field) => {
         if (field.type === 'secret') {
           return (
@@ -61,16 +72,19 @@ export default function ExtensionSettings({ entry, act }) {
         }
         if (field.type === 'directory') {
           return (
-            <Space key={field.key} wrap>
-              <Button onClick={() => act(async () => {
+            <div key={field.key} className="extension-settings__directory">
+              <FolderOpenOutlined className="extension-settings__folder" />
+              <span className="extension-settings__path" title={workspace || ''}>
+                {workspace || t('extensions.noWorkspace')}
+              </span>
+              <Button size="small" onClick={() => act(async () => {
                 const picked = await open({ directory: true, multiple: false });
                 if (typeof picked === 'string') {
                   setWorkspace(picked);
                   await save({ workspace: picked });
                 }
               })}>{field.label}</Button>
-              <span>{workspace || t('extensions.noWorkspace')}</span>
-            </Space>
+            </div>
           );
         }
         return (
@@ -84,9 +98,8 @@ export default function ExtensionSettings({ entry, act }) {
         );
       })}
       <Space wrap>
-        <Button onClick={() => act(() => save())}>{labels.save}</Button>
         {has('url') && (
-          <Button onClick={() => act(async () => {
+          <Button type="primary" onClick={() => act(async () => {
             setDiagnostic('');
             await save();
             const url = `${values.endpoint.trim().replace(/\/+$/, '')}/capabilities`;

@@ -64,3 +64,40 @@
   .language-services__heading { align-items: flex-start; }
   .language-services__detail-heading h4 { font-size: 15px; }
 }
+
+/* Directory picker row: folder icon + path + choose button. */
+.extension-settings__directory {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 10px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface-2, rgba(127, 127, 127, 0.06));
+}
+
+.extension-settings__folder {
+  color: var(--accent);
+  font-size: 14px;
+}
+
+.extension-settings__path {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-family: var(--font-mono, 'JetBrains Mono', monospace);
+  font-size: 12px;
+  color: var(--text-sec);
+}
+
+/* Plugin-provided styled HTML (sandboxed, scripts disabled). */
+.extension-settings__html {
+  width: 100%;
+  height: 140px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: inherit;
+}

@@ -194,10 +194,6 @@ export default function LanguageServices() {
             {!selectedExt.official && <Button size="small" danger disabled={!desktop} onClick={() => act(() => extState.uninstall(selectedExt.descriptor.id))}>{t('extensions.uninstall')}</Button>}
           </div>
           <ExtensionSettings key={selectedExt.descriptor.id} entry={selectedExt.entry} act={act} />
-          <Button onClick={() => act(async () => {
-            const path = await open({ multiple: false, filters: [{ name: 'MokiDown plugin', extensions: ['json'] }] });
-            if (typeof path === 'string') await extState.installPackage(await readTextFile(path));
-          })}>{t('extensions.import')}</Button>
           {extState.runtimeErrors[selectedExt.descriptor.id] && <p role="alert">{extState.runtimeErrors[selectedExt.descriptor.id]}</p>}
         </>}
       {(extState.error || error) && <p className="language-services__error" role="alert">{extState.error || error}</p>}
