@@ -19,6 +19,7 @@ import { externalLink } from '@utils/editorLinks';
 import { getFileLanguage } from '@utils/fileLanguage';
 import { initMonacoShiki, isMonacoShikiReady, getMonacoThemeName } from '@utils/monacoShiki';
 import { setBuffer, getBuffer, registerEditorBufferFlusher } from '@utils/editorBuffer';
+import { registerPluginEditor } from '@/services/pluginEditor';
 import { getDocumentViewState, setDocumentViewState, registerDocumentViewState, requestDocumentViewStateSave } from '@utils/documentViewState';
 import MonacoContextMenu from './MonacoContextMenu';
 import MobileSelectionBar from './MobileSelectionBar';
@@ -329,6 +330,17 @@ const MonacoEditorComponent = forwardRef(function MonacoEditorComponent({ classN
         markTabDirty(tabId, true);
       }
     });
+    const stopPluginEditor = registerPluginEditor(() => currentTabIdRef.current, (edits) => {
+      if (isComposing) throw new Error('EDITOR_COMPOSING: 请等待输入法完成当前输入');
+      const model = editor.getModel();
+      if (!model) throw new Error('Editor model unavailable');
+      editor.pushUndoStop();
+      editor.executeEdits('mokidown.plugin', edits.map((edit) => {
+        const start = model.getPositionAt(edit.from), end = model.getPositionAt(edit.to);
+        return { range: { startLineNumber: start.lineNumber, startColumn: start.column, endLineNumber: end.lineNumber, endColumn: end.column }, text: edit.text, forceMoveMarkers: true };
+      }));
+      editor.pushUndoStop();
+    });
 
     editor.onDidChangeCursorPosition((e) => {
       setCursorPosition({
@@ -490,6 +502,7 @@ const MonacoEditorComponent = forwardRef(function MonacoEditorComponent({ classN
       if (!isComposing) flushAutoSave();
       closedTabs();
       stopBufferFlusher();
+      stopPluginEditor();
       stopSessionView();
       linkOpener.dispose();
       editor.dispose();

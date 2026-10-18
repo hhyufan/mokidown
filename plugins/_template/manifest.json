@@ -1,0 +1,16 @@
+{
+  "format": "mokidown-extension-v1",
+  "id": "your.publisher.plugin-id",
+  "name": "插件显示名",
+  "version": "0.1.0",
+  "permissions": [
+    "editor.read",
+    "commands",
+    "ui.statusBar"
+  ],
+  "fileExtensions": [
+    "md",
+    "txt"
+  ],
+  "entry": "src/index.mjs"
+}

@@ -8,6 +8,8 @@ export default [
   {
     ignores: [
       'dist/**',
+      'dist-app/**',
+      'archive/**',
       'node_modules/**',
       'src-tauri/target/**',
       'installer/dist/**',
@@ -22,6 +24,7 @@ export default [
       // 与本应用无关的错误）。
       'outputs/**',
       'sites/**',
+      'site/**',
       'miaogu-notepad/**',
       'releases/**',
       '.dbg/**',
@@ -51,6 +54,15 @@ export default [
     },
   },
   js.configs.recommended,
+  {
+    files: ['plugins/**/*.mjs', 'shared/*.mjs'],
+    languageOptions: { globals: globals.node },
+    rules: { 'no-unused-vars': ['error', { varsIgnorePattern: '^_', argsIgnorePattern: '^_' }] },
+  },
+  {
+    files: ['plugins/**/client/*.mjs', 'plugins/**/src/*.mjs', 'plugins/sdk/*.mjs', 'shared/*.mjs'],
+    languageOptions: { globals: globals.browser },
+  },
   // Static startup scripts are served directly from public, outside Vite.
   {
     files: ['public/**/*.js'],
@@ -68,7 +80,7 @@ export default [
       ecmaVersion: 'latest',
       sourceType: 'module',
       parserOptions: { ecmaFeatures: { jsx: true } },
-      globals: { ...globals.browser, ...globals.node },
+      globals: { ...globals.browser, ...globals.node, __MOKI_WEB_DEMO__: 'readonly' },
     },
     plugins: { react, 'react-hooks': reactHooks, 'react-refresh': reactRefresh },
     rules: {

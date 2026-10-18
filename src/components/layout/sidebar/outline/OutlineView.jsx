@@ -90,7 +90,6 @@ function OutlineView() {
           paddingLeft = 12 + (item.parentLevel - minLevel + 1) * 14 + item.indent * 10;
         }
 
-
         const isCollapsed = collapsed[i];
 
         return (

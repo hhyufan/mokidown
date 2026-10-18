@@ -2,6 +2,8 @@ import { useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
 import useUpdateStore from '@store/useUpdateStore';
 import useLspStore, { availablePlugins } from '@store/useLspStore';
+import usePluginContributions from '@store/usePluginContributions';
+import useExtensionStore from '@store/useExtensionStore';
 
 const MB = 1048576;
 
@@ -48,6 +50,9 @@ export default function useTasks() {
   const total = useUpdateStore((s) => s.total);
   const updateError = useUpdateStore((s) => s.error);
   const operations = useLspStore((s) => s.operations);
+  const extensionUpdate = useExtensionStore((s) => s.updateState);
+  const pendingExtensionUpdates = useExtensionStore((s) => s.pendingUpdates);
+  const pluginTasks = usePluginContributions((s) => s.pluginTasks);
 
   const tasks = useMemo(() => {
     const list = [];
@@ -81,6 +86,56 @@ export default function useTasks() {
       });
     }
 
+    for (const task of pluginTasks) {
+      list.push({
+        kind: 'plugin-task',
+        id: `${task.pluginId}:${task.id}`,
+        stage: 'pending',
+        name: task.title,
+        status: task.status,
+        percent: task.progress,
+        showBar: task.progress != null,
+        action: 'plugin-command',
+        command: task.command,
+        pluginId: task.pluginId,
+        close: null,
+      });
+    }
+
+    if (!extensionUpdate && pendingExtensionUpdates.length) {
+      list.push({
+        kind: 'extension',
+        id: 'extension-update',
+        stage: 'available',
+        name: pendingExtensionUpdates.map((item) => item.entry.name).join('、'),
+        status: t('extensions.updateAvailableCount', { count: pendingExtensionUpdates.length }),
+        action: 'update-extension',
+        entries: pendingExtensionUpdates.map((item) => item.entry),
+        close: null,
+      });
+    }
+
+    if (extensionUpdate) {
+      list.push({
+        kind: 'extension',
+        id: 'extension-update',
+        stage: extensionUpdate.stage,
+        name: extensionUpdate.name,
+        status: t(
+          extensionUpdate.stage === 'updating'
+            ? 'extensions.updating'
+            : extensionUpdate.stage === 'done'
+              ? 'extensions.updated'
+              : 'extensions.updateFailed',
+        ),
+        percent: undefined,
+        showBar: false,
+        close: extensionUpdate.stage === 'error' ? 'dismiss' : null,
+        meta: '',
+        error: extensionUpdate.error || '',
+      });
+    }
+
     const state = useLspStore.getState();
     const names = new Map();
     for (const plugin of availablePlugins(state)) names.set(plugin.id, plugin.name);
@@ -109,7 +164,7 @@ export default function useTasks() {
     }
 
     return list;
-  }, [stage, version, downloaded, total, updateError, operations, t]);
+  }, [stage, version, downloaded, total, updateError, operations, extensionUpdate, pendingExtensionUpdates, pluginTasks, t]);
 
   const active = useMemo(() => {
     // 优先"正在进行"的：更新在前（它可能已经跑到下载/安装），其次是语言服务；
@@ -118,6 +173,12 @@ export default function useTasks() {
       tasks.find((task) => task.kind === 'update' && ACTIVE_STAGES.has(task.stage)) ||
       tasks.find((task) => task.kind === 'plugin' && BUSY_PHASES.has(task.stage));
     if (running) return running;
+    const extensionTask =
+      tasks.find((task) => task.kind === 'extension' && task.stage === 'updating')
+      || tasks.find((task) => task.kind === 'extension');
+    if (extensionTask) return extensionTask;
+    const pluginTask = tasks.find((task) => task.kind === 'plugin-task');
+    if (pluginTask) return pluginTask;
     return tasks.find((task) => task.kind === 'update' && NOTICE_STAGES.has(task.stage)) || null;
   }, [tasks]);
 

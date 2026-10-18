@@ -205,3 +205,20 @@
     transition: none;
   }
 }
+
+.task-action {
+  flex: 0 0 auto;
+  white-space: nowrap;
+  border: 0;
+  border-radius: 5px;
+  background: var(--accent);
+  color: #fff;
+  font-size: 12px;
+  line-height: 1;
+  padding: 6px 10px;
+  cursor: pointer;
+}
+
+.task-action:hover {
+  filter: brightness(1.08);
+}

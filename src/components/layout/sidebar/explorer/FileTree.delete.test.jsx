@@ -12,7 +12,7 @@ vi.mock('@hooks/useFileManager', () => ({ useFileManager: () => ({ loadDirectory
 vi.mock('@tauri-apps/plugin-dialog', () => ({ confirm: vi.fn() }));
 vi.mock('@utils/tauriApi', () => ({ deleteFile: vi.fn(), isSafUri: () => false, safDisplayName: (path) => path }));
 vi.mock('@store/useNotificationStore', () => ({ default: { getState: () => ({ notify: mock.notify }) } }));
-vi.mock('@/services/syncEngine', () => ({ syncEngine: {} }));
+
 vi.mock('react-i18next', () => ({
   useTranslation: () => ({ t: (key) => key }),
   // @/i18n 初始化时要用它。缺了它，只要有依赖链把 @/i18n 拉进来

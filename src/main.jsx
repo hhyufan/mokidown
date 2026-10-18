@@ -16,7 +16,12 @@ import ThemedConfigProvider from '@/antd/ThemedConfigProvider';
 import { preloadMonacoEditor } from '@utils/monacoRuntimeBoot';
 import { announceMainWindowReady } from '@utils/startupHandover';
 import { installTooltipHygiene } from '@utils/tooltipHygiene';
+import { installWebThemeBridge } from '@utils/webThemeBridge';
 import './i18n';
+
+// 跨域 iframe（官网把 demo 托管在 GitHub Pages / OSS 时）无法读取 DOM，
+// 由父页面通过 postMessage 下发主题；桌面端与同源构建下为空操作。
+installWebThemeBridge();
 import '@styles/index.scss';
 import '@styles/prism-theme.scss';
 import '@styles/antd-overrides.scss';

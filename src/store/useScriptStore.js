@@ -61,7 +61,7 @@ const useScriptStore = create(persist((set, get) => ({
   },
 }), {
   name: 'mokidown-script-console',
-  // Interpreter paths belong to this device, not cloud-synced settings.
+  
   partialize: (state) => ({ height: state.height, runtimePaths: state.runtimePaths }),
 }));
 

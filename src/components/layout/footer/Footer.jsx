@@ -3,15 +3,18 @@ import { useHorizontalDragScroll } from '@hooks/useHorizontalDragScroll';
 import { useTranslation } from 'react-i18next';
 import { Dropdown, Tooltip } from 'antd';
 import useEditorStore from '@store/useEditorStore';
-import useConfigStore from '@store/useConfigStore';
 import useUpdateStore from '@store/useUpdateStore';
+import usePluginContributions from '@store/usePluginContributions';
+import { sendToPlugin } from '@utils/pluginBus';
 import { useFileManager } from '@hooks/useFileManager';
 import useTasks from '@hooks/useTasks';
 import { getDirectoryContents, isSafUri, safDisplayName, showInExplorer } from '@utils/tauriApi';
+import { isWebDemo, notifyWebDemo } from '@utils/webDemo';
 import { splitPath, buildFullPath } from '@utils/pathUtils';
-import SyncStatusIndicator from '@components/ui/SyncStatusIndicator';
+
 import FileTypeIcon from '@components/ui/FileTypeIcon';
 import TaskStatusIndicator from '@components/ui/TaskStatusIndicator';
+import PluginStatusPill from './PluginStatusPill';
 import { isAndroidRuntime } from '@utils/platform';
 import './footer.scss';
 
@@ -61,11 +64,12 @@ function ChevronIcon() {
 function Footer() {
   const { t } = useTranslation();
   const { toggleSidebar, viewMode, toggleEditPreview } = useEditorStore();
+  const pluginStatus = usePluginContributions((s) => s.statusBar);
   const tabs = useEditorStore((s) => s.tabRenderList);
   const activeTabId = useEditorStore((s) => s.activeTabId);
   const cursorPosition = useEditorStore((s) => s.cursorPosition);
   const characterCount = useEditorStore((s) => s.characterCount);
-  const syncEnabled = useConfigStore((s) => s.syncEnabled);
+  
   const tasksOpen = useUpdateStore((s) => s.open);
   // 当前该在状态栏露出的任务（更新或语言服务安装），以及它的确定进度（没有则为 undefined）。
   const { active: activeTask } = useTasks();
@@ -143,6 +147,10 @@ function Footer() {
   }, [activeTab?.path]);
 
   const handleSegmentClick = useCallback(async (index) => {
+    if (isWebDemo()) {
+      notifyWebDemo('在网页预览中不能浏览本机文件夹，请使用桌面版 MokiDown。');
+      return;
+    }
     if (openDropdown === index) {
       setOpenDropdown(null);
       return;
@@ -318,13 +326,17 @@ function Footer() {
         <span>{activeTab?.encoding || 'UTF-8'}</span>
         <span className="footer__sep" />
         <span>{activeTab?.lineEnding || 'LF'}</span>
-        {/* 在线/离线状态随云同步总开关显示。 */}
-        {syncEnabled && (
-          <>
-            <span className="footer__sep" />
-            <SyncStatusIndicator />
-          </>
-        )}
+        {pluginStatus.length > 0 && <span className="footer__sep" />}
+        {pluginStatus.map((item) => (
+          <PluginStatusPill
+            key={`${item.pluginId}:${item.id}`}
+            item={item}
+            onActivate={(action) => {
+              const command = action?.command || item.command;
+              if (command && usePluginContributions.getState().commands[`${item.pluginId}:${command}`]) sendToPlugin(item.pluginId, { type: 'command', id: command, args: action?.args });
+            }}
+          />
+        ))}
       </div>
     </footer>
   );

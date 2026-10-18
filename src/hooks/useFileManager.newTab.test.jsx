@@ -13,10 +13,7 @@ vi.mock('@tauri-apps/api/core', () => ({ invoke: vi.fn() }));
 vi.mock('@tauri-apps/plugin-dialog', () => ({ open: vi.fn(), save: vi.fn() }));
 const language = vi.hoisted(() => ({ current: 'en' }));
 vi.mock('@/i18n', () => ({ default: { t: (key) => key === 'file.untitledName' ? (language.current === 'zh' ? '未命名.md' : 'Untitled.md') : key } }));
-vi.mock('@/services/syncEngine', () => ({
-  syncEngine: { registerLocalDocument: vi.fn(), queueLocalUpsert: vi.fn(async () => ({ ok: true })) },
-  isCloudPath: () => false, fileIdFromCloudPath: () => null,
-}));
+
 let disk;
 beforeEach(() => {
   vi.clearAllMocks(); language.current = 'en'; disk = new Map(); clearDiskBaselines();

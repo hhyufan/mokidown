@@ -3,8 +3,10 @@ import { getVersion } from '@tauri-apps/api/app';
 import { useTranslation } from 'react-i18next';
 import useUpdateStore from '@store/useUpdateStore';
 import useLspStore from '@store/useLspStore';
+import useExtensionStore from '@store/useExtensionStore';
 import useEditorStore from '@store/useEditorStore';
 import useTasks from '@hooks/useTasks';
+import { sendToPlugin } from '@utils/pluginBus';
 import './task-list.scss';
 
 // 关闭一条任务：进行中的安装是真取消，失败的只是把记录去掉，
@@ -41,7 +43,7 @@ export default function TaskList() {
   // 必须放在下面的提前 return 之前，否则 Hooks 调用顺序会随 open 变化。
   const { open, dismiss } = update;
   useEffect(() => {
-    if (open && tasks.length === 0) dismiss();
+    if (open && tasks.length === 0 && useExtensionStore.getState().pendingUpdates.length === 0) dismiss();
   }, [open, tasks.length, dismiss]);
 
   // 面板的展开只由用户点击状态栏触发（showTasks），没有任何"自动弹出来"的路径。
@@ -66,6 +68,29 @@ export default function TaskList() {
                   {task.name}
                   {task.kind === 'update' && task.version ? ` · v${task.version}` : ''}
                 </span>
+                {task.action === 'plugin-command' && (
+                  <button
+                    type="button"
+                    className="task-action"
+                    onClick={() => sendToPlugin(task.pluginId, { type: 'command', id: task.command, args: task.args })}
+                  >
+                    {t('tasks.run')}
+                  </button>
+                )}
+                {task.action === 'update-extension' && (
+                  <button
+                    type="button"
+                    className="task-action"
+                    aria-label={t('extensions.updateNow')}
+                    onClick={() => {
+                      for (const entry of task.entries || []) {
+                        void useExtensionStore.getState().updatePlugin(entry).catch(() => {});
+                      }
+                    }}
+                  >
+                    {t('extensions.updateNow')}
+                  </button>
+                )}
                 {task.close && (
                   <button
                     type="button"

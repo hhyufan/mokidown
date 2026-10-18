@@ -1,13 +1,17 @@
 import AppDialog from './AppDialog';
 import { useEffect, useMemo, useState } from 'react';
-import { Button, Input, Select, Switch, Tooltip } from 'antd';
-import { AppstoreOutlined, ArrowLeftOutlined, CheckOutlined, CloudDownloadOutlined, PlusOutlined, ReloadOutlined,
+import { Button, Input, Select, Switch, Tooltip, message } from 'antd';
+import { ArrowLeftOutlined, CheckOutlined, CloudDownloadOutlined, PlusOutlined, ReloadOutlined,
   SearchOutlined, StopOutlined, DeleteOutlined, GlobalOutlined, LinkOutlined } from '@ant-design/icons';
 import { useTranslation } from 'react-i18next';
 import useLspStore, { availablePlugins, selectLanguagePlugin } from '@store/useLspStore';
+import useExtensionStore, { OFFICIAL_EXTENSIONS } from '@store/useExtensionStore';
 import { openExternal } from '@utils/tauriApi';
 import { getMaterialIcons, loadMaterialIcons } from '@utils/materialIcons';
 import TaskRing from '@components/ui/TaskRing';
+import { open } from '@tauri-apps/plugin-dialog';
+import { readTextFile } from '@tauri-apps/plugin-fs';
+import ExtensionSettings from './ExtensionSettings';
 // JavaScript / TypeScript 使用网上获取的官方品牌图标（devicon，MIT License）：
 // https://github.com/devicons/devicon
 import javascriptLogo from '@/assets/devicon/javascript-original.svg';
@@ -33,6 +37,8 @@ const LANGUAGE_ICONS = {
 // 并排等大（JS 居左、TS 居右），共同代表二者。
 const TS_JS = 'TS_JS';
 
+const kindLabel = (_descriptor, language) => String(language || '').startsWith('zh') ? '服务插件' : 'Service plugin';
+
 /**
  * 解析插件应使用的图标组件名。
  *
@@ -48,12 +54,14 @@ function iconName(plugin) {
   return mapped ? LANGUAGE_ICONS[mapped] : null;
 }
 
+
 export default function LanguageServices() {
   const { t, i18n } = useTranslation();
   const state = useLspStore();
+  const extState = useExtensionStore();
   const [query, setQuery] = useState('');
-  const [filter, setFilter] = useState('marketplace');
   const [selectedId, setSelectedId] = useState(null);
+  const [selectedExtId, setSelectedExtId] = useState(null);
   const [adding, setAdding] = useState(false);
   const [addMode, setAddMode] = useState('source');
   const [source, setSource] = useState('');
@@ -66,11 +74,29 @@ export default function LanguageServices() {
   const plugins = useMemo(() => availablePlugins(state), [state]);
   const installedIds = new Set(state.installed.map((plugin) => plugin.manifest.id));
   const filtered = plugins.filter((plugin) => {
-    if (filter === 'installed' && !installedIds.has(plugin.id)) return false;
     const text = `${plugin.name} ${plugin.publisher} ${plugin.languages.join(' ')} ${plugin.description} ${plugin.descriptionZh || ''}`.toLowerCase();
     return text.includes(query.trim().toLowerCase());
   });
   const selected = plugins.find((plugin) => plugin.id === selectedId);
+  const officialIds = new Set(OFFICIAL_EXTENSIONS.map((entry) => entry.id));
+  const extensionCards = [
+    ...OFFICIAL_EXTENSIONS.map((descriptor) => ({
+      descriptor,
+      entry: extState.installed.find((entry) => entry.package.id === descriptor.id)
+        || { package: descriptor, enabled: false, settings: {} },
+      official: true,
+    })),
+    ...extState.installed
+      .filter((entry) => !officialIds.has(entry.package.id))
+      .map((entry) => ({ descriptor: entry.package, entry, official: false })),
+    ...extState.catalog
+      .filter((item) => !officialIds.has(item.id) && !extState.installed.some((entry) => entry.package.id === item.id))
+      .map((item) => ({ descriptor: item, entry: null, official: false, catalogItem: true })),
+  ].filter((card) => {
+    const text = `${card.descriptor.name} ${card.descriptor.description || ''} ${card.descriptor.descriptionZh || ''}`.toLowerCase();
+    return text.includes(query.trim().toLowerCase());
+  });
+  const selectedExt = extensionCards.find((card) => card.descriptor.id === selectedExtId);
   useEffect(() => { useLspStore.getState().refresh(); }, []);
   useEffect(() => {
     // 品牌图标模块与文件树共用同一个缓存加载器，加载完成前回退字母徽标。
@@ -148,12 +174,39 @@ export default function LanguageServices() {
     </div>
     {!desktop && <div className="language-services__notice">{t('languageServices.desktopOnly')}</div>}
     {(error || state.loadError) && !adding && <div role="alert" className="language-services__error">{error || state.loadError}</div>}
-    {!selected ? <>
+    {selectedExt ? <div className="language-services__detail">
+      <Button type="text" size="small" icon={<ArrowLeftOutlined />} onClick={() => setSelectedExtId(null)}>{t('languageServices.back')}</Button>
+      <div className="language-services__detail-heading">
+        <span className="language-services__icon language-services__icon--large" aria-hidden="true">{(selectedExt.descriptor.name || '?').slice(0, 2)}</span>
+        <div><h4>{selectedExt.descriptor.name}</h4>
+          <p>{kindLabel(selectedExt.descriptor, i18n.language)} · v{selectedExt.entry?.package?.version || selectedExt.descriptor.version || '1.0.0'}</p></div>
+      </div>
+      <p className="language-services__detail-description">{i18n.language.startsWith('zh') ? selectedExt.descriptor.descriptionZh || selectedExt.descriptor.description : selectedExt.descriptor.description || selectedExt.descriptor.descriptionZh}</p>
+      {selectedExt.catalogItem
+        ? <Button type="primary" disabled={!desktop} onClick={() => act(() => extState.installFromCatalog(selectedExt.descriptor))}>{t('extensions.install')}</Button>
+        : <>
+          <div className="language-services__detail-actions">
+            <span>{t(selectedExt.entry?.enabled ? 'extensions.enabled' : 'extensions.disabled')}</span>
+            <Switch disabled={!desktop} checked={Boolean(selectedExt.entry?.enabled)} onChange={(value) => act(async () => {
+              if (value) await extState.ensureInstalled(selectedExt.descriptor.id);
+              extState.toggle(selectedExt.descriptor.id, value);
+            })} />
+            {!selectedExt.official && <Button size="small" danger disabled={!desktop} onClick={() => act(() => extState.uninstall(selectedExt.descriptor.id))}>{t('extensions.uninstall')}</Button>}
+          </div>
+          <ExtensionSettings key={selectedExt.descriptor.id} entry={selectedExt.entry} act={act} />
+          <Button onClick={() => act(async () => {
+            const path = await open({ multiple: false, filters: [{ name: 'MokiDown plugin', extensions: ['json'] }] });
+            if (typeof path === 'string') await extState.installPackage(await readTextFile(path));
+          })}>{t('extensions.import')}</Button>
+          {extState.runtimeErrors[selectedExt.descriptor.id] && <p role="alert">{extState.runtimeErrors[selectedExt.descriptor.id]}</p>}
+        </>}
+      {(extState.error || error) && <p className="language-services__error" role="alert">{extState.error || error}</p>}
+    </div> : !selected ? <>
       <div className="language-services__search">
         <Input prefix={<SearchOutlined />} allowClear placeholder={t('languageServices.search')} value={query}
           onChange={(event) => setQuery(event.target.value)} aria-label={t('languageServices.search')} />
-        <Tooltip title={t('languageServices.add')} placement="top" mouseEnterDelay={0.3}>
-          <Button icon={<PlusOutlined />} aria-label={t('languageServices.add')}
+        <Tooltip title={t('languageServices.addPlugin')} placement="top" mouseEnterDelay={0.3}>
+          <Button icon={<PlusOutlined />} aria-label={t('languageServices.addPlugin')}
             onClick={() => { setError(''); setAdding(true); }} disabled={!desktop} />
         </Tooltip>
         <Tooltip title={t('languageServices.refresh')} placement="top" mouseEnterDelay={0.3}>
@@ -162,6 +215,13 @@ export default function LanguageServices() {
               for (const url of state.sources) await state.addCatalog(url);
               await state.refresh();
             })} />
+        </Tooltip>
+        <Tooltip title={t('extensions.checkUpdates')} placement="top" mouseEnterDelay={0.3}>
+          <Button icon={<CloudDownloadOutlined />} aria-label={t('extensions.checkUpdates')} disabled={!desktop}
+            onClick={async () => {
+              const updates = await extState.checkUpdates();
+              if (!updates.length) message.success(t('extensions.upToDate'));
+            }} />
         </Tooltip>
         <Tooltip title={t('languageServices.accelerator')} placement="top" mouseEnterDelay={0.3}>
           <Button icon={<LinkOutlined />} aria-label={t('languageServices.accelerator')}
@@ -178,13 +238,6 @@ export default function LanguageServices() {
           <p>{t('languageServices.acceleratorHint')}</p>
         </div>
       )}
-      <div className="language-services__tabs" role="tablist">
-        {['marketplace', 'installed'].map((key) => <button key={key} type="button" role="tab" aria-selected={filter === key}
-          className={filter === key ? 'is-active' : ''} onClick={() => setFilter(key)}>
-          {key === 'marketplace' ? <AppstoreOutlined /> : <CheckOutlined />}{t(`languageServices.${key}`)}
-          <span>{key === 'marketplace' ? plugins.length : state.installed.length}</span>
-        </button>)}
-      </div>
       <div className="language-services__list">
         {filtered.map((plugin) => <article key={plugin.id} className="language-services__card">
           <button className="language-services__summary" type="button" onClick={() => setSelectedId(plugin.id)}>
@@ -196,7 +249,27 @@ export default function LanguageServices() {
           <div className="language-services__card-bottom"><span className="language-services__languages">{plugin.languages.join(' · ')}</span>{actions(plugin)}</div>
           {state.operations[plugin.id]?.phase === 'error' && <p className="language-services__error" role="alert">{state.operations[plugin.id].text}</p>}
         </article>)}
-        {!filtered.length && <div className="language-services__empty"><SearchOutlined /><p>{t(filter === 'installed' && !query ? 'languageServices.noInstalled' : 'languageServices.noResults')}</p></div>}
+        {extensionCards.map(({ descriptor, entry, official, catalogItem }) => <article key={descriptor.id} className="language-services__card">
+          <button className="language-services__summary" type="button" onClick={() => setSelectedExtId(descriptor.id)}>
+            <span className="language-services__icon" aria-hidden="true">{(descriptor.name || '?').slice(0, 2)}</span>
+            <span className="language-services__summary-content">
+              <strong>{descriptor.name}{official && <span className="service-extensions__badge">{t('extensions.builtin')}</span>}</strong>
+              <span className="language-services__description">{i18n.language.startsWith('zh') ? descriptor.descriptionZh || descriptor.description : descriptor.description || descriptor.descriptionZh}</span>
+              <span className="language-services__meta">{kindLabel(descriptor, i18n.language)}{entry?.package?.version ? ` · v${entry.package.version}` : ''}</span>
+            </span>
+          </button>
+          <div className="language-services__card-bottom">
+            <span className="language-services__languages">{catalogItem ? t('extensions.notInstalled') : kindLabel(descriptor)}</span>
+            {catalogItem
+              ? <Button size="small" type="primary" icon={<CloudDownloadOutlined />} disabled={!desktop} onClick={() => act(() => extState.installFromCatalog(descriptor))}>{t('extensions.install')}</Button>
+              : <Button size="small" icon={entry?.enabled ? <StopOutlined /> : <CheckOutlined />} disabled={!desktop} onClick={() => act(async () => {
+                const next = !entry?.enabled;
+                if (next) await extState.ensureInstalled(descriptor.id);
+                extState.toggle(descriptor.id, next);
+              })}>{t(entry?.enabled ? 'languageServices.disable' : 'languageServices.enable')}</Button>}
+          </div>
+        </article>)}
+        {!filtered.length && !extensionCards.length && <div className="language-services__empty"><SearchOutlined /><p>{t(query ? 'languageServices.noResults' : 'languageServices.noInstalled')}</p></div>}
       </div>
     </> : <div className="language-services__detail">
       <Button type="text" size="small" icon={<ArrowLeftOutlined />} onClick={() => setSelectedId(null)}>{t('languageServices.back')}</Button>
@@ -222,8 +295,8 @@ export default function LanguageServices() {
         {state.operations[selected.id]?.text || state.statuses[selected.id]?.message}
       </pre>}
     </div>}
-    <AppDialog open={adding} title={t('languageServices.add')} onCancel={() => setAdding(false)}
-      onOk={add} okText={t('languageServices.add')} cancelText={t('languageServices.cancel')} confirmLoading={addBusy} width={560}>
+    <AppDialog open={adding} title={t('languageServices.addPlugin')} onCancel={() => setAdding(false)}
+      onOk={add} okText={t('languageServices.addPlugin')} cancelText={t('languageServices.cancel')} confirmLoading={addBusy} width={560}>
       <div className="language-services__add">
         <Select value={addMode} onChange={setAddMode} options={[
           { value: 'source', label: t('languageServices.source') }, { value: 'manifest', label: t('languageServices.manifest') },

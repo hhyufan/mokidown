@@ -18,9 +18,6 @@ const useThemeStore = create(
       theme: 'light',
       themeUpdatedAt: 0,
 
-      /**
-       * 显式设置主题，同时记录可用于云同步比较的更新时间。
-       */
       setTheme: (theme, meta = {}) => {
         document.documentElement.dataset.theme = theme;
         set({

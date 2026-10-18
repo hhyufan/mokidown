@@ -1,10 +1,25 @@
 import { create } from 'zustand';
 import i18n from '@/i18n';
 import { canCheckUpdates, checkForUpdate, installUpdate, relaunchApp } from '@utils/appUpdater';
+import { isWebDemo, notifyWebDemo } from '@utils/webDemo';
 import useNotificationStore from '@store/useNotificationStore';
+import useExtensionStore from '@store/useExtensionStore';
 
 let startupChecked = false;
 let updateResource = null;
+
+/** Check service plugins alongside the app; ask before updating them. */
+async function checkPluginUpdates() {
+  try {
+    const updates = await useExtensionStore.getState().checkUpdates();
+    if (!updates.length) return;
+    // Only detect: the update itself becomes a pending task the user can run.
+    if (updates.length) useUpdateStore.getState().showTasks();
+  } catch {
+    /* plugin updates are best-effort */
+  }
+}
+
 const busy = (stage) => ['checking', 'downloading', 'installing', 'restarting'].includes(stage);
 const releaseResource = async () => {
   const resource = updateResource;
@@ -21,6 +36,11 @@ const useUpdateStore = create((set, get) => ({
   downloaded: 0,
   total: 0,
   check: async ({ startup = false } = {}) => {
+    if (isWebDemo()) {
+      if (!startup) notifyWebDemo('检查更新需要在桌面版 MokiDown 中使用。');
+      return;
+    }
+    void checkPluginUpdates();
     if (!canCheckUpdates()) return;
     const manual = !startup;
     if (startup) {
@@ -59,7 +79,7 @@ const useUpdateStore = create((set, get) => ({
         // 已是最新版本：这种事不该用一个还得手动关闭的弹窗来告知。
         // 用右上角那套通知（NotificationContainer），它会自己消失。
         // 启动时的静默检查不给提示——否则每次开机都弹一句"已是最新版本"。
-        set({ stage: 'up-to-date', open: false });
+        set({ stage: 'up-to-date', open: useExtensionStore.getState().pendingUpdates.length > 0 });
         if (manual) useNotificationStore.getState().notify('info', i18n.t('notification.upToDate'));
       }
     } catch (error) {
