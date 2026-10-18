@@ -658,29 +658,17 @@ html[data-theme='dark'] .le-gutter {
 /* Vertical feature pager: one capability per screen, the live demo last.
    Scrolling is a plain document flow — no CSS scroll snapping — so wheel and
    programmatic scrolling never fight each other. */
+/* Hide the vertical scrollbar entirely; scrolling remains available. */
 html {
-  scrollbar-width: thin;
-  scrollbar-color: rgba(127, 127, 127, 0.45) transparent;
+  scrollbar-width: none;
+  -ms-overflow-style: none;
 }
 
-::-webkit-scrollbar {
-  width: 10px;
-  height: 10px;
-}
-
-::-webkit-scrollbar-track {
-  background: transparent;
-}
-
-::-webkit-scrollbar-thumb {
-  background: rgba(127, 127, 127, 0.45);
-  border: 3px solid transparent;
-  border-radius: 999px;
-  background-clip: content-box;
-}
-
-::-webkit-scrollbar-thumb:hover {
-  background-color: rgba(127, 127, 127, 0.7);
+html::-webkit-scrollbar,
+body::-webkit-scrollbar {
+  width: 0;
+  height: 0;
+  display: none;
 }
 
 .feature-sections {
