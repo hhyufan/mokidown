@@ -577,3 +577,42 @@
   color: var(--text-sec);
   font-size: 11px;
 }
+
+/* Collapsible plugin panel header, matching the local-history row. */
+.sidebar__plugin-panel-toggle {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+  padding: 4px;
+  border: 0;
+  border-radius: 5px;
+  background: transparent;
+  color: var(--text-sec);
+  font: inherit;
+  font-size: 11px;
+  cursor: pointer;
+}
+
+.sidebar__plugin-panel-toggle:hover {
+  background: var(--hover);
+}
+
+.sidebar__plugin-panel-chevron {
+  transition: transform 0.15s ease;
+}
+
+.sidebar__plugin-panel-chevron.is-open {
+  transform: rotate(90deg);
+}
+
+.sidebar__plugin-panel-title {
+  flex: 1;
+  text-align: left;
+}
+
+.sidebar__plugin-panel-empty {
+  padding: 4px 6px;
+  color: var(--text-sec);
+  font-size: 11px;
+}
