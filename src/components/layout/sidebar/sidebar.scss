@@ -524,43 +524,91 @@
   height: 12px;
 }
 
-/* Generic plugin panel (entries and title are plugin-provided). */
-.sidebar__plugin-panel {
+/* Keep the plugin panel header on one line (12px chevron, ellipsized title). */
+
+
+
+/* Plugin panel reuses the timeline classes; only the chevron is scoped. */
+
+
+
+
+
+/* Generic sidebar panel fed by plugins (self-contained layout). */
+.plugin-panel {
   border-top: 1px solid var(--border);
-  padding: 8px 8px 4px;
   flex: 0 0 auto;
-  max-height: 220px;
-  overflow-y: auto;
+  min-width: 0;
 }
 
-.sidebar__plugin-panel-header {
+.plugin-panel__toggle {
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  padding: 0 4px 6px;
+  gap: 6px;
+  width: 100%;
+  padding: 6px 8px;
+  border: 0;
+  background: transparent;
   color: var(--text-sec);
+  font: inherit;
   font-size: 11px;
+  cursor: pointer;
 }
 
-.sidebar__plugin-panel-count {
+.plugin-panel__toggle:hover {
+  background: var(--hover);
+}
+
+.plugin-panel__chevron {
+  flex: 0 0 12px;
+  width: 12px;
+  height: 12px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  transition: transform 0.15s ease;
+}
+
+.plugin-panel__chevron svg {
+  width: 12px;
+  height: 12px;
+  display: block;
+}
+
+.plugin-panel__chevron.is-open {
+  transform: rotate(90deg);
+}
+
+.plugin-panel__title {
+  flex: 1;
+  min-width: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  text-align: left;
+}
+
+.plugin-panel__count {
+  flex: 0 0 auto;
   opacity: 0.7;
 }
 
-.sidebar__plugin-panel-list {
+.plugin-panel__list {
   list-style: none;
   margin: 0;
-  padding: 0;
+  padding: 0 0 6px;
+  max-height: 180px;
+  overflow-y: auto;
 }
 
-.sidebar__plugin-panel-item {
+.plugin-panel__item {
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 8px;
   width: 100%;
-  padding: 5px 6px;
+  padding: 5px 8px;
   border: 0;
-  border-radius: 5px;
   background: transparent;
   color: var(--text);
   font: inherit;
@@ -569,101 +617,72 @@
   cursor: pointer;
 }
 
-.sidebar__plugin-panel-item:hover {
+.plugin-panel__item:hover {
   background: var(--hover);
 }
 
-.sidebar__plugin-panel-meta {
+.plugin-panel__meta {
   color: var(--text-sec);
   font-size: 11px;
 }
 
-/* Collapsible plugin panel header, matching the local-history row. */
-.sidebar__plugin-panel-toggle {
+.plugin-panel__empty {
+  padding: 4px 8px;
+  color: var(--text-sec);
+  font-size: 11px;
+}
+
+/* Panel header row mirrors the local history toggle + refresh button. */
+.plugin-panel__header {
   display: flex;
   align-items: center;
-  gap: 6px;
-  width: 100%;
-  padding: 4px;
+  gap: 2px;
+}
+
+.plugin-panel__header .plugin-panel__toggle {
+  flex: 1;
+  min-width: 0;
+}
+
+.plugin-panel__refresh {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
   border: 0;
   border-radius: 5px;
   background: transparent;
   color: var(--text-sec);
-  font: inherit;
-  font-size: 11px;
   cursor: pointer;
 }
 
-.sidebar__plugin-panel-toggle:hover {
+.plugin-panel__refresh:hover {
   background: var(--hover);
+  color: var(--text);
 }
 
-.sidebar__plugin-panel-chevron {
-  transition: transform 0.15s ease;
+.plugin-panel__refresh svg {
+  width: 12px;
+  height: 12px;
 }
 
-.sidebar__plugin-panel-chevron.is-open {
-  transform: rotate(90deg);
+/* Match the local-history typography. */
+.plugin-panel__toggle {
+  font-size: 11px;
+  font-weight: 600;
 }
 
-.sidebar__plugin-panel-title {
-  flex: 1;
-  text-align: left;
+.plugin-panel__title {
+  font-size: 11px;
+  font-weight: 600;
 }
 
-.sidebar__plugin-panel-empty {
-  padding: 4px 6px;
-  color: var(--text-sec);
+.plugin-panel__label {
   font-size: 11px;
 }
 
-/* Keep the plugin panel header on one line (12px chevron, ellipsized title). */
-.sidebar__plugin-panel-chevron {
-  flex: 0 0 12px;
-  width: 12px;
-  height: 12px;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-}
-
-.sidebar__plugin-panel-chevron svg {
-  width: 12px;
-  height: 12px;
-  display: block;
-}
-
-.sidebar__plugin-panel-title {
-  flex: 1;
-  min-width: 0;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-/* Plugin panel reuses the timeline classes; only the chevron is scoped. */
-.sidebar__plugin-panel-chevron {
-  flex: 0 0 12px;
-  width: 12px;
-  height: 12px;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  transition: transform 0.15s ease;
-}
-
-.sidebar__plugin-panel-chevron svg {
-  width: 12px;
-  height: 12px;
-  display: block;
-}
-
-.sidebar__plugin-panel-chevron.is-open {
-  transform: rotate(90deg);
-}
-
-.sidebar__plugin-panel-empty {
-  padding: 4px 8px;
-  color: var(--text-sec);
-  font-size: 11px;
+.plugin-panel__meta {
+  font-size: 10px;
 }
