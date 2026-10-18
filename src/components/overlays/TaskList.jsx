@@ -1,5 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
-import { getVersion } from '@tauri-apps/api/app';
+import { useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
 import useUpdateStore from '@store/useUpdateStore';
 import useLspStore from '@store/useLspStore';
@@ -23,21 +22,9 @@ export default function TaskList() {
   const update = useUpdateStore();
   const { tasks } = useTasks();
   const hasUnsaved = useEditorStore((s) => s.tabRenderList.some((tab) => tab.modified));
-  const [currentVersion, setCurrentVersion] = useState('');
   useEffect(() => {
-    getVersion()
-      .then(setCurrentVersion)
-      .catch(() => {});
     void useUpdateStore.getState().check({ startup: true });
   }, []);
-
-  const versionRow = useMemo(
-    () =>
-      update.stage === 'available' && currentVersion
-        ? `v${currentVersion} → v${update.version}`
-        : '',
-    [update.stage, update.version, currentVersion],
-  );
 
   // 最后一条任务被关掉（或被取消）后面板自己收起，不留一个"没有进行中的任务"的空壳。
   // 必须放在下面的提前 return 之前，否则 Hooks 调用顺序会随 open 变化。
@@ -59,15 +46,12 @@ export default function TaskList() {
       </div>
       <div className="task-list">
         {tasks.map((task) => {
-          // 数字进度那一行的左侧内容：下载量优先，其次是版本对比。
-          const metaLeft = task.meta || (task.kind === 'update' ? versionRow : '');
+          // 进度行左侧只放 task.meta；版本对比行已按设计移除。
+          const metaLeft = task.meta || '';
           return (
             <div className={`task-item${task.leaving ? ' is-leaving' : ''}`} key={`${task.kind}-${task.id}`}>
               <div className="ti-row">
-                <span className="ti-name">
-                  {task.name}
-                  {task.kind === 'update' && task.version ? ` · v${task.version}` : ''}
-                </span>
+                <span className="ti-name">{task.name}</span>
                 {task.action === 'plugin-command' && (
                   <button
                     type="button"
@@ -127,12 +111,6 @@ export default function TaskList() {
 
             {task.kind === 'update' && update.stage === 'available' && (
               <>
-                {update.body && (
-                  <details className="task-notes">
-                    <summary>{t('tasks.releaseNotes')}</summary>
-                    <div>{update.body}</div>
-                  </details>
-                )}
                 <p className="task-hint">{t('update.consent')}</p>
                 {hasUnsaved && (
                   <p className="task-warning" role="status">
