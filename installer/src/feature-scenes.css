@@ -524,3 +524,9 @@ html[data-theme='dark'] .scene-theme-frame[data-theme='light'] {
   --accent-light: #e8f0ff;
   --hover: #f0f0f2;
 }
+
+/* The theme card swaps between light and dark; a 1px border reads as a white
+   frame around the dark card, so let the shadow define the edge instead. */
+.scene-theme-demo {
+  border: 0;
+}
