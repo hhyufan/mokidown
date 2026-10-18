@@ -622,5 +622,6 @@
   "tasks.run": "Run",
   "sync.useRemote": "Use cloud version",
   "sync.keepLocal": "Keep local",
-  "extensions.checking": "Checking plugin updates…"
+  "extensions.checking": "Checking plugin updates…",
+  "extensions.noConfiguration": "This plugin does not declare a settings form."
 }

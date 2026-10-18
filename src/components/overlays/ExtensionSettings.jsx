@@ -14,22 +14,13 @@ import useExtensionStore from '@store/useExtensionStore';
  * renders generic field types — url, secret, directory — and never hardcodes
  * what a specific plugin asks for.
  */
-const DEFAULT_CONFIG = {
-  fields: [
-    { key: 'endpoint', type: 'url', label: '服务地址', placeholder: 'http://127.0.0.1:8787' },
-    { key: 'credential', type: 'secret', label: '访问密钥（留空保留现有密钥）' },
-    { key: 'workspace', type: 'directory', label: '选择目录' },
-  ],
-  actions: { test: '保存并测试连接' },
-};
-
 export default function ExtensionSettings({ entry, act }) {
   const { t } = useTranslation();
   const config = entry.package.configuration && Array.isArray(entry.package.configuration.fields)
     ? entry.package.configuration
-    : DEFAULT_CONFIG;
-  const fields = config.fields;
-  const labels = { ...DEFAULT_CONFIG.actions, ...(config.actions || {}) };
+    : null;
+  const fields = config ? config.fields : [];
+  const labels = config?.actions || {};
   const [values, setValues] = useState(() => ({
     endpoint: entry.settings.endpoint || '',
     credential: '',
@@ -43,6 +34,9 @@ export default function ExtensionSettings({ entry, act }) {
     await useExtensionStore.getState().configure(entry.package.id, settings, values.credential);
     setValues((current) => ({ ...current, credential: '' }));
   };
+
+  // No configuration declared by the plugin: nothing to render here.
+  if (!config) return <p>{t('extensions.noConfiguration')}</p>;
 
   return (
     <Space direction="vertical" style={{ width: '100%' }}>
