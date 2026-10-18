@@ -349,3 +349,42 @@ html[data-theme='dark'] .theme-switch-icons .theme-icon--moon {
   transform: translateY(0) rotate(0deg) scale(1);
   opacity: 1;
 }
+/* Generic version list rendered for plugins (editor.showVersions). */
+.version-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  max-height: 50vh;
+  overflow-y: auto;
+}
+
+.version-list__item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  width: 100%;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.version-list__item:hover {
+  border-color: var(--accent);
+  background: var(--hover);
+}
+
+.version-list__meta {
+  color: var(--text-sec);
+  font-size: 12px;
+}
+
+.version-list__empty {
+  color: var(--text-sec);
+  font-size: 13px;
+}
