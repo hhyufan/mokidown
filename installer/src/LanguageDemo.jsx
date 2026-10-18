@@ -8,9 +8,18 @@ export default function LanguageDemo({ onComplete }) {
   useEffect(() => {
     if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
       setStep(2);
-      return;
+      return undefined;
     }
-    const timers = [setTimeout(() => setStep(1), 1400), setTimeout(() => setStep(2), 4300)];
+    let timers = [];
+    const run = () => {
+      setStep(0);
+      timers = [
+        setTimeout(() => setStep(1), 1400),
+        setTimeout(() => setStep(2), 4300),
+        setTimeout(run, 5800),
+      ];
+    };
+    run();
     return () => timers.forEach(clearTimeout);
   }, []);
   useDemoComplete(step === 2, onComplete);
