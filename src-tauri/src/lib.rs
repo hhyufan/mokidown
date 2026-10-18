@@ -15,6 +15,7 @@ use std::process::Command;
 use std::sync::{Arc, Mutex};
 use std::time::{SystemTime, UNIX_EPOCH};
 use tauri::{AppHandle, Emitter, Manager};
+mod extensions;
 mod hotkeys;
 mod language_plugins;
 mod lsp;
@@ -808,64 +809,6 @@ async fn clear_recovery_snapshot(app_handle: AppHandle) -> Result<(), String> {
         }
     }
     Ok(())
-}
-
-const CREDENTIAL_SERVICE: &str = "com.mokidown.app";
-/// 品牌更名前的凭据服务名（旧版 bundle identifier）。
-///
-/// 旧条目仍然留在系统钥匙串里，只在读取不到新条目时当作一次性迁移来源，
-/// 复制成功后不再访问，因此用户不需要重新登录。
-const LEGACY_CREDENTIAL_SERVICE: &str = "com.mde.app";
-const REFRESH_TOKEN_ACCOUNT: &str = "refresh-token";
-
-#[tauri::command]
-async fn set_refresh_credential(token: String) -> Result<(), String> {
-    keyring::Entry::new(CREDENTIAL_SERVICE, REFRESH_TOKEN_ACCOUNT)
-        .map_err(|error| format!("Failed to open credential store: {error}"))?
-        .set_password(&token)
-        .map_err(|error| format!("Failed to save credential: {error}"))
-}
-
-#[tauri::command]
-async fn get_refresh_credential() -> Result<Option<String>, String> {
-    let entry = keyring::Entry::new(CREDENTIAL_SERVICE, REFRESH_TOKEN_ACCOUNT)
-        .map_err(|error| format!("Failed to open credential store: {error}"))?;
-    match entry.get_password() {
-        Ok(token) => Ok(Some(token)),
-        Err(keyring::Error::NoEntry) => {
-            // 品牌更名后的一次性迁移：新服务名下还没有凭据时，回到旧服务名里找一份，
-            // 复制到新服务名后再返回；旧条目保留，不删除用户数据。
-            let Some(token) = legacy_refresh_credential() else {
-                return Ok(None);
-            };
-            let _ = entry.set_password(&token);
-            Ok(Some(token))
-        }
-        Err(error) => Err(format!("Failed to read credential: {error}")),
-    }
-}
-
-/// 读取旧凭据服务名下的刷新令牌。
-///
-/// 这是纯兼容路径：任何读取失败都按“没有旧凭据”处理，绝不影响新凭据的正常流程。
-fn legacy_refresh_credential() -> Option<String> {
-    let entry = keyring::Entry::new(LEGACY_CREDENTIAL_SERVICE, REFRESH_TOKEN_ACCOUNT).ok()?;
-    entry.get_password().ok()
-}
-
-#[tauri::command]
-async fn delete_refresh_credential() -> Result<(), String> {
-    let entry = keyring::Entry::new(CREDENTIAL_SERVICE, REFRESH_TOKEN_ACCOUNT)
-        .map_err(|error| format!("Failed to open credential store: {error}"))?;
-    // 退出登录时必须把旧服务名下的条目一起删掉：否则下一次读取会把它当成
-    // “待迁移的旧凭据”再复制回来，用户会莫名保持登录状态。
-    if let Ok(legacy) = keyring::Entry::new(LEGACY_CREDENTIAL_SERVICE, REFRESH_TOKEN_ACCOUNT) {
-        let _ = legacy.delete_credential();
-    }
-    match entry.delete_credential() {
-        Ok(()) | Err(keyring::Error::NoEntry) => Ok(()),
-        Err(error) => Err(format!("Failed to delete credential: {error}")),
-    }
 }
 
 fn diagnostic_directory(app_handle: &AppHandle) -> Result<PathBuf, String> {
@@ -1814,9 +1757,11 @@ pub fn run() {
             write_recovery_snapshot,
             read_recovery_snapshot,
             clear_recovery_snapshot,
-            set_refresh_credential,
-            get_refresh_credential,
-            delete_refresh_credential,
+            extensions::extension_set_credential,
+            extensions::extension_http_request,
+            extensions::extension_cancel_request,
+            extensions::extension_workspace,
+            extensions::extension_delete_credential,
             record_diagnostic,
             export_diagnostics,
             check_file_exists,

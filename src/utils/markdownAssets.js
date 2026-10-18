@@ -104,16 +104,10 @@ function mimeFromPath(path) {
   return MIME_BY_EXT[ext] || 'application/octet-stream';
 }
 
-/**
- * 结合当前文档路径解析 Markdown 内联资源地址。
- *
- * 对 http/data/blob/content/cloud 等外部资源保持原样；仅对本地相对路径
- * 做归一化拼接，避免预览层误改外链语义。
- */
 export function resolveMarkdownAssetPath(src, documentPath) {
   const normalizedSrc = fileUrlToPath(src);
   if (!normalizedSrc || isExternalSrc(normalizedSrc) || isAbsolutePath(normalizedSrc)) return normalizedSrc;
-  if (!documentPath || documentPath.startsWith('content://') || documentPath.startsWith('cloud://')) return src;
+  if (!documentPath || documentPath.startsWith('content://') || /^[a-z][a-z\d+.-]*:\/\//i.test(documentPath)) return src;
   return joinPath(dirname(documentPath), decodeURI(normalizedSrc));
 }
 
@@ -143,10 +137,10 @@ export function resolveMarkdownLinkPath(href, documentPath) {
   if (!decodedPath) {
     return { path: '', internal: false, hash };
   }
-  if (decodedPath.startsWith('content://') || decodedPath.startsWith('cloud://') || isAbsolutePath(decodedPath)) {
+  if (decodedPath.startsWith('content://') || /^[a-z][a-z\d+.-]*:\/\//i.test(decodedPath) || isAbsolutePath(decodedPath)) {
     return { path: decodedPath, internal: true, hash };
   }
-  if (!documentPath || documentPath.startsWith('content://') || documentPath.startsWith('cloud://')) {
+  if (!documentPath || documentPath.startsWith('content://') || /^[a-z][a-z\d+.-]*:\/\//i.test(documentPath)) {
     return { path: normalizedHref, internal: false, hash };
   }
   return {

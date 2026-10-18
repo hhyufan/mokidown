@@ -3,13 +3,7 @@
  *
  * ?????????????????????????? store ?????????
  */
-import useAuthStore from './useAuthStore';
 
-/**
- * 游客态默认作用域标识。
- *
- * 用于在未登录时也能把本地持久化数据划分到稳定命名空间。
- */
 export const GUEST_USER_SCOPE = 'guest';
 
 /**
@@ -23,7 +17,7 @@ export function normalizeOwnerUserId(ownerUserId) {
  * 读取当前会话对应的用户作用域 ID。
  */
 export function getCurrentUserScopeId() {
-  return normalizeOwnerUserId(useAuthStore.getState().user?.id);
+  return GUEST_USER_SCOPE;
 }
 
 /**

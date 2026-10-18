@@ -17,13 +17,13 @@ beforeEach(async () => {
   useLspStore.setState({ enabled: true, installed: [], catalog: [], sources: [], preferred: {}, operations: {}, statuses: {}, loading: false, loadError: '' });
   invoke.mockReset(); invoke.mockResolvedValue([]);
 });
-it('shows a searchable marketplace and an empty installed view', async () => {
+it('shows a searchable plugin list and an empty search result', async () => {
   render(<LanguageServices />);
   expect(screen.getByText('JavaScript & TypeScript')).toBeInTheDocument();
   fireEvent.change(screen.getByLabelText('Search languages, services or publishers'), { target: { value: 'rust' } });
   expect(screen.getByText('Rust · rust-analyzer')).toBeInTheDocument();
   expect(screen.queryByText('JavaScript & TypeScript')).not.toBeInTheDocument();
-  fireEvent.click(screen.getByRole('tab', { name: /Installed/ }));
+  fireEvent.change(screen.getByLabelText('Search languages, services or publishers'), { target: { value: 'no-such-plugin-782' } });
   expect(screen.getByText('No matching language services')).toBeInTheDocument();
   await waitFor(() => expect(useLspStore.getState().loading).toBe(false));
 });

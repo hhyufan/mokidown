@@ -97,4 +97,32 @@ installer/src-tauri/gen/
 # 本地试用手记与验证产物：内容是随手动编辑器改动的样例文件（还会被"新建文件"、
 # 改写链接之类的操作留下残留），不适合当版本化内容，各人本地保留即可。
 examples/
+!plugins/examples/
+!plugins/examples/**
 artifacts/
+
+# 插件源码与构建产物独立仓库维护，不随主项目提交
+plugins/*
+!plugins/sdk/
+!plugins/sdk/**
+!plugins/_template/
+!plugins/_template/**
+!plugins/examples/
+!plugins/examples/**
+!plugins/SDK.md
+releases/
+
+# ===========================
+# Additional build / cache outputs
+# ===========================
+dist-app/
+dist-demo/
+public/service-plugins/
+public/app/
+coverage/
+.vite/
+.turbo/
+*.tsbuildinfo
+.playwright/
+.tools/
+.cache-*.log

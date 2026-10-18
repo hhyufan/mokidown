@@ -47,7 +47,7 @@ open = "5.0"
 thiserror = "1.0"
 base64 = "0.22"
 sha2 = "0.10"
-keyring = { version = "3", features = ["windows-native"] }
+keyring = { version = "3", features = ["windows-native", "apple-native"] }
 tempfile = "3"
 reqwest = { version = "0.13", default-features = false, features = ["blocking", "json", "rustls"] }
 zip = { version = "4", default-features = false, features = ["deflate-flate2"] }
@@ -58,6 +58,9 @@ tar = "0.4"
 windows-sys = { version = "0.52", features = ["Win32_System_Console", "Win32_Foundation", "Win32_Storage_FileSystem", "Win32_System_JobObjects", "Win32_System_Threading", "Win32_Security", "Win32_UI_Input_KeyboardAndMouse"] }
 
 # 桌面端单实例：已运行实例接收第二次启动（文件关联打开）的参数转发。
+[target.'cfg(target_os = "linux")'.dependencies]
+keyring = { version = "3", features = ["sync-secret-service", "crypto-rust", "vendored"] }
+
 [target.'cfg(not(any(target_os = "android", target_os = "ios")))'.dependencies]
 tauri-plugin-single-instance = "2"
 

@@ -20,7 +20,7 @@ vi.mock('@hooks/useResponsiveLayout', () => ({
 }));
 vi.mock('@tauri-apps/api/app', () => ({ getVersion: vi.fn(async () => 'test') }));
 vi.mock('./LanguageServices', () => ({ default: () => null }));
-vi.mock('../../services/syncEngine', () => ({ default: {} }));
+
 vi.mock('@tauri-apps/plugin-dialog', () => ({ open: vi.fn(), save: vi.fn() }));
 vi.mock('@tauri-apps/plugin-fs', () => ({
   readFile: vi.fn(),

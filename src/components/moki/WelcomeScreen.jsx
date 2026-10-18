@@ -11,7 +11,7 @@ import useConfigStore from '@store/useConfigStore';
 import useThemeStore from '@store/useThemeStore';
 import useEditorStore from '@store/useEditorStore';
 import useFileStore, { getScopedRecentFiles } from '@store/useFileStore';
-import useAuthStore from '@store/useAuthStore';
+
 import { GUEST_USER_SCOPE } from '@store/userScope';
 import { useFileManager } from '@hooks/useFileManager';
 import MokiSprite from './MokiSprite';
@@ -23,7 +23,7 @@ export default function WelcomeScreen() {
   // 中文名随主题变（浅色晴笺 / 深色夜读），与 MokiSprite 取同一份主题状态。
   const theme = useThemeStore((state) => state.theme);
   const recentEntries = useFileStore((state) => state.recentFiles);
-  const userId = useAuthStore((state) => state.user?.id || GUEST_USER_SCOPE);
+  const userId = GUEST_USER_SCOPE;
   const { openFileDialog, openFolderDialog, openFileFromPath } = useFileManager();
   const recent = useMemo(
     () => getScopedRecentFiles(recentEntries, userId).slice(0, 4),

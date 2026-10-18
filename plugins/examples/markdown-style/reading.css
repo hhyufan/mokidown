@@ -1,0 +1,4 @@
+:root { --plugin-heading-color: #647eea; }
+h1, h2, h3 { color: var(--plugin-heading-color); letter-spacing: .02em; }
+blockquote { border-left: 4px solid #647eea; padding-left: 1em; }
+code { border-radius: 4px; }

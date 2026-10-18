@@ -1,6 +1,5 @@
 import useEditorStore from '@store/useEditorStore';
-import useAuthStore from '@store/useAuthStore';
-import useExternalDocsStore from '@store/useExternalDocsStore';
+
 import { readFileContent, startFileWatching, isSafUri } from '@utils/tauriApi';
 import { rememberDiskBaseline } from './localFileGuard';
 import {
@@ -29,12 +28,7 @@ const savedAtBoot = readSession();
 
 async function loadTab(tab) {
   if (!tab || typeof tab.id !== 'string' || typeof tab.name !== 'string') return null;
-  if (tab.externalFileId) {
-    // Account-scoped caches are unavailable until local authentication restores.
-    await useAuthStore.getState().loadToken();
-    const cached = useExternalDocsStore.getState().get(tab.externalFileId);
-    return cached && typeof cached.content === 'string' ? { ...tab, ...cached, id: tab.id, path: '', modified: false } : null;
-  }
+  
   if (!tab.path) return { ...tab, content: tab.content || '', modified: !!tab.modified };
   try {
     const disk = await readFileContent(tab.path);

@@ -284,22 +284,7 @@
   }
 }
 
-.sidebar__recent-cloud-badge {
-  position: absolute;
-  right: 1px;
-  bottom: 1px;
-  width: 10px;
-  height: 10px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  color: var(--accent);
 
-  svg {
-    width: 10px;
-    height: 10px;
-  }
-}
 
 .sidebar__recent-name {
   font-size: 13px;
@@ -494,4 +479,47 @@
     width: 34px;
     height: 34px;
   }
+}
+
+/* antd keeps the focus background after a mouse click; drop it so the footer
+   buttons do not look stuck in a hovered state, but keep a keyboard outline. */
+.sidebar__footer-btn:focus,
+.sidebar__footer-btn:focus-visible {
+  background: none !important;
+  box-shadow: none !important;
+}
+
+.sidebar__footer-btn:focus-visible {
+  outline: 1px solid var(--accent);
+  outline-offset: 1px;
+}
+
+.file-tree__plugin-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+}
+
+.file-tree__plugin-icon svg {
+  width: 16px;
+  height: 16px;
+}
+
+.file-tree__item-name {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.file-tree__item-badge {
+  display: inline-flex;
+  align-items: center;
+  opacity: 0.85;
+}
+
+.file-tree__item-badge svg {
+  width: 12px;
+  height: 12px;
 }

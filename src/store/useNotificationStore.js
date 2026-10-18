@@ -19,9 +19,25 @@ const useNotificationStore = create((set) => ({
    * 追加一条通知；`duration <= 0` 时保持常驻，等待手动关闭。
    */
   notify: (type, title, message = '', duration = 4000) => {
+    // Demo builds run the app in a browser without a Tauri runtime. Explain the
+    // limitation instead of leaking invoke/TypeError text into a red error.
+    const webDemo = typeof __MOKI_WEB_DEMO__ !== 'undefined' && __MOKI_WEB_DEMO__;
+    const technical =
+      /invoke|__TAURI_INTERNALS__|File is no longer available|File not found|Cannot read properties of undefined|is not a function/i;
+    let nextType = type;
+    let nextTitle = title;
+    let nextMessage = message;
+    if (webDemo && type === 'error' && technical.test(`${title} ${message}`)) {
+      nextType = 'info';
+      nextTitle = '网页预览';
+      nextMessage = '这个操作需要在桌面版 MokiDown 中使用，网页预览暂不支持。';
+    }
     const id = ++notifId;
     set((state) => ({
-      notifications: [...state.notifications, { id, type, title, message, duration }],
+      notifications: [
+        ...state.notifications,
+        { id, type: nextType, title: nextTitle, message: nextMessage, duration },
+      ],
     }));
     if (duration > 0) {
       setTimeout(() => {

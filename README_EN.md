@@ -23,7 +23,7 @@
 
 ## Overview
 
-MokiDown is an open-source Markdown editor built with Tauri 2, React, Monaco, and Milkdown. It reads and writes local files by default with no sign-in required; it can also connect to a self-hosted server to sync documents and settings.
+MokiDown is an open-source Markdown editor built with Tauri 2, React, Monaco, and Milkdown. Local-first: it reads and writes local files by default, with no sign-in and no network required.
 
 <p align="center">
   <img src="screenshots/main.png" width="880" alt="MokiDown main window" />
@@ -41,8 +41,6 @@ MokiDown is an open-source Markdown editor built with Tauri 2, React, Monaco, an
 
 * **Files and workspace**: multiple tabs, directory browsing, outline, global search, bookmarks, and auto-save.
 
-* **Optional cloud sync**: sync documents and settings, and compare versions side by side when conflicts occur.
-
 * **Personalization**: light and dark themes plus a Chinese/English interface.
 
 
@@ -57,15 +55,15 @@ MokiDown is an open-source Markdown editor built with Tauri 2, React, Monaco, an
 | :--------------------------------------------: | :----------------------------------------------: |
 | ![Three editing modes](screenshots/editor.png) | ![Running code blocks](screenshots/code-run.png) |
 
-|                   Cloud sync                   |          Running code blocks         |
-| :--------------------------------------------: | :----------------------------------: |
-| ![Sync conflict](screenshots/sync-display.png) | ![Tree editor](screenshots/tree.png) |
+|          Running code blocks         |
+| :----------------------------------: |
+| ![Running code blocks](screenshots/code-run.png) |
 
 |                 Dark editing                 |           Appearance and character settings          |
 | :------------------------------------------: | :--------------------------------------------------: |
 | ![Dark editing](screenshots/editor-dark.png) | ![Character settings](screenshots/moki-settings.png) |
 
-Captured from the running application with sample documents. Code output and sync conflicts use demonstration data in the real components; these images do not indicate browser access to the desktop execution engine or a connected sync service. [Mobile welcome](screenshots/welcome-mobile.png) · [Design and capture notes](docs/character-design/moki-integration.md)
+Captured from the running application with sample documents. Code output uses demonstration data in the real components; these images do not indicate browser access to the desktop execution engine. [Mobile welcome](screenshots/welcome-mobile.png) · [Design and capture notes](docs/character-design/moki-integration.md)
 
 ## Installation
 
@@ -74,6 +72,8 @@ See [Releases](https://github.com/hhyufan/mde-tauri/releases) for the available 
 The [live demo](https://www.miaogu.xyz/) shows the interface without installing; the browser demo cannot execute code locally the way the desktop app does. Android also differs in file access and local script execution.
 
 ## Quick start
+
+The official incremental document sync service is included as an independent plugin under **Settings → Language services → Service plugins**, disabled by default. Configure your own endpoint, access key and folder; no account login is required. Its implementation runs only while enabled. [Plugin guide](plugins/README.md) · [Server and database setup](services/sync-server/README.md) · [API documentation](services/sync-server/docs/API.md)
 
 ### Local development
 
@@ -105,9 +105,9 @@ npm run tauri:android:init
 npm run tauri:android:build
 ```
 
-### Self-hosted sync
+### Cloud sync (archived)
 
-Deploy the server by following the [mde-server](https://github.com/hhyufan/mde-server) instructions, then set the server URL under Settings → Cloud Sync in the client, sign in, bind documents, and enable sync.
+The cloud sync implementation has been removed from the main project and archived at [archive/cloud-sync](archive/cloud-sync/README.md) for reference or standalone open-source use. MokiDown now runs fully locally: no server, and your documents never leave your machine.
 
 ## Docs and contributing
 

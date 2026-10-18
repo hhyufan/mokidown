@@ -50,7 +50,7 @@ export default function Timeline() {
   const eligible = tab
     && typeof tab.path === 'string'
     && tab.path
-    && !tab.path.startsWith('cloud://')
+    && !/^[a-z][a-z\d+.-]*:\/\//i.test(tab.path)
     && !tab.path.startsWith('content://');
 
   const load = useCallback(async () => {

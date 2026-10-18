@@ -58,3 +58,14 @@ i18n.on('languageChanged', (lng) => {
 });
 
 export default i18n;
+
+// The marketing-site demo switches its own locale and posts it into the
+// embedded iframe so the application UI follows the website language.
+if (typeof __MOKI_WEB_DEMO__ !== 'undefined' && __MOKI_WEB_DEMO__) {
+  window.addEventListener('message', (event) => {
+    const data = event.data;
+    if (!data || data.type !== 'moki:locale') return;
+    const next = data.locale === 'en' ? 'en' : 'zh';
+    if (i18n.language !== next) void i18n.changeLanguage(next);
+  });
+}

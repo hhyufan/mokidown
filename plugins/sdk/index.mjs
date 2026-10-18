@@ -1,0 +1,85 @@
+export class PluginError extends Error {
+  constructor(message, code = 'PLUGIN_ERROR') { super(message); this.name = 'PluginError'; this.code = code; }
+}
+
+export function createPluginClient(port, { timeoutMs = 35000 } = {}) {
+  let nextId = 0, disposed = false;
+  const pending = new Map(), commands = new Map(), listeners = new Map(), cleanup = [];
+  const controller = new AbortController();
+  const rpc = (method, args = {}) => {
+    if (disposed) return Promise.reject(new PluginError('Plugin stopped', 'PLUGIN_STOPPED'));
+    return new Promise((resolve, reject) => {
+      const id = ++nextId;
+      const timer = setTimeout(() => { pending.delete(id); reject(new PluginError(`Plugin request timed out: ${method}`, 'RPC_TIMEOUT')); }, timeoutMs);
+      pending.set(id, { resolve, reject, timer });
+      try { port.postMessage({ id, method, args }); }
+      catch (error) { pending.delete(id); clearTimeout(timer); reject(error); }
+    });
+  };
+  const report = (error) => { console.error('[MokiDown plugin]', error); };
+  const handle = ({ data }) => {
+    if (disposed) return;
+    if (data?.type === 'command') {
+      const callback = commands.get(data.id);
+      if (callback) Promise.resolve().then(() => callback(data.args)).catch(report);
+      return;
+    }
+    if (data?.type === 'event') {
+      for (const callback of listeners.get(data.name) || []) Promise.resolve().then(() => callback(data.payload)).catch(report);
+      return;
+    }
+    const request = pending.get(data?.id); if (!request) return;
+    pending.delete(data.id); clearTimeout(request.timer);
+    if (data.error) request.reject(new PluginError(typeof data.error === 'string' ? data.error : data.error.message, data.code || data.error.code));
+    else request.resolve(data.value);
+  };
+  port.addEventListener('message', handle); port.start();
+  const on = (name, callback) => {
+    if (!listeners.has(name)) listeners.set(name, new Set());
+    listeners.get(name).add(callback);
+    return () => listeners.get(name)?.delete(callback);
+  };
+  const api = {
+    apiVersion: 1, rpc, signal: controller.signal,
+    context: () => rpc('context'),
+    storage: { get: (key) => rpc('storage.get', { key }), set: (key, value) => rpc('storage.set', { key, value }) },
+    workspace: {
+      list: (path = '') => rpc('fs.list', { path }), read: (path) => rpc('fs.read', { path }),
+      write: (path, content, expectedHash = null) => rpc('fs.write', { path, content, expectedHash }),
+      delete: (path, expectedHash) => rpc('fs.delete', { path, expectedHash }),
+    },
+    net: { request: (path, options = {}) => rpc('net.request', { path, ...options }) },
+    commands: { register: async (id, title, callback) => { commands.set(id, callback); await rpc('command.register', { id, title }); return () => { commands.delete(id); void rpc('command.unregister', { id }).catch(report); }; } },
+    statusBar: { set: (id, item) => rpc('statusBar.addItem', { id, ...item }), remove: (id) => rpc('statusBar.remove', { id }) },
+    fileIcons: { set: (id, item) => rpc('fileIcon.add', { id, ...item }), remove: (id) => rpc('fileIcon.remove', { id }) },
+  fileBadges: { set: (id, item) => rpc('fileBadge.add', { id, ...item }), remove: (id) => rpc('fileBadge.remove', { id }) },
+  tasks: { set: (id, task) => rpc('task.add', { id, ...task }), remove: (id) => rpc('task.remove', { id }) },
+    editor: { getActiveDocument: () => rpc('editor.getActiveDocument'), applyEdits: (documentId, expectedChecksum, edits) => rpc('editor.applyEdits', { documentId, expectedChecksum, edits }), onDidSave: (callback) => on('didSave', callback) },
+    styles: { setMarkdown: (id, css) => rpc('styles.set', { id, target: 'markdown', css }), remove: (id) => rpc('styles.remove', { id }) },
+    on, onDispose: (callback) => { if (disposed) callback(); else cleanup.push(callback); return callback; },
+    dispose: () => {
+      if (disposed) return;
+      controller.abort();
+      for (const callback of cleanup.reverse()) { try { callback(); } catch (error) { report(error); } }
+      disposed = true;
+      for (const request of pending.values()) { clearTimeout(request.timer); request.reject(new PluginError('Plugin stopped', 'PLUGIN_STOPPED')); }
+      pending.clear(); commands.clear(); listeners.clear(); port.removeEventListener('message', handle); port.close();
+    },
+  };
+  return api;
+}
+
+export function definePlugin(activate) {
+  let client;
+  const attach = (event) => {
+    if (client || event.source !== parent || event.data?.type !== 'mokidown:extension-port' || !event.ports[0]) return;
+    client = createPluginClient(event.ports[0]);
+    Promise.resolve().then(() => activate(client)).then((dispose) => { if (typeof dispose === 'function') client.onDispose(dispose); }).catch((error) => {
+      console.error('[MokiDown plugin activation]', error);
+      void client.statusBar.set('activation-error', { text: error.message, tone: 'error' }).catch(() => {});
+    });
+  };
+  window.addEventListener('message', attach);
+  window.addEventListener('pagehide', () => { window.removeEventListener('message', attach); client?.dispose(); }, { once: true });
+  parent.postMessage({ type: 'mokidown:extension-ready' }, '*');
+}

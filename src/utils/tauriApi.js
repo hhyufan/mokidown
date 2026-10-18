@@ -78,6 +78,43 @@ export const appWindow = new Proxy(
 // 透出 URI 辅助方法，避免调用方为了兼容移动端同时依赖两个模块。
 export { isSafUri, safDisplayName };
 
+// ---------------------------------------------------------------------
+// Browser demo file system
+//
+// Only the marketing-site build (VITE_WEB_DEMO=1) registers files picked via
+// the browser File System Access API. The desktop build never sets this flag,
+// so the branches below compile away there.
+// ---------------------------------------------------------------------
+const webDemo = typeof __MOKI_WEB_DEMO__ !== 'undefined' && __MOKI_WEB_DEMO__;
+const webFiles = new Map(); // path -> { handle, content }
+const webDirs = new Map(); // path -> entries[]
+
+/** 判断路径是否属于浏览器演示的虚拟文件系统。 */
+export function isWebPath(path) {
+  return typeof path === 'string' && path.startsWith('web:');
+}
+
+/**
+ * Normalize `web:` paths so breadcrumb navigation (which recomposes paths with
+ * a single slash) still resolves to the registered entry.
+ */
+function normalizeWebPath(path) {
+  return String(path)
+    .replace(/^web:[\\/]*/, 'web://')
+    .replace(/\\/g, '/')
+    .replace(/\/+$/, '');
+}
+
+/** 登记浏览器里选中的文件句柄，内容可延迟读取。 */
+export function registerWebFile(path, handle, content = null) {
+  webFiles.set(path, { handle, content });
+}
+
+/** 登记浏览器里选中的目录内容。 */
+export function registerWebDirectory(path, entries) {
+  webDirs.set(path, entries);
+}
+
 /**
  * 根据文本内容推断换行符风格，供保存结果回传统一元信息。
  */
@@ -103,6 +140,22 @@ function detectLineEnding(content) {
  * 按路径读取文本文件内容。
  */
 export async function readFileContent(path) {
+  if (webDemo && isWebPath(path)) {
+    const record = webFiles.get(normalizeWebPath(path));
+    if (!record) throw new Error('File is no longer available');
+    const content = record.content ?? (await (await record.handle.getFile()).text());
+    record.content = content;
+    return {
+      success: true,
+      message: 'File read successfully',
+      content,
+      file_path: path,
+      file_name: path.split('/').pop(),
+      encoding: 'UTF-8',
+      line_ending: detectLineEnding(content),
+      size: content.length,
+    };
+  }
   if (isSafUri(path)) {
     try {
       const { content, encoding, lineEnding, size } = await safReadFileText(path);
@@ -153,6 +206,24 @@ export function saveFile(filePath, content, encoding, { operationHeld = false } 
 }
 
 async function writeEncodedFile(filePath, content, encoding) {
+  if (webDemo && isWebPath(filePath)) {
+    const record = webFiles.get(normalizeWebPath(filePath));
+    if (record?.handle) {
+      const writable = await record.handle.createWritable();
+      await writable.write(content);
+      await writable.close();
+      record.content = content;
+    }
+    return {
+      success: true,
+      message: 'File saved successfully',
+      file_path: filePath,
+      file_name: filePath.split('/').pop(),
+      encoding: encoding || 'UTF-8',
+      line_ending: detectLineEnding(content),
+      size: content.length,
+    };
+  }
   if (isSafUri(filePath)) {
     try {
       const result = await safWriteFileText(filePath, content);
@@ -177,16 +248,19 @@ async function writeEncodedFile(filePath, content, encoding) {
 
 /** 列出本地文件的历史快照（时间戳 + 字节数，新→旧）。 */
 export async function historyList(filePath) {
+  if (webDemo && isWebPath(filePath)) return [];
   return invoke('history_list', { filePath });
 }
 
 /** 读取某个历史快照的完整文本。 */
 export async function historyRead(filePath, timestamp) {
+  if (webDemo && isWebPath(filePath)) return '';
   return invoke('history_read', { filePath, timestamp });
 }
 
 /** 记录快照；打开/回滚传 force，回滚附带 restoredFrom，普通记录仍去重。 */
 export async function historyCapture(filePath, content, { force = false, restoredFrom } = {}) {
+  if (webDemo && isWebPath(filePath)) return true;
   return invoke('history_capture', {
     filePath, content, force,
     ...(restoredFrom != null ? { restoredFrom } : {}),
@@ -195,6 +269,7 @@ export async function historyCapture(filePath, content, { force = false, restore
 
 /** 清空某个文件的全部历史快照。 */
 export async function historyClear(filePath) {
+  if (webDemo && isWebPath(filePath)) return true;
   return invoke('history_clear', { filePath });
 }
 
@@ -213,27 +288,6 @@ export async function clearRecoverySnapshot() {
   return invoke('clear_recovery_snapshot');
 }
 
-export async function setRefreshCredential(token) {
-  if (!window.__TAURI_INTERNALS__) {
-    localStorage.setItem('mokidown-dev-refresh-token', token);
-    return;
-  }
-  return invoke('set_refresh_credential', { token });
-}
-
-export async function getRefreshCredential() {
-  if (!window.__TAURI_INTERNALS__) return localStorage.getItem('mokidown-dev-refresh-token');
-  return invoke('get_refresh_credential');
-}
-
-export async function deleteRefreshCredential() {
-  if (!window.__TAURI_INTERNALS__) {
-    localStorage.removeItem('mokidown-dev-refresh-token');
-    return;
-  }
-  return invoke('delete_refresh_credential');
-}
-
 export async function recordDiagnostic(category, durationMs) {
   if (!window.__TAURI_INTERNALS__) return;
   return invoke('record_diagnostic', { category, durationMs });
@@ -247,6 +301,7 @@ export async function exportDiagnostics(destination) {
  * 判断指定路径是否存在。
  */
 export async function checkFileExists(path) {
+  if (webDemo && isWebPath(path)) return webFiles.has(normalizeWebPath(path)) || webDirs.has(normalizeWebPath(path));
   if (isSafUri(path)) {
     // 对 `content://` 做纯存在性判断时，最稳妥的方式是直接 `stat` 一次；
     // 当前调用点传入的都是完整子 URI，因此无需额外父目录上下文。
@@ -264,6 +319,19 @@ export async function checkFileExists(path) {
  * 读取文件或目录基础信息。
  */
 export async function getFileInfo(path) {
+  if (webDemo && isWebPath(path)) {
+    const record = webFiles.get(normalizeWebPath(path));
+    if (!record) throw new Error('File is no longer available');
+    const file = await record.handle.getFile();
+    return {
+      path,
+      name: file.name,
+      is_file: true,
+      is_dir: false,
+      size: file.size,
+      modified: file.lastModified,
+    };
+  }
   if (isSafUri(path)) {
     const info = await safStatUri(path);
     if (!info) throw new Error('Stat failed');
@@ -276,6 +344,7 @@ export async function getFileInfo(path) {
  * 列出目录内容。
  */
 export async function getDirectoryContents(dirPath) {
+  if (webDemo && isWebPath(dirPath)) return webDirs.get(normalizeWebPath(dirPath)) || [];
   if (isSafUri(dirPath)) {
     return safListFolder(dirPath);
   }
@@ -332,7 +401,7 @@ export async function deleteFile(path) {
 export async function startFileWatching(filePath) {
   // SAF 文档没有可直接接入 inotify 的真实路径；若改用轮询 `statUri` 成本较高，
   // 且 Android 上文件在编辑器外部被同时修改的场景较少，因此直接跳过监听。
-  if (isSafUri(filePath)) return false;
+  if (isSafUri(filePath) || (webDemo && isWebPath(filePath))) return false;
   return invoke('start_file_watching', { filePath });
 }
 
@@ -340,7 +409,7 @@ export async function startFileWatching(filePath) {
  * 停止文件变更监听。
  */
 export async function stopFileWatching(filePath) {
-  if (isSafUri(filePath)) return false;
+  if (isSafUri(filePath) || (webDemo && isWebPath(filePath))) return false;
   return invoke('stop_file_watching', { filePath });
 }
 
@@ -351,6 +420,9 @@ export async function stopFileWatching(filePath) {
  */
 const safSearchTasks = new Map();
 export async function searchFiles(dirPath, query, searchContent = false, maxResults = 100, taskId, options = {}) {
+  if (webDemo && isWebPath(dirPath)) {
+    return { results: [], truncated: false, skippedFiles: 0 };
+  }
   if (isSafUri(dirPath)) {
     const state = { cancelled: false };
     safSearchTasks.set(taskId, state);
@@ -407,6 +479,7 @@ export async function cancelSearch(taskId) {
  * 在系统文件管理器中显示目标路径。
  */
 export async function showInExplorer(path) {
+  if (webDemo && isWebPath(path)) return 'Not available in the browser preview';
   if (isSafUri(path)) {
     const ok = await safOpenInFileManager(path);
     if (!ok) {
@@ -424,6 +497,11 @@ export async function showInExplorer(path) {
  * @returns {Promise<void>} 打开完成的 Promise
  */
 export async function openExternal(url) {
+  // Browser demo builds have no native shell; open a normal tab instead.
+  if (webDemo && typeof window !== 'undefined' && !window.__TAURI_INTERNALS__) {
+    window.open(url, '_blank', 'noopener,noreferrer');
+    return;
+  }
   return invoke('open_external', { url });
 }
 

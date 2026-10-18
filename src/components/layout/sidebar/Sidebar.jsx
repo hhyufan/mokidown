@@ -8,18 +8,16 @@ import { useState, useRef, useCallback, useMemo, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Dropdown, Tooltip, Button, Tag } from 'antd';
 import useEditorStore from '@store/useEditorStore';
-import useAuthStore from '@store/useAuthStore';
+
 import useThemeStore from '@store/useThemeStore';
 import useFileStore, { getScopedRecentFiles } from '@store/useFileStore';
-import useExternalDocsStore, { getScopedExternalDocsMap } from '@store/useExternalDocsStore';
-import useSyncStore from '@store/useSyncStore';
-import useConfigStore from '@store/useConfigStore';
-import { GUEST_USER_SCOPE, isOwnedByUser } from '@store/userScope';
+
+import { GUEST_USER_SCOPE } from '@store/userScope';
 import { useFileManager } from '@hooks/useFileManager';
 import FileTree from './explorer/FileTree';
 import OutlineView from './outline/OutlineView';
 import Timeline from '@components/history/Timeline';
-import UserMenu from '@components/ui/UserMenu';
+
 import FileTypeIcon from '@components/ui/FileTypeIcon';
 import AppMark from '@components/ui/AppMark';
 import MokiStatusEmpty from '@components/moki/MokiStatusEmpty';
@@ -197,89 +195,26 @@ function RecentToolbar({ onOpenStats }) {
   );
 }
 
-/**
- * 最近文件与云端书签列表。
- *
- * 这里把本地最近文件、书签优先级、云端仅在线文档三类数据聚合成同一
- * 个展示列表，保证侧边栏 recent 视图能同时覆盖本地与云同步入口。
- *
- * @param {object} props 组件属性。
- * @param {Function} props.onOpenStats 打开统计面板的回调。
- * @returns {JSX.Element} 聚合后的最近文件列表。
- */
 function RecentList({ onOpenStats }) {
   const { t } = useTranslation();
-  const userId = useAuthStore((s) => s.user?.id || GUEST_USER_SCOPE);
+  const userId = GUEST_USER_SCOPE;
   const recentEntries = useFileStore((s) => s.recentFiles);
-  const externalDocEntries = useExternalDocsStore((s) => s.docs);
-  const syncDocsMap = useSyncStore((s) => s.docs);
-  const replicaMap = useSyncStore((s) => s.replicas);
+
   const { openFileFromPath } = useFileManager();
   const recentFiles = useMemo(
     () => getScopedRecentFiles(recentEntries, userId),
     [recentEntries, userId],
   );
-  const linkedReplicas = useMemo(
-    () => Object.values(replicaMap).filter((replica) =>
-      isOwnedByUser(replica?.ownerUserId, userId) && replica?.linkState === 'linked'
-    ),
-    [replicaMap, userId],
-  );
-  const linkedPaths = useMemo(
-    () => linkedReplicas.map((replica) => replica.localPath).filter(Boolean),
-    [linkedReplicas],
-  );
-  const linkedFileIds = useMemo(
-    () => new Set(linkedReplicas.map((replica) => replica.fileId)),
-    [linkedReplicas],
-  );
-  const externalDocs = useMemo(
-    () => getScopedExternalDocsMap(externalDocEntries, userId),
-    [externalDocEntries, userId],
-  );
-  const syncDocs = useMemo(
-    () => Object.values(syncDocsMap).filter((doc) => isOwnedByUser(doc?.ownerUserId, userId)),
-    [syncDocsMap, userId],
-  );
 
   // Recent is presentation-only. Removing an entry must never change a device
-  // replica or delete the account-wide cloud document.
-  /**
-   * 从最近列表中移除一项，并同步处理书签或云端文档关联状态。
-   *
-   * @param {MouseEvent} e 删除按钮点击事件。
-   * @param {object} f 待移除的最近文件或云端文档项。
-   * @returns {Promise<void>}
-   */
+
   const handleRemove = useCallback(async (e, f) => {
     e.stopPropagation();
-    if (!f.cloud) useFileStore.getState().removeRecentFile(f.path);
+    useFileStore.getState().removeRecentFile(f.path);
   }, []);
 
-  const recentPaths = new Set(recentFiles.map((r) => r.path));
-  const cloudOnlyEntries = syncDocs
-    .filter((doc) => !doc.deleted && !linkedFileIds.has(doc.fileId))
-    .map((doc) => {
-      const fileId = doc.fileId;
-      const meta = externalDocs[fileId] || {};
-      const name = doc.name || meta.name || `Cloud file (${(fileId || '').slice(0, 8)})`;
-      return {
-        path: `cloud://${fileId}`,
-        name,
-        ext: doc.ext || meta.ext || name.split('.').pop() || '',
-        cloud: true,
-      };
-    })
-    .filter((entry) => !recentPaths.has(entry.path));
-
-  const allFiles = [...cloudOnlyEntries, ...recentFiles];
-  const sortedFiles = [...allFiles].sort((a, b) => {
-    const aBookmarked = linkedPaths.includes(a.path);
-    const bBookmarked = linkedPaths.includes(b.path);
-    if (aBookmarked && !bBookmarked) return -1;
-    if (!aBookmarked && bBookmarked) return 1;
-    return 0;
-  });
+  const allFiles = recentFiles;
+  const sortedFiles = allFiles;
 
   return (
     <div className="sidebar__view">
@@ -293,11 +228,9 @@ function RecentList({ onOpenStats }) {
       ) : (
         <div className="sidebar__recent-list">
           {sortedFiles.map((f) => {
-            const isBookmarked = linkedPaths.includes(f.path);
-            const isCloud = !!f.cloud;
-            const titleText = isCloud
-              ? t('sidebar.cloudFileHint', { name: f.name })
-              : f.path;
+            const isBookmarked = useFileStore.getState().isBookmarked(f.path);
+            
+            const titleText = f.path;
             return (
               <Tooltip key={f.path} title={titleText} placement="right" mouseEnterDelay={0.5}>
                 <div
@@ -306,15 +239,7 @@ function RecentList({ onOpenStats }) {
                 >
                   <span className="sidebar__recent-icon">
                     <FileTypeIcon extension={f.ext} fileName={f.name} />
-                    {isCloud && (
-                      <Tooltip title={t('sidebar.cloud')} placement="top" mouseEnterDelay={0.3}>
-                        <span className="sidebar__recent-cloud-badge">
-                          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                            <path d="M18 10h-1.26A8 8 0 1 0 9 20h9a5 5 0 0 0 0-10z" />
-                          </svg>
-                        </span>
-                      </Tooltip>
-                    )}
+                    
                   </span>
                   <span className="sidebar__recent-name">{f.name}</span>
                   {isBookmarked && (
@@ -324,8 +249,7 @@ function RecentList({ onOpenStats }) {
                       </span>
                     </Tooltip>
                   )}
-                  {!isCloud && (
-                    <Tooltip title={t('sidebar.recent.remove')} placement="top" mouseEnterDelay={0.3}>
+                  <Tooltip title={t('sidebar.recent.remove')} placement="top" mouseEnterDelay={0.3}>
                       <span
                         className="sidebar__recent-del"
                         onClick={(e) => handleRemove(e, f)}
@@ -333,7 +257,6 @@ function RecentList({ onOpenStats }) {
                         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" /></svg>
                       </span>
                     </Tooltip>
-                  )}
                 </div>
               </Tooltip>
             );
@@ -383,12 +306,11 @@ function SidebarTabIcon({ id }) {
  * 承载 Explorer / Outline / Recent 三个核心工作流，同时在底部集中提供
  * 用户、主题、更新检查和设置入口。
  */
-function Sidebar({ onOpenSettings, onOpenStats, onOpenLogin }) {
+function Sidebar({ onOpenSettings, onOpenStats }) {
   const { t } = useTranslation();
   const { sidebarVisible, sidebarView, setSidebarView } = useEditorStore();
-  const { theme, toggleTheme } = useThemeStore();
-  // 云同步开启时登录入口会占回底栏首位，GitHub 入口要让位（两者互斥）。
-  const syncEnabled = useConfigStore((state) => state.syncEnabled);
+  const { toggleTheme } = useThemeStore();
+
   const themeButtonRef = useRef(null);
   const checkingUpdate = useUpdateStore((s) => ['checking', 'downloading', 'installing'].includes(s.stage));
   const handleCheckUpdates = () => useUpdateStore.getState().check();
@@ -421,19 +343,19 @@ function Sidebar({ onOpenSettings, onOpenStats, onOpenLogin }) {
    */
   function handleThemeSwitch() {
     const element = themeButtonRef.current;
-    if (!element) { toggleTheme(); return; }
-    const rect = element.getBoundingClientRect();
-    const x = rect.left + rect.width / 2;
-    const y = rect.top + rect.height / 2;
+    const rect = element?.getBoundingClientRect();
+    const x = rect ? rect.left + rect.width / 2 : window.innerWidth - 48;
+    const y = rect ? rect.top + rect.height / 2 : window.innerHeight - 48;
     if (!document.startViewTransition) { toggleTheme(); return; }
+    // Ripple out of the toggle. The circle is a CSS keyframe on the View
+    // Transition snapshot, so it does not depend on Element.animate()'s
+    // pseudo-element support.
+    const root = document.documentElement;
+    root.style.setProperty('--theme-x', `${x}px`);
+    root.style.setProperty('--theme-y', `${y}px`);
+    root.dataset.themeTransition = 'ripple';
     const transition = document.startViewTransition(() => { toggleTheme(); });
-    transition.ready.then(() => {
-      const radius = Math.sqrt(Math.max(x, window.innerWidth - x) ** 2 + Math.max(y, window.innerHeight - y) ** 2);
-      document.documentElement.animate(
-        { clipPath: [`circle(0 at ${x}px ${y}px)`, `circle(${radius}px at ${x}px ${y}px)`] },
-        { duration: 300, pseudoElement: '::view-transition-new(root)' }
-      );
-    });
+    transition.finished.finally(() => { delete root.dataset.themeTransition; });
   }
 
   return (
@@ -489,22 +411,13 @@ function Sidebar({ onOpenSettings, onOpenStats, onOpenLogin }) {
       </div>
 
       <footer className="sidebar__footer">
-        {/* 常驻开源入口：只在底部让出登录按钮的位置时出现，云同步开启后由 UserMenu 接管。 */}
-        {!syncEnabled && (
-          <Tooltip title={t('sidebar.support')} placement="top" mouseEnterDelay={0.3}>
-            <button
-              type="button"
-              className="sidebar__support"
-              aria-label={t('sidebar.support')}
-              onClick={() => openExternal(REPO_URL).catch(() => {})}
-            >
-              <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
-                <path d="M12 .5A11.5 11.5 0 0 0 .5 12a11.5 11.5 0 0 0 7.86 10.92c.58.1.79-.25.79-.56v-2c-3.2.7-3.88-1.37-3.88-1.37-.53-1.34-1.29-1.7-1.29-1.7-1.05-.72.08-.7.08-.7 1.16.08 1.77 1.19 1.77 1.19 1.03 1.77 2.7 1.26 3.36.96.1-.75.4-1.26.73-1.55-2.55-.29-5.23-1.28-5.23-5.7 0-1.26.45-2.29 1.19-3.1-.12-.29-.52-1.46.11-3.05 0 0 .97-.31 3.18 1.18a11 11 0 0 1 5.79 0c2.2-1.49 3.17-1.18 3.17-1.18.63 1.59.23 2.76.12 3.05.74.81 1.19 1.84 1.19 3.1 0 4.43-2.69 5.4-5.25 5.69.41.36.78 1.06.78 2.14v3.17c0 .31.21.67.8.56A11.5 11.5 0 0 0 23.5 12A11.5 11.5 0 0 0 12 .5z" />
-              </svg>
-            </button>
-          </Tooltip>
-        )}
-        <UserMenu onOpenLogin={onOpenLogin} />
+        <Tooltip title="GitHub" placement="top">
+          <Button type="text" onClick={() => openExternal(REPO_URL)} aria-label="GitHub">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M12 .5A12 12 0 0 0 8.2 23.9c.6.1.8-.3.8-.6v-2.2c-3.3.7-4-1.4-4-1.4-.5-1.4-1.3-1.7-1.3-1.7-1.1-.8.1-.8.1-.8 1.2.1 1.8 1.2 1.8 1.2 1.1 1.8 2.8 1.3 3.4 1 .1-.8.4-1.3.8-1.6-2.7-.3-5.5-1.4-5.5-6A4.7 4.7 0 0 1 5.5 8.5c-.1-.3-.5-1.6.1-3.2 0 0 1-.3 3.3 1.2a11.3 11.3 0 0 1 6 0C17.2 5 18.2 5.3 18.2 5.3c.6 1.6.2 2.9.1 3.2a4.7 4.7 0 0 1 1.2 3.3c0 4.6-2.8 5.7-5.5 6 .4.4.8 1.1.8 2.2v3.3c0 .3.2.7.8.6A12 12 0 0 0 12 .5z" /></svg>
+          </Button>
+        </Tooltip>
+        {}
+
         {/* 版本号从运行时读，别再写死：写死后升级了界面还显示旧版本，
             而且很容易和 tauri.conf.json 里的真实版本对不上。 */}
         <Tag className="sidebar__version" bordered={false}>{appVersion ? `v${appVersion}` : ''}</Tag>
@@ -515,12 +428,12 @@ function Sidebar({ onOpenSettings, onOpenStats, onOpenLogin }) {
               type="text"
               className="sidebar__footer-btn"
               onClick={handleThemeSwitch}
+              onMouseUp={(event) => event.currentTarget.blur()}
               icon={
-                theme === 'dark' ? (
-                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="12" r="5" /><line x1="12" y1="1" x2="12" y2="3" /><line x1="12" y1="21" x2="12" y2="23" /><line x1="4.22" y1="4.22" x2="5.64" y2="5.64" /><line x1="18.36" y1="18.36" x2="19.78" y2="19.78" /><line x1="1" y1="12" x2="3" y2="12" /><line x1="21" y1="12" x2="23" y2="12" /><line x1="4.22" y1="19.78" x2="5.64" y2="18.36" /><line x1="18.36" y1="5.64" x2="19.78" y2="4.22" /></svg>
-                ) : (
-                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z" /></svg>
-                )
+                <span className="theme-switch-icons" aria-hidden="true">
+                  <svg className="theme-icon theme-icon--sun" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="12" r="5" /><line x1="12" y1="1" x2="12" y2="3" /><line x1="12" y1="21" x2="12" y2="23" /><line x1="4.22" y1="4.22" x2="5.64" y2="5.64" /><line x1="18.36" y1="18.36" x2="19.78" y2="19.78" /><line x1="1" y1="12" x2="3" y2="12" /><line x1="21" y1="12" x2="23" y2="12" /><line x1="4.22" y1="19.78" x2="5.64" y2="18.36" /><line x1="18.36" y1="5.64" x2="19.78" y2="4.22" /></svg>
+                  <svg className="theme-icon theme-icon--moon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z" /></svg>
+                </span>
               }
             />
           </Tooltip>
@@ -530,6 +443,7 @@ function Sidebar({ onOpenSettings, onOpenStats, onOpenLogin }) {
               className="sidebar__footer-btn"
               loading={checkingUpdate}
               onClick={handleCheckUpdates}
+              onMouseUp={(event) => event.currentTarget.blur()}
               icon={<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="23 4 23 10 17 10" /><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10" /></svg>}
             />
           </Tooltip>
@@ -538,6 +452,7 @@ function Sidebar({ onOpenSettings, onOpenStats, onOpenLogin }) {
               type="text"
               className="sidebar__footer-btn"
               onClick={() => onOpenSettings?.()}
+              onMouseUp={(event) => event.currentTarget.blur()}
               icon={<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="12" r="3" /><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z" /></svg>}
             />
           </Tooltip>

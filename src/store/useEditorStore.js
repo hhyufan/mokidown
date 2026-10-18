@@ -37,7 +37,7 @@ function toTabMeta(tab) {
     modified: !!tab.modified,
     encoding: tab.encoding || 'UTF-8',
     lineEnding: tab.lineEnding || 'LF',
-    externalFileId: tab.externalFileId,
+    
   };
 }
 
@@ -99,35 +99,7 @@ const useEditorStore = create(
         });
       },
 
-      /**
-       * 打开只存在于云端缓存区的 external 文档。
-       */
-      openExternalFile: (file) => {
-        const { tabs } = get();
-        const tabId = `external-${file.fileId}`;
-        const existing = tabs.find((t) => t.id === tabId);
-        if (existing) {
-          set({ activeTabId: existing.id });
-          return;
-        }
-        const newTab = {
-          id: tabId,
-          name: file.name,
-          path: '',
-          externalFileId: file.fileId,
-          ext: (file.name || '').split('.').pop() || file.ext || '',
-          content: file.content || '',
-          encoding: file.encoding || 'UTF-8',
-          lineEnding: file.lineEnding || 'LF',
-          modified: false,
-        };
-        setBuffer(newTab.id, newTab.content);
-        set({
-          tabs: [...tabs, newTab],
-          tabRenderList: [...get().tabRenderList, toTabMeta(newTab)],
-          activeTabId: newTab.id,
-        });
-      },
+      
 
       /**
        * 创建未命名标签，初始内容只落在内存缓冲中，等待首次保存拿到真实路径。
@@ -253,7 +225,7 @@ const useEditorStore = create(
                   path,
                   name,
                   ext: name.split('.').pop() || '',
-                  externalFileId: undefined,
+                  
                 }
               : t
           ),
@@ -265,7 +237,7 @@ const useEditorStore = create(
                   path,
                   name,
                   ext: name.split('.').pop() || '',
-                  externalFileId: undefined,
+                  
                 }
               : t
           ),
@@ -283,7 +255,7 @@ const useEditorStore = create(
         // 退出文档时，若内容相对上一次快照有变化，捕获终态——它同时是
         // 下次进入该文档时的“初始状态”。清理 buffer 前必须读取正文。
         const closing = get().tabs.find((t) => t.id === tabId);
-        if (closing && closing.path && !closing.path.startsWith('cloud://') && !closing.path.startsWith('content://')) {
+        if (closing && closing.path && !/^[a-z][a-z\d+.-]*:\/\//i.test(closing.path) && !closing.path.startsWith('content://')) {
           historyCapture(closing.path, getBuffer(tabId, closing.content || '')).catch(() => {});
         }
         clearBuffer(tabId);
@@ -314,7 +286,7 @@ const useEditorStore = create(
         const tab = get().tabRenderList.find((t) => t.id === tabId);
         if (!tab || tab.modified === modified) return;
         set((state) => ({
-          // `syncEngine` 读取 `tabs`，UI 渲染依赖 `tabRenderList`，
+          
           // 两处都要同步 modified，避免冲突检测读到过期脏状态。
           tabs: state.tabs.map((t) =>
             t.id === tabId ? { ...t, modified } : t
@@ -386,33 +358,7 @@ const useEditorStore = create(
       },
 
       /** ????? `fileId` ????????? */
-      replaceTabContentByExternalFileId: (externalFileId, patch) => {
-        if (!externalFileId) return;
-        const tab = get().tabs.find((t) => t.externalFileId === externalFileId);
-        if (tab && patch && typeof patch.content === 'string') {
-          setBuffer(tab.id, patch.content);
-        }
-        set((state) => ({
-          tabs: state.tabs.map((t) =>
-            t.externalFileId === externalFileId
-              ? {
-                  ...t,
-                  ...patch,
-                  modified: false,
-                }
-              : t
-          ),
-          tabRenderList: state.tabRenderList.map((t) =>
-            t.externalFileId === externalFileId
-              ? {
-                  ...t,
-                  ...toTabMeta({ ...t, ...patch, modified: false }),
-                }
-              : t
-          ),
-          tabsRevision: state.tabsRevision + 1,
-        }));
-      },
+      
 
       /**
        * 保存实际落盘的快照；保存期间的新输入继续保持未保存状态。
@@ -478,18 +424,7 @@ const useEditorStore = create(
       },
 
       /** ????? `fileId` ?????????? */
-      getTabByExternalFileId: (externalFileId) => {
-        if (!externalFileId) return null;
-        const tab = get().tabs.find((t) => t.externalFileId === externalFileId) || null;
-        if (!tab) return null;
-        const meta = get().tabRenderList.find((t) => t.id === tab.id);
-        const buffered = hasBuffer(tab.id) ? getBuffer(tab.id, tab.content) : tab.content;
-        return {
-          ...tab,
-          content: buffered,
-          modified: meta?.modified ?? tab.modified,
-        };
-      },
+      
 
       /** ??????????? UI ?????? */
       toggleSidebar: () => set((s) => ({
@@ -536,13 +471,7 @@ const useEditorStore = create(
         uiStateUpdatedAt: meta.updatedAt ?? Date.now(),
       }),
 
-      /**
-       * 应用来自云同步的 UI 布局状态。
-       *
-       * 只覆盖可同步的界面字段，避免把本地运行时状态（如标签列表）误当成
-       * 配置从远端整包替换。
-       */
-      applySyncedUiState: (uiState = {}, meta = {}) => set((state) => ({
+      applyLayoutSnapshot: (uiState = {}, meta = {}) => set((state) => ({
         sidebarVisible: typeof uiState.sidebarVisible === 'boolean'
           ? uiState.sidebarVisible
           : state.sidebarVisible,

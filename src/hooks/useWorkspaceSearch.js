@@ -3,7 +3,8 @@ import useFileStore from '@store/useFileStore';
 import useConfigStore from '@store/useConfigStore';
 import useEditorStore from '@store/useEditorStore';
 import { getBuffer, subscribe } from '@utils/editorBuffer';
-import { cancelSearch, searchFiles } from '@utils/tauriApi';
+import { cancelSearch, searchFiles, isWebPath } from '@utils/tauriApi';
+import { isWebDemo } from '@utils/webDemo';
 import { contentSearchResults, fileSearchScore, isInSearchRoot, relativeSearchPath, searchPathKey } from '@utils/searchMatching';
 
 export default function useWorkspaceSearch({ open, query, mode, scope, caseSensitive, includeExcluded }) {
@@ -53,6 +54,9 @@ export default function useWorkspaceSearch({ open, query, mode, scope, caseSensi
     const sort = (items) => mode === 'files' ? items.sort((a, b) => a.score - b.score || a.name.localeCompare(b.name)) : items;
     setState({ results: sort(local).slice(0, 100), loading: effectiveScope !== 'open', error: '', truncated: local.length > 100, skippedFiles: 0 });
     if (effectiveScope === 'open') return undefined;
+    // The browser demo has no real workspace to scan; keep the local
+    // open-document hits instead of surfacing a Tauri "open file" error.
+    if (isWebDemo() && !isWebPath(root)) return undefined;
     const timer = setTimeout(async () => {
       taskId = crypto.randomUUID();
       try {

@@ -290,3 +290,85 @@
     max-width: min(92vw, 320px);
   }
 }
+
+.footer__plugin-status {
+  border: 0;
+  background: transparent;
+  color: var(--accent);
+  font: inherit;
+  cursor: pointer;
+  padding: 0 4px;
+  white-space: nowrap;
+}
+
+.footer__plugin-status:hover {
+  text-decoration: underline;
+}
+
+.footer__plugin-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.footer__plugin-status-icon {
+  display: inline-flex;
+  width: 14px;
+  height: 14px;
+}
+
+.footer__plugin-status-icon svg {
+  width: 14px;
+  height: 14px;
+}
+
+.footer__plugin-status--info { color: var(--accent); }
+.footer__plugin-status--success { color: #3fb950; }
+.footer__plugin-status--warning { color: #d29922; }
+.footer__plugin-status--error { color: #f85149; }
+
+
+.plugin-status {
+  display: inline-flex; align-items: center; gap: 4px; cursor: pointer;
+  padding: 2px 6px; border: 0; background: transparent; border-radius: 4px;
+  font: inherit; font-size: 11px; color: var(--accent);
+  &:hover { background: var(--hover); }
+  &--success { color: var(--success, #3fb950); }
+  &--warning { color: #d29922; }
+  &--error { color: var(--error, #f85149); }
+  &__icon { display: flex; align-items: center; }
+  &__icon svg { width: 12px; height: 12px; }
+  &__label { max-width: min(28vw, 420px); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  &.is-busy &__icon { animation: plugin-status-spin 1s linear infinite; }
+}
+@keyframes plugin-status-spin { to { transform: rotate(360deg); } }
+
+.plugin-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  font-size: 11px;
+  padding: 2px 6px;
+  border-radius: 4px;
+  cursor: pointer;
+}
+
+.plugin-status:hover { background: var(--hover, rgba(127, 127, 127, 0.12)); }
+
+.plugin-status__icon { display: inline-flex; width: 12px; height: 12px; }
+.plugin-status__icon svg { width: 12px; height: 12px; }
+
+.plugin-status.is-busy .plugin-status__icon { animation: plugin-spin 0.9s linear infinite; }
+
+.plugin-status--success { color: var(--success, #3fb950); }
+.plugin-status--warning { color: var(--warning, #d29922); }
+.plugin-status--error { color: var(--error, #f85149); }
+
+@keyframes plugin-spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}

@@ -1,9 +1,4 @@
-/**
- * 设置弹窗模块。
- *
- * 汇总应用配置相关的展示与交互入口，覆盖常规偏好、编辑器外观、
- * 云同步设置，以及设置快照的导入导出流程。
- */
+
 import { useState, useEffect } from 'react';
 import { Modal, Menu, Switch, Select, Input, InputNumber, Button, Space } from 'antd';
 import { useResponsiveLayout } from '@hooks/useResponsiveLayout';
@@ -11,14 +6,14 @@ import {
   SettingOutlined,
   BgColorsOutlined,
   EditOutlined,
-  CloudOutlined,
+  DownloadOutlined,
+  
   PlusOutlined,
   MinusOutlined,
-  SyncOutlined,
-  CloudDownloadOutlined,
+
   ExportOutlined,
   ImportOutlined,
-  LogoutOutlined,
+  
   InfoCircleOutlined,
   GithubOutlined,
   StarFilled,
@@ -27,22 +22,24 @@ import {
 } from '@ant-design/icons';
 import AppMark from '@components/ui/AppMark';
 import { REPO_URL, INSTALLER_URL } from '@/configs/repository';
+import { resolveInstallerUrl } from '@utils/installerDownload';
 import { open, save } from '@tauri-apps/plugin-dialog';
 import { readTextFile, writeTextFile } from '@tauri-apps/plugin-fs';
 import { getVersion } from '@tauri-apps/api/app';
 import { openExternal } from '@utils/tauriApi';
 import { useTranslation } from 'react-i18next';
 import { canCheckUpdates } from '@utils/appUpdater';
+import { isWebDemo } from '@utils/webDemo';
 import useUpdateStore from '@store/useUpdateStore';
 import useConfigStore from '@store/useConfigStore';
-import useAuthStore from '@store/useAuthStore';
+
 import useNotificationStore from '@store/useNotificationStore';
-import syncEngine from '../../services/syncEngine';
+
 import {
   applySettingsSnapshot,
   buildSettingsExportPayload,
   parseSettingsImportPayload,
-} from '@utils/settingsSync';
+} from '@utils/settingsSnapshot';
 import './settings-modal.scss';
 import LanguageServices from './LanguageServices';
 import BackgroundSettings from './BackgroundSettings';
@@ -56,30 +53,37 @@ const NAV_ICONS = {
   editor: <EditOutlined />,
   shortcuts: <ThunderboltOutlined />,
   languages: <AppstoreOutlined />,
-  cloud: <CloudOutlined />,
+  
   about: <InfoCircleOutlined />,
 };
 
-const NAV_KEYS = ['general', 'appearance', 'editor', 'shortcuts', 'languages', 'cloud', 'about'];
+const NAV_KEYS = ['general', 'appearance', 'editor', 'shortcuts', 'languages',  'about'];
 
-/**
- * 设置弹窗。
- *
- * 按分类集中管理工作区、外观、编辑器与云同步相关配置，并提供设置导入导出、
- * 云端同步与账号状态展示。
- *
- * @param {object} props 组件属性。
- * @param {boolean} props.open 控制弹窗显示状态。
- * @param {() => void} props.onClose 关闭弹窗的回调。
- */
 function SettingsModal({ open: openProp, onClose }) {
   const { t, i18n } = useTranslation();
   const [activeNav, setActiveNav] = useState('general');
-  const [cloudBusy, setCloudBusy] = useState(false);
+  const [settingsBusy, setSettingsBusy] = useState(false);
+  
   const [appVersion, setAppVersion] = useState('');
+  const [installerUrl, setInstallerUrl] = useState(INSTALLER_URL);
+  // The browser demo has no native shell. Resolve the newest installer link
+  // (Aliyun manifest first, GitHub manifest as fallback) before the click so
+  // the anchor can open the direct download without a popup blocker.
+  useEffect(() => {
+    if (!isWebDemo()) return undefined;
+    let cancelled = false;
+    resolveInstallerUrl()
+      .then((url) => {
+        if (!cancelled) setInstallerUrl(url);
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, []);
   const config = useConfigStore();
   const updateStage = useUpdateStore((s) => s.stage);
-  const { isLoggedIn, user, logout } = useAuthStore();
+  
   const notify = useNotificationStore((s) => s.notify);
   const { isMobileLayout, isPortrait } = useResponsiveLayout();
   // 手机竖屏下把设置面板当作全屏抽屉处理，给内部双栏布局留出纵向堆叠空间；
@@ -126,51 +130,12 @@ function SettingsModal({ open: openProp, onClose }) {
   }
 
   /**
-   * 将本地设置主动推送到云端。
-   *
-   * @returns {Promise<void>} 同步完成后更新忙碌状态并给出通知。
-   */
-  async function handleSyncSettings() {
-    if (!isLoggedIn) return;
-    setCloudBusy(true);
-    try {
-      await syncEngine.syncConfig();
-      notify('success', t('settings.cloud.syncSettings'), t('settings.cloud.syncSuccess'));
-    } catch (err) {
-      notify('error', t('notification.error'), err?.message || t('sync.status.error'));
-    } finally {
-      setCloudBusy(false);
-    }
-  }
-
-  /**
-   * 从云端拉取设置并覆盖当前本地配置快照。
-   *
-   * @returns {Promise<void>} 拉取完成后同步语言并提示结果。
-   */
-  async function handlePullSettings() {
-    if (!isLoggedIn) return;
-    setCloudBusy(true);
-    try {
-      const remote = await syncEngine.syncConfig({ preferRemote: true });
-      if (remote?.language) {
-        i18n.changeLanguage(remote.language === 'zh' ? 'zh' : 'en');
-      }
-      notify('success', t('settings.cloud.pullSettings'), t('settings.cloud.pullSuccess'));
-    } catch (err) {
-      notify('error', t('notification.error'), err?.message || t('sync.status.error'));
-    } finally {
-      setCloudBusy(false);
-    }
-  }
-
-  /**
    * 导出当前设置快照为本地 JSON 文件。
    *
    * @returns {Promise<void>} 导出结束后重置忙碌状态。
    */
   async function handleExportJson() {
-    setCloudBusy(true);
+    setSettingsBusy(true);
     try {
       const path = await save({
         defaultPath: 'mokidown-settings.json',
@@ -179,11 +144,11 @@ function SettingsModal({ open: openProp, onClose }) {
       if (!path) return;
       const payload = buildSettingsExportPayload();
       await writeTextFile(path, JSON.stringify(payload, null, 2));
-      notify('success', t('settings.cloud.exportJson'), t('settings.cloud.exportSuccess'));
+      notify('success', t('settings.snapshot.exportJson'), t('settings.snapshot.exportSuccess'));
     } catch (err) {
       notify('error', t('notification.error'), err?.message || String(err));
     } finally {
-      setCloudBusy(false);
+      setSettingsBusy(false);
     }
   }
 
@@ -193,7 +158,7 @@ function SettingsModal({ open: openProp, onClose }) {
    * @returns {Promise<void>} 导入完成后同步语言并提示结果。
    */
   async function handleImportJson() {
-    setCloudBusy(true);
+    setSettingsBusy(true);
     try {
       const path = await open({
         multiple: false,
@@ -204,11 +169,11 @@ function SettingsModal({ open: openProp, onClose }) {
       const settings = parseSettingsImportPayload(raw);
       applySettingsSnapshot(settings);
       i18n.changeLanguage((settings.language || 'en') === 'zh' ? 'zh' : 'en');
-      notify('success', t('settings.cloud.importJson'), t('settings.cloud.importSuccess'));
+      notify('success', t('settings.snapshot.importJson'), t('settings.snapshot.importSuccess'));
     } catch (err) {
       notify('error', t('notification.error'), err?.message || String(err));
     } finally {
-      setCloudBusy(false);
+      setSettingsBusy(false);
     }
   }
 
@@ -272,6 +237,12 @@ function SettingsModal({ open: openProp, onClose }) {
           <div className="settings-modal__content">
             {activeNav === 'general' && (
               <div className="settings-section">
+                <SettingRow label={t('settings.snapshot.title')}>
+                  <Space>
+                    <Button icon={<ExportOutlined />} loading={settingsBusy} onClick={handleExportJson}>{t('settings.snapshot.exportJson')}</Button>
+                    <Button icon={<ImportOutlined />} disabled={settingsBusy} onClick={handleImportJson}>{t('settings.snapshot.importJson')}</Button>
+                  </Space>
+                </SettingRow>
                 <SettingGroup label={t('settings.group.workspace')} />
                 <SettingRow
                   label={t('settings.general.language')}
@@ -434,93 +405,6 @@ function SettingsModal({ open: openProp, onClose }) {
 
             {activeNav === 'languages' && <LanguageServices />}
 
-            {activeNav === 'cloud' && (
-              <div className="settings-section">
-                {/* 云同步总开关：关闭后界面不再出现任何云入口，同步引擎也整体暂停。 */}
-                <SettingGroup label={t('settings.group.cloud')} />
-                <SettingRow
-                  label={t('settings.cloud.syncEnabled')}
-                  desc={t('settings.cloud.syncEnabledDesc')}
-                >
-                  <Switch
-                    checked={config.syncEnabled}
-                    onChange={(v) => handleChange('syncEnabled', v)}
-                  />
-                </SettingRow>
-                <SettingGroup label={t('settings.group.connection')} />
-                <SettingRow
-                  label={t('settings.cloud.serverUrl')}
-                  desc={t('settings.cloud.serverUrlDesc')}
-                >
-                  <Input
-                    style={{ width: 260 }}
-                    value={config.serverUrl}
-                    onChange={(e) => handleChange('serverUrl', e.target.value)}
-                    placeholder="https://www.miaogu.xyz"
-                    disabled={isLoggedIn}
-                  />
-                </SettingRow>
-                <SettingGroup label={t('settings.group.account')} />
-                <SettingRow
-                  label={t('settings.cloud.account')}
-                  desc={isLoggedIn ? user?.email : t('settings.cloud.notLoggedIn')}
-                >
-                  {isLoggedIn ? (
-                    <Button danger icon={<LogoutOutlined />} onClick={logout}>
-                      {t('auth.logout')}
-                    </Button>
-                  ) : (
-                    <span className="setting-row__empty">—</span>
-                  )}
-                </SettingRow>
-                <SettingGroup label={t('settings.group.sync')} />
-                <SettingRow
-                  label={t('settings.cloud.syncSettings')}
-                  desc={t('settings.cloud.syncSettingsDesc')}
-                >
-                  <Space>
-                    <Button
-                      icon={<SyncOutlined />}
-                      onClick={handleSyncSettings}
-                      disabled={!isLoggedIn || cloudBusy}
-                      loading={cloudBusy}
-                    >
-                      {t('sync.syncNow')}
-                    </Button>
-                    <Button
-                      icon={<CloudDownloadOutlined />}
-                      onClick={handlePullSettings}
-                      disabled={!isLoggedIn || cloudBusy}
-                      loading={cloudBusy}
-                    >
-                      {t('settings.cloud.pullSettings')}
-                    </Button>
-                  </Space>
-                </SettingRow>
-                <SettingRow
-                  label={t('settings.cloud.settingsJson')}
-                  desc={t('settings.cloud.settingsJsonDesc')}
-                >
-                  <Space>
-                    <Button
-                      icon={<ExportOutlined />}
-                      onClick={handleExportJson}
-                      disabled={cloudBusy}
-                    >
-                      {t('settings.cloud.exportJson')}
-                    </Button>
-                    <Button
-                      icon={<ImportOutlined />}
-                      onClick={handleImportJson}
-                      disabled={cloudBusy}
-                    >
-                      {t('settings.cloud.importJson')}
-                    </Button>
-                  </Space>
-                </SettingRow>
-              </div>
-            )}
-
             {activeNav === 'about' && (
               <div className="settings-section">
                 <div
@@ -545,7 +429,11 @@ function SettingsModal({ open: openProp, onClose }) {
                       </div>
                     </div>
                     <p className="settings-about__tagline">{t('settings.about.tagline')}</p>
-                    {canCheckUpdates() && <div><Button icon={<CloudDownloadOutlined />} loading={['checking', 'downloading', 'installing'].includes(updateStage)} onClick={() => useUpdateStore.getState().check()}>{t('sidebar.footer.checkUpdates')}</Button><Button type="link" onClick={() => openExternal(INSTALLER_URL)}>{t('settings.about.installer')}</Button></div>}
+                    {(canCheckUpdates() || isWebDemo()) && <div><Button icon={<DownloadOutlined />} loading={['checking', 'downloading', 'installing'].includes(updateStage)} onClick={() => useUpdateStore.getState().check()}>{t('sidebar.footer.checkUpdates')}</Button>{isWebDemo() ? (
+                      <Button type="link" href={installerUrl} target="_blank" rel="noreferrer">{t('settings.about.installer')}</Button>
+                    ) : (
+                      <Button type="link" onClick={async () => { const url = await resolveInstallerUrl(); try { await openExternal(url); } catch (err) { notify('error', t('notification.error'), err?.message || String(err)); } }}>{t('settings.about.installer')}</Button>
+                    )}</div>}
                     <dl className="settings-about__meta">
                       <dt>{t('settings.about.author')}</dt>
                       <dd>{t('settings.about.authorDesc')}</dd>

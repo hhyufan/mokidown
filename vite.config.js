@@ -56,17 +56,40 @@ const assertNoMonacoNls = {
 
 const host = process.env.TAURI_DEV_HOST;
 
+// The marketing site (mde-server) embeds the built app in a browser iframe.
+// Those builds set VITE_WEB_DEMO=1 so browser-only file access and friendly
+// fallbacks are compiled in; the desktop app never sees them.
+const webDemo = process.env.VITE_WEB_DEMO === '1';
+
+const webDemoEntry = (enabled) => ({
+  name: 'web-demo-entry',
+  transformIndexHtml(html) {
+    if (!enabled) return html;
+    return {
+      html,
+      tags: [
+        {
+          tag: 'script',
+          injectTo: 'head-prepend',
+          children: 'window.process = { env: { NODE_ENV: "production" } };',
+        },
+      ],
+    };
+  },
+});
+
 // 应用版本在构建期注入。版本号以 tauri.conf.json 为准，由 npm run version:sync
 // 同步到 package.json，所以这里读 package.json 是可靠的。
 // 用 import.meta.env.VITE_* 的形式而不是裸的全局常量：前者在 eslint 下天然合法，
 // 后者要额外声明 globals，而且在 vitest 里拿不到值。
 const appVersion = JSON.parse(readFileSync(resolve(__dirname, './package.json'), 'utf-8')).version;
 
-export default defineConfig(async () => ({
-  plugins: [stripMonacoBrokenSourcemaps, assertNoMonacoNls, react()],
+export default defineConfig(async ({ mode }) => ({
+  plugins: [webDemoEntry(mode === 'demo' || webDemo), stripMonacoBrokenSourcemaps, assertNoMonacoNls, react()],
 
   define: {
     'import.meta.env.VITE_APP_VERSION': JSON.stringify(appVersion),
+    __MOKI_WEB_DEMO__: JSON.stringify(mode === 'demo' || webDemo),
   },
 
   resolve: {

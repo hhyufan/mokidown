@@ -14,14 +14,11 @@ import { useFileManager } from '@hooks/useFileManager';
 import { useHorizontalDragScroll } from '@hooks/useHorizontalDragScroll';
 import { deleteFile as deleteFileApi } from '@utils/tauriApi';
 import useNotificationStore from '@store/useNotificationStore';
-import useFileIdStore from '@store/useFileIdStore';
-import useSyncStore from '@store/useSyncStore';
-import useAuthStore from '@store/useAuthStore';
-import { syncEngine } from '@/services/syncEngine';
-import { getExplorerFileSyncState } from '@/services/sync/syncPresentation';
+
 import { cn } from '@utils/classNames';
 import MokiStatusEmpty from '@components/moki/MokiStatusEmpty';
 import FileTypeIcon from '@components/ui/FileTypeIcon';
+import usePluginContributions from '@store/usePluginContributions';
 import ChevronIcon from '@components/ui/ChevronIcon';
 import { isSafUri, safDisplayName } from '@utils/tauriApi';
 import FileNameField, { splitFileName, DEFAULT_FILE_EXTENSION } from './FileNameField';
@@ -45,6 +42,12 @@ function buildBreadcrumbPath(currentDir, index) {
     if (index <= 0) return `${parts[0]}\\`;
     return `${parts[0]}\\${parts.slice(1, index + 1).join('\\')}`;
   }
+  // The browser demo mounts its picked directory as web://<folder>/<sub>.
+  // Rebuild those paths without the leading slash that normal absolute paths use.
+  if (parts[0] === 'web:') {
+    if (index <= 0) return 'web:';
+    return `web://${parts.slice(1, index + 1).join('/')}`;
+  }
   return `/${parts.slice(0, index + 1).join('/')}`;
 }
 
@@ -65,6 +68,11 @@ function getParentDir(currentDir) {
     if (parts.length === 2) return `${parts[0]}\\`;
     return `${parts[0]}\\${parts.slice(1, -1).join('\\')}`;
   }
+  // Keep browser-demo paths in their web:// form; the root itself has no parent.
+  if (parts[0] === 'web:') {
+    if (parts.length <= 2) return 'web:';
+    return `web://${parts.slice(1, -1).join('/')}`;
+  }
   const next = `/${parts.slice(0, -1).join('/')}`;
   return next || '/';
 }
@@ -84,12 +92,6 @@ function FileTree() {
   const sortBy = useFileStore((s) => s.sortBy);
   const sortOrder = useFileStore((s) => s.sortOrder);
   const activeTabId = useEditorStore((s) => s.activeTabId);
-  const ownerUserId = useAuthStore((s) => s.user?.id);
-  const pathToId = useFileIdStore((s) => s.pathToId);
-  const syncDocs = useSyncStore((s) => s.docs);
-  const syncReplicas = useSyncStore((s) => s.replicas);
-  const syncQueue = useSyncStore((s) => s.queue);
-  const syncConflicts = useSyncStore((s) => s.conflicts);
 
   const {
     loadDirectory,
@@ -115,13 +117,6 @@ function FileTree() {
   const bcScrollRef = useRef(null);
   const bcThumbRef = useRef(null);
 
-  /**
-   * 删除前先确认；已纳入同步的文件同时写入云端墓碑，避免下一轮拉取把它复活。
-   *
-   * @param {import('@store/useFileStore').FileInfo} file 待删除的文件条目
-   * @param {import('react').MouseEvent<HTMLElement>} [event] 原始点击事件
-   * @returns {Promise<void>}
-   */
   const handleDeleteFile = useCallback((file, event) => {
     event?.stopPropagation?.();
     setDeleteTarget(file);
@@ -134,43 +129,21 @@ function FileTree() {
     setDeleting(true);
 
     let localDeleted = false;
-    let preparedDeletion = null;
+    
     try {
-      const fileId = useFileIdStore.getState().idOf(file.path);
-      const linkedReplica = fileId
-        ? useSyncStore.getState().getReplica(fileId)
-        : null;
-      const shouldDeleteCloud = linkedReplica?.linkState === 'linked';
-      if (shouldDeleteCloud) {
-        preparedDeletion = await syncEngine.prepareLocalDeletion(fileId);
-        if (preparedDeletion?.ok === false) {
-          throw new Error(`Failed to prepare cloud deletion: ${preparedDeletion.reason}`);
-        }
-      }
+
       const deleteResult = await deleteFileApi(file.path);
       if (deleteResult?.success === false) {
         throw new Error(deleteResult.error || `Failed to delete ${file.path}`);
       }
       localDeleted = true;
-      if (shouldDeleteCloud) {
-        const syncResult = preparedDeletion?.mutationId
-          ? await syncEngine.commitLocalDeletion(preparedDeletion)
-          : await syncEngine.deleteDocument(fileId);
-        if (syncResult?.ok === false) {
-          throw new Error(`Failed to record cloud deletion: ${syncResult.reason}`);
-        }
-        useFileIdStore.getState().unbindFileId(fileId);
-      } else if (fileId) {
-        useFileIdStore.getState().unbindFileId(fileId);
-      }
+      
       if (useFileStore.getState().isBookmarked(file.path)) {
         useFileStore.getState().toggleBookmark(file.path);
       }
       useFileStore.getState().removeRecentFile(file.path);
     } catch (err) {
-      if (!localDeleted && preparedDeletion?.mutationId) {
-        await syncEngine.abortLocalDeletion(preparedDeletion).catch(() => {});
-      }
+      
       useNotificationStore.getState().notify('error', t('notification.error'), String(err));
     } finally {
       if (localDeleted) {
@@ -408,24 +381,6 @@ function FileTree() {
     });
   }, [files, sortBy, sortOrder]);
 
-  const fileSyncStates = useMemo(() => new Map(
-    sortedFiles
-      .filter((file) => !file.is_dir)
-      .map((file) => [
-        file.path,
-        getExplorerFileSyncState({
-          filePath: file.path,
-          ownerUserId,
-          pathToId,
-          docs: syncDocs,
-          replicas: syncReplicas,
-          queue: syncQueue,
-          conflicts: syncConflicts,
-        }),
-      ])
-      .filter(([, state]) => state),
-  ), [ownerUserId, pathToId, sortedFiles, syncConflicts, syncDocs, syncQueue, syncReplicas]);
-
   // 面包屑展示数据。
   const breadcrumbParts = currentDir
     ? (currentDirIsSaf ? [safDisplayName(currentDir)] : currentDir.split(/[\\/]/).filter(Boolean))
@@ -614,7 +569,7 @@ function FileTree() {
         {sortedFiles.map((file) => {
           const ext = file.name.split('.').pop() || '';
           const isActive = activeTabId === file.path;
-          const fileSyncState = fileSyncStates.get(file.path);
+          
           return (
             <div
               key={file.path}
@@ -644,25 +599,27 @@ function FileTree() {
                     onDoubleClick={(e) => { startRenaming(file, e); }}
                   >
                     {file.name}
+                    {(() => {
+                      if (file.is_dir) return null;
+                      const badges = usePluginContributions.getState().fileBadges;
+                      const extension = (file.name.split('.').pop() || '').toLowerCase();
+                      const normalize = (value) => String(value || '').replace(/\\/g, '/');
+                      const badge = badges.find((entry) => {
+                        if ((entry.extensions || []).includes(extension)) return true;
+                        return (entry.paths || []).some((candidate) => {
+                          const left = normalize(candidate);
+                          const right = normalize(file.path);
+                          return left === right || right.endsWith('/' + left) || left.endsWith('/' + right);
+                        });
+                      });
+                      return badge
+                        ? <span className="file-tree__item-badge" title={badge.title || ''} dangerouslySetInnerHTML={{ __html: badge.svg }} />
+                        : null;
+                    })()}
                   </span>
                 </Tooltip>
               )}
-              {fileSyncState && (
-                <Tooltip
-                  title={`${t('sidebar.cloud')} · ${t(`sync.status.${fileSyncState.status}`)}`}
-                  placement="top"
-                  mouseEnterDelay={0.3}
-                >
-                  <span
-                    className={`file-tree__item-cloud file-tree__item-cloud--${fileSyncState.status}`}
-                    aria-label={`${t('sidebar.cloud')} · ${t(`sync.status.${fileSyncState.status}`)}`}
-                  >
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                      <path d="M18 10h-1.26A8 8 0 1 0 9 20h9a5 5 0 0 0 0-10z" />
-                    </svg>
-                  </span>
-                </Tooltip>
-              )}
+              
               {!file.is_dir && renamingPath !== file.path && (
                 <Tooltip title={t('sidebar.explorer.deleteFile')} placement="top" mouseEnterDelay={0.3}>
                 <span

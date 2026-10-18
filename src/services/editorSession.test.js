@@ -3,7 +3,7 @@ import { beforeEach, afterEach, expect, it, vi } from 'vitest';
 const disk = vi.hoisted(() => ({ read: vi.fn(), watch: vi.fn() }));
 vi.mock('@utils/tauriApi', () => ({ readFileContent: disk.read, startFileWatching: disk.watch,
   isSafUri: (path) => path.startsWith('content://'), historyCapture: vi.fn().mockResolvedValue(undefined) }));
-vi.mock('@store/useExternalDocsStore', () => ({ default: { getState: () => ({ get: () => null }) } }));
+
 
 let stop;
 let useEditorStore, getBuffer, getDocumentViewState, setDocumentViewState, registerDocumentViewState;

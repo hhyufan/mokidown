@@ -6,7 +6,7 @@ import useThemeStore from '@store/useThemeStore';
 import useConfigStore from '@store/useConfigStore';
 import { flushEditorBuffer, getBuffer, subscribe } from '@utils/editorBuffer';
 import MonacoConflictDiff from './MonacoConflictDiff';
-import './conflict-dialog.scss';
+import './external-file-conflict.scss';
 import i18n from '@/i18n';
 
 const { Paragraph, Text } = Typography;

@@ -64,7 +64,5 @@ export default function TablePicker({ onInsert, onClose, initialRows = 3, initia
       </Tooltip>
       <Button size="small" htmlType="submit">{t(resize ? 'table.resize' : 'table.insert')}</Button>
     </form>
-    <p>{t('table.wheelHint')}</p>
-    <p>{t('table.quickHint')}</p>
   </div>;
 }

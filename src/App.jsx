@@ -14,10 +14,11 @@ import { createFileChangeObserver, setLocalFileComposing } from '@/services/loca
 import useThemeStore from '@store/useThemeStore';
 import useEditorStore from '@store/useEditorStore';
 import { getBuffer } from '@utils/editorBuffer';
-import useAuthStore from '@store/useAuthStore';
+
 import useFileStore from '@store/useFileStore';
 import useConfigStore from '@store/useConfigStore';
 import useLspStore from '@store/useLspStore';
+import ExtensionHost from '@components/overlays/ExtensionHost';
 import { useFileManager } from '@hooks/useFileManager';
 import { useWorkspaceDirectory } from '@hooks/useWorkspaceDirectory';
 import { useResponsiveLayout } from '@hooks/useResponsiveLayout';
@@ -27,7 +28,7 @@ import { useBackgroundSurfaces } from '@hooks/useBackgroundSurfaces';
 import { getBackgroundTransparency } from '@utils/backgroundImage';
 import { disableNativeContextMenu } from '@utils/nativeContextMenu';
 import { createFullscreenController } from '@utils/windowFullscreen';
-import { syncEngine } from '@/services/syncEngine';
+
 import { restoreEditorSession, startEditorSessionTracking, flushEditorSession } from '@/services/editorSession';
 import {
   discardRecoverySnapshot,
@@ -49,8 +50,7 @@ import ExternalFileConflictNotice from '@components/overlays/ExternalFileConflic
 import TaskList from '@components/overlays/TaskList';
 import CrtBoot from '@components/overlays/CrtBoot';
 import NotificationContainer from '@components/notification/NotificationContainer';
-import useSyncStore from '@store/useSyncStore';
-import { GUEST_USER_SCOPE, isOwnedByUser } from '@store/userScope';
+
 import { cn } from '@utils/classNames';
 import '@styles/App.scss';
 
@@ -64,15 +64,10 @@ import '@styles/App.scss';
 // 提前打进入口包；其中 `StatsPanel` 还会额外引入体积较大的 `@antv/g2`。
 const SettingsModal = lazy(() => import('@components/overlays/SettingsModal'));
 const StatsPanel = lazy(() => import('@components/overlays/StatsPanel'));
-const LoginModal = lazy(() => import('@components/overlays/LoginModal'));
 // ConflictDialog owns a second Monaco entry point (the diff editor). Gate it
 // behind the same complete runtime bootstrap as the main editor so a restored
 // conflict cannot race localization, token providers or theme registration.
-const ConflictDialog = lazy(() =>
-  import('@/utils/monacoRuntimeBoot')
-    .then(({ prepareMonacoRuntime }) => prepareMonacoRuntime())
-    .then(() => import('@components/overlays/ConflictDialog'))
-);
+
 const UnsavedChangesModal = lazy(() => import('@components/overlays/UnsavedChangesModal'));
 const RecoveryModal = lazy(() => import('@components/overlays/RecoveryModal'));
 
@@ -107,11 +102,9 @@ function App() {
   const closeTab = useEditorStore((s) => s.closeTab);
   const tabs = useEditorStore((s) => s.tabRenderList);
   const activeTabId = useEditorStore((s) => s.activeTabId);
-  const loadToken = useAuthStore((s) => s.loadToken);
-  const isLoggedIn = useAuthStore((s) => s.isLoggedIn);
-  const userId = useAuthStore((s) => s.user?.id || GUEST_USER_SCOPE);
+
   const autoSave = useConfigStore((s) => s.autoSave);
-  const syncEnabled = useConfigStore((s) => s.syncEnabled);
+  
   const backgroundEnabled = useConfigStore((s) => s.backgroundEnabled);
   const backgroundTransparency = useConfigStore((s) => s.backgroundTransparency);
   const theme = useThemeStore((s) => s.theme);
@@ -119,21 +112,13 @@ function App() {
   const hasBackground = backgroundEnabled && Boolean(backgroundUrl);
   useBackgroundSurfaces({ enabled: hasBackground, imageUrl: backgroundUrl,
     opacity: (100 - getBackgroundTransparency(backgroundTransparency, theme)) / 100 });
-  const conflictEntries = useSyncStore((s) => s.conflicts);
-  const conflicts = useMemo(
-    () => conflictEntries.filter((item) => isOwnedByUser(item?.ownerUserId, userId)),
-    [conflictEntries, userId],
-  );
+
   const [searchOpen, setSearchOpen] = useState(false);
   const openSearch = useCallback(() => setSearchOpen(true), []);
   const closeSearch = useCallback(() => setSearchOpen(false), []);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [statsOpen, setStatsOpen] = useState(false);
-  const [loginOpen, setLoginOpen] = useState(false);
-  const [syncConflictReviewOpen, setSyncConflictReviewOpen] = useState(false);
-  useEffect(() => {
-    if (!conflicts.length) setSyncConflictReviewOpen(false);
-  }, [conflicts.length]);
+
   const [unsavedPromptOpen, setUnsavedPromptOpen] = useState(false);
   const [unsavedPromptSaving, setUnsavedPromptSaving] = useState(false);
   const [pendingCloseTabId, setPendingCloseTabId] = useState(null);
@@ -213,23 +198,15 @@ function App() {
   }, [autoSave, closeTab, openUnsavedClosePrompt]);
 
   useEffect(() => {
-    // 主题与登录态会影响首屏渲染结果，因此在首次挂载时立即初始化。
     initTheme();
-    loadToken();
     useLspStore.getState().refresh();
-
-    // 桌面主窗口由启动交接模块在界面就绪后显示；这里仅初始化界面状态。
-
-    // 不影响首屏可见内容的工作统一延后到浏览器空闲期执行，避免阻塞交互就绪：
-    // 例如同步引擎重置、资源管理器目录恢复等。
-    const idle = window.requestIdleCallback || ((cb) => setTimeout(cb, 1));
-    idle(() => {
-      syncEngine.ensureLocalReset();
-      const savedDir = useFileStore.getState().currentDir;
-      if (savedDir) loadFilesOnly(savedDir);
+    const idle = window.requestIdleCallback || ((callback) => setTimeout(callback, 1));
+    const task = idle(() => {
+      const directory = useFileStore.getState().currentDir;
+      if (directory) loadFilesOnly(directory);
     });
-  }, []);
-
+    return () => (window.cancelIdleCallback || clearTimeout)(task);
+  }, [initTheme, loadFilesOnly]);
 
   useEffect(() => {
     if (isAndroid) return undefined;
@@ -259,7 +236,7 @@ function App() {
     const timer = setInterval(() => {
       const { activeTabId, tabs } = useEditorStore.getState();
       const tab = tabs.find((item) => item.id === activeTabId);
-      if (!tab || !tab.path || tab.path.startsWith('cloud://') || tab.path.startsWith('content://')) return;
+      if (!tab || !tab.path || /^[a-z][a-z\d+.-]*:\/\//i.test(tab.path) || tab.path.startsWith('content://')) return;
       historyCapture(tab.path, getBuffer(tab.id, tab.content || '')).catch(() => {});
     }, 60_000);
     return () => clearInterval(timer);
@@ -272,7 +249,7 @@ function App() {
     prevActiveIdRef.current = activeTabId;
     if (!prevId || prevId === activeTabId) return;
     const tab = useEditorStore.getState().tabs.find((item) => item.id === prevId);
-    if (!tab || !tab.path || tab.path.startsWith('cloud://') || tab.path.startsWith('content://')) return;
+    if (!tab || !tab.path || /^[a-z][a-z\d+.-]*:\/\//i.test(tab.path) || tab.path.startsWith('content://')) return;
     historyCapture(tab.path, getBuffer(prevId, tab.content || '')).catch(() => {});
   }, [activeTabId]);
 
@@ -315,13 +292,6 @@ function App() {
       setSidebarVisible(false);
     }
   }, [isMobileLayout, setSidebarVisible]);
-
-  useEffect(() => {
-    // 总开关关闭时不触发任何同步动作，避免无谓的鉴权/网络请求。
-    if (isLoggedIn && syncEnabled) {
-      syncEngine.fullSync();
-    }
-  }, [isLoggedIn, syncEnabled]);
 
   useEffect(() => {
     if (cliArgsOpenedRef.current || isAndroid) return;
@@ -444,7 +414,6 @@ function App() {
       if (event.key === 'Escape' && !isCapturingShortcut()) {
         setSearchOpen(false);
         setSettingsOpen(false);
-        setLoginOpen(false);
       }
       handleKeyDown(event);
     };
@@ -499,7 +468,7 @@ function App() {
       // 应用正常退出时，为当前活动文档捕获终态（等价于一次“退出编辑”）。
       const { activeTabId, tabs } = useEditorStore.getState();
       const activeTab = tabs.find((item) => item.id === activeTabId);
-      if (activeTab && activeTab.path && !activeTab.path.startsWith('cloud://') && !activeTab.path.startsWith('content://')) {
+      if (activeTab && activeTab.path && !/^[a-z][a-z\d+.-]*:\/\//i.test(activeTab.path) && !activeTab.path.startsWith('content://')) {
         historyCapture(activeTab.path, getBuffer(activeTab.id, activeTab.content || '')).catch(() => {});
       }
       allowWindowCloseRef.current = true;
@@ -845,7 +814,6 @@ function App() {
         <Sidebar
           onOpenSettings={() => setSettingsOpen(true)}
           onOpenStats={() => setStatsOpen(true)}
-          onOpenLogin={() => setLoginOpen(true)}
         />
         {isMobileLayout && sidebarVisible && (
           <button
@@ -863,12 +831,7 @@ function App() {
             onRequestClose={requestWindowClose}
           />
           <TabBar onRequestCloseTab={requestTabClose} />
-          {conflicts.length > 0 && (
-            <div className="external-file-notice" role="status">
-              <span>{t('sync.conflict.title')} · {conflicts.length}</span>
-              <button type="button" onClick={() => setSyncConflictReviewOpen(true)}>{t('sync.conflict.review')}</button>
-            </div>
-          )}
+          
           {externalConflict && (
             <ExternalFileConflictNotice
               key={externalConflict.path}
@@ -905,17 +868,10 @@ function App() {
         )}
       </div>
       <Suspense fallback={null}>
+        <ExtensionHost />
         {settingsOpen && <SettingsModal open={settingsOpen} onClose={() => setSettingsOpen(false)} />}
         {statsOpen && <StatsPanel open={statsOpen} onClose={() => setStatsOpen(false)} />}
-        {loginOpen && <LoginModal open={loginOpen} onClose={() => setLoginOpen(false)} />}
-        {conflicts.length > 0 && syncConflictReviewOpen && (
-          <ConflictDialog
-            open
-            conflicts={conflicts}
-            onResolve={(fileId, resolution) => syncEngine.resolveConflict(fileId, resolution)}
-            onClose={() => setSyncConflictReviewOpen(false)}
-          />
-        )}
+        
         {unsavedPromptOpen && (
           <UnsavedChangesModal
             open={unsavedPromptOpen}

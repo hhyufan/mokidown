@@ -4,6 +4,7 @@ import { invoke } from '@tauri-apps/api/core';
 import { listen } from '@tauri-apps/api/event';
 import bundledCatalog from '@/configs/language-plugins.json';
 import useProblemsStore from './useProblemsStore';
+import { isWebDemo, notifyWebDemo } from '@utils/webDemo';
 
 export const LANGUAGE_PLUGIN_CATALOG = bundledCatalog;
 let subscription;
@@ -73,6 +74,7 @@ const useLspStore = create(persist((set, get) => ({
     return refreshing;
   },
   addCatalog: async (url) => {
+    if (isWebDemo()) { notifyWebDemo('语言服务需要在桌面版 MokiDown 中使用。'); return; }
     const catalog = (await invoke('fetch_language_catalog', { url })).map(validatePluginManifest);
     set((state) => ({ catalog: [...new Map([...state.catalog, ...catalog].map((manifest) => [manifest.id, manifest])).values()], sources: [...new Set([...state.sources, url])] }));
   },
@@ -81,6 +83,7 @@ const useLspStore = create(persist((set, get) => ({
     set((state) => ({ catalog: [...state.catalog.filter((plugin) => plugin.id !== manifest.id), manifest] }));
   },
   install: async (manifest) => {
+    if (isWebDemo()) { notifyWebDemo('安装语言服务需要在桌面版 MokiDown 中使用。'); return; }
     const id = manifest.id;
     if (['preparing', 'downloading', 'extracting', 'installing', 'uninstalling'].includes(get().operations[id]?.phase)) return;
     set((state) => ({ operations: { ...state.operations, [id]: { phase: 'preparing', text: '' } } }));
@@ -116,6 +119,7 @@ const useLspStore = create(persist((set, get) => ({
       return { operations };
     }),
   togglePlugin: async (id, enabled) => {
+    if (isWebDemo()) { notifyWebDemo('语言服务需要在桌面版 MokiDown 中使用。'); return; }
     if (toggling.has(id)) return;
     toggling.add(id);
     const previous = get().installed.find((plugin) => plugin.manifest.id === id)?.enabled;
@@ -136,6 +140,7 @@ const useLspStore = create(persist((set, get) => ({
     } finally { toggling.delete(id); }
   },
   uninstall: async (id) => {
+    if (isWebDemo()) { notifyWebDemo('卸载语言服务需要在桌面版 MokiDown 中使用。'); return; }
     set((state) => ({ operations: { ...state.operations, [id]: { phase: 'uninstalling' } }, revision: state.revision + 1 }));
     try {
       await invoke('uninstall_language_plugin', { id });

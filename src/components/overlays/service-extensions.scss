@@ -1,0 +1,8 @@
+.service-extensions { margin-bottom: 24px; padding-bottom: 20px; border-bottom: 1px solid var(--border); }
+.service-extensions__card { padding: 16px; border: 1px solid var(--border, #555); border-radius: 8px; margin: 12px 0; }
+.service-extensions__row, .service-extensions__identity { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; }
+.service-extensions__row { justify-content: space-between; gap: 12px; }
+.service-extensions__badge { padding: 1px 7px; color: var(--accent); background: color-mix(in srgb, var(--accent) 12%, transparent); border-radius: 4px; font-size: 11px; }
+.service-extensions__version { color: var(--text-secondary); font-size: 12px; }
+.service-extensions__settings { margin-top: 16px; }
+.service-extensions__advanced { margin-top: 16px; summary { cursor: pointer; color: var(--text-secondary); } }

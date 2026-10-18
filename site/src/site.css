@@ -1,0 +1,1408 @@
+/* Feature sections and live editor for the marketing site.
+   Cards keep the installer's exact composition; only the surrounding layout,
+   scale and page theme are defined here. */
+
+.site-preview {
+  --bg: #f5f5f7;
+  --bg-elev: #ffffff;
+  --text: #1d1d1f;
+  --text-sec: #6e6e73;
+  --border: #e3e3e8;
+  --accent: #4091ff;
+  --font-app: 'Poppins', 'Source-HanSan', system-ui, sans-serif;
+  background: var(--bg);
+  color: var(--text);
+  font: 14px/1.6 var(--font-app);
+}
+
+html[data-theme='dark'] .site-preview {
+  --bg: #111114;
+  --bg-elev: #1a1a1e;
+  --text: #f2f2f4;
+  --text-sec: #a1a1a8;
+  --border: #2c2c31;
+}
+
+.feature-sections {
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+}
+
+.feature-block {
+  padding: 24px 0;
+}
+
+.feature-block__inner {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, min(56vw, 920px));
+  align-items: center;
+  gap: clamp(24px, 3vw, 56px);
+  max-width: 1440px;
+  margin: 0 auto;
+  padding: 0 clamp(20px, 4vw, 56px);
+}
+
+.feature-block--flip .feature-block__inner {
+  grid-template-columns: minmax(0, min(56vw, 920px)) minmax(0, 1fr);
+}
+
+.feature-block--flip .feature-block__copy {
+  order: 2;
+  justify-self: end;
+}
+
+.feature-block__copy {
+  max-width: 480px;
+}
+
+.feature-block__eyebrow {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  color: var(--accent);
+  font: 600 11px/1 var(--font-app);
+  letter-spacing: 0.14em;
+}
+
+.feature-block__eyebrow::before {
+  content: '';
+  width: 22px;
+  height: 1px;
+  background: currentColor;
+  opacity: 0.55;
+}
+
+.feature-block__copy h2 {
+  margin: 18px 0 14px;
+  font-size: clamp(26px, 2.6vw, 34px);
+  line-height: 1.42;
+  font-weight: 650;
+  letter-spacing: -0.02em;
+}
+
+.feature-block__copy h2 em {
+  display: inline-block;
+  font-style: normal;
+  color: var(--accent);
+}
+
+.feature-block__copy p {
+  margin: 0;
+  color: var(--text-sec);
+  font-size: 14px;
+  line-height: 1.85;
+}
+
+.feature-block__stage {
+  display: flex;
+  justify-content: center;
+  min-width: 0;
+}
+
+.feature-block__frame {
+  position: relative;
+  width: 746px;
+  height: 408px;
+  max-width: 100%;
+  transform-origin: top left;
+}
+
+.feature-block__frame .feature-scene {
+  transform: none;
+}
+
+.feature-block__frame .scene-card,
+.feature-block__frame .feature-scene > .scene-surface {
+  will-change: transform;
+}
+
+@media (max-width: 1220px) {
+  .feature-block__inner,
+  .feature-block--flip .feature-block__inner {
+    grid-template-columns: 1fr;
+    gap: 28px;
+    justify-items: center;
+  }
+  .feature-block--flip .feature-block__copy {
+    order: 0;
+    justify-self: start;
+  }
+  .feature-block__copy {
+    justify-self: start;
+  }
+  .feature-block__stage {
+    justify-self: center;
+  }
+  .feature-block__frame {
+    zoom: 0.82;
+  }
+}
+
+@media (max-width: 720px) {
+  .feature-block__frame {
+    zoom: 0.55;
+  }
+}
+
+/* ---- Live editor ------------------------------------------------------- */
+
+.live-shell {
+  --le-bg: #ffffff;
+  --le-side: #fafafa;
+  --le-border: #e5e5e7;
+  --le-text: #2c2c2e;
+  --le-text-sec: #6d6d6f;
+  --le-hover: #f0f0f2;
+  --le-active: #e8e8ea;
+  --le-accent: #4091ff;
+  display: flex;
+  height: 560px;
+  overflow: hidden;
+  color: var(--le-text);
+  background: var(--le-bg);
+  border: 1px solid var(--le-border);
+  border-radius: 12px;
+  box-shadow: 0 22px 60px #1a2b4718, 0 2px 6px #1a2b470c;
+  font: 13px/1.5 'Poppins', 'Source-HanSan', system-ui, sans-serif;
+}
+
+.le-sidebar {
+  width: 218px;
+  flex: 0 0 218px;
+  display: flex;
+  flex-direction: column;
+  background: var(--le-side);
+  border-right: 1px solid var(--le-border);
+}
+
+.le-brand {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 14px 16px 10px;
+}
+
+.le-brand__mark {
+  width: 28px;
+  height: 28px;
+  border-radius: 8px;
+  display: grid;
+  place-items: center;
+  background: linear-gradient(135deg, #5aa2ff, #2f7bf0);
+  color: #fff;
+  font-weight: 700;
+  font-size: 15px;
+}
+
+.le-brand strong {
+  display: block;
+  font-size: 14px;
+}
+
+.le-brand small {
+  color: var(--le-text-sec);
+  font-size: 10px;
+}
+
+.le-tabs {
+  display: flex;
+  gap: 2px;
+  margin: 0 12px 8px;
+  padding: 3px;
+  border-radius: 8px;
+  background: #ececef;
+}
+
+.le-tabs span {
+  flex: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  height: 28px;
+  border-radius: 6px;
+  color: var(--le-text-sec);
+  font-size: 12px;
+}
+
+.le-tabs span.is-active {
+  background: #fff;
+  color: var(--le-text);
+  box-shadow: 0 1px 2px #00000014;
+}
+
+.le-tabs svg {
+  width: 14px;
+  height: 14px;
+}
+
+.le-tools {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 6px 16px;
+  color: var(--le-text-sec);
+  font-size: 11px;
+}
+
+.le-tools span {
+  display: inline-flex;
+  gap: 10px;
+}
+
+.le-tools svg {
+  width: 15px;
+  height: 15px;
+}
+
+.le-tree {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  padding: 2px 8px 8px;
+}
+
+.le-tree__folder,
+.le-tree__item {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  width: 100%;
+  height: 30px;
+  padding: 0 8px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--le-text);
+  font: inherit;
+  font-size: 12.5px;
+  text-align: left;
+}
+
+.le-tree__folder {
+  color: var(--le-text-sec);
+}
+
+.le-tree__item {
+  cursor: pointer;
+}
+
+.le-tree__item:hover {
+  background: var(--le-hover);
+}
+
+.le-tree__item.is-active {
+  background: var(--le-active);
+  font-weight: 600;
+}
+
+.le-icon {
+  display: inline-flex;
+  width: 16px;
+  height: 16px;
+  flex: 0 0 16px;
+}
+
+.le-icon svg {
+  width: 100%;
+  height: 100%;
+}
+
+.le-tree__history {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  margin-top: 10px;
+  padding: 10px 8px 0;
+  border-top: 1px solid var(--le-border);
+  color: var(--le-text-sec);
+  font-size: 12px;
+}
+
+.le-tree__history svg {
+  width: 13px;
+  height: 13px;
+}
+
+.le-tree__history span {
+  margin-left: auto;
+  padding: 0 6px;
+  border: 1px solid var(--le-border);
+  border-radius: 9px;
+}
+
+.le-sidebar__footer {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 16px;
+  border-top: 1px solid var(--le-border);
+  color: var(--le-text-sec);
+  font-size: 11px;
+}
+
+.le-sidebar__footer i {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #62a895;
+  margin-left: auto;
+}
+
+.le-main {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.le-titlebar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  height: 46px;
+  padding: 0 12px;
+  border-bottom: 1px solid var(--le-border);
+}
+
+.le-titlebar__btn {
+  display: grid;
+  place-items: center;
+  width: 26px;
+  height: 26px;
+  color: var(--le-text-sec);
+}
+
+.le-titlebar__btn svg {
+  width: 16px;
+  height: 16px;
+}
+
+.le-search {
+  flex: 1;
+  max-width: 420px;
+  height: 30px;
+  margin: 0 auto;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0 12px;
+  border: 1px solid var(--le-border);
+  border-radius: 16px;
+  color: var(--le-text-sec);
+  font-size: 12px;
+  background: #fff;
+}
+
+.le-search svg {
+  width: 14px;
+  height: 14px;
+}
+
+.le-search kbd {
+  margin-left: auto;
+  font: 10px 'JetBrains Mono', monospace;
+  color: #a1a1a8;
+}
+
+.le-window {
+  display: flex;
+  gap: 2px;
+  margin-left: auto;
+  color: var(--le-text-sec);
+}
+
+.le-window span {
+  width: 28px;
+  height: 26px;
+  display: grid;
+  place-items: center;
+  font-size: 12px;
+}
+
+.le-tabbar {
+  display: flex;
+  align-items: stretch;
+  gap: 2px;
+  height: 38px;
+  padding: 0 10px;
+  border-bottom: 1px solid var(--le-border);
+  overflow: hidden;
+}
+
+.le-tab {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 0 14px;
+  border: 0;
+  border-bottom: 2px solid transparent;
+  background: transparent;
+  color: var(--le-text-sec);
+  font: inherit;
+  font-size: 12.5px;
+  cursor: pointer;
+}
+
+.le-tab:hover {
+  color: var(--le-text);
+}
+
+.le-tab.is-active {
+  color: var(--le-text);
+  border-bottom-color: var(--le-accent);
+  background: #fff;
+}
+
+.le-tab .le-icon {
+  width: 14px;
+  height: 14px;
+  flex-basis: 14px;
+}
+
+.le-body {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  overflow: hidden;
+  background: #fff;
+}
+
+.le-wysiwyg {
+  flex: 1;
+  min-width: 0;
+  overflow: auto;
+  padding: 20px 30px;
+  background: #fff;
+}
+
+.le-wysiwyg .milkdown {
+  min-height: 100%;
+}
+
+.le-wysiwyg .milkdown-editor {
+  padding-bottom: 40px;
+}
+
+.le-source {
+  display: flex;
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  background: #fff;
+  font: 12.5px/1.8 'JetBrains Mono', 'Source-HanSan', monospace;
+}
+
+.le-gutter {
+  display: flex;
+  flex-direction: column;
+  padding: 16px 8px 16px 0;
+  min-width: 44px;
+  text-align: right;
+  color: #b0b0b4;
+  user-select: none;
+  background: #fcfcfd;
+  border-right: 1px solid var(--le-border);
+  overflow: hidden;
+}
+
+.le-source textarea {
+  flex: 1;
+  min-width: 0;
+  border: 0;
+  outline: 0;
+  resize: none;
+  padding: 16px 18px;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  white-space: pre;
+  tab-size: 2;
+}
+
+.le-body--split .le-source {
+  flex: 0 0 50%;
+  border-right: 1px solid var(--le-border);
+}
+
+.le-preview {
+  flex: 1;
+  min-width: 0;
+  overflow: auto;
+  padding: 20px 30px;
+  background: #fff;
+}
+
+.le-statusbar {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  height: 34px;
+  padding: 0 12px;
+  border-top: 1px solid var(--le-border);
+  color: var(--le-text-sec);
+  font-size: 11px;
+}
+
+.le-statusbar__left {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.le-statusbar__btn {
+  display: grid;
+  place-items: center;
+  width: 22px;
+  height: 22px;
+}
+
+.le-statusbar__btn svg {
+  width: 14px;
+  height: 14px;
+}
+
+.le-modes {
+  display: flex;
+  gap: 2px;
+}
+
+.le-modes button {
+  border: 0;
+  background: transparent;
+  color: var(--le-text-sec);
+  font: 11px 'Poppins', system-ui, sans-serif;
+  padding: 3px 6px;
+  border-radius: 4px;
+  cursor: pointer;
+}
+
+.le-modes button.is-active {
+  color: var(--le-accent);
+  background: rgba(64, 145, 255, 0.1);
+}
+
+.le-statusbar__path {
+  flex: 1;
+  text-align: center;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.le-statusbar__path span {
+  margin: 0 4px;
+}
+
+.le-statusbar__right {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.le-statusbar__right i {
+  width: 1px;
+  height: 12px;
+  background: var(--le-border);
+}
+
+.le-sync {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.le-sync b {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #62a895;
+}
+
+html[data-theme='dark'] .live-shell {
+  --le-bg: #1b1b1f;
+  --le-side: #191919;
+  --le-border: #333338;
+  --le-text: #ececf0;
+  --le-text-sec: #a1a1a8;
+  --le-hover: #2a2a2f;
+  --le-active: #303036;
+}
+
+html[data-theme='dark'] .le-search,
+html[data-theme='dark'] .le-tabs span.is-active,
+html[data-theme='dark'] .le-tab.is-active {
+  background: #242429;
+}
+
+html[data-theme='dark'] .le-body,
+html[data-theme='dark'] .le-wysiwyg,
+html[data-theme='dark'] .le-preview,
+html[data-theme='dark'] .le-source {
+  background: #1b1b1f;
+}
+
+html[data-theme='dark'] .le-gutter {
+  background: #1e1e22;
+}
+
+@media (max-width: 900px) {
+  .live-shell {
+    height: 480px;
+  }
+  .le-sidebar {
+    display: none;
+  }
+}
+/* Vertical feature pager: one capability per screen, the live demo last. */
+html {
+  scroll-snap-type: y proximity;
+}
+
+.feature-sections {
+  flex-direction: column;
+  gap: 0;
+  overflow: visible;
+}
+
+.feature-block-host {
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  scroll-snap-align: start;
+  padding: 0 clamp(12px, 4vw, 48px);
+  box-sizing: border-box;
+}
+
+.feature-block-host--demo {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.feature-demo {
+  width: 100%;
+  max-width: 1440px;
+  height: min(72vh, 780px);
+  border-radius: 20px;
+  overflow: hidden;
+  border: 1px solid var(--border);
+  background: var(--surface);
+}
+
+.feature-demo__frame {
+  width: 100%;
+  height: 100%;
+  border: 0;
+  display: block;
+}
+
+/* feature-scenes.css pins a light palette on .feature-scene; follow the site theme. */
+html[data-theme='dark'] .feature-scene {
+  --surface: #1e1e1e;
+  --sidebar: #252526;
+  --border: #3a3a3c;
+  --border-light: #333336;
+  --text: #e6e6e8;
+  --text-sec: #a0a0a5;
+  --hover: rgba(255, 255, 255, 0.08);
+  --accent-bg: rgba(64, 145, 255, 0.18);
+}
+
+/* The live demo is the last screen of the vertical pager. */
+.hero-demo {
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  scroll-snap-align: start;
+}
+
+/* Let the feature pager use the full viewport width; the inherited shell
+   max-width squeezed the copy column into the stage. */
+#why-mde.product-story,
+.feature-block-host {
+  max-width: none;
+  width: 100%;
+}
+
+.feature-block__inner {
+  max-width: 1440px;
+  width: 100%;
+  grid-template-columns: minmax(0, 1fr) minmax(0, min(52vw, 860px));
+  gap: clamp(24px, 3vw, 48px);
+}
+
+.feature-block--flip .feature-block__inner {
+  grid-template-columns: minmax(0, min(52vw, 860px)) minmax(0, 1fr);
+}
+
+/* Per-screen "continue" cue: jumps to the next capability (the last one
+   jumps to TRY IT NOW). The demo screen itself has no cue. */
+.feature-block-host {
+  position: relative;
+}
+
+.scroll-cue--next {
+  position: absolute;
+  left: 50%;
+  bottom: 24px;
+  transform: translateX(-50%);
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--text-sec);
+  cursor: pointer;
+  border-radius: 999px;
+  padding: 8px 14px;
+  font: inherit;
+}
+
+/* Center the pager content and scale it up on wide screens. */
+#why-mde .feature-block__inner,
+.feature-block__inner {
+  max-width: 1600px;
+  width: 100%;
+  margin-inline: auto;
+  grid-template-columns: minmax(0, 1fr) minmax(0, min(58vw, 980px));
+  gap: clamp(24px, 3vw, 56px);
+}
+
+#why-mde .feature-block--flip .feature-block__inner,
+.feature-block--flip .feature-block__inner {
+  grid-template-columns: minmax(0, min(58vw, 980px)) minmax(0, 1fr);
+}
+
+/* Lock the pager: one screen per capability, no free scrolling past a page. */
+html {
+  scroll-snap-type: y mandatory !important;
+}
+
+#why-mde,
+#why-mde.section-shell {
+  width: 100% !important;
+  max-width: none !important;
+  margin-inline: 0 !important;
+}
+
+.feature-block-host {
+  height: 100svh;
+  min-height: 100svh;
+  overflow: hidden;
+}
+
+.feature-block {
+  margin-inline: auto;
+}
+
+/* Nudge each screen up so the fixed "continue" cue never covers the copy. */
+.feature-block-host {
+  align-items: flex-start;
+  padding-top: clamp(64px, 8vh, 112px);
+  padding-bottom: clamp(96px, 12vh, 140px);
+}
+
+.pager-next {
+  position: fixed;
+  left: 50%;
+  bottom: 22px;
+  transform: translateX(-50%);
+  z-index: 60;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 16px;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  background: color-mix(in srgb, var(--surface) 86%, transparent);
+  backdrop-filter: blur(10px);
+  color: var(--text-sec);
+  cursor: pointer;
+  font: inherit;
+}
+
+.pager-next:hover {
+  color: var(--text);
+  border-color: var(--accent);
+}
+
+.pager-next {
+  white-space: nowrap;
+}
+
+.pager-next svg {
+  width: 16px;
+  height: 16px;
+  flex-shrink: 0;
+}
+
+/* Vertically center the screen content; keep only a small top offset. */
+.feature-block-host {
+  align-items: center;
+  padding-top: clamp(24px, 4vh, 48px);
+  padding-bottom: clamp(96px, 12vh, 140px);
+}
+
+/* Keep the fixed cue on one line with a proper pill shape. */
+.pager-next {
+  display: inline-flex;
+  flex-wrap: nowrap;
+  min-width: max-content;
+  border-radius: 999px;
+  padding: 10px 18px;
+  font-size: 13px;
+}
+
+.pager-next span {
+  white-space: nowrap;
+}
+
+/* Cue matches the original scroll-cue look: plain text + chevron, no pill. */
+.pager-next {
+  border: 0;
+  background: transparent;
+  color: var(--text-sec);
+  padding: 6px 10px;
+  font-size: 12px;
+  letter-spacing: 0.01em;
+  box-shadow: none;
+  backdrop-filter: none;
+}
+
+.pager-next:hover {
+  color: var(--accent);
+}
+
+/* The scenes are authored at 746x408; scale the frame up on wide screens. */
+.feature-block__frame {
+  zoom: 1.12;
+}
+
+@media (min-width: 1700px) {
+  .feature-block__frame {
+    zoom: 1.22;
+  }
+}
+
+@media (min-width: 1900px) {
+  .feature-block__frame {
+    zoom: 1.32;
+  }
+}
+
+/* Restore the pill look: bordered translucent pill + blue chevron. */
+.pager-next {
+  border: 1px solid var(--border);
+  background: color-mix(in srgb, var(--surface) 88%, transparent);
+  backdrop-filter: blur(12px);
+  color: var(--text-sec);
+  padding: 10px 18px;
+  font-size: 13px;
+  border-radius: 999px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.14);
+}
+
+.pager-next svg {
+  width: 18px;
+  height: 18px;
+  color: var(--accent);
+  stroke: var(--accent);
+  fill: none;
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+/* Last screen: TRY IT NOW + live demo + footer all fit in one viewport. */
+#demo.hero-demo {
+  min-height: 100svh;
+  height: 100svh;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-start;
+  gap: clamp(12px, 2vh, 24px);
+  padding-top: clamp(16px, 3vh, 32px);
+  padding-bottom: 0;
+}
+
+#demo .hero-demo__intro {
+  flex: 0 0 auto;
+}
+
+#demo .demo-frame {
+  flex: 1 1 auto;
+  min-height: 0;
+}
+
+#demo .demo-app-frame {
+  height: 100%;
+}
+
+#demo .site-footer {
+  flex: 0 0 auto;
+  padding-top: clamp(10px, 1.6vh, 18px);
+  padding-bottom: clamp(10px, 1.6vh, 18px);
+  border-top: 1px solid var(--border);
+}
+
+/* Let the iframe take the remaining height so the footer stays in view. */
+#demo .demo-frame {
+  position: relative;
+  flex: 1 1 0;
+  min-height: 0;
+  height: auto;
+  overflow: hidden;
+}
+
+#demo .demo-app-frame {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  border: 0;
+}
+
+#demo .demo-frame {
+  flex: 1 1 0 !important;
+  height: auto !important;
+  min-height: 0 !important;
+  position: relative !important;
+  overflow: hidden !important;
+}
+
+#demo .demo-app-frame {
+  position: absolute !important;
+  inset: 0 !important;
+  width: 100% !important;
+  height: 100% !important;
+}
+
+#demo .hero-demo__intro {
+  margin-bottom: 8px !important;
+}
+
+/* Account for the sticky header so the footer lands exactly at the viewport bottom. */
+#demo.hero-demo {
+  height: calc(100svh - 64px) !important;
+  min-height: calc(100svh - 64px) !important;
+  padding-bottom: 0 !important;
+}
+
+/* Responsive pager: stack on small screens, compact on short landscape. */
+@media (max-width: 900px) {
+  .feature-block__inner,
+  .feature-block--flip .feature-block__inner {
+    grid-template-columns: 1fr;
+    gap: 18px;
+    padding: 0 16px;
+    justify-items: start;
+  }
+
+  .feature-block--flip .feature-block__copy {
+    order: 0;
+    justify-self: start;
+  }
+
+  .feature-block__copy {
+    max-width: none;
+  }
+
+  .feature-block__copy h2 {
+    font-size: clamp(22px, 5vw, 28px);
+    margin: 12px 0 10px;
+  }
+
+  .feature-block__copy p {
+    font-size: 13px;
+    line-height: 1.7;
+  }
+
+  .feature-block__stage {
+    width: 100%;
+    justify-content: flex-start;
+  }
+
+  .feature-block__frame {
+    zoom: 0.55;
+  }
+
+  .feature-block-host {
+    height: auto;
+    min-height: 100svh;
+    padding: 24px 14px 92px;
+  }
+}
+
+@media (max-width: 600px) {
+  .feature-block__frame {
+    zoom: 0.42;
+  }
+
+  .feature-block__copy h2 {
+    font-size: 21px;
+  }
+
+  .pager-next {
+    font-size: 12px;
+    padding: 8px 14px;
+  }
+}
+
+/* Landscape phones and other short viewports: keep one screen per feature. */
+@media (max-height: 640px) and (orientation: landscape) {
+  .feature-block-host {
+    height: 100svh;
+    min-height: 100svh;
+    padding: 10px 16px 58px;
+    align-items: center;
+  }
+
+  .feature-block__inner,
+  .feature-block--flip .feature-block__inner {
+    grid-template-columns: minmax(0, 1fr) minmax(0, min(52vw, 520px));
+    gap: 18px;
+  }
+
+  .feature-block__copy h2 {
+    font-size: clamp(16px, 2.4vw, 22px);
+    margin: 8px 0 6px;
+  }
+
+  .feature-block__copy p {
+    font-size: 11px;
+    line-height: 1.55;
+  }
+
+  .feature-block__eyebrow {
+    font-size: 9px;
+  }
+
+  .feature-block__frame {
+    zoom: 0.46;
+  }
+
+  #demo .hero-demo__intro {
+    display: none;
+  }
+
+  #demo .demo-frame {
+    flex: 1 1 0;
+  }
+
+  .pager-next {
+    bottom: 8px;
+    padding: 6px 12px;
+    font-size: 11px;
+  }
+}
+
+@media (max-width: 900px) {
+  #why-mde .feature-block__inner,
+  #why-mde .feature-block--flip .feature-block__inner {
+    grid-template-columns: 1fr !important;
+  }
+
+  #why-mde .feature-block__stage,
+  #why-mde .feature-block__copy {
+    justify-self: start !important;
+    width: 100%;
+  }
+}
+
+@media (max-width: 600px) {
+  #why-mde .feature-block__inner {
+    padding: 0 12px;
+    gap: 14px;
+  }
+
+  #why-mde .feature-block__frame {
+    zoom: 0.4;
+  }
+
+  #why-mde .feature-block__copy {
+    width: 100%;
+    max-width: none;
+  }
+
+  #why-mde .feature-block__copy h2 {
+    font-size: 20px;
+  }
+
+  #why-mde .feature-block__copy p {
+    font-size: 12px;
+  }
+
+  #why-mde .feature-block-host {
+    padding: 18px 10px 84px;
+  }
+}
+
+@media (max-width: 420px) {
+  #why-mde .feature-block__frame {
+    zoom: 0.34;
+  }
+
+  #why-mde .feature-block__copy h2 {
+    font-size: 18px;
+  }
+}
+
+/* Landscape (short) screens keep two columns even when narrow. */
+@media (max-height: 640px) and (orientation: landscape) {
+  #why-mde .feature-block__inner {
+    grid-template-columns: minmax(0, 1fr) minmax(0, min(52vw, 520px)) !important;
+  }
+
+  #why-mde .feature-block--flip .feature-block__inner {
+    grid-template-columns: minmax(0, min(52vw, 520px)) minmax(0, 1fr) !important;
+  }
+
+  #why-mde .feature-block__frame {
+    zoom: 0.44 !important;
+  }
+
+  #why-mde .feature-block-host {
+    height: 100svh !important;
+    min-height: 100svh !important;
+    padding: 8px 14px 54px !important;
+  }
+}
+
+/* Portrait phones: hide the demo scenes and the live preview (too cramped),
+   and tell the reader why. */
+@media (orientation: portrait) and (max-width: 900px) {
+  #why-mde .feature-block__stage {
+    display: none !important;
+  }
+
+  #demo .demo-frame {
+    display: none !important;
+  }
+
+  #demo .hero-demo__details::after {
+    content: '竖屏下已隐藏组件演示与实时预览，横屏或桌面端可查看完整效果。';
+    display: block;
+    margin-top: 12px;
+    color: var(--text-sec);
+    font-size: 12px;
+    line-height: 1.7;
+  }
+
+  #why-mde .feature-block__copy::after {
+    content: '竖屏下已隐藏组件演示，横屏可查看。';
+    display: block;
+    margin-top: 10px;
+    color: var(--text-dim);
+    font-size: 11px;
+  }
+}
+
+/* Portrait: only the TRY IT NOW live preview is hidden (the feature scenes stay). */
+@media (orientation: portrait) and (max-width: 900px) {
+  #why-mde .feature-block__stage {
+    display: flex !important;
+  }
+
+  #why-mde .feature-block__copy::after {
+    content: none;
+  }
+
+  #demo .demo-frame {
+    display: none !important;
+  }
+
+  #demo .hero-demo__details::after {
+    content: '竖屏空间有限，TRY IT NOW 的实时预览已隐藏；横屏或桌面端可查看完整演示。';
+    display: block;
+    margin-top: 12px;
+    color: var(--text-sec);
+    font-size: 12px;
+    line-height: 1.7;
+  }
+}
+
+/* Portrait: keep the scene readable (no tiny shrink); only the TRY IT NOW
+   live preview is hidden, with a short note explaining why. */
+@media (max-width: 600px) {
+  #why-mde .feature-block__frame {
+    zoom: 0.62;
+  }
+}
+
+@media (max-width: 420px) {
+  #why-mde .feature-block__frame {
+    zoom: 0.55;
+  }
+}
+
+@media (orientation: portrait) and (max-width: 900px) {
+  #why-mde .feature-block__stage {
+    display: flex !important;
+  }
+
+  #why-mde .feature-block__copy::after {
+    content: none;
+  }
+
+  #demo .demo-frame {
+    display: none !important;
+  }
+
+  #demo .hero-demo__details::after {
+    content: '竖屏空间有限，TRY IT NOW 的实时预览已隐藏；横屏或桌面端可查看完整演示。';
+    display: block;
+    margin-top: 12px;
+    color: var(--text-sec);
+    font-size: 12px;
+    line-height: 1.7;
+  }
+}
+
+/* Portrait phones: zoom the whole fixed-size frame so the scene never clips. */
+@media (max-width: 600px) {
+  #why-mde .feature-block__frame {
+    width: 746px;
+    max-width: none;
+    zoom: 0.46;
+  }
+
+  #why-mde .feature-block__stage {
+    width: 100%;
+    overflow: hidden;
+  }
+}
+
+@media (max-width: 420px) {
+  #why-mde .feature-block__frame {
+    zoom: 0.44;
+  }
+}
+
+/* Portrait: keep the iframe rendered but cover it with an explanatory veil. */
+@media (orientation: portrait) and (max-width: 900px) {
+  #why-mde .feature-block__stage {
+    overflow: visible;
+  }
+
+  #demo.hero-demo {
+    height: auto !important;
+    min-height: 100svh !important;
+  }
+
+  #demo .demo-frame {
+    display: block !important;
+    position: relative;
+    min-height: 320px;
+  }
+
+  #demo .demo-frame::after {
+    content: '竖屏空间有限，实时预览已隐藏；横屏或桌面端可查看完整演示。';
+    position: absolute;
+    inset: 0;
+    z-index: 3;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 24px;
+    background: color-mix(in srgb, var(--surface) 78%, transparent);
+    backdrop-filter: blur(8px);
+    color: var(--text-sec);
+    font-size: 12px;
+    line-height: 1.8;
+    text-align: center;
+  }
+
+  #demo .hero-demo__details::after {
+    content: none;
+  }
+}
+
+@media (orientation: portrait) and (max-width: 900px) {
+  #demo.hero-demo {
+    height: calc(100svh - 64px) !important;
+    min-height: 0 !important;
+  }
+
+  #demo .demo-frame {
+    flex: 1 1 0 !important;
+    min-height: 0 !important;
+  }
+}
+
+/* Third scene (LANGUAGE) hard-codes a light palette in feature-scenes.css. */
+html[data-theme='dark'] .scene-language-demo {
+  background: var(--surface);
+  color: var(--text);
+}
+
+html[data-theme='dark'] .scene-language-demo .scene-completions {
+  background: var(--surface);
+  border-color: var(--border);
+  color: var(--text);
+}
+
+html[data-theme='dark'] .scene-language-demo .scene-completion-row.is-selected {
+  background: var(--hover);
+}
+
+html[data-theme='dark'] .scene-language-demo .scene-completion-row small,
+html[data-theme='dark'] .scene-language-demo .scene-completion-detail,
+html[data-theme='dark'] .scene-language-demo .scene-completion-detail span {
+  color: var(--text-sec);
+}
+
+html[data-theme='dark'] .scene-language-demo .scene-line-number {
+  color: var(--text-dim);
+}
+
+html[data-theme='dark'] .scene-language-demo .scene-editor-footer {
+  background: var(--sidebar);
+  border-color: var(--border);
+  color: var(--text-sec);
+}
+
+/* Snap alignment: the first pager screen must start exactly at scrollY 0,
+   otherwise the browser snaps 0 -> first screen offset on load (visible jitter).
+   The sticky header no longer occupies document flow, and its height is added
+   as inner padding instead. */
+.site-header {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  z-index: 100;
+}
+
+#why-mde.product-story {
+  padding-top: 0 !important;
+  margin-top: 0 !important;
+}
+
+.feature-block-host {
+  scroll-margin-top: 0;
+}
+
+#why-mde .feature-block-host {
+  padding-top: 64px;
+}
+
+#demo.hero-demo {
+  padding-top: 64px;
+}
+
+/* main's top offset pushed the first snap point to 34px. */
+main#top {
+  padding-top: 0 !important;
+  margin-top: 0 !important;
+}
+
+/* Pull the pager up by the residual 34px so its first snap point is exactly 0. */
+main#top {
+  margin-top: -34px !important;
+}
+
+/* Proximity snapping: pages still align when you stop near one, but the
+   browser never force-snaps during React mounting (the source of the jitter). */
+html {
+  scroll-snap-type: y proximity !important;
+}
