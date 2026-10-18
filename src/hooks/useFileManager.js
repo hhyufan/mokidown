@@ -536,6 +536,8 @@ export function useFileManager() {
 
       dismissedAutoSavePromptRef.current.delete(tab.id);
       await finalizeSavedTab(tab, targetPath, options.source === 'auto-save' ? 'auto-save' : 'save-as');
+      // Save-as also counts as a save for plugins (e.g. sync the new file).
+      broadcastToPlugins({ type: 'event', name: 'didSave', payload: { path: targetPath, name: targetPath.split(/[\\/]/).pop() } });
       return targetPath;
     } catch (err) {
       notify('error', t('notification.error'), String(err));

@@ -253,7 +253,7 @@ export default function LanguageServices() {
           <button className="language-services__summary" type="button" onClick={() => setSelectedExtId(descriptor.id)}>
             <span className="language-services__icon" aria-hidden="true">{(descriptor.name || '?').slice(0, 2)}</span>
             <span className="language-services__summary-content">
-              <strong>{descriptor.name}{official && <span className="service-extensions__badge">{t('extensions.builtin')}</span>}</strong>
+              <strong>{descriptor.name}</strong>
               <span className="language-services__description">{i18n.language.startsWith('zh') ? descriptor.descriptionZh || descriptor.description : descriptor.description || descriptor.descriptionZh}</span>
               <span className="language-services__meta">{kindLabel(descriptor, i18n.language)}{entry?.package?.version ? ` · v${entry.package.version}` : ''}</span>
             </span>
