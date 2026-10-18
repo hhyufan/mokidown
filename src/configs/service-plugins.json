@@ -2,9 +2,9 @@
   {
     "id": "mokidown.incremental-sync",
     "name": "MokiDown 增量同步服务",
-    "version": "1.6.4",
-    "url": "https://github.com/hhyufan/mokidown-plugin-incremental-sync/releases/download/v1.6.4/mokidown.incremental-sync-1.6.4-945a61cfffc0a4f9.mokiplugin.json",
-    "sha256": "945a61cfffc0a4f9cc6ad5ec12c25c165581cfaecd8425de10490d14110456e2",
+    "version": "1.7.0",
+    "url": "https://github.com/hhyufan/mokidown-plugin-incremental-sync/releases/download/v1.7.0/mokidown.incremental-sync-1.7.0-d011dddedb2e1b34.mokiplugin.json",
+    "sha256": "d011dddedb2e1b348ab20a878566a70ec816364b438b7a7b939d7e76eb3c3554",
     "checksumMode": "canonical-json-v1",
     "permissions": [
       "workspace.read",
@@ -24,6 +24,31 @@
     ],
     "description": "Document-scoped incremental sync with your own service and database.",
     "descriptionZh": "按当前文档显示状态，在编辑器内处理差异并同步到自建服务。",
-    "updateCatalog": "https://github.com/hhyufan/mokidown-plugin-incremental-sync/releases/download/plugin-catalog/catalog.json"
+    "updateCatalog": "https://github.com/hhyufan/mokidown-plugin-incremental-sync/releases/download/plugin-catalog/catalog.json",
+    "configuration": {
+      "help": "本机填写 http://127.0.0.1:端口；局域网填写服务器内网 IP；远程填写代理或自建反代的 HTTPS 地址。三种方式使用相同访问密钥。",
+      "fields": [
+        {
+          "key": "endpoint",
+          "type": "url",
+          "label": "服务地址",
+          "placeholder": "http://127.0.0.1:8787"
+        },
+        {
+          "key": "credential",
+          "type": "secret",
+          "label": "访问密钥（留空保留现有密钥）"
+        },
+        {
+          "key": "workspace",
+          "type": "directory",
+          "label": "选择授权目录"
+        }
+      ],
+      "actions": {
+        "save": "保存连接配置",
+        "test": "保存并测试连接"
+      }
+    }
   }
 ]
