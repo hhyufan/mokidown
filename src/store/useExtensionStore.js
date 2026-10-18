@@ -21,6 +21,8 @@ const useExtensionStore = create(persist((set, get) => ({
   // Compare the bundled catalog (the source of truth for official plugins)
   // against what is installed, so update checks can be offered to the user.
   checkUpdates: async () => {
+    const startedAt = Date.now();
+    set({ updateState: { id: 'catalog', name: '', stage: 'checking' } });
     const installed = get().installed;
     const candidates = await Promise.all(OFFICIAL_EXTENSIONS.map(async (builtin) => {
       if (!builtin.updateCatalog) return builtin;
@@ -45,7 +47,8 @@ const useExtensionStore = create(persist((set, get) => ({
       if (!current || current.package.version === entry.version && (!current.packageDigest || current.packageDigest === entry.sha256)) return null;
       return { entry, currentVersion: current?.package.version || null };
     }).filter(Boolean);
-    set({ pendingUpdates: updates });
+    await new Promise((resolve) => setTimeout(resolve, Math.max(0, 500 - (Date.now() - startedAt))));
+    set({ pendingUpdates: updates, updateState: null });
     return updates;
   },
   updatePlugin: async (entry) => {

@@ -372,3 +372,50 @@
   from { transform: rotate(0deg); }
   to { transform: rotate(360deg); }
 }
+.plugin-status { transition: color 180ms ease, background-color 180ms ease; }
+.plugin-status__icon { flex: 0 0 14px; width: 14px; height: 14px; }
+.plugin-status__label { min-width: 5em; text-align: left; animation: plugin-label-enter 180ms ease both; }
+@keyframes plugin-label-enter { from { opacity: .3; transform: translateY(2px); } to { opacity: 1; transform: translateY(0); } }
+.task-status-indicator { transition: opacity 220ms ease, transform 220ms ease; }
+.task-status-indicator.is-leaving { opacity: 0; transform: translateY(3px); pointer-events: none; }
+@media (prefers-reduced-motion: reduce) { .plugin-status__label { animation: none; } }
+
+/* Sync status labels are all four characters, so icons align across states. */
+.plugin-status__label {
+  display: inline-block;
+  min-width: 4em;
+  text-align: left;
+  line-height: 1;
+}
+
+/* Final sync pill metrics: 12px icon box and a 12px label line keep the check
+   centred against the four-character label, with symmetric padding. */
+.plugin-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 2px 8px;
+  line-height: 1;
+}
+
+.plugin-status__icon {
+  flex: 0 0 12px;
+  width: 12px;
+  height: 12px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.plugin-status__icon svg {
+  width: 12px;
+  height: 12px;
+  display: block;
+}
+
+.plugin-status__label {
+  display: inline-block;
+  min-width: 4em;
+  line-height: 12px;
+  text-align: left;
+}

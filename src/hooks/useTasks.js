@@ -4,6 +4,7 @@ import useUpdateStore from '@store/useUpdateStore';
 import useLspStore, { availablePlugins } from '@store/useLspStore';
 import usePluginContributions from '@store/usePluginContributions';
 import useExtensionStore from '@store/useExtensionStore';
+import useTaskPresence from './useTaskPresence';
 
 const MB = 1048576;
 
@@ -54,7 +55,7 @@ export default function useTasks() {
   const pendingExtensionUpdates = useExtensionStore((s) => s.pendingUpdates);
   const pluginTasks = usePluginContributions((s) => s.pluginTasks);
 
-  const tasks = useMemo(() => {
+  const rawTasks = useMemo(() => {
     const list = [];
 
     if (LISTED_STAGES.has(stage)) {
@@ -102,7 +103,7 @@ export default function useTasks() {
       });
     }
 
-    if (!extensionUpdate && pendingExtensionUpdates.length) {
+    if ((!extensionUpdate || extensionUpdate.stage === 'done') && pendingExtensionUpdates.length) {
       list.push({
         kind: 'extension',
         id: 'extension-update',
@@ -115,14 +116,14 @@ export default function useTasks() {
       });
     }
 
-    if (extensionUpdate) {
+    if (extensionUpdate && extensionUpdate.stage !== 'done') {
       list.push({
         kind: 'extension',
         id: 'extension-update',
         stage: extensionUpdate.stage,
         name: extensionUpdate.name,
         status: t(
-          extensionUpdate.stage === 'updating'
+          extensionUpdate.stage === 'checking' ? 'extensions.checking' : extensionUpdate.stage === 'updating'
             ? 'extensions.updating'
             : extensionUpdate.stage === 'done'
               ? 'extensions.updated'
@@ -165,6 +166,7 @@ export default function useTasks() {
 
     return list;
   }, [stage, version, downloaded, total, updateError, operations, extensionUpdate, pendingExtensionUpdates, pluginTasks, t]);
+  const tasks = useTaskPresence(rawTasks);
 
   const active = useMemo(() => {
     // 优先"正在进行"的：更新在前（它可能已经跑到下载/安装），其次是语言服务；

@@ -3,7 +3,7 @@ import { createExtensionBridge } from './extensionBridge';
 const mocks = vi.hoisted(() => ({ invoke: vi.fn(), get: vi.fn(), set: vi.fn(), save: vi.fn() }));
 vi.mock('@tauri-apps/api/core', () => ({ invoke: mocks.invoke }));
 vi.mock('@tauri-apps/plugin-store', () => ({ load: async () => ({ get: mocks.get, set: mocks.set, save: mocks.save }) }));
-vi.mock('@store/useEditorStore', () => ({ default: { getState: () => ({ tabs: [] }) } }));
+vi.mock('@store/useEditorStore', () => ({ default: { getState: () => ({ tabs: [] }), subscribe: () => () => {} } }));
 vi.mock('@utils/editorBuffer', () => ({ getBuffer: vi.fn() }));
 vi.mock('./localFileGuard', () => ({ withFileOperation: (_path, action) => action() }));
 afterEach(() => vi.clearAllMocks());

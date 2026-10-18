@@ -1,6 +1,7 @@
 import { useEffect, useRef } from 'react';
 import useExtensionStore from '@store/useExtensionStore';
 import usePluginContributions from '@store/usePluginContributions';
+import useHistoryStore from '@store/useHistoryStore';
 import { createExtensionBridge } from '@/services/extensionBridge';
 import { registerPluginSender, unregisterPluginSender } from '@utils/pluginBus';
 import './service-extensions.scss';
@@ -37,7 +38,7 @@ function ExtensionFrame({ entry }) {
     };
     window.addEventListener('message', attach);
     frame.srcdoc = `<!doctype html><html><head><meta charset="utf-8"><meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src ${runnerSource} blob:; style-src 'unsafe-inline'; connect-src 'none'; img-src data:;"><script defer src="${runner.href}"></script></head><body></body></html>`;
-    return () => { unregisterPluginSender(entry.package.id); usePluginContributions.getState().clearPlugin(entry.package.id); clearPluginStyles(entry.package.id); bridge.dispose(); window.removeEventListener('message', attach); frame.srcdoc = ''; };
+    return () => { unregisterPluginSender(entry.package.id); usePluginContributions.getState().clearPlugin(entry.package.id); if (useHistoryStore.getState().diff?.pluginId === entry.package.id) useHistoryStore.getState().clearDiff(); clearPluginStyles(entry.package.id); bridge.dispose(); window.removeEventListener('message', attach); frame.srcdoc = ''; };
   }, [entry]);
   return <iframe ref={ref} hidden aria-hidden="true" tabIndex={-1} title={entry.package.name} sandbox="allow-scripts" />;
 }

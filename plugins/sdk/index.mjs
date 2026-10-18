@@ -21,7 +21,9 @@ export function createPluginClient(port, { timeoutMs = 35000 } = {}) {
     if (disposed) return;
     if (data?.type === 'command') {
       const callback = commands.get(data.id);
-      if (callback) Promise.resolve().then(() => callback(data.args)).catch(report);
+      const result = callback ? Promise.resolve().then(() => callback(data.args)) : Promise.reject(new PluginError('Unknown plugin command'));
+      result.then((value) => { if (data.requestId && !disposed) port.postMessage({ type: 'command-result', requestId: data.requestId, value }); })
+        .catch((error) => { if (data.requestId && !disposed) port.postMessage({ type: 'command-result', requestId: data.requestId, error: error.message }); else report(error); });
       return;
     }
     if (data?.type === 'event') {
@@ -54,7 +56,7 @@ export function createPluginClient(port, { timeoutMs = 35000 } = {}) {
     fileIcons: { set: (id, item) => rpc('fileIcon.add', { id, ...item }), remove: (id) => rpc('fileIcon.remove', { id }) },
   fileBadges: { set: (id, item) => rpc('fileBadge.add', { id, ...item }), remove: (id) => rpc('fileBadge.remove', { id }) },
   tasks: { set: (id, task) => rpc('task.add', { id, ...task }), remove: (id) => rpc('task.remove', { id }) },
-    editor: { getActiveDocument: () => rpc('editor.getActiveDocument'), applyEdits: (documentId, expectedChecksum, edits) => rpc('editor.applyEdits', { documentId, expectedChecksum, edits }), onDidSave: (callback) => on('didSave', callback) },
+    editor: { getActiveDocument: () => rpc('editor.getActiveDocument'), listDocuments: () => rpc('editor.listDocuments'), showDiff: (options) => rpc('editor.showDiff', options), reloadDocument: (documentId) => rpc('editor.reloadDocument', { documentId }), applyEdits: (documentId, expectedChecksum, edits) => rpc('editor.applyEdits', { documentId, expectedChecksum, edits }), onDidSave: (callback) => on('didSave', callback), onDidChangeDocuments: (callback) => on('documentsChanged', callback) },
     styles: { setMarkdown: (id, css) => rpc('styles.set', { id, target: 'markdown', css }), remove: (id) => rpc('styles.remove', { id }) },
     on, onDispose: (callback) => { if (disposed) callback(); else cleanup.push(callback); return callback; },
     dispose: () => {
