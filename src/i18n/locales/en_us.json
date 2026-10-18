@@ -621,5 +621,6 @@
   "extensions.notInstalled": "Not installed",
   "tasks.run": "Run",
   "sync.useRemote": "Use cloud version",
-  "sync.keepLocal": "Keep local"
+  "sync.keepLocal": "Keep local",
+  "extensions.checking": "Checking plugin updates…"
 }

@@ -13,7 +13,7 @@ import './task-list.scss';
 // 更新则回到空闲并释放已拿到的更新资源。
 function closeTask(task) {
   if (task.close === 'cancel') void useLspStore.getState().cancelInstall(task.id);
-  else if (task.close === 'dismiss') useLspStore.getState().dismissOperation(task.id);
+  else if (task.close === 'dismiss') { if (task.kind === 'extension') useExtensionStore.getState().clearUpdateState(); else useLspStore.getState().dismissOperation(task.id); }
   else if (task.close === 'reset') void useUpdateStore.getState().reset();
 }
 
@@ -62,7 +62,7 @@ export default function TaskList() {
           // 数字进度那一行的左侧内容：下载量优先，其次是版本对比。
           const metaLeft = task.meta || (task.kind === 'update' ? versionRow : '');
           return (
-            <div className="task-item" key={`${task.kind}-${task.id}`}>
+            <div className={`task-item${task.leaving ? ' is-leaving' : ''}`} key={`${task.kind}-${task.id}`}>
               <div className="ti-row">
                 <span className="ti-name">
                   {task.name}

@@ -1,7 +1,15 @@
 {
   "name": "@mokidown/sdk",
-  "version": "1.1.0",
+  "version": "1.2.0",
   "type": "module",
-  "exports": { ".": { "types": "./index.d.ts", "import": "./index.mjs" } },
-  "files": ["index.mjs", "index.d.ts"]
+  "exports": {
+    ".": {
+      "types": "./index.d.ts",
+      "import": "./index.mjs"
+    }
+  },
+  "files": [
+    "index.mjs",
+    "index.d.ts"
+  ]
 }

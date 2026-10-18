@@ -5,6 +5,7 @@ import './task-status-indicator.scss';
 // 进行中的阶段：检测更新、下载/安装/重启，以及语言服务的安装与卸载。
 const activeStages = new Set([
   'checking',
+  'updating',
   'downloading',
   'installing',
   'restarting',
@@ -13,7 +14,7 @@ const activeStages = new Set([
   'uninstalling',
 ]);
 
-export default function TaskStatusIndicator({ stage, label, progress, expanded, onClick }) {
+export default function TaskStatusIndicator({ stage, label, progress, expanded, onClick, leaving }) {
   const { t } = useTranslation();
   const active = activeStages.has(stage);
   // label 由调用方给出（语言服务阶段用的是 languageServices.phase.* 文案），
@@ -22,7 +23,7 @@ export default function TaskStatusIndicator({ stage, label, progress, expanded, 
   return (
     <button
       type="button"
-      className={`task-status-indicator${active ? ' is-active' : ''}`}
+      className={`task-status-indicator${active ? ' is-active' : ''}${leaving ? ' is-leaving' : ''}`}
       aria-label={text}
       aria-expanded={expanded}
       onClick={onClick}

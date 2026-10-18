@@ -1,7 +1,8 @@
 export interface PluginDocument { id: string; path: string | null; name: string; content: string; checksum: string; language: string }
 export interface TextEdit { from: number; to: number; text: string }
 export interface StatusAction { id: string; title: string; command: string; args?: unknown; group?: string; disabled?: boolean }
-export interface StatusItem { text: string; title?: string; command?: string; icon?: string; tone?: 'info' | 'success' | 'warning' | 'error'; busy?: boolean; actions?: StatusAction[] }
+export interface StatusItem { text: string; title?: string; command?: string; icon?: string; tone?: 'info' | 'success' | 'warning' | 'error'; busy?: boolean; actions?: StatusAction[]; documentId?: string; args?: unknown }
+export interface DocumentInfo { id: string; path: string | null; name: string; relativePath: string | null; active: boolean; modified: boolean }
 export interface PluginApi {
   apiVersion: 1;
   signal: AbortSignal;
@@ -17,6 +18,10 @@ export interface PluginApi {
   net: { request<T = unknown>(path: string, options?: { method?: 'GET' | 'PUT' | 'POST' | 'DELETE'; body?: unknown }): Promise<{ status: number; data: T }> };
   editor: {
     getActiveDocument(): Promise<PluginDocument | null>;
+    listDocuments(): Promise<DocumentInfo[]>;
+    showDiff(options: { path?: string; content: string; label?: string; rev?: number; actions: StatusAction[] }): Promise<boolean>;
+    reloadDocument(documentId: string): Promise<boolean>;
+    onDidChangeDocuments(callback: (documents: DocumentInfo[]) => unknown): () => void;
     applyEdits(documentId: string, expectedChecksum: string, edits: TextEdit[]): Promise<{ documentId: string; checksum: string }>;
     onDidSave(callback: (event: { path: string; name: string }) => void | Promise<void>): () => void;
   };
