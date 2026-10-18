@@ -655,9 +655,32 @@ html[data-theme='dark'] .le-gutter {
     display: none;
   }
 }
-/* Vertical feature pager: one capability per screen, the live demo last. */
+/* Vertical feature pager: one capability per screen, the live demo last.
+   Scrolling is a plain document flow — no CSS scroll snapping — so wheel and
+   programmatic scrolling never fight each other. */
 html {
-  scroll-snap-type: y proximity;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(127, 127, 127, 0.45) transparent;
+}
+
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: rgba(127, 127, 127, 0.45);
+  border: 3px solid transparent;
+  border-radius: 999px;
+  background-clip: content-box;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background-color: rgba(127, 127, 127, 0.7);
 }
 
 .feature-sections {
@@ -670,7 +693,6 @@ html {
   min-height: 100vh;
   display: flex;
   align-items: center;
-  scroll-snap-align: start;
   padding: 0 clamp(12px, 4vw, 48px);
   box-sizing: border-box;
 }
@@ -716,7 +738,6 @@ html[data-theme='dark'] .feature-scene {
   display: flex;
   flex-direction: column;
   justify-content: center;
-  scroll-snap-align: start;
 }
 
 /* Let the feature pager use the full viewport width; the inherited shell
@@ -773,11 +794,6 @@ html[data-theme='dark'] .feature-scene {
   grid-template-columns: minmax(0, min(58vw, 980px)) minmax(0, 1fr);
 }
 
-/* Lock the pager: one screen per capability, no free scrolling past a page. */
-html {
-  scroll-snap-type: y mandatory !important;
-}
-
 #why-mde,
 #why-mde.section-shell {
   width: 100% !important;
@@ -786,9 +802,8 @@ html {
 }
 
 .feature-block-host {
-  height: 100svh;
   min-height: 100svh;
-  overflow: hidden;
+  overflow: visible;
 }
 
 .feature-block {
@@ -1396,13 +1411,7 @@ main#top {
   margin-top: 0 !important;
 }
 
-/* Pull the pager up by the residual 34px so its first snap point is exactly 0. */
+/* Pull the pager up by the residual 34px so its first screen starts at 0. */
 main#top {
   margin-top: -34px !important;
-}
-
-/* Proximity snapping: pages still align when you stop near one, but the
-   browser never force-snaps during React mounting (the source of the jitter). */
-html {
-  scroll-snap-type: y proximity !important;
 }
