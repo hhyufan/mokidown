@@ -503,3 +503,20 @@
     animation: none;
   }
 }
+
+/* The theme scene must render the real light frame even when the site itself
+   is dark: the page-level dark palette overrides .feature-scene, so scope the
+   light palette explicitly on the frame. */
+html[data-theme='dark'] .scene-theme-frame[data-theme='light'] {
+  --surface: #fff;
+  --sidebar: #fafafa;
+  --border: #e5e5e7;
+  --border-light: #efefef;
+  --text: #2c2c2e;
+  --text-sec: #6d6d6f;
+  --text-dim: #c4c4c6;
+  --accent: #4091ff;
+  --accent-bg: rgba(64, 145, 255, 0.08);
+  --accent-light: #e8f0ff;
+  --hover: #f0f0f2;
+}
