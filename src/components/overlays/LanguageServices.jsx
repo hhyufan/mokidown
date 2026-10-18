@@ -181,7 +181,14 @@ export default function LanguageServices() {
         <div><h4>{selectedExt.descriptor.name}</h4>
           <p>{kindLabel(selectedExt.descriptor, i18n.language)} · v{selectedExt.entry?.package?.version || selectedExt.descriptor.version || '1.0.0'}</p></div>
       </div>
-      <p className="language-services__detail-description">{i18n.language.startsWith('zh') ? selectedExt.descriptor.descriptionZh || selectedExt.descriptor.description : selectedExt.descriptor.description || selectedExt.descriptor.descriptionZh}</p>
+      <p className="language-services__detail-description">{(() => {
+        // Description comes from the installed plugin package first; the
+        // catalog entry is only a fallback for the pre-install view.
+        const pkg = selectedExt.entry?.package || selectedExt.descriptor;
+        return i18n.language.startsWith('zh')
+          ? pkg.descriptionZh || pkg.description
+          : pkg.description || pkg.descriptionZh;
+      })()}</p>
       {selectedExt.catalogItem
         ? <Button type="primary" disabled={!desktop} onClick={() => act(() => extState.installFromCatalog(selectedExt.descriptor))}>{t('extensions.install')}</Button>
         : <>
