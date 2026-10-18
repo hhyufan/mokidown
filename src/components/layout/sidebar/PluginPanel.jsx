@@ -48,7 +48,7 @@ export default function PluginPanel() {
       </header>
       <div className="timeline__body" aria-hidden={!expanded}>
         <ul className="timeline__list">
-          {source.items.length === 0 && <li className="timeline__placeholder">暂无历史</li>}
+          {source.items.length === 0 && <li className="timeline__placeholder">{source.emptyText || '暂无历史'}</li>}
           {source.items.map((item) => (
             <li key={item.id}>
               <button
