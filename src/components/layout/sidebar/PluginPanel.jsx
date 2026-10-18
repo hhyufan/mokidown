@@ -12,9 +12,9 @@ const Chevron = () => (
 );
 
 /**
- * Generic, collapsible sidebar panel fed by plugins. The editor has no idea
- * what the entries mean: title, labels and metadata all come from the plugin
- * that registered the source. No source → nothing renders.
+ * Generic, collapsible sidebar panel fed by plugins. It reuses the local
+ * history row styling so both panels look identical; the editor still has no
+ * idea what the entries mean — title and items come from the plugin.
  */
 export default function PluginPanel() {
   const [expanded, setExpanded] = useState(false);
@@ -26,39 +26,41 @@ export default function PluginPanel() {
     && (normalize(tab.path) === normalize(entry.path) || normalize(tab.path).endsWith('/' + normalize(entry.path))));
   if (!source) return null;
   return (
-    <section className="sidebar__plugin-panel" aria-label={source.title}>
-      <header className="sidebar__plugin-panel-header">
+    <section className="timeline sidebar__plugin-panel" aria-label={source.title}>
+      <header className="timeline__header">
         <button
           type="button"
-          className="sidebar__plugin-panel-toggle"
+          className="timeline__toggle"
           aria-expanded={expanded}
           onClick={() => setExpanded((value) => !value)}
         >
-          <span className={`sidebar__plugin-panel-chevron${expanded ? ' is-open' : ''}`}><Chevron /></span>
-          <span className="sidebar__plugin-panel-title">{source.title}</span>
-          <span className="sidebar__plugin-panel-count">{source.items.length}</span>
+          <span className={`timeline__chevron sidebar__plugin-panel-chevron${expanded ? ' is-open' : ''}`}><Chevron /></span>
+          <span className="timeline__label">{source.title}</span>
+          <span className="timeline__count">{source.items.length}</span>
         </button>
       </header>
       {expanded && (
-        <ul className="sidebar__plugin-panel-list">
-          {source.items.length === 0 && <li className="sidebar__plugin-panel-empty">暂无版本</li>}
-          {source.items.map((item) => (
-            <li key={item.id}>
-              <button
-                type="button"
-                className="sidebar__plugin-panel-item"
-                onClick={() => sendToPlugin(source.pluginId, {
-                  type: 'event',
-                  name: 'versionSelected',
-                  payload: { id: item.id, rev: item.rev },
-                })}
-              >
-                <span className="sidebar__plugin-panel-label">{item.label}</span>
-                {item.meta && <span className="sidebar__plugin-panel-meta">{item.meta}</span>}
-              </button>
-            </li>
-          ))}
-        </ul>
+        <div className="timeline__body">
+          <ul className="timeline__list">
+            {source.items.length === 0 && <li className="sidebar__plugin-panel-empty">暂无版本</li>}
+            {source.items.map((item) => (
+              <li key={item.id}>
+                <button
+                  type="button"
+                  className="timeline__item"
+                  onClick={() => sendToPlugin(source.pluginId, {
+                    type: 'event',
+                    name: 'versionSelected',
+                    payload: { id: item.id, rev: item.rev },
+                  })}
+                >
+                  <span className="timeline__time">{item.label}</span>
+                  <span className="timeline__size">{item.meta}</span>
+                </button>
+              </li>
+            ))}
+          </ul>
+        </div>
       )}
     </section>
   );
