@@ -11,10 +11,17 @@ const Chevron = () => (
   </svg>
 );
 
+const Refresh = () => (
+  <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" aria-hidden="true">
+    <path d="M13.2 8a5.2 5.2 0 1 1-1.5-3.7" />
+    <path d="M13.5 2.5v3h-3" />
+  </svg>
+);
+
 /**
- * Generic, collapsible sidebar panel fed by plugins. It reuses the local
- * history row styling so both panels look identical; the editor still has no
- * idea what the entries mean — title and items come from the plugin.
+ * Generic, collapsible sidebar panel fed by plugins. It mirrors the local
+ * history row (same typography and expand/collapse) while title, entries and
+ * the refresh action all come from the plugin.
  */
 export default function PluginPanel() {
   const [expanded, setExpanded] = useState(false);
@@ -26,41 +33,47 @@ export default function PluginPanel() {
     && (normalize(tab.path) === normalize(entry.path) || normalize(tab.path).endsWith('/' + normalize(entry.path))));
   if (!source) return null;
   return (
-    <section className="timeline sidebar__plugin-panel" aria-label={source.title}>
-      <header className="timeline__header">
+    <section className="plugin-panel" aria-label={source.title}>
+      <header className="plugin-panel__header">
         <button
           type="button"
-          className="timeline__toggle"
+          className="plugin-panel__toggle"
           aria-expanded={expanded}
           onClick={() => setExpanded((value) => !value)}
         >
-          <span className={`timeline__chevron sidebar__plugin-panel-chevron${expanded ? ' is-open' : ''}`}><Chevron /></span>
-          <span className="timeline__label">{source.title}</span>
-          <span className="timeline__count">{source.items.length}</span>
+          <span className={`plugin-panel__chevron${expanded ? ' is-open' : ''}`}><Chevron /></span>
+          <span className="plugin-panel__title">{source.title}</span>
+          <span className="plugin-panel__count">{source.items.length}</span>
+        </button>
+        <button
+          type="button"
+          className="plugin-panel__refresh"
+          aria-label="刷新"
+          onClick={() => sendToPlugin(source.pluginId, { type: 'event', name: 'versionRefresh' })}
+        >
+          <Refresh />
         </button>
       </header>
       {expanded && (
-        <div className="timeline__body">
-          <ul className="timeline__list">
-            {source.items.length === 0 && <li className="sidebar__plugin-panel-empty">暂无版本</li>}
-            {source.items.map((item) => (
-              <li key={item.id}>
-                <button
-                  type="button"
-                  className="timeline__item"
-                  onClick={() => sendToPlugin(source.pluginId, {
-                    type: 'event',
-                    name: 'versionSelected',
-                    payload: { id: item.id, rev: item.rev },
-                  })}
-                >
-                  <span className="timeline__time">{item.label}</span>
-                  <span className="timeline__size">{item.meta}</span>
-                </button>
-              </li>
-            ))}
-          </ul>
-        </div>
+        <ul className="plugin-panel__list">
+          {source.items.length === 0 && <li className="plugin-panel__empty">暂无历史</li>}
+          {source.items.map((item) => (
+            <li key={item.id}>
+              <button
+                type="button"
+                className="plugin-panel__item"
+                onClick={() => sendToPlugin(source.pluginId, {
+                  type: 'event',
+                  name: 'versionSelected',
+                  payload: { id: item.id, rev: item.rev },
+                })}
+              >
+                <span className="plugin-panel__label">{item.label}</span>
+                {item.meta && <span className="plugin-panel__meta">{item.meta}</span>}
+              </button>
+            </li>
+          ))}
+        </ul>
       )}
     </section>
   );
