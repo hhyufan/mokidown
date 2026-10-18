@@ -6,6 +6,7 @@ import { invoke } from '@tauri-apps/api/core';
 import { load } from '@tauri-apps/plugin-store';
 import useEditorStore from '@store/useEditorStore';
 import useHistoryStore from '@store/useHistoryStore';
+import useVersionListStore from '@store/useVersionListStore';
 import useUpdateStore from '@store/useUpdateStore';
 import usePluginContributions from '@store/usePluginContributions';
 import { getBuffer, setBuffer } from '@utils/editorBuffer';
@@ -138,6 +139,31 @@ export function createExtensionBridge(entry, port) {
         pluginId: pkg.id,
         actions: validateStatusActions(args.actions),
         rev: Number.isSafeInteger(args.rev) ? args.rev : null,
+      });
+      return true;
+    }
+    if (method === 'editor.showVersions') {
+      const state = useEditorStore.getState();
+      const normalize = (value) => String(value || '').replace(/\\/g, '/');
+      const info = getPluginDocuments(state, settings.workspace).find((entry) => args.path
+        ? normalize(entry.path) === normalize(args.path) || entry.relativePath === normalize(args.path)
+        : entry.active);
+      const tab = state.tabs.find((entry) => entry.id === info?.id);
+      if (!tab) throw new Error('Open the document first');
+      useVersionListStore.getState().show({
+        pluginId: pkg.id,
+        tabId: tab.id,
+        path: tab.path || String(args.path || ''),
+        title: String(args.title || tab.name || ''),
+        items: Array.isArray(args.items) ? args.items.slice(0, 100).map((item) => ({
+          id: String(item.id || '').slice(0, 128),
+          label: String(item.label || item.id || '').slice(0, 160),
+          meta: String(item.meta || '').slice(0, 160),
+          rev: Number.isSafeInteger(item.rev) ? item.rev : null,
+          content: typeof item.content === 'string' ? item.content : null,
+          actionLabel: item.actionLabel ? String(item.actionLabel).slice(0, 80) : '',
+          applyIcon: item.applyIcon === 'cloud-download' ? 'cloud-download' : '',
+        })) : [],
       });
       return true;
     }
