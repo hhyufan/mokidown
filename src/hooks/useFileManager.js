@@ -772,7 +772,8 @@ export function useFileManager() {
     try {
       const result = await saveExistingFile(tab.path, tab.content, tab.encoding, tab.id);
       if (result.success) {
-
+        // Ctrl+S path: tell plugins a save happened (cloud sync reacts to it).
+        broadcastToPlugins({ type: 'event', name: 'didSave', payload: { path: tab.path, name: tab.path.split(/[\\\\/]/).pop() } });
         return { ok: true, tabId: tab.id };
       } else if (!result.conflict && !result.externalReloaded && !result.superseded) {
         notify('error', t('notification.error'), result.message);
