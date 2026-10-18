@@ -1,27 +1,18 @@
 import { useState } from 'react';
+import { ReloadOutlined } from '@ant-design/icons';
+import ChevronIcon from '@components/ui/ChevronIcon';
 import useEditorStore from '@store/useEditorStore';
 import usePluginContributions from '@store/usePluginContributions';
 import { sendToPlugin } from '@utils/pluginBus';
+import '@components/history/history.scss';
 
 const normalize = (value) => String(value || '').replace(/\\/g, '/');
 
-const Chevron = () => (
-  <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.6" aria-hidden="true">
-    <path d="m6 3 5 5-5 5" />
-  </svg>
-);
-
-const Refresh = () => (
-  <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" aria-hidden="true">
-    <path d="M13.2 8a5.2 5.2 0 1 1-1.5-3.7" />
-    <path d="M13.5 2.5v3h-3" />
-  </svg>
-);
-
 /**
- * Generic, collapsible sidebar panel fed by plugins. It mirrors the local
- * history row (same typography and expand/collapse) while title, entries and
- * the refresh action all come from the plugin.
+ * Generic, collapsible sidebar panel fed by plugins. It copies the exact
+ * timeline structure (including the `timeline--open` class that drives the
+ * height transition and chevron rotation) so it looks and behaves identically
+ * to local history; title and entries come from the plugin.
  */
 export default function PluginPanel() {
   const [expanded, setExpanded] = useState(false);
@@ -33,48 +24,49 @@ export default function PluginPanel() {
     && (normalize(tab.path) === normalize(entry.path) || normalize(tab.path).endsWith('/' + normalize(entry.path))));
   if (!source) return null;
   return (
-    <section className="plugin-panel" aria-label={source.title}>
-      <header className="plugin-panel__header">
+    <section className={`timeline${expanded ? ' timeline--open' : ''}`} aria-label={source.title}>
+      <header className="timeline__header">
         <button
           type="button"
-          className="plugin-panel__toggle"
+          className="timeline__toggle"
           aria-expanded={expanded}
-          onClick={() => setExpanded((value) => !value)}
+          aria-label={source.title}
+          onClick={() => setExpanded(!expanded)}
         >
-          <span className={`plugin-panel__chevron${expanded ? ' is-open' : ''}`}><Chevron /></span>
-          <span className="plugin-panel__title">{source.title}</span>
-          <span className="plugin-panel__count">{source.items.length}</span>
+          <ChevronIcon className="timeline__chevron" />
         </button>
+        <span className="timeline__label">{source.title}</span>
+        <span className="timeline__count">{source.items.length}</span>
         <button
           type="button"
-          className="plugin-panel__refresh"
+          className="timeline__refresh"
           aria-label="刷新"
           onClick={() => sendToPlugin(source.pluginId, { type: 'event', name: 'versionRefresh' })}
         >
-          <Refresh />
+          <ReloadOutlined />
         </button>
       </header>
-      {expanded && (
-        <ul className="plugin-panel__list">
-          {source.items.length === 0 && <li className="plugin-panel__empty">暂无历史</li>}
+      <div className="timeline__body" aria-hidden={!expanded}>
+        <ul className="timeline__list">
+          {source.items.length === 0 && <li className="timeline__placeholder">暂无历史</li>}
           {source.items.map((item) => (
             <li key={item.id}>
               <button
                 type="button"
-                className="plugin-panel__item"
+                className="timeline__item"
                 onClick={() => sendToPlugin(source.pluginId, {
                   type: 'event',
                   name: 'versionSelected',
                   payload: { id: item.id, rev: item.rev },
                 })}
               >
-                <span className="plugin-panel__label">{item.label}</span>
-                {item.meta && <span className="plugin-panel__meta">{item.meta}</span>}
+                <span className="timeline__time">{item.label}</span>
+                <span className="timeline__size">{item.meta}</span>
               </button>
             </li>
           ))}
         </ul>
-      )}
+      </div>
     </section>
   );
 }
