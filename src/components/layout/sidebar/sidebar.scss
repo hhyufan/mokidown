@@ -686,3 +686,32 @@
 .plugin-panel__meta {
   font-size: 10px;
 }
+
+/* Match the local-history count badge, refresh icon and row hover exactly. */
+.plugin-panel__count {
+  flex: 0 0 auto;
+  font-size: 10px;
+  font-weight: 400;
+  color: var(--text-sec);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 0 6px;
+  line-height: 16px;
+  opacity: 1;
+}
+
+.plugin-panel__refresh {
+  width: 18px;
+  height: 18px;
+  border-radius: 4px;
+}
+
+.plugin-panel__refresh:hover {
+  background: transparent;
+  color: var(--text);
+}
+
+.plugin-panel__item:hover {
+  background: transparent;
+}
