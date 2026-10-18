@@ -622,5 +622,6 @@
   "tasks.run": "处理",
   "sync.useRemote": "使用云端版本",
   "sync.keepLocal": "保留本地",
-  "extensions.checking": "正在检查插件更新…"
+  "extensions.checking": "正在检查插件更新…",
+  "extensions.noConfiguration": "该插件未声明配置界面。"
 }
