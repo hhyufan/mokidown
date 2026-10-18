@@ -309,6 +309,7 @@ function Footer() {
         {activeTask && (
           <TaskStatusIndicator
             stage={activeTask.stage}
+            leaving={activeTask.leaving}
             label={`${activeTask.status}${Number.isFinite(activeTask.percent) ? ` ${activeTask.percent}%` : ''}`}
             progress={activeTask.percent}
             expanded={tasksOpen}
@@ -326,14 +327,14 @@ function Footer() {
         <span>{activeTab?.encoding || 'UTF-8'}</span>
         <span className="footer__sep" />
         <span>{activeTab?.lineEnding || 'LF'}</span>
-        {pluginStatus.length > 0 && <span className="footer__sep" />}
-        {pluginStatus.map((item) => (
+        {pluginStatus.some((item) => !item.documentId || item.documentId === activeTabId) && <span className="footer__sep" />}
+        {pluginStatus.filter((item) => !item.documentId || item.documentId === activeTabId).map((item) => (
           <PluginStatusPill
             key={`${item.pluginId}:${item.id}`}
             item={item}
             onActivate={(action) => {
               const command = action?.command || item.command;
-              if (command && usePluginContributions.getState().commands[`${item.pluginId}:${command}`]) sendToPlugin(item.pluginId, { type: 'command', id: command, args: action?.args });
+              if (command && usePluginContributions.getState().commands[`${item.pluginId}:${command}`]) sendToPlugin(item.pluginId, { type: 'command', id: command, args: action?.args ?? item.args });
             }}
           />
         ))}

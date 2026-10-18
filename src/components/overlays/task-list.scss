@@ -222,3 +222,5 @@
 .task-action:hover {
   filter: brightness(1.08);
 }
+.task-panel .task-item { transition: opacity 220ms ease, transform 220ms ease; }
+.task-panel .task-item.is-leaving { opacity: 0; transform: translateY(-4px); pointer-events: none; }

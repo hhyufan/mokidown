@@ -1,15 +1,16 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Button, Tooltip } from 'antd';
-import { CheckOutlined, CloseOutlined, CloudDownloadOutlined, HistoryOutlined, UndoOutlined } from '@ant-design/icons';
+import { CheckOutlined, CloseOutlined, HistoryOutlined, UndoOutlined } from '@ant-design/icons';
 import * as monaco from 'monaco-editor';
 import useHistoryStore from '@store/useHistoryStore';
 import useEditorStore from '@store/useEditorStore';
 import useThemeStore from '@store/useThemeStore';
 import useConfigStore from '@store/useConfigStore';
 import { useFileManager } from '@hooks/useFileManager';
-import { broadcastToPlugins } from '@utils/pluginBus';
-import { getBuffer } from '@utils/editorBuffer';
+import { broadcastToPlugins, executePluginCommand, sendToPlugin } from '@utils/pluginBus';
+import { getBuffer, flushEditorBuffer } from '@utils/editorBuffer';
+import { sha256 } from '../../../shared/plugin-package.mjs';
 import { historyCapture } from '@utils/tauriApi';
 import { getFileLanguage } from '@utils/fileLanguage';
 import { initMonacoShiki, getMonacoThemeName } from '@utils/monacoShiki';
@@ -259,13 +260,15 @@ export default function HistoryDiffView() {
   const [selectionReady, setSelectionReady] = useState(false);
   const [historyHash, setHistoryHash] = useState(null);
   const [splitOffset, setSplitOffset] = useState(null);
+  const [actionError, setActionError] = useState('');
   const editorRef = useRef(null);
 
   const tab = tabs.find((item) => item.id === diff?.tabId) || null;
-  const isConflict = Boolean(diff?.label);
+  const pluginActions = diff?.pluginId && diff.actions?.length ? diff.actions : null;
   useEffect(() => {
     setDraft(null);
     setSelectionReady(false);
+    setActionError('');
   }, [diff?.timestamp, tab?.id]);
   const historyContent = diff?.content;
   useEffect(() => {
@@ -318,6 +321,28 @@ export default function HistoryDiffView() {
     }
   };
 
+  const runPluginAction = async (action) => {
+    if (busy) return;
+    setBusy(true); setActionError('');
+    try {
+      flushEditorBuffer(tab.id);
+      const content = getBuffer(tab.id, tab.content || '');
+      const currentTab = useEditorStore.getState().tabs.find((item) => item.id === tab.id);
+      if (currentTab?.modified || content !== currentTab?.content) {
+        const result = await saveTab(tab.id);
+        if (!result?.ok) throw new Error('Document could not be saved');
+      }
+      await executePluginCommand(diff.pluginId, action.command, {
+        ...action.args,
+        document: { id: tab.id, path: tab.path, content, checksum: await sha256(content) },
+        draftContent: draft ?? content,
+        referenceContent: diff.content,
+      });
+      if (useHistoryStore.getState().diff === diff) clearDiff();
+    } catch (error) { setActionError(String(error?.message || error)); }
+    finally { setBusy(false); }
+  };
+
   return (
     <div className="history-diff">
       <header className="history-diff__bar">
@@ -331,12 +356,13 @@ export default function HistoryDiffView() {
                 icon={<CloseOutlined aria-hidden="true" />}
                 disabled={busy}
                 onClick={() => {
-                  broadcastToPlugins({ type: 'event', name: 'diffClosed', payload: { path: tab.path } });
+                  if (diff.pluginId) sendToPlugin(diff.pluginId, { type: 'event', name: 'diffClosed', payload: { path: tab.path } });
                   clearDiff();
                 }}
               />
             </span>
           </Tooltip>
+          {pluginActions ? pluginActions.map((action) => <Button key={action.id} size="small" disabled={busy || action.disabled} type={action === pluginActions.at(-1) ? 'primary' : 'default'} onClick={() => runPluginAction(action)}>{action.title}</Button>) : <>
           <Tooltip title={t('history.restoreSelection')} placement="top" mouseEnterDelay={0.3}>
             <span className="history-diff__action">
               <Button
@@ -348,7 +374,6 @@ export default function HistoryDiffView() {
               />
             </span>
           </Tooltip>
-          {true && (
           <Tooltip title={t('history.applyChanges')} placement="top" mouseEnterDelay={0.3}>
             <span className="history-diff__action">
               <Button
@@ -361,20 +386,21 @@ export default function HistoryDiffView() {
               />
             </span>
           </Tooltip>
-          )}
           <Tooltip title={diff.actionLabel || t('history.restore')} placement="top" mouseEnterDelay={0.3}>
             <span className="history-diff__action">
               <Button
                 size="small"
                 aria-label={diff.actionLabel || t('history.restore')}
-                icon={diff.applyIcon === 'cloud-download' ? <CloudDownloadOutlined aria-hidden="true" /> : <HistoryOutlined aria-hidden="true" />}
+                icon={<HistoryOutlined aria-hidden="true" />}
                 disabled={busy}
                 onClick={() => saveChanges(diff.content, !diff.label)}
               />
             </span>
           </Tooltip>
+          </>}
         </div>
       </header>
+      {actionError && <div className="history-diff__error" role="alert">{actionError}</div>}
       <div
         className="history-diff__files"
         style={{ '--history-split': splitOffset == null ? '50%' : `${splitOffset}px` }}

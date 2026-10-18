@@ -1,12 +1,14 @@
 import { sanitizePluginSvg } from './pluginSvg';
 import { validateStatusActions } from './pluginStatusActions';
+import { getPluginDocuments } from './pluginDocuments';
+import { finishPluginCommand } from '@utils/pluginBus';
 import { invoke } from '@tauri-apps/api/core';
 import { load } from '@tauri-apps/plugin-store';
 import useEditorStore from '@store/useEditorStore';
 import useHistoryStore from '@store/useHistoryStore';
 import useUpdateStore from '@store/useUpdateStore';
 import usePluginContributions from '@store/usePluginContributions';
-import { getBuffer } from '@utils/editorBuffer';
+import { getBuffer, setBuffer } from '@utils/editorBuffer';
 import { withFileOperation } from './localFileGuard';
 import { getPluginDocument, applyPluginEdits } from './pluginEditor';
 import { setPluginStyle, removePluginStyle, clearPluginStyles } from './pluginStyles';
@@ -45,6 +47,8 @@ export function createExtensionBridge(entry, port) {
         tone: ['info', 'success', 'warning', 'error'].includes(args.tone) ? args.tone : 'info',
         busy: args.busy === true,
         actions: validateStatusActions(args.actions),
+        documentId: typeof args.documentId === 'string' ? args.documentId : null,
+        args: args.args,
       });
       return true;
     }
@@ -64,6 +68,23 @@ export function createExtensionBridge(entry, port) {
       if (pkg.format === 'mokidown-extension-v2') permit('editor.read');
       return getPluginDocument();
     }
+    if (method === 'editor.listDocuments') { permit('editor.read'); return getPluginDocuments(useEditorStore.getState(), settings.workspace); }
+    if (method === 'editor.reloadDocument') {
+      permit('editor.write'); permit('workspace.read');
+      const state = useEditorStore.getState();
+      const tab = state.tabs.find((item) => item.id === args.documentId);
+      const info = getPluginDocuments(state, settings.workspace).find((item) => item.id === args.documentId);
+      if (!tab || !info?.relativePath || tab.modified || getBuffer(tab.id, tab.content) !== tab.content) throw new Error('Document has unsaved changes or is outside the workspace');
+      const snapshot = tab.content;
+      const result = await invoke('extension_workspace', { root: settings.workspace, path: info.relativePath, action: 'read', content: null, expectedHash: null }); check();
+      const current = useEditorStore.getState().tabs.find((item) => item.id === tab.id);
+      if (!current || current.modified || getBuffer(tab.id, current.content) !== snapshot) throw new Error('Document changed while reloading');
+      if (result.content === null) { useEditorStore.getState().closeTab(tab.id); return false; }
+      if (typeof result.content !== 'string') throw new Error('Document is unavailable');
+      setBuffer(tab.id, result.content);
+      useEditorStore.getState().replaceTabContent(tab.id, { content: result.content });
+      return true;
+    }
     if (method === 'editor.applyEdits') { permit('editor.write'); return applyPluginEdits(args); }
     if (method === 'styles.set') { permit('styles.markdown'); setPluginStyle(pkg.id, args.id, args.target, args.css); return true; }
     if (method === 'styles.remove') { permit('styles.markdown'); removePluginStyle(pkg.id, args.id); return true; }
@@ -72,11 +93,10 @@ export function createExtensionBridge(entry, port) {
     if (method === 'fileIcon.remove') { usePluginContributions.getState().removeContribution(pkg.id, 'fileIcons', args.id); return true; }
     if (method === 'fileBadge.add') {
       if (!args.id || !/^[a-z0-9][a-z0-9.-]{1,80}$/i.test(args.id)) throw new Error('Invalid file badge id');
-      const svg = String(args.svg || '');
-      if (svg.length > 4096 || !/^<svg[\s>]/i.test(svg.trim()) || /<script|onload=|onclick=/i.test(svg)) throw new Error('Invalid SVG badge');
+      const svg = sanitizePluginSvg(args.svg);
       usePluginContributions.getState().addFileBadge(pkg.id, {
         id: args.id,
-        title: String(args.title || '云端').slice(0, 80),
+        title: String(args.title || '插件标记').slice(0, 80),
         extensions: Array.isArray(args.extensions) ? args.extensions.map((ext) => String(ext).toLowerCase()).slice(0, 32) : [],
         paths: Array.isArray(args.paths) ? args.paths.map((path) => String(path)) : [],
         svg,
@@ -95,17 +115,19 @@ export function createExtensionBridge(entry, port) {
         args: args.args || undefined,
         progress: Number.isFinite(args.progress) ? args.progress : undefined,
       });
-      useUpdateStore.getState().showTasks();
+      if (args.reveal === true) useUpdateStore.getState().showTasks();
       return true;
     }
     if (method === 'task.remove') { usePluginContributions.getState().removePluginTask(pkg.id, args.id); return true; }
     if (method === 'editor.showDiff') {
+      if (pkg.format === 'mokidown-extension-v2') permit('editor.read');
       if (typeof args.content !== 'string') throw new Error('Missing remote content');
       const state = useEditorStore.getState();
       const normalize = (value) => String(value || '').replace(/\\/g, '/');
-      const matches = (left, right) => left === right || left.endsWith('/' + right) || right.endsWith('/' + left);
-      const tab = state.tabs.find((entry) => entry.id === state.activeTabId && (!args.path || matches(normalize(entry.path), normalize(args.path))))
-        || state.tabs.find((entry) => args.path && matches(normalize(entry.path), normalize(args.path)));
+      const info = getPluginDocuments(state, settings.workspace).find((entry) => args.path
+        ? normalize(entry.path) === normalize(args.path) || entry.relativePath === normalize(args.path)
+        : entry.active);
+      const tab = state.tabs.find((entry) => entry.id === info?.id);
       if (!tab) throw new Error('Open the document before comparing');
       useHistoryStore.getState().setDiff({
         tabId: tab.id,
@@ -113,7 +135,8 @@ export function createExtensionBridge(entry, port) {
         content: String(args.content),
         label: String(args.label || ''),
         actionLabel: args.actionLabel ? String(args.actionLabel).slice(0, 80) : '',
-        applyIcon: args.applyIcon === 'cloud-download' ? 'cloud-download' : '',
+        pluginId: pkg.id,
+        actions: validateStatusActions(args.actions),
         rev: Number.isSafeInteger(args.rev) ? args.rev : null,
       });
       return true;
@@ -170,6 +193,7 @@ export function createExtensionBridge(entry, port) {
     throw new Error(`Unknown plugin method: ${method}`);
   };
   port.onmessage = ({ data }) => {
+    if (active && data?.type === 'command-result') { finishPluginCommand(pkg.id, data); return; }
     if (!active || !Number.isSafeInteger(data?.id)) return;
     // Serialize plugin requests to preserve storage/write ordering on shutdown.
     queue = queue.then(async () => {
@@ -178,8 +202,20 @@ export function createExtensionBridge(entry, port) {
     });
   };
   port.start();
+  let documentKey = '';
+  const documentsChanged = (state) => {
+    if (!active || !pkg.permissions.includes('editor.read')) return;
+    const documents = getPluginDocuments(state, settings.workspace);
+    const key = JSON.stringify(documents);
+    if (key === documentKey) return;
+    documentKey = key;
+    port.postMessage({ type: 'event', name: 'documentsChanged', payload: documents });
+  };
+  const unsubscribeDocuments = useEditorStore.subscribe(documentsChanged);
+  documentsChanged(useEditorStore.getState());
   const dispose = () => {
     active = false;
+    unsubscribeDocuments();
     clearPluginStyles(pkg.id);
     port.close();
     for (const requestId of pending) void invoke('extension_cancel_request', { requestId }).catch(() => {});

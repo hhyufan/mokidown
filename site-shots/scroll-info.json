@@ -1,0 +1,58 @@
+{
+  "viewport": {
+    "w": 1440,
+    "h": 900
+  },
+  "doc": {
+    "scrollingElement": "HTML",
+    "scrollHeight": 5446,
+    "bodyScrollHeight": 5446,
+    "htmlOverflowX": "visible",
+    "htmlOverflowY": "visible",
+    "bodyOverflowX": "visible",
+    "bodyOverflowY": "visible",
+    "snap": "y",
+    "scrollbarWidth": 0
+  },
+  "horizontalOverflow": [
+    {
+      "tag": "text",
+      "id": "",
+      "cls": "[object SVGAnimatedString]",
+      "w": 7,
+      "sw": 13,
+      "h": 10,
+      "sh": 18,
+      "overflowX": "visible",
+      "overflowY": "visible",
+      "position": "static"
+    }
+  ],
+  "nestedScrollers": [],
+  "sections": [
+    {
+      "tag": "HEADER",
+      "id": "",
+      "cls": "site-header",
+      "top": 0,
+      "h": 64,
+      "snapAlign": "none"
+    },
+    {
+      "tag": "SECTION",
+      "id": "why-mde",
+      "cls": "product-story section-shell",
+      "top": 0,
+      "h": 4610,
+      "snapAlign": "none"
+    },
+    {
+      "tag": "SECTION",
+      "id": "demo",
+      "cls": "hero-demo section-shell",
+      "top": 4610,
+      "h": 836,
+      "snapAlign": "start"
+    }
+  ]
+}

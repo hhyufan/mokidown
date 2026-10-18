@@ -1,6 +1,6 @@
 import * as React from 'react';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
-import { cleanup, fireEvent, render, screen } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import useUpdateStore from '@store/useUpdateStore';
 import useLspStore from '@store/useLspStore';
 import useEditorStore from '@store/useEditorStore';
@@ -134,7 +134,7 @@ it('更新与语言服务同时进行时，两条任务并列显示', () => {
   expect(screen.getByText('Markdown · Marksman')).toBeVisible();
 });
 
-it('安装完成后该任务不再出现在列表里', () => {
+it('安装完成后该任务经过缓冲动画退出列表', async () => {
   useLspStore.setState({
     operations: { 'mde.marksman': { phase: 'installing', percent: 100, text: '' } },
   });
@@ -142,7 +142,8 @@ it('安装完成后该任务不再出现在列表里', () => {
   expect(screen.getByText('Markdown · Marksman')).toBeVisible();
   useLspStore.setState({ operations: {} });
   rerender(<TaskList />);
-  expect(screen.queryByText('Markdown · Marksman')).not.toBeInTheDocument();
+  expect(screen.queryByText('Markdown · Marksman')).toBeInTheDocument();
+  await waitFor(() => expect(screen.queryByText('Markdown · Marksman')).not.toBeInTheDocument(), { timeout: 1500 });
 });
 
 it('最后一条任务消失后面板自动收起，不留空壳', async () => {

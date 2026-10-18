@@ -57,28 +57,31 @@ definePlugin(async (sdk) => {
 | `editor.onDidSave(callback)` | 无 | 返回取消订阅函数；事件 `{path,name}` |
 | `styles.setMarkdown(id,css)` / `remove(id)` | styles.markdown | 样式只作用于 Markdown 预览和富文本内容；单张样式最多 128 KiB |
 | `commands.register(id,title,callback)` | commands | Promise 返回注销函数；状态栏项目可指定 command |
-| `statusBar.set(id,{text,title,command,icon,tone,busy,actions})` / `remove(id)` | ui.statusBar | tone: info/success/warning/error；text ≤80 字符，title ≤120 字符 |
+| `statusBar.set(id,{documentId,text,title,command,args,icon,tone,busy})` / `remove(id)` | ui.statusBar | tone: info/success/warning/error；text ≤80 字符，title ≤120 字符 |
 | `fileIcons.set(id,{extensions,paths,svg})` / `remove(id)` | ui.fileIcons | SVG ≤4096 字符；插件卸载时撤销贡献 |
 | `onDispose(callback)` / `signal` | 无 | 清理回调 / AbortSignal；插件应自行释放定时器和资源 |
 
 文件操作须声明 fileExtensions，例如 `["md","markdown","txt"]`。禁止绝对路径、`..`、符号链接逃逸。文件最大 32 MiB，HTTP 请求/响应最大 4 MiB，超时 30 秒；SDK RPC 默认超时 35 秒。富文本模式支持样式注入，文本编辑 API 当前要求源码编辑器。
 
-## 编辑器内操作
+## 文档状态和对比操作
 
-插件没有独立页面和“打开插件”入口，iframe 仅作为隐藏的后台执行容器。状态、命令、文件图标和 Markdown 样式通过声明式 SDK 接入编辑器。不要向 iframe 的 document 渲染操作界面；它不会展示给用户。
+插件运行在隐藏容器中，状态和操作注入编辑器，不创建独立页面。通过 editor.listDocuments() 获取已打开文档的 id、path、relativePath、active。relativePath 仅在文档位于授权目录内时存在；editor.onDidChangeDocuments() 在标签打开、关闭、切换时通知。
 
-状态栏可附带 actions，用户点击状态项时在编辑器原生菜单中执行。group 用于按文档分组，args 原样传给同一插件的命令回调；disabled 可在操作期间禁用。每项最多 256 个动作，参数总计不超过 128 KiB，标题最多 80 字符，分组名最多 240 字符。一次仅展示部分记录时，可注册翻页命令并更新同一状态项。
+statusBar.set(id,{documentId,text,title,command,args,tone,busy,icon}) 可绑定一个文档。编辑器仅在对应标签激活时显示该状态，切换到没有对应状态的文件时不显示。短于 180ms 的忙碌状态会合并；已显示的加载状态至少保留 450ms，避免闪动。
+
+editor.showDiff({path,content,label,actions}) 在编辑区显示通用可编辑对比。actions 按数组顺序展示，标题、命令和参数完全由插件声明。每个动作格式为 {id,title,command,args}。用户点击动作时，编辑器保存尚未落盘的当前正文，然后把 document:{id,path,content,checksum}、draftContent（右侧编辑稿）和 referenceContent（左侧参考稿）交给该插件命令。
+
+命令必须返回 Promise：只有成功回执才关闭对比；失败展示错误并保留界面。编辑器不会解释动作名称或执行业务策略。插件自行提交业务请求，并可调用 editor.reloadDocument(id) 将授权目录中的最新磁盘内容加载到干净文档；存在未保存改动时拒绝覆盖。关闭对比只关闭界面，不代表完成插件操作。
 
 ```js
-await sdk.commands.register('example.resolve', '处理文档', async (args) => {
-  // 使用 args.documentId / args.choice 执行插件操作，然后刷新状态。
+await sdk.commands.register('example.apply', '应用编辑结果', async (args) => {
+  await applyDomainChange(args.document.checksum, args.draftContent);
+  await sdk.editor.reloadDocument(args.document.id);
+  return { complete: true };
 });
-await sdk.statusBar.set('example.state', {
-  text: '待处理 1 项', tone: 'warning',
-  actions: [
-    { id: 'document.local', title: '保留本地', group: 'note.md', command: 'example.resolve', args: { documentId: 'note', choice: 'local' } },
-    { id: 'document.remote', title: '采用远端', group: 'note.md', command: 'example.resolve', args: { documentId: 'note', choice: 'remote' } },
-  ],
+await sdk.editor.showDiff({
+  path: '/workspace/note.md', content: referenceText, label: '文档对比',
+  actions: [{id:'apply.edits',title:'应用修改',command:'example.apply',args:{revision:42}}],
 });
 ```
 

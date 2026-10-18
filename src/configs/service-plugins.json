@@ -2,9 +2,9 @@
   {
     "id": "mokidown.incremental-sync",
     "name": "MokiDown 增量同步服务",
-    "version": "1.5.0",
-    "url": "https://github.com/hhyufan/mokidown-plugin-incremental-sync/releases/download/v1.5.0/mokidown.incremental-sync-1.5.0.mokiplugin.json",
-    "sha256": "6751f53594a6790bb99dd119b6f74845a18a32d71b8660429289f0548141a508",
+    "version": "1.6.4",
+    "url": "https://github.com/hhyufan/mokidown-plugin-incremental-sync/releases/download/v1.6.4/mokidown.incremental-sync-1.6.4-945a61cfffc0a4f9.mokiplugin.json",
+    "sha256": "945a61cfffc0a4f9cc6ad5ec12c25c165581cfaecd8425de10490d14110456e2",
     "checksumMode": "canonical-json-v1",
     "permissions": [
       "workspace.read",
@@ -13,15 +13,17 @@
       "network",
       "commands",
       "ui.statusBar",
-      "ui.fileIcons"
+      "ui.fileIcons",
+      "editor.read",
+      "editor.write"
     ],
     "fileExtensions": [
       "md",
       "markdown",
       "txt"
     ],
-    "description": "Keep your saved documents in sync with your own server and database. No account required.",
-    "descriptionZh": "将已保存的文档增量同步到自己的服务器和数据库，无需注册登录。",
-    "updateCatalog": "https://raw.githubusercontent.com/hhyufan/mokidown-plugin-incremental-sync/main/catalog.json"
+    "description": "Document-scoped incremental sync with your own service and database.",
+    "descriptionZh": "按当前文档显示状态，在编辑器内处理差异并同步到自建服务。",
+    "updateCatalog": "https://github.com/hhyufan/mokidown-plugin-incremental-sync/releases/download/plugin-catalog/catalog.json"
   }
 ]
