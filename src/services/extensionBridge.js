@@ -126,6 +126,7 @@ export function createExtensionBridge(entry, port) {
       usePluginContributions.getState().setVersionSource(pkg.id, {
         path,
         title: String(args.title || '云端版本').slice(0, 80),
+        emptyText: String(args.emptyText || '暂无历史').slice(0, 120),
         items: Array.isArray(args.items) ? args.items.slice(0, 100).map((item) => ({
           id: String(item.id || '').slice(0, 160),
           label: String(item.label || '').slice(0, 160),
