@@ -280,50 +280,7 @@ html[data-theme='dark'] {
   }
 }
 
-/* Theme toggle: sunrise / sunset ---------------------------------------------
-   The button holds both icons; the active one slides into view while the other
-   slides out, so switching reads as "the sun goes down, the moon rises" (and
-   the reverse) instead of a page-wide fade or overlay. */
-.theme-switch-icons {
-  position: relative;
-  display: inline-block;
-  width: 16px;
-  height: 16px;
-  overflow: hidden;
-  vertical-align: -2px;
-}
-
-.theme-switch-icons .theme-icon {
-  position: absolute;
-  inset: 0;
-  width: 16px;
-  height: 16px;
-  transition:
-    transform 0.35s cubic-bezier(0.2, 0.8, 0.2, 1),
-    opacity 0.28s ease;
-}
-
-.theme-switch-icons .theme-icon--sun {
-  color: #faad14;
-  transform: translateY(0);
-  opacity: 1;
-}
-
-.theme-switch-icons .theme-icon--moon {
-  color: #597ef7;
-  transform: translateY(120%);
-  opacity: 0;
-}
-
-html[data-theme='dark'] .theme-switch-icons .theme-icon--sun {
-  transform: translateY(-120%);
-  opacity: 0;
-}
-
-html[data-theme='dark'] .theme-switch-icons .theme-icon--moon {
-  transform: translateY(0);
-  opacity: 1;
-}/* Theme switch: ripple + sun/moon cross-fade ---------------------------------
+/* Theme switch: ripple + sun/moon cross-fade ---------------------------------
    Both icons live in the button. The active one sits still; the other waits
    below-right, tilted and scaled down. Switching lets the old icon tilt away
    while the new one rises into place. */

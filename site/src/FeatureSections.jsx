@@ -117,9 +117,11 @@ export default function FeatureSections() {
         setActive((current) => {
           const next = new Set(current);
           for (const entry of entries) {
-            // Once a scene has played it stays mounted: the demo should not
-            // reset to an empty card while the reader scrolls past it and back.
-            if (entry.isIntersecting) next.add(Number(entry.target.dataset.index));
+            const index = Number(entry.target.dataset.index);
+            // Play only while the screen is on view: entering starts it,
+            // leaving stops and unmounts it again.
+            if (entry.isIntersecting) next.add(index);
+            else next.delete(index);
           }
           return next;
         });

@@ -39,7 +39,8 @@ function treeFrame(elapsed) {
 }
 
 export default function TreeDemo({ children, onComplete }) {
-  const elapsed = useDemoClock();
+  // Loop the add/rename timeline while the slide is visible.
+  const elapsed = useDemoClock(8200);
   const frame = treeFrame(elapsed);
   useDemoComplete(frame.complete, onComplete);
   return (
