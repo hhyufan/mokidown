@@ -24,13 +24,13 @@ export default function ThemeDemo({ children, onComplete }) {
   const [finished, setFinished] = useState(reduced);
   useEffect(() => {
     if (reduced) return undefined;
-    // 涟漪本身只有 300ms（见 feature-scenes.css），此前两跳之间隔了 3.8s，
-    // 体感是"动画太长"。这里把每一跳前的停留压到 1s：
-    // 1.0s 起跳深色（+300ms 结束）→ 再停 1s → 2.6s 起跳回浅色。
-    const timers = [
-      setTimeout(() => setReveal('dark'), 1000),
-      setTimeout(() => setReveal('light'), 2600),
-    ];
+    // Loop the sun/moon ripple while the slide stays visible.
+    let timers = [];
+    const cycle = () => {
+      setReveal('dark');
+      timers = [setTimeout(() => setReveal('light'), 1800), setTimeout(cycle, 3600)];
+    };
+    timers = [setTimeout(cycle, 600)];
     return () => timers.forEach(clearTimeout);
   }, [reduced]);
   useDemoComplete(finished, onComplete);

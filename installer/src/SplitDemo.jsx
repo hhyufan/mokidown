@@ -7,7 +7,8 @@ const source =
   '# 写下新的想法\n\n## 从灵感开始\n\n让 **文字** 自然流淌。\n\n> 好的想法，值得记录。\n\n- [x] 记录今天的灵感\n- [ ] 写下新的故事';
 
 export default function SplitDemo({ onComplete }) {
-  const elapsed = useDemoClock();
+  // Loop the typing timeline while the slide is visible.
+  const elapsed = useDemoClock(5200);
   const count = Math.max(0, Math.min(source.length, Math.floor((elapsed - 450) / 75)));
   const text = source.slice(0, count);
   useDemoComplete(count === source.length, onComplete);

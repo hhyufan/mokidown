@@ -50,6 +50,8 @@ export default function WritingDemo({ onComplete }) {
   const root = useRef(null);
   const [failed, setFailed] = useState(false);
   const [finished, setFinished] = useState(false);
+  // Bump to remount the editor and replay the typing loop while visible.
+  const [runId, setRunId] = useState(0);
   useEffect(() => {
     let disposed = false;
     let created = false;
@@ -113,6 +115,10 @@ export default function WritingDemo({ onComplete }) {
           if (index === steps.length) {
             setFinished(true);
             onComplete?.();
+            // Replay after a short pause; the effect remounts a fresh editor.
+            timer = setTimeout(() => {
+              if (!disposed) setRunId((value) => value + 1);
+            }, 2200);
           } else timer = setTimeout(type, step === 'WAIT' ? 600 : 80);
         };
         timer = setTimeout(type, 400);
@@ -128,7 +134,7 @@ export default function WritingDemo({ onComplete }) {
       clearTimeout(timer);
       if (created) void editor.destroy();
     };
-  }, [onComplete]);
+  }, [onComplete, runId]);
   return (
     <div className="md-preview md-preview--milkdown scene-writing-demo" data-complete={finished}>
       <div ref={root} />
