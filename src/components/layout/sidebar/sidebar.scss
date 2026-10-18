@@ -715,3 +715,103 @@
 .plugin-panel__item:hover {
   background: transparent;
 }
+
+/* No hover background anywhere in the plugin panel (matches local history). */
+.plugin-panel__toggle:hover {
+  background: transparent;
+}
+
+.plugin-panel__refresh:hover {
+  background: transparent;
+}
+
+.plugin-panel__item:hover,
+.plugin-panel__item:focus-visible {
+  background: transparent;
+}
+
+.plugin-panel__refresh .anticon {
+  font-size: 14px;
+}
+
+/* Header geometry copied from .timeline__header for a 1:1 row. */
+.plugin-panel {
+  display: flex;
+  flex-direction: column;
+  flex-shrink: 0;
+  width: 100%;
+  min-width: 0;
+  max-width: 100%;
+  border-top: 1px solid var(--border);
+  background: var(--sidebar);
+}
+
+.plugin-panel__header {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  padding: 5px 8px 5px 4px;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-sec);
+}
+
+.plugin-panel__toggle {
+  display: grid;
+  place-items: center;
+  width: 18px;
+  height: 18px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--text-sec);
+  cursor: pointer;
+}
+
+.plugin-panel__toggle:hover {
+  color: var(--text);
+  background: transparent;
+}
+
+.plugin-panel__toggle svg {
+  width: 12px;
+  height: 12px;
+  transition: transform 0.15s ease;
+}
+
+.plugin-panel__toggle.is-open svg {
+  transform: rotate(90deg);
+}
+
+.plugin-panel__title {
+  flex: 1;
+  min-width: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.plugin-panel__refresh {
+  display: grid;
+  place-items: center;
+  width: 18px;
+  height: 18px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--text-sec);
+  cursor: pointer;
+}
+
+.plugin-panel__refresh:hover {
+  color: var(--text);
+  background: transparent;
+}
+
+.plugin-panel__refresh .anticon {
+  font-size: 14px;
+}
