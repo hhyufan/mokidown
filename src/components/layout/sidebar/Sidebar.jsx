@@ -17,6 +17,7 @@ import { useFileManager } from '@hooks/useFileManager';
 import FileTree from './explorer/FileTree';
 import OutlineView from './outline/OutlineView';
 import Timeline from '@components/history/Timeline';
+import PluginPanel from './PluginPanel';
 
 import FileTypeIcon from '@components/ui/FileTypeIcon';
 import AppMark from '@components/ui/AppMark';
@@ -397,6 +398,7 @@ function Sidebar({ onOpenSettings, onOpenStats }) {
             <ExplorerToolbar />
             <FileTree />
             <Timeline />
+            <PluginPanel />
           </div>
         )}
         {sidebarView === 'outline' && (

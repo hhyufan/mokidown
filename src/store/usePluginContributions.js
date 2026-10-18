@@ -50,6 +50,19 @@ const usePluginContributions = create((set) => ({
     })),
   removePluginTask: (pluginId, id) =>
     set((state) => ({ pluginTasks: state.pluginTasks.filter((entry) => !(entry.pluginId === pluginId && entry.id === id)) })),
+  // Version sources shown in the sidebar timeline (plugin-provided lists).
+  versionSources: [],
+  setVersionSource: (pluginId, source) =>
+    set((state) => ({
+      versionSources: [
+        ...state.versionSources.filter((entry) => !(entry.pluginId === pluginId && entry.path === source.path)),
+        { ...source, pluginId },
+      ],
+    })),
+  removeVersionSource: (pluginId, path) =>
+    set((state) => ({
+      versionSources: state.versionSources.filter((entry) => !(entry.pluginId === pluginId && entry.path === path)),
+    })),
   clearPlugin: (pluginId) =>
     set((state) => ({
       commands: Object.fromEntries(
@@ -59,6 +72,7 @@ const usePluginContributions = create((set) => ({
       fileIcons: state.fileIcons.filter((item) => item.pluginId !== pluginId),
       fileBadges: state.fileBadges.filter((item) => item.pluginId !== pluginId),
       pluginTasks: state.pluginTasks.filter((item) => item.pluginId !== pluginId),
+      versionSources: state.versionSources.filter((item) => item.pluginId !== pluginId),
     })),
 }));
 

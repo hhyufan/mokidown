@@ -297,3 +297,19 @@
     margin-bottom: 12px;
   }
 }
+
+/* Plugin-contributed version group in the sidebar timeline. */
+.timeline__plugin {
+  margin-top: 8px;
+  border-top: 1px solid var(--border);
+  padding-top: 8px;
+}
+
+.timeline__plugin-title {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 2px 8px 6px;
+  color: var(--text-sec);
+  font-size: 11px;
+}

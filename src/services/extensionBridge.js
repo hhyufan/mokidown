@@ -120,6 +120,25 @@ export function createExtensionBridge(entry, port) {
       return true;
     }
     if (method === 'task.remove') { usePluginContributions.getState().removePluginTask(pkg.id, args.id); return true; }
+    if (method === 'versions.set') {
+      const path = String(args.path || '').slice(0, 1024);
+      if (!path) throw new Error('Invalid version source path');
+      usePluginContributions.getState().setVersionSource(pkg.id, {
+        path,
+        title: String(args.title || '云端版本').slice(0, 80),
+        items: Array.isArray(args.items) ? args.items.slice(0, 100).map((item) => ({
+          id: String(item.id || '').slice(0, 160),
+          label: String(item.label || '').slice(0, 160),
+          meta: String(item.meta || '').slice(0, 160),
+          rev: Number.isSafeInteger(item.rev) ? item.rev : null,
+        })) : [],
+      });
+      return true;
+    }
+    if (method === 'versions.remove') {
+      usePluginContributions.getState().removeVersionSource(pkg.id, String(args.path || ''));
+      return true;
+    }
     if (method === 'editor.showDiff') {
       if (pkg.format === 'mokidown-extension-v2') permit('editor.read');
       if (typeof args.content !== 'string') throw new Error('Missing remote content');
