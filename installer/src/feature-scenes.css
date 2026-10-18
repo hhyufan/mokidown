@@ -215,6 +215,7 @@
   inset: 0;
   border-radius: 12px;
   overflow: hidden;
+  background: var(--surface);
   pointer-events: none;
   animation: scene-theme-reveal 300ms ease-out both;
 }

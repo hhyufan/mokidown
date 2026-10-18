@@ -48,14 +48,12 @@ export default function ThemeDemo({ children, onComplete }) {
           className="scene-theme-ripple"
           aria-hidden="true"
           onAnimationEnd={(event) => {
-            // 只认覆盖层自己的动画：animationend 会从子元素冒泡上来，
-            // 提前收掉覆盖层就会露出还没换底色的那一帧（白闪）。
+            // 只认覆盖层自己的动画：animationend 会从子元素冒泡上来。
             if (event.target !== event.currentTarget) return;
-            // 先把底色切过去——此刻覆盖层还在，这一帧看不见；
-            // 下一帧再撤覆盖层，避免"覆盖层已移除、底色尚未换"的一帧。
+            // 切底色后保留覆盖层，直到下一次循环把它替换掉：撤掉覆盖层
+            // 的那一帧浏览器可能还在用旧的浅色变量重绘，就会闪一帧白边。
             setDark(reveal === 'dark');
             if (reveal === 'light') setFinished(true);
-            requestAnimationFrame(() => setReveal(null));
           }}
         >
           <ThemeFrame dark={reveal === 'dark'}>{children}</ThemeFrame>
