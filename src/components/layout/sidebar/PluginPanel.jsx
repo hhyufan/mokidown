@@ -1,10 +1,15 @@
 import { useState } from 'react';
-import ChevronIcon from '@components/ui/ChevronIcon';
 import useEditorStore from '@store/useEditorStore';
 import usePluginContributions from '@store/usePluginContributions';
 import { sendToPlugin } from '@utils/pluginBus';
 
 const normalize = (value) => String(value || '').replace(/\\/g, '/');
+
+const Chevron = () => (
+  <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.6" aria-hidden="true">
+    <path d="m6 3 5 5-5 5" />
+  </svg>
+);
 
 /**
  * Generic, collapsible sidebar panel fed by plugins. The editor has no idea
@@ -29,7 +34,7 @@ export default function PluginPanel() {
           aria-expanded={expanded}
           onClick={() => setExpanded((value) => !value)}
         >
-          <ChevronIcon className={`sidebar__plugin-panel-chevron${expanded ? ' is-open' : ''}`} />
+          <span className={`sidebar__plugin-panel-chevron${expanded ? ' is-open' : ''}`}><Chevron /></span>
           <span className="sidebar__plugin-panel-title">{source.title}</span>
           <span className="sidebar__plugin-panel-count">{source.items.length}</span>
         </button>
