@@ -640,3 +640,30 @@
   overflow: hidden;
   text-overflow: ellipsis;
 }
+
+/* Plugin panel reuses the timeline classes; only the chevron is scoped. */
+.sidebar__plugin-panel-chevron {
+  flex: 0 0 12px;
+  width: 12px;
+  height: 12px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  transition: transform 0.15s ease;
+}
+
+.sidebar__plugin-panel-chevron svg {
+  width: 12px;
+  height: 12px;
+  display: block;
+}
+
+.sidebar__plugin-panel-chevron.is-open {
+  transform: rotate(90deg);
+}
+
+.sidebar__plugin-panel-empty {
+  padding: 4px 8px;
+  color: var(--text-sec);
+  font-size: 11px;
+}
