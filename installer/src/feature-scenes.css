@@ -213,6 +213,8 @@
 .scene-theme-ripple {
   position: absolute;
   inset: 0;
+  border-radius: 12px;
+  overflow: hidden;
   pointer-events: none;
   animation: scene-theme-reveal 300ms ease-out both;
 }
@@ -229,7 +231,9 @@
     clip-path: circle(0 at 28px calc(100% - 18px));
   }
   to {
-    clip-path: circle(820px at 28px calc(100% - 18px));
+    /* The card is ~828×374, so 820px left the top-right corner uncovered and
+       showed a one-frame light wedge when switching light → dark. */
+    clip-path: circle(1200px at 28px calc(100% - 18px));
   }
 }
 .scene-tree-demo .moki-tree__canvas {
