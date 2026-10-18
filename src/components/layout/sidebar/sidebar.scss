@@ -616,3 +616,27 @@
   color: var(--text-sec);
   font-size: 11px;
 }
+
+/* Keep the plugin panel header on one line (12px chevron, ellipsized title). */
+.sidebar__plugin-panel-chevron {
+  flex: 0 0 12px;
+  width: 12px;
+  height: 12px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.sidebar__plugin-panel-chevron svg {
+  width: 12px;
+  height: 12px;
+  display: block;
+}
+
+.sidebar__plugin-panel-title {
+  flex: 1;
+  min-width: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
