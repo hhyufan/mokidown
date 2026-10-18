@@ -1,11 +1,5 @@
-/**
- * 文件管理主 Hook 模块。
- *
- * 该模块统一协调编辑器标签、Tauri 文件系统 API、Android SAF、自动保存、
- * 文件监视、资源管理器目录视图以及云同步引擎，是应用中文件 I/O 能力的核心入口。
- * 对调用方而言，它屏蔽了桌面端路径、Android `content://` URI 与纯云端文档之间的差异，
- * 只暴露一组可直接调用的高层文件动作。
- */
+
+import { broadcastToPlugins } from '@utils/pluginBus';
 import { useCallback, useEffect, useMemo, useRef } from 'react';
 import { open, save } from '@tauri-apps/plugin-dialog';
 import {
@@ -23,6 +17,9 @@ import {
   getAppDocumentsDir,
   isSafUri,
   safDisplayName,
+  registerWebFile,
+  registerWebDirectory,
+  isWebPath,
 } from '@utils/tauriApi';
 import {
   isAndroidSafAvailable,
@@ -35,7 +32,7 @@ import useEditorStore from '@store/useEditorStore';
 import useFileStore from '@store/useFileStore';
 import useConfigStore from '@store/useConfigStore';
 import useNotificationStore from '@store/useNotificationStore';
-import { syncEngine, isCloudPath, fileIdFromCloudPath } from '@/services/syncEngine';
+
 import { getBuffer, flushEditorBuffer } from '@utils/editorBuffer';
 import { debounceByKey } from '@utils/debounce';
 import { sortDirectoryContents } from '@utils/directoryContents';
@@ -45,14 +42,12 @@ import { saveExistingFile } from '@/services/localFileOperations';
 import i18n from '@/i18n';
 import { untitledFileName } from '@utils/untitledFileName';
 
+// Marketing-site demo builds (VITE_WEB_DEMO=1) may pick files through the
+// browser File System Access API; the desktop build compiles these branches away.
+const webDemo = typeof __MOKI_WEB_DEMO__ !== 'undefined' && __MOKI_WEB_DEMO__;
+
 let newMarkdownTabQueue = Promise.resolve();
 
-/**
- * 文件管理核心 Hook。
- *
- * 统一封装文件打开、保存、目录加载、拖放导入、Android SAF 适配、
- * 自动保存与云同步衔接，是编辑器和文件系统之间的主桥接层。
- */
 /**
  * 根据现有路径格式推断应使用的分隔符。
  *
@@ -165,7 +160,7 @@ async function rememberSavedDiskVersion(path, content, metadata) {
 export function useFileManager() {
   const {
     openFile: openTab,
-    openExternalFile,
+    
     markTabSaved,
     createUntitledTab,
     updateTabPath,
@@ -251,55 +246,17 @@ export function useFileManager() {
    * @returns {(filePath: string, content: string, encoding: string, meta?: object) => void} 防抖后的保存函数。
    */
   const debouncedAutoSave = useMemo(
-    () => debounceByKey(async (filePath, content, encoding, meta = {}) => {
+    () => debounceByKey(async (filePath, content, encoding) => {
       if (!filePath) return;
       try {
         const tabId = useEditorStore.getState().getTabByPath(filePath)?.id || filePath;
-        const result = await saveExistingFile(filePath, content, encoding, tabId);
-        if (result.success) {
-          syncEngine.registerLocalDocument(filePath, {
-            name: meta.name || filePath.split(/[\\/]/).pop() || '',
-            ext: meta.ext || '',
-            encoding,
-            lineEnding: meta.lineEnding || 'LF',
-          });
-          await syncEngine.queueLocalUpsert(filePath, result.savedContent, encoding, {
-            name: meta.name || filePath.split(/[\\/]/).pop() || '',
-            lineEnding: meta.lineEnding || 'LF',
-            source: 'auto-save',
-          });
-        }
+        await saveExistingFile(filePath, content, encoding, tabId);
       } catch (_) { /* silent */ }
     }, 1000),
     []
   );
 
-  // 本地文件和“仅云端存在”的 external tab 走两条自动保存链路：
   // 前者落盘并入同步队列，后者直接更新远端文档快照。
-  /**
-   * 面向纯云端 external 标签的防抖同步器。
-   *
-   * @returns {(tabId: string, fileId: string, content: string, encoding: string, meta?: object) => void} 防抖后的同步函数。
-   */
-  const debouncedExternalSync = useMemo(
-    () => debounceByKey(async (tabId, fileId, content, encoding, meta = {}) => {
-      if (!fileId) return;
-      try {
-        const result = await syncEngine.queueExternalUpsert(fileId, content, encoding, {
-          name: meta.name || fileId,
-          lineEnding: meta.lineEnding || 'LF',
-          source: 'auto-sync-external',
-        });
-        if (result?.ok) {
-          const currentTab = useEditorStore.getState().tabs.find((item) => item.id === tabId);
-          if (currentTab?.externalFileId === fileId) {
-            markTabSaved(tabId, content);
-          }
-        }
-      } catch (_) { /* silent */ }
-    }, 1000),
-    [markTabSaved]
-  );
 
   /**
    * 保存指定标签；不传 id 时保存当前活动标签。延迟任务必须携带原文档 id。
@@ -312,13 +269,7 @@ export function useFileManager() {
     const tab = typeof tabId === 'string' ? getLiveTabById(tabId) : useEditorStore.getState().getActiveTab();
     if (!tab) return;
     const content = getBuffer(tab.id, tab.content);
-    if (!tab.path && tab.externalFileId) {
-      debouncedExternalSync(tab.id, tab.externalFileId, content, tab.encoding, {
-        name: tab.name,
-        lineEnding: tab.lineEnding,
-      });
-      return;
-    }
+    
     if (!tab.path) {
       // Desktop drafts stay in memory until an explicit Save / Save As action.
       if (!isAndroid) return;
@@ -332,7 +283,7 @@ export function useFileManager() {
       ext: tab.ext,
       lineEnding: tab.lineEnding,
     });
-  }, [debouncedAutoSave, debouncedExternalSync, isAndroid]);
+  }, [debouncedAutoSave, isAndroid]);
 
   /**
    * 加载指定目录，并同步更新当前目录与文件列表。
@@ -341,6 +292,16 @@ export function useFileManager() {
    * @returns {Promise<void>}
    */
   const loadDirectory = useCallback(async (dirPath) => {
+    if (webDemo && !window.__TAURI_INTERNALS__) {
+      if (!isWebPath(dirPath)) {
+        notify('info', '网页预览', '请使用桌面版打开本地目录。');
+        return;
+      }
+      if (/^web:(\/\/?)?$/.test(String(dirPath).replace(/\/+$/, ''))) {
+        notify('info', '网页预览', '这已经是演示工作区的根目录。');
+        return;
+      }
+    }
     try {
       const contents = await getDirectoryContents(dirPath);
       setFiles(sortDirectoryContents(contents, useFileStore.getState()));
@@ -363,6 +324,16 @@ export function useFileManager() {
    * @returns {Promise<void>}
    */
   const loadFilesOnly = useCallback(async (dirPath) => {
+    if (webDemo && !window.__TAURI_INTERNALS__) {
+      if (!isWebPath(dirPath)) {
+        notify('info', '网页预览', '请使用桌面版打开本地目录。');
+        return;
+      }
+      if (/^web:(\/\/?)?$/.test(String(dirPath).replace(/\/+$/, ''))) {
+        notify('info', '网页预览', '这已经是演示工作区的根目录。');
+        return;
+      }
+    }
     try {
       const contents = await getDirectoryContents(dirPath);
       setFiles(sortDirectoryContents(contents, useFileStore.getState()));
@@ -388,7 +359,7 @@ export function useFileManager() {
 
     if (isAndroid) {
       // 优先走 SAF 目录选择器，让用户可访问 Documents、Downloads、SD 卡
-      // 或云端 DocumentsProvider；若 SAF bridge 不可用，再回退到应用私有
+      
       // Documents 目录，保持旧行为而不是直接退回未命名标签。
       if (isAndroidSafAvailable()) {
         try {
@@ -440,32 +411,15 @@ export function useFileManager() {
    * @param {string} [source='manual-save'] 保存来源标识。
    * @returns {Promise<void>}
    */
-  const finalizeSavedTab = useCallback(async (tab, path, source = 'manual-save') => {
+  const finalizeSavedTab = useCallback(async (tab, path) => {
     const name = path.split(/[\\/]/).pop();
     const ext = name.split('.').pop() || '';
     const currentDir = useFileStore.getState().currentDir;
-    const externalFileId = tab.externalFileId;
 
     updateTabPath(tab.id, path, name);
     markTabSaved(path, tab.content);
     addRecentFile({ name, path, ext });
     if (!isAndroid) startFileWatching(path).catch(() => {});
-
-    if (externalFileId) {
-      await syncEngine.claimExternalDoc(externalFileId, path, tab.content, tab.encoding);
-    } else {
-      syncEngine.registerLocalDocument(path, {
-        name,
-        ext,
-        encoding: tab.encoding,
-        lineEnding: tab.lineEnding,
-      });
-      await syncEngine.queueLocalUpsert(path, tab.content, tab.encoding, {
-        name,
-        lineEnding: tab.lineEnding,
-        source,
-      });
-    }
 
     if (currentDir && path.startsWith(currentDir.replace(/[\\/]+$/, ''))) {
       await loadDirectory(currentDir);
@@ -543,6 +497,17 @@ export function useFileManager() {
         if (!dir) return null;
         const suggestedName = ensureSuggestedFileName(tab);
         targetPath = await buildUniqueUntitledPath(dir, suggestedName);
+      } else if (webDemo && !window.__TAURI_INTERNALS__) {
+        // Browser demo: save through the File System Access API. Auto-save
+        // cannot open a picker without a user gesture, so it stays a draft.
+        if (!options.allowDialog || !window.showSaveFilePicker) return null;
+        const handle = await window.showSaveFilePicker({
+          suggestedName: ensureSuggestedFileName(tab),
+          types: [{ description: 'Markdown', accept: { 'text/markdown': ['.md'] } }],
+        });
+        const file = await handle.getFile();
+        targetPath = `web://${file.name}`;
+        registerWebFile(targetPath, handle, tab.content);
       } else if (options.allowDialog) {
         const selected = await save({
           defaultPath: ensureSuggestedFileName(tab),
@@ -588,28 +553,12 @@ export function useFileManager() {
    * @returns {Promise<void>}
    */
   const openFileFromPath = useCallback(async (filePath, fileName) => {
-    // 纯云端书签没有本地文件，只存在于 external 文档缓存区。此时应以
-    // external 标签打开；首次保存再走另存为并把本地路径登记到服务端。
-    if (isCloudPath(filePath)) {
-      const fileId = fileIdFromCloudPath(filePath);
-      // 自愈策略：若 fullSync 没把正文缓存下来，或这是重装后的首次访问，
-      // 则在这里按需补拉一次远端正文。
-      const doc = await syncEngine.ensureExternalDoc(fileId);
-      if (!doc || typeof doc.content !== 'string') {
-        notify('error', t('notification.error'), t('notification.cloudFileContentUnavailable'));
-        return;
-      }
-      const displayName = doc.name || fileName || fileId;
-      openExternalFile({
-        fileId,
-        name: displayName,
-        ext: doc.ext,
-        content: doc.content,
-        encoding: doc.encoding,
-        lineEnding: doc.lineEnding,
-      });
+    if (webDemo && !window.__TAURI_INTERNALS__ && !isWebPath(filePath)) {
+      notify('info', '网页预览', '请使用桌面版打开本地文件。');
       return;
     }
+    
+    // external 标签打开；首次保存再走另存为并把本地路径登记到服务端。
 
     try {
       const result = await readFileContent(filePath);
@@ -620,12 +569,7 @@ export function useFileManager() {
           await readFileMetadata(filePath),
         );
         const ext = fileName.split('.').pop() || '';
-        syncEngine.registerLocalDocument(filePath, {
-          name: fileName,
-          ext,
-          encoding: result.encoding || 'UTF-8',
-          lineEnding: result.line_ending || 'LF',
-        });
+        
         const alreadyOpen = Boolean(useEditorStore.getState().getTabByPath(filePath));
         openTab({
           name: fileName,
@@ -641,6 +585,7 @@ export function useFileManager() {
         }
         addRecentFile({ name: fileName, path: filePath, ext });
         if (!isAndroid) startFileWatching(filePath).catch(() => {});
+        broadcastToPlugins({ type: 'event', name: 'didOpen', payload: { path: filePath, name: fileName } });
       } else {
         notify('error', t('notification.error'), result.message);
       }
@@ -743,6 +688,33 @@ export function useFileManager() {
         return;
       }
 
+      if (webDemo && !window.__TAURI_INTERNALS__) {
+        if (!window.showOpenFilePicker) {
+          notify('info', '网页预览', '当前浏览器不支持选择本地文件，请使用桌面版 MokiDown。');
+          return;
+        }
+        try {
+          const handles = await window.showOpenFilePicker({
+            multiple: true,
+            types: [
+              {
+                description: 'Markdown',
+                accept: { 'text/markdown': ['.md', '.markdown', '.mdown', '.txt'] },
+              },
+            ],
+          });
+          for (const handle of handles) {
+            const file = await handle.getFile();
+            const webPath = `web://${file.name}`;
+            registerWebFile(webPath, handle, await file.text());
+            await openFileFromPath(webPath, file.name);
+          }
+        } catch (err) {
+          if (err?.name !== 'AbortError') notify('error', t('notification.error'), String(err));
+        }
+        return;
+      }
+
       const selected = await open({
         multiple: false,
         filters: [
@@ -777,16 +749,14 @@ export function useFileManager() {
   const saveTab = useCallback(async (tabId) => {
     // 实时正文保存在 editorBuffer 中，`tab.content` 只是上一次持久化的快照。
     // 这里统一通过 getLiveTabById 取最新缓冲内容，避免把过期正文落盘/推云
-    // （尤其是云端文档“认领”落盘时，会把旧内容推到云，导致新编辑丢失）。
+    
     const activeId = useEditorStore.getState().activeTabId;
     flushEditorBuffer(tabId || activeId);
     const tab = getLiveTabById(tabId || activeId);
     if (!tab) return { ok: false };
 
     if (!tab.path) {
-      // 未命名草稿与纯云端文档共用同一条“首次保存”链路：写入真实文件后，
-      // `finalizeSavedTab` 会对带有 externalFileId 的云端文档执行 claim——
-      // 落盘、登记本地路径(增加 fileId 绑定)，并把它从纯云端列表中取走，
+
       // 而不是再次触发整篇内容回推同步。
       // Android 会自动把标签落到应用私有 Documents 目录；桌面端则弹出
       // 保存对话框。两条路径最终都会写入真实文件，不再停留在“只有草稿”的死胡同。
@@ -800,17 +770,7 @@ export function useFileManager() {
     try {
       const result = await saveExistingFile(tab.path, tab.content, tab.encoding, tab.id);
       if (result.success) {
-        syncEngine.registerLocalDocument(tab.path, {
-          name: tab.name,
-          ext: tab.ext,
-          encoding: tab.encoding,
-          lineEnding: tab.lineEnding,
-        });
-        await syncEngine.queueLocalUpsert(tab.path, result.savedContent, tab.encoding, {
-          name: tab.name,
-          lineEnding: tab.lineEnding,
-          source: 'manual-save',
-        });
+
         return { ok: true, tabId: tab.id };
       } else if (!result.conflict && !result.externalReloaded && !result.superseded) {
         notify('error', t('notification.error'), result.message);
@@ -843,10 +803,6 @@ export function useFileManager() {
     const tab = useEditorStore.getState().getActiveTab();
     if (!tab) return;
 
-    if (!tab.path && !tab.externalFileId) {
-      dismissedAutoSavePromptRef.current.delete(tab.id);
-    }
-
     try {
       // Android 没有统一可用的原生另存为对话框，因此回退到应用私有 Documents
       // 目录，并对重名文件自动补上 “ (n)” 后缀，避免静默覆盖。
@@ -870,25 +826,12 @@ export function useFileManager() {
         if (result.success) {
           const name = path.split(/[\\/]/).pop();
           const ext = name.split('.').pop() || '';
-          const externalFileId = tab.externalFileId;
+          
           updateTabPath(tab.id, path, name);
           markTabSaved(path, tab.content);
           addRecentFile({ name, path, ext });
-          if (externalFileId) {
-            await syncEngine.claimExternalDoc(externalFileId, path, tab.content, tab.encoding);
-          } else {
-            syncEngine.registerLocalDocument(path, {
-              name,
-              ext,
-              encoding: tab.encoding,
-              lineEnding: tab.lineEnding,
-            });
-            await syncEngine.queueLocalUpsert(path, tab.content, tab.encoding, {
-              name,
-              lineEnding: tab.lineEnding,
-              source: 'save-as',
-            });
-          }
+          broadcastToPlugins({ type: 'event', name: 'didSave', payload: { path, name } });
+
         }
       }
     } catch (err) {
@@ -961,6 +904,32 @@ export function useFileManager() {
     }
 
     try {
+      if (webDemo && !window.__TAURI_INTERNALS__) {
+        if (!window.showDirectoryPicker) {
+          notify('info', '网页预览', '当前浏览器不支持选择文件夹，请使用桌面版 MokiDown。');
+          return;
+        }
+        const dirHandle = await window.showDirectoryPicker();
+        const root = `web://${dirHandle.name}`;
+        const walk = async (handle, dirPath) => {
+          const entries = [];
+          for await (const [name, child] of handle.entries()) {
+            if (name.startsWith('.')) continue;
+            const childPath = `${dirPath}/${name}`;
+            if (child.kind === 'directory') {
+              entries.push({ name, path: childPath, is_dir: true });
+              registerWebDirectory(childPath, await walk(child, childPath));
+            } else {
+              entries.push({ name, path: childPath, is_dir: false });
+              registerWebFile(childPath, child, null);
+            }
+          }
+          return entries;
+        };
+        registerWebDirectory(root, await walk(dirHandle, root));
+        await loadDirectory(root);
+        return;
+      }
       const { open: openDialog } = await import('@tauri-apps/plugin-dialog');
       const dir = await openDialog({ directory: true });
       if (dir) {
@@ -968,7 +937,7 @@ export function useFileManager() {
         await loadDirectory(dirPath);
       }
     } catch (err) {
-      notify('error', t('notification.error'), String(err));
+      if (err?.name !== 'AbortError') notify('error', t('notification.error'), String(err));
     }
   }, [ensureAndroidDocsDir, isAndroid, loadDirectory, notify, t]);
 

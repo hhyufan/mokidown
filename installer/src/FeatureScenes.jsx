@@ -5,7 +5,7 @@ import SplitDemo from './SplitDemo';
 import ThemeDemo from './ThemeDemo';
 import TreeDemo from './TreeDemo';
 import remarkGfm from 'remark-gfm';
-import { Tree, ConfigProvider, Input } from 'antd';
+import { Tree, ConfigProvider, Input, theme as antdTheme } from 'antd';
 import {
   FolderOpenOutlined,
   FileTextOutlined,
@@ -151,6 +151,10 @@ function TreePreview({ nodes, editing }) {
   return (
     <ConfigProvider
       theme={{
+        algorithm:
+          typeof document !== 'undefined' && document.documentElement.dataset.theme === 'dark'
+            ? antdTheme.darkAlgorithm
+            : antdTheme.defaultAlgorithm,
         token: {
           fontFamily: 'var(--font-app)',
           colorPrimary: '#4091ff',

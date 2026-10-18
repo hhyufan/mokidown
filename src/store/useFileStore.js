@@ -216,33 +216,7 @@ const useFileStore = create(
           ),
         })),
 
-      /**
-       * 云端书签只对当前用户作用域做清理，避免误删其他账号的持久数据。
-       */
-      removeCloudBookmarks: () =>
-        set((state) => ({
-          bookmarkedPaths: state.bookmarkedPaths.filter(
-            (entry) => !(
-              isOwnedByUser(
-                typeof entry === 'string' ? null : entry?.ownerUserId,
-                getCurrentUserScopeId(),
-              ) && bookmarkPathOf(entry).startsWith('cloud://')
-            ),
-          ),
-        })),
-
       /** ?????????????? UI ??? */
-      resetSyncUiState: () =>
-        set((state) => ({
-          bookmarkedPaths: state.bookmarkedPaths.filter(
-            (entry) => !(
-              isOwnedByUser(
-                typeof entry === 'string' ? null : entry?.ownerUserId,
-                getCurrentUserScopeId(),
-              ) && bookmarkPathOf(entry).startsWith('cloud://')
-            ),
-          ),
-        })),
 
       /** ??????????? */
       setSortBy: (sortBy) => set({ sortBy }),

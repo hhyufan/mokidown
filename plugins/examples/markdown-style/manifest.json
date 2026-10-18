@@ -1,0 +1,1 @@
+{"id":"example.markdown-style","name":"Markdown 阅读样式示例","version":"1.0.0","permissions":["styles.markdown"],"styles":[{"id":"reading","target":"markdown","path":"reading.css"}]}

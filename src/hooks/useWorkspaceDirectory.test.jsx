@@ -15,7 +15,7 @@ vi.mock('@utils/tauriApi', async (importOriginal) => ({
   stopDirectoryWatching: vi.fn(),
 }));
 vi.mock('@/i18n', () => ({ default: { t: (key) => key } }));
-vi.mock('@/services/syncEngine', () => ({ syncEngine: {}, isCloudPath: () => false, fileIdFromCloudPath: () => null }));
+
 
 let changed;
 let stopListening;

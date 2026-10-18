@@ -9,11 +9,7 @@ import { clearDiskBaselines } from '@/services/localFileGuard';
 import { useFileManager } from './useFileManager';
 
 vi.mock('@tauri-apps/api/core', () => ({ invoke: vi.fn() }));
-vi.mock('@/services/syncEngine', () => ({
-  syncEngine: { registerLocalDocument: vi.fn() },
-  isCloudPath: (path) => path.startsWith('cloud://'),
-  fileIdFromCloudPath: (path) => path.slice(8),
-}));
+
 vi.mock('@/i18n', () => ({ default: { t: (key) => key } }));
 
 const path = 'C:\\notes\\unchanged.txt';

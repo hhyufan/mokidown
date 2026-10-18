@@ -10,7 +10,7 @@ import { DEFAULT_HOTKEYS, findHotkeyConflicts, resolveHotkeys } from '@/configs/
 import { validateKeybinding } from '@utils/keybinding';
 
 const DEVICE_LOCAL_CONFIG_KEYS = new Set([
-  'workspacePath', 'serverUrl', 'syncEnabled',
+  'workspacePath',
   'backgroundImage', 'backgroundImageName', 'backgroundEnabled', 'backgroundTransparency',
   // 键位取决于本机键盘布局与外接键盘，跨设备同步会把别人机器上的手感带过来。
   'hotkeys',
@@ -19,15 +19,6 @@ const DEVICE_LOCAL_CONFIG_KEYS = new Set([
 ]);
 const initialLanguage = readInitialLanguage();
 
-/**
- * 作废热键占用探测的缓存。
- *
- * 键位表被整体替换（导入设置、云端回放）后，之前向系统问到的“某个组合是否被
- * 别的程序占用”不再可信。这里用动态导入避免 store ↔ 探测模块的循环依赖：
- * `hotkeyProbe` 需要 `tauriApi`，而 `tauriApi` 会经由本地文件守卫间接引用 store。
- *
- * @returns {Promise<void>} 清理完成后 resolve；失败不影响配置写入。
- */
 async function invalidateHotkeyProbeCache() {
   try {
     const { clearHotkeyProbeCache } = await import('@utils/hotkeyProbe');
@@ -66,12 +57,10 @@ const useConfigStore = create(
       mokiIcon: false,
       autoSave: true,
       workspacePath: '',
-      serverUrl: 'https://www.miaogu.xyz',
-      // 云同步总开关：默认关闭。关闭时不渲染任何云入口，同步引擎也整体暂停。
-      syncEnabled: false,
+
       hotkeys: { ...DEFAULT_HOTKEYS },
       configUpdatedAt: 0,
-      syncableConfigUpdatedAt: 0,
+      settingsUpdatedAt: 0,
 
       /**
        * 按单个键更新配置，并同步刷新配置时间戳。
@@ -80,8 +69,8 @@ const useConfigStore = create(
         ...state,
         [key]: value,
         configUpdatedAt: meta.updatedAt ?? Date.now(),
-        syncableConfigUpdatedAt: DEVICE_LOCAL_CONFIG_KEYS.has(key)
-          ? state.syncableConfigUpdatedAt
+        settingsUpdatedAt: DEVICE_LOCAL_CONFIG_KEYS.has(key)
+          ? state.settingsUpdatedAt
           : meta.updatedAt ?? Date.now(),
       })),
       /**
@@ -123,7 +112,7 @@ const useConfigStore = create(
             ...state,
             hotkeys: next,
             configUpdatedAt: meta.updatedAt ?? Date.now(),
-            syncableConfigUpdatedAt: state.syncableConfigUpdatedAt,
+            settingsUpdatedAt: state.settingsUpdatedAt,
           };
         });
         return result;
@@ -138,12 +127,10 @@ const useConfigStore = create(
           ...state,
           hotkeys: { ...DEFAULT_HOTKEYS },
           configUpdatedAt: Date.now(),
-          syncableConfigUpdatedAt: state.syncableConfigUpdatedAt,
+          settingsUpdatedAt: state.settingsUpdatedAt,
         }));
       },
-      /**
-       * 批量加载配置快照，常用于设置导入或云端配置回放。
-       */
+      
       loadConfig: (config, meta = {}) => {
         // 导入/回放的键位必须归一化：快照可能来自旧版本（含已下线的动作 id）
         // 或被手工改过，直接铺开会让非法组合进入键位表。同时作废探测缓存——
@@ -155,11 +142,11 @@ const useConfigStore = create(
           ...config,
           ...(hasHotkeys ? { hotkeys: resolveHotkeys(config.hotkeys) } : {}),
           configUpdatedAt: meta.updatedAt ?? state.configUpdatedAt ?? Date.now(),
-          syncableConfigUpdatedAt: Object.keys(config || {}).some(
+          settingsUpdatedAt: Object.keys(config || {}).some(
             (key) => !DEVICE_LOCAL_CONFIG_KEYS.has(key)
           )
             ? meta.updatedAt ?? Date.now()
-            : state.syncableConfigUpdatedAt,
+            : state.settingsUpdatedAt,
         }));
       },
     }),
@@ -167,7 +154,8 @@ const useConfigStore = create(
       name: 'mokidown-config',
       // Retire the editor companion without restoring it from older local preferences.
       merge: (persisted, current) => {
-        const merged = { ...current, ...persisted };
+        const merged = { ...current, ...Object.fromEntries(Object.entries(persisted || {}).filter(([key]) => key in current)) };
+
         if (merged.mokiDisplay === 'companion') merged.mokiDisplay = 'welcome';
         delete merged.mokiSize;
         delete merged.mokiCollapsed;

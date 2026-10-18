@@ -23,7 +23,7 @@
 
 ## 简介
 
-MokiDown 是基于 Tauri 2、React、Monaco 与 Milkdown 的开源 Markdown 编辑器。默认读写本地文件，无需登录；也可连接自托管服务端，同步文档与设置。
+MokiDown 是基于 Tauri 2、React、Monaco 与 Milkdown 的开源 Markdown 编辑器。本地优先：默认读写本地文件，无需登录、无需联网。
 
 <p align="center">
   <img src="screenshots/main.png" width="880" alt="MokiDown 主界面" />
@@ -41,8 +41,6 @@ MokiDown 是基于 Tauri 2、React、Monaco 与 Milkdown 的开源 Markdown 编�
 
 * **文件与工作区**：多标签页、目录浏览、大纲、全局搜索、书签与自动保存。
 
-* **可选云同步**：同步文档与设置，发生冲突时可对比并选择保留版本。
-
 * **个性化**：支持明暗主题与中英双语界面。
 
 ## 📸 界面截图
@@ -55,15 +53,15 @@ MokiDown 是基于 Tauri 2、React、Monaco 与 Milkdown 的开源 Markdown 编�
 | :------------------------------: | :---------------------------: |
 | ![三模式编辑](screenshots/editor.png) | ![树编辑器](screenshots/tree.png) |
 
-|                  云同步                  |                代码块运行               |
-| :-----------------------------------: | :--------------------------------: |
-| ![同步冲突](screenshots/sync-display.png) | ![代码块运行](screenshots/code-run.png) |
+|                代码块运行               |
+| :--------------------------------: |
+| ![代码块运行](screenshots/code-run.png) |
 
 |                 深色编辑                 |                 外观与角色设置                |
 | :----------------------------------: | :------------------------------------: |
 | ![深色编辑](screenshots/editor-dark.png) | ![角色设置](screenshots/moki-settings.png) |
 
-截图来自运行中的实际界面，使用示例文档；代码输出和同步冲突使用演示数据展示真实组件，不代表浏览器可启动桌面执行引擎或已连接同步服务。[移动端欢迎页](screenshots/welcome-mobile.png) · [设计与截图说明](docs/character-design/moki-integration.md)
+截图来自运行中的实际界面，使用示例文档；代码输出使用演示数据展示真实组件，不代表浏览器可启动桌面执行引擎。[移动端欢迎页](screenshots/welcome-mobile.png) · [设计与截图说明](docs/character-design/moki-integration.md)
 
 ## 安装
 
@@ -72,6 +70,8 @@ MokiDown 是基于 Tauri 2、React、Monaco 与 Milkdown 的开源 Markdown 编�
 [在线体验](https://www.miaogu.xyz/) 可免安装查看界面；浏览器演示不具备桌面端的本地代码执行能力。Android 的文件访问与本地脚本运行等能力也有差异。
 
 ## 快速开始
+
+官方增量同步服务作为独立插件内置于 **设置 → 语言服务 → 服务插件**，默认关闭，无需账号登录。配置自己的服务地址、访问密钥和目录即可启用；实现代码保持独立，关闭后不运行。[插件说明](plugins/README.md) · [Linux 部署与数据库配置](services/sync-server/README.md) · [API 对接文档](services/sync-server/docs/API.md)
 
 ### 本地开发
 
@@ -104,9 +104,9 @@ npm run tauri:android:init
 npm run tauri:android:build
 ```
 
-### 自托管同步
+### 云同步（已归档）
 
-按 [mde-server](https://github.com/hhyufan/mde-server) 的说明部署服务端，在客户端「设置 → 云同步」中配置服务端地址，登录并绑定文档后启用同步。
+云同步实现已从主项目移除，归档在 [archive/cloud-sync](archive/cloud-sync/README.md) 供日后参考或独立开源。MokiDown 现在完全本地运行，不需要任何服务端，也不会上传你的文档。
 
 ## 文档与贡献
 

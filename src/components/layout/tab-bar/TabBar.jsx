@@ -9,16 +9,14 @@ import { useTranslation } from 'react-i18next';
 import { Tooltip } from 'antd';
 import useEditorStore from '@store/useEditorStore';
 import useConfigStore from '@store/useConfigStore';
-import useAuthStore from '@store/useAuthStore';
+
 import useFileStore from '@store/useFileStore';
-import useFileIdStore from '@store/useFileIdStore';
-import useSyncStore from '@store/useSyncStore';
+
 import useNotificationStore from '@store/useNotificationStore';
 import useScriptStore from '@store/useScriptStore';
-import { GUEST_USER_SCOPE } from '@store/userScope';
 import { renameFile } from '@utils/tauriApi';
 import { useFileManager } from '@hooks/useFileManager';
-import { syncEngine } from '@/services/syncEngine';
+
 import { moveDiskBaseline } from '@/services/localFileGuard';
 import { consoleAvailable } from '@utils/consoleSupport';
 import { cn } from '@utils/classNames';
@@ -53,11 +51,7 @@ function TabBar({ onRequestCloseTab }) {
   const toggleConsole = useScriptStore((s) => s.setOpen);
   const notify = useNotificationStore((s) => s.notify);
   const autoSave = useConfigStore((s) => s.autoSave);
-  const syncEnabled = useConfigStore((s) => s.syncEnabled);
-  const userId = useAuthStore((s) => s.user?.id || GUEST_USER_SCOPE);
-  const isLoggedIn = useAuthStore((s) => s.isLoggedIn);
-  const pathToId = useFileIdStore((s) => s.pathToId);
-  const replicas = useSyncStore((s) => s.replicas);
+
   const currentDir = useFileStore((s) => s.currentDir);
   const { loadDirectory, createNewTab } = useFileManager();
   const scrollRef = useRef(null);
@@ -162,7 +156,7 @@ function TabBar({ onRequestCloseTab }) {
         const actualPath = result?.file_path || newPath;
         moveDiskBaseline(tab.path, actualPath);
         updateTabPath(tab.id, actualPath, trimmed);
-        await syncEngine.rebindLocalPath(tab.path, actualPath, trimmed);
+        
         if (currentDir) loadDirectory(currentDir);
       } else {
         notify('error', t('notification.renameFailed'), result?.message || '');
@@ -179,17 +173,6 @@ function TabBar({ onRequestCloseTab }) {
     setRenamingTabId(null);
   }, []);
 
-  const activeReplica = useMemo(() => {
-    if (!activeTab?.path) return null;
-    const mappedFileId = pathToId[`${userId}::path::${activeTab.path}`];
-    return (mappedFileId && replicas[`${userId}::${mappedFileId}`])
-      || Object.values(replicas).find((item) =>
-        item?.ownerUserId === userId && item?.localPath === activeTab.path
-      )
-      || null;
-  }, [activeTab?.path, pathToId, replicas, userId]);
-  const isLinkedForSync = activeReplica?.linkState === 'linked';
-
   /**
    * 向左平滑滚动标签列表，便于访问被遮挡的标签。
    */
@@ -203,36 +186,6 @@ function TabBar({ onRequestCloseTab }) {
   const scrollRight = useCallback(() => {
     scrollRef.current?.scrollBy({ left: 120, behavior: 'smooth' });
   }, []);
-
-  /**
-   * 切换当前活动文件在此设备上的同步关联。停止同步不会删除云端副本。
-   *
-   * @returns {Promise<void>} 设备同步关联更新完成。
-   */
-  const handleBookmark = useCallback(async () => {
-    if (!activeTab?.path) return;
-    if (!isLoggedIn) {
-      notify('error', t('notification.syncFailed'), t('settings.cloud.notLoggedIn'));
-      return;
-    }
-    if (!isLinkedForSync) {
-      const liveTab = useEditorStore.getState().getActiveTab();
-      const syncTab = liveTab?.id === activeTab.id ? liveTab : activeTab;
-      const result = await syncEngine.linkLocalDocument(syncTab.path, syncTab.content, syncTab.encoding, {
-        name: syncTab.name,
-        lineEnding: syncTab.lineEnding,
-      });
-      if (!result?.ok) {
-        notify('error', t('notification.syncFailed'), result?.reason || 'link-failed');
-        return;
-      }
-    } else {
-      const result = await syncEngine.stopTrackingLocal(activeTab.path);
-      if (!result?.ok) {
-        notify('error', t('notification.syncFailed'), result?.reason || 'unlink-failed');
-      }
-    }
-  }, [activeTab, isLinkedForSync, isLoggedIn, notify, t]);
 
   return (
     <div className="tabbar">
@@ -249,9 +202,7 @@ function TabBar({ onRequestCloseTab }) {
       <div className="tabbar__tabs" ref={scrollRef}>
         {tabs.map((tab) => {
           const isRenaming = renamingTabId === tab.id;
-          const isCloudTab = Boolean(
-            tab.externalFileId || (typeof tab.path === 'string' && tab.path.startsWith('cloud://')),
-          );
+          
           return (
             <div
               key={tab.id}
@@ -263,15 +214,7 @@ function TabBar({ onRequestCloseTab }) {
             >
               <span className="tabbar__tab-icon">
                 <FileTypeIcon extension={tab.ext} fileName={tab.name} size={16} />
-                {isCloudTab && (
-                  <Tooltip title={t('sidebar.cloud')} placement="top" mouseEnterDelay={0.3}>
-                    <span className="tabbar__tab-cloud-badge">
-                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                        <path d="M18 10h-1.26A8 8 0 1 0 9 20h9a5 5 0 0 0 0-10z" />
-                      </svg>
-                    </span>
-                  </Tooltip>
-                )}
+                
               </span>
 
               <span className="tabbar__tab-label">
@@ -349,26 +292,8 @@ function TabBar({ onRequestCloseTab }) {
             </button>
           </Tooltip>
         )}
-        {/* 当前文件在此设备上的云同步关联开关；总开关关闭时不渲染。 */}
-        {syncEnabled && (
-          <Tooltip
-            title={t(isLinkedForSync ? 'tabbar.disableCloudSync' : 'tabbar.enableCloudSync')}
-            placement="bottom"
-            mouseEnterDelay={0.3}
-          >
-            <button
-              className={cn('tabbar__action-btn', isLinkedForSync && 'tabbar__action-btn--active')}
-              onClick={handleBookmark}
-              disabled={!activeTab?.path}
-              aria-label={t(isLinkedForSync ? 'tabbar.disableCloudSync' : 'tabbar.enableCloudSync')}
-              type="button"
-            >
-              <svg viewBox="0 0 24 24" fill={isLinkedForSync ? 'currentColor' : 'none'} stroke="currentColor" strokeWidth="2">
-                <path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z" />
-              </svg>
-            </button>
-          </Tooltip>
-        )}
+        {}
+        
         {/* Markdown 和树文件的源码 / 渲染分栏。 */}
         {(isMarkdown || activeTab?.ext?.toLowerCase() === 'mgtree') && (
           <Tooltip title={t('tabbar.splitView')} placement="bottom" mouseEnterDelay={0.3}>

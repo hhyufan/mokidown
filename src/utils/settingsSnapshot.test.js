@@ -1,0 +1,122 @@
+import { afterAll, beforeEach, describe, expect, it } from 'vitest';
+import useConfigStore from '@store/useConfigStore';
+import useEditorStore from '@store/useEditorStore';
+import useThemeStore from '@store/useThemeStore';
+import { applySettingsSnapshot, getLocalSettingsSnapshot } from './settingsSnapshot';
+
+const DEVICE_LOCAL_STATE = {
+  workspacePath: 'C:\\workspaces\\local-notes',
+};
+
+function resetSettingsStores() {
+  useConfigStore.setState({
+    language: 'en',
+    fontSize: 14,
+    previewFontSize: 14,
+    fontFamily: 'JetBrains Mono',
+    lineHeight: 24,
+    previewLineHeight: 24,
+    previewZoomSync: true,
+    tabSize: 2,
+    wordWrap: true,
+    lineNumbers: true,
+    minimap: { enabled: false },
+    autoSave: true,
+    mokiDisplay: 'welcome',
+    mokiMotion: true,
+    ...DEVICE_LOCAL_STATE,
+    configUpdatedAt: 100,
+    settingsUpdatedAt: 100,
+  });
+  useThemeStore.setState({ theme: 'light', themeUpdatedAt: 0 });
+  useEditorStore.setState({
+    sidebarVisible: true,
+    sidebarView: 'explorer',
+    viewMode: 'edit',
+    toolbarVisible: true,
+    uiStateUpdatedAt: 0,
+  });
+}
+
+describe('device-local settings isolation', () => {
+  beforeEach(() => {
+    resetSettingsStores();
+  });
+
+  afterAll(() => {
+    resetSettingsStores();
+  });
+
+  it.each([
+    ['workspacePath', 'D:\\private-workspace'],
+  ])('does not advance the settings timestamp when %s changes', (key, value) => {
+    useConfigStore.getState().setConfig(key, value, { updatedAt: 5_000 });
+
+    const config = useConfigStore.getState();
+    expect(config[key]).toBe(value);
+    expect(config.configUpdatedAt).toBe(5_000);
+    expect(config.settingsUpdatedAt).toBe(100);
+    expect(getLocalSettingsSnapshot().updatedAt).toBe(100);
+  });
+
+  it('keeps the settings timestamp stable when a batch contains only device-local keys', () => {
+    useConfigStore.getState().loadConfig(
+      {
+        workspacePath: 'E:\\batch-workspace',
+      },
+      { updatedAt: 8_000 },
+    );
+
+    const config = useConfigStore.getState();
+    expect(config.configUpdatedAt).toBe(8_000);
+    expect(config.settingsUpdatedAt).toBe(100);
+    expect(getLocalSettingsSnapshot().updatedAt).toBe(100);
+  });
+
+  it('omits all device-local settings from the settings snapshot', () => {
+    const snapshot = getLocalSettingsSnapshot();
+
+    expect(snapshot).not.toHaveProperty('workspacePath');
+    expect(snapshot).not.toHaveProperty('mokiCollapsed');
+    expect(snapshot).toMatchObject({
+      language: 'en',
+      fontSize: 14,
+      updatedAt: 100,
+    });
+  });
+
+  it('preserves welcome preferences and retires legacy companion settings', () => {
+    applySettingsSnapshot({
+      mokiDisplay: 'invalid',
+      mokiSize: 'large',
+      mokiMotion: 'false',
+      mokiCollapsed: true,
+    });
+    expect(useConfigStore.getState()).toMatchObject({ mokiDisplay: 'welcome' });
+    applySettingsSnapshot({ mokiDisplay: 'companion', mokiSize: 999, mokiMotion: false });
+    expect(getLocalSettingsSnapshot()).toMatchObject({ mokiDisplay: 'welcome' });
+    expect(getLocalSettingsSnapshot()).not.toHaveProperty('mokiSize');
+    // 周边轻动效开关已下线：旧快照里的字段既不下发也不再进入新快照。
+    expect(getLocalSettingsSnapshot()).not.toHaveProperty('mokiMotion');
+    applySettingsSnapshot({});
+    expect(useConfigStore.getState()).toMatchObject({ mokiDisplay: 'welcome' });
+    expect(useConfigStore.getState()).not.toHaveProperty('mokiCollapsed');
+  });
+
+  it('does not overwrite device-local values when applying a settings snapshot', () => {
+    applySettingsSnapshot(
+      {
+        language: 'en',
+        fontSize: 18,
+        workspacePath: '/remote/workspace',
+        updatedAt: 9_000,
+      },
+      { includeDeviceLocal: false },
+    );
+
+    expect(useConfigStore.getState()).toMatchObject({
+      fontSize: 18,
+      ...DEVICE_LOCAL_STATE,
+    });
+  });
+});
