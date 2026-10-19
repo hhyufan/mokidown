@@ -27,6 +27,7 @@ export default function ExtensionSettings({ entry, act }) {
   }));
   const [workspace, setWorkspace] = useState(entry.settings.workspace || '');
   const [diagnostic, setDiagnostic] = useState('');
+  const [diagnosticTone, setDiagnosticTone] = useState('success');
   const has = useMemo(() => (type) => fields.some((field) => field.type === type), [fields]);
 
   const save = async (extra = {}) => {
@@ -95,19 +96,27 @@ export default function ExtensionSettings({ entry, act }) {
         {has('url') && (
           <Button type="primary" onClick={() => act(async () => {
             setDiagnostic('');
-            await save();
-            const url = `${values.endpoint.trim().replace(/\/+$/, '')}/capabilities`;
-            const result = await invoke('extension_http_request', { url, method: 'GET', body: null, credentialId: entry.package.id });
-            if (result.status === 401 || result.status === 403) throw new Error(t('extensions.keyRejected'));
-            if (result.status !== 200) throw new Error(`HTTP ${result.status}: ${t('extensions.checkProxy')}`);
-            let data;
-            try { data = JSON.parse(result.body); } catch { throw new Error(t('extensions.checkProxy')); }
-            if (!data.service || !Array.isArray(data.plugins)) throw new Error(t('extensions.checkProxy'));
-            setDiagnostic(`${t('extensions.connectionOk')} · ${data.service}`);
+            try {
+              await save();
+              const url = `${values.endpoint.trim().replace(/\/+$/, '')}/capabilities`;
+              const result = await invoke('extension_http_request', { url, method: 'GET', body: null, credentialId: entry.package.id });
+              if (result.status === 401 || result.status === 403) throw new Error(t('extensions.keyRejected'));
+              if (result.status !== 200) throw new Error(`HTTP ${result.status}: ${t('extensions.checkProxy')}`);
+              let data;
+              try { data = JSON.parse(result.body); } catch { throw new Error(t('extensions.checkProxy')); }
+              if (!data.service || !Array.isArray(data.plugins)) throw new Error(t('extensions.checkProxy'));
+              setDiagnosticTone('success');
+              setDiagnostic(`${t('extensions.connectionOk')} · ${data.service}`);
+            } catch (err) {
+              setDiagnosticTone('error');
+              setDiagnostic(String(err?.message || err));
+            }
           })}>{labels.test}</Button>
         )}
       </Space>
-      {diagnostic && <p role="status">{diagnostic}</p>}
+      {diagnostic && (
+        <p className={`extension-settings__diagnostic is-${diagnosticTone}`} role="status">{diagnostic}</p>
+      )}
     </Space>
   );
 }
