@@ -117,7 +117,8 @@ releases/
 # ===========================
 dist-app/
 dist-demo/
-public/service-plugins/
+public/service-plugins/*
+!public/service-plugins/mokidown.incremental-sync-1.8.0-ee70fa576616ef23.mokiplugin.json
 public/app/
 coverage/
 .vite/

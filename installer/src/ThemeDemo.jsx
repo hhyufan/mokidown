@@ -38,6 +38,7 @@ export default function ThemeDemo({ children, onComplete }) {
   return (
     <div
       className="scene-surface scene-editor-card scene-theme-demo"
+      data-theme={dark ? 'dark' : 'light'}
       data-theme-state={reveal ? 'ripple' : dark ? 'dark' : 'light'}
       data-complete={finished}
     >
@@ -46,6 +47,7 @@ export default function ThemeDemo({ children, onComplete }) {
         <div
           key={reveal}
           className="scene-theme-ripple"
+          data-theme={reveal}
           aria-hidden="true"
           onAnimationEnd={(event) => {
             // 只认覆盖层自己的动画：animationend 会从子元素冒泡上来。

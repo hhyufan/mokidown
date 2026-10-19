@@ -86,6 +86,7 @@ function getParentDir(currentDir) {
 function FileTree() {
   const { t } = useTranslation();
   const files = useFileStore((s) => s.files);
+  const fileBadges = usePluginContributions((s) => s.fileBadges);
   const currentDir = useFileStore((s) => s.currentDir);
   const historyIndex = useFileStore((s) => s.historyIndex);
   const dirHistory = useFileStore((s) => s.dirHistory);
@@ -601,10 +602,9 @@ function FileTree() {
                     {file.name}
                     {(() => {
                       if (file.is_dir) return null;
-                      const badges = usePluginContributions.getState().fileBadges;
                       const extension = (file.name.split('.').pop() || '').toLowerCase();
                       const normalize = (value) => String(value || '').replace(/\\/g, '/');
-                      const badge = badges.find((entry) => {
+                      const badge = fileBadges.find((entry) => {
                         if ((entry.extensions || []).includes(extension)) return true;
                         return (entry.paths || []).some((candidate) => {
                           const left = normalize(candidate);
