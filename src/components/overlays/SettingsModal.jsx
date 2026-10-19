@@ -202,11 +202,10 @@ function SettingsModal({ open: openProp, onClose }) {
         <div className="settings-modal__header">
           <div className="settings-modal__header-left">
             <div className="settings-modal__header-icon">
-              {NAV_ICONS[activeNav]}
+              <SettingOutlined />
             </div>
             <div>
               <h2>{t('settings.title')}</h2>
-              <span className="settings-modal__header-sub">{t(`settings.nav.${activeNav}`)}</span>
             </div>
           </div>
         </div>

@@ -93,20 +93,21 @@ export default function ExtensionSettings({ entry, act }) {
         );
       })}
       <Space wrap>
-        {has('url') && (
-          <Button type="primary" onClick={() => act(async () => {
+        {has('url') && config.test && (
+          <Button onClick={() => act(async () => {
             setDiagnostic('');
             try {
               await save();
-              const url = `${values.endpoint.trim().replace(/\/+$/, '')}/capabilities`;
-              const result = await invoke('extension_http_request', { url, method: 'GET', body: null, credentialId: entry.package.id });
+              const base = values.endpoint.trim().replace(/\/+$/, '');
+              const result = await invoke('extension_http_request', { url: `${base}${config.test.path}`, method: 'GET', body: null, credentialId: entry.package.id });
               if (result.status === 401 || result.status === 403) throw new Error(t('extensions.keyRejected'));
-              if (result.status !== 200) throw new Error(`HTTP ${result.status}: ${t('extensions.checkProxy')}`);
+              if (result.status !== 200) throw new Error(`HTTP ${result.status}: ${config.test.failure || t('extensions.checkProxy')}`);
               let data;
-              try { data = JSON.parse(result.body); } catch { throw new Error(t('extensions.checkProxy')); }
-              if (!data.service || !Array.isArray(data.plugins)) throw new Error(t('extensions.checkProxy'));
+              try { data = JSON.parse(result.body); } catch { throw new Error(config.test.failure || t('extensions.checkProxy')); }
+              const checks = Array.isArray(config.test.check) ? config.test.check : [];
+              if (checks.some((key) => data?.[key] === undefined)) throw new Error(config.test.failure || t('extensions.checkProxy'));
               setDiagnosticTone('success');
-              setDiagnostic(`${t('extensions.connectionOk')} · ${data.service}`);
+              setDiagnostic(config.test.success || t('extensions.connectionOk'));
             } catch (err) {
               setDiagnosticTone('error');
               setDiagnostic(String(err?.message || err));
