@@ -101,3 +101,25 @@
   background: transparent;
   color: inherit;
 }
+
+/* Connection test feedback: same block for success (green) and failure (red). */
+.extension-settings__diagnostic {
+  margin: 0;
+  padding: 6px 10px;
+  border-radius: 6px;
+  font-size: 12px;
+  line-height: 1.5;
+  border: 1px solid transparent;
+}
+
+.extension-settings__diagnostic.is-success {
+  color: var(--success, #3fb950);
+  background: rgba(63, 185, 80, 0.12);
+  border-color: rgba(63, 185, 80, 0.35);
+}
+
+.extension-settings__diagnostic.is-error {
+  color: var(--danger, #f85149);
+  background: rgba(248, 81, 73, 0.12);
+  border-color: rgba(248, 81, 73, 0.35);
+}
