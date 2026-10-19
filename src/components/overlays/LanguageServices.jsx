@@ -128,7 +128,7 @@ export default function LanguageServices() {
         {operation.percent != null && ` ${operation.percent}%`}</span>
       {operation.phase !== 'uninstalling' && <Button size="small" type="text" onClick={() => act(() => state.cancelInstall(plugin.id))}>{t('languageServices.cancel')}</Button>}
     </div>;
-    if (!installed) return <Button size="small" type="primary" icon={<CloudDownloadOutlined />} disabled={!desktop}
+    if (!installed) return <Button size="small" icon={<CloudDownloadOutlined />} disabled={!desktop}
       onClick={() => state.install(plugin)}>{t(operation?.phase === 'error' ? 'languageServices.retry' : 'languageServices.install')}</Button>;
     return <div className="language-services__actions">
       <Button size="small" icon={installed.enabled ? <StopOutlined /> : <CheckOutlined />} disabled={!desktop}
@@ -192,7 +192,7 @@ export default function LanguageServices() {
           : pkg.description || pkg.descriptionZh;
       })()}</p>
       {selectedExt.catalogItem
-        ? <Button type="primary" disabled={!desktop} onClick={() => act(() => extState.installFromCatalog(selectedExt.descriptor))}>{t('extensions.install')}</Button>
+        ? <Button disabled={!desktop} onClick={() => act(() => extState.installFromCatalog(selectedExt.descriptor))}>{t('extensions.install')}</Button>
         : <>
           <div className="language-services__detail-actions">
             <span>{t(selectedExt.entry?.enabled ? 'extensions.enabled' : 'extensions.disabled')}</span>
@@ -266,7 +266,7 @@ export default function LanguageServices() {
           <div className="language-services__card-bottom">
             <span className="language-services__languages">{catalogItem ? t('extensions.notInstalled') : kindLabel(descriptor)}</span>
             {catalogItem
-              ? <Button size="small" type="primary" icon={<CloudDownloadOutlined />} disabled={!desktop} onClick={() => act(() => extState.installFromCatalog(descriptor))}>{t('extensions.install')}</Button>
+              ? <Button size="small" icon={<CloudDownloadOutlined />} disabled={!desktop} onClick={() => act(() => extState.installFromCatalog(descriptor))}>{t('extensions.install')}</Button>
               : <Button size="small" icon={entry?.enabled ? <StopOutlined /> : <CheckOutlined />} disabled={!desktop} onClick={() => act(async () => {
                 const next = !entry?.enabled;
                 if (next) await extState.ensureInstalled(descriptor.id);
