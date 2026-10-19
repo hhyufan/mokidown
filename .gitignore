@@ -119,6 +119,7 @@ dist-app/
 dist-demo/
 public/service-plugins/*
 !public/service-plugins/mokidown.incremental-sync-1.8.0-ee70fa576616ef23.mokiplugin.json
+!public/service-plugins/mokidown.incremental-sync-1.8.1-3620cf503c5b5365.mokiplugin.json
 public/app/
 coverage/
 .vite/
