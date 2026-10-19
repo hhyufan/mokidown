@@ -4,7 +4,7 @@
     "name": "MokiDown 增量同步服务",
     "version": "1.8.1",
     "url": "https://github.com/hhyufan/mokidown-plugin-incremental-sync/releases/download/v1.8.1/mokidown.incremental-sync-1.8.1-3620cf503c5b5365.mokiplugin.json",
-    "sha256": "e68259a418a9061a23c598e31ba3a35add895e48f520bb6922d95cded8bbd1dc",
+    "sha256": "3620cf503c5b536577395f27fe20521db290f9af161a209d165af21e2c9f72a6",
     "checksumMode": "canonical-json-v1",
     "permissions": [
       "workspace.read",
