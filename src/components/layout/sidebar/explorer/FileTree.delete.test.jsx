@@ -3,6 +3,7 @@ import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-libra
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import FileTree from './FileTree';
 import useFileStore from '@store/useFileStore';
+import usePluginContributions from '@store/usePluginContributions';
 import { deleteFile } from '@utils/tauriApi';
 import { confirm } from '@tauri-apps/plugin-dialog';
 
@@ -22,6 +23,7 @@ vi.mock('react-i18next', () => ({
 vi.mock('@/i18n', () => ({ default: { t: (key) => key } }));
 beforeEach(() => {
   vi.clearAllMocks();
+  usePluginContributions.setState({ fileBadges: [] });
   vi.stubGlobal('ResizeObserver', class { observe() {} disconnect() {} });
   useFileStore.setState({ currentDir: '/notes', files: [{ path: '/notes/test.md', name: 'test.md', is_dir: false }], dirHistory: ['/notes'], historyIndex: 0 });
   deleteFile.mockResolvedValue({ success: true });
@@ -59,4 +61,15 @@ it('retains the dialog for retry when deletion fails', async () => {
   await waitFor(() => expect(mock.notify).toHaveBeenCalledWith('error', 'notification.error', expect.stringContaining('Access denied')));
   expect(screen.getByRole('dialog')).toBeInTheDocument();
   expect(screen.getByRole('button', { name: 'sidebar.explorer.cancelDelete' })).not.toBeDisabled();
+});
+
+it('reacts to plugin badge updates and removes them when the plugin unloads', () => {
+  const view = render(<FileTree />);
+  const badge = { id: 'document-state', paths: ['test.md'], svg: '<svg />', title: 'Completed' };
+  act(() => usePluginContributions.getState().addFileBadge('example.plugin', badge));
+  expect(view.container.querySelector('.file-tree__item-badge')).toHaveAttribute('title', 'Completed');
+  act(() => usePluginContributions.getState().addFileBadge('example.plugin', { ...badge, title: 'Failed' }));
+  expect(view.container.querySelector('.file-tree__item-badge')).toHaveAttribute('title', 'Failed');
+  act(() => usePluginContributions.getState().clearPlugin('example.plugin'));
+  expect(view.container.querySelector('.file-tree__item-badge')).toBeNull();
 });

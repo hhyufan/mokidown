@@ -213,8 +213,8 @@
 .scene-theme-ripple {
   position: absolute;
   inset: 0;
-  border-radius: 12px;
-  overflow: hidden;
+  /* The card clips its corners once. A second rounded clip on the reveal
+     antialiases against the light backing and leaves a pale seam when rotated. */
   background: var(--surface);
   pointer-events: none;
   animation: scene-theme-reveal 300ms ease-out both;
@@ -512,7 +512,8 @@
 /* The theme scene must render the real light frame even when the site itself
    is dark: the page-level dark palette overrides .feature-scene, so scope the
    light palette explicitly on the frame. */
-html[data-theme='dark'] .scene-theme-frame[data-theme='light'] {
+.scene-theme-demo[data-theme='light'],
+.scene-theme-demo [data-theme='light'] {
   --surface: #fff;
   --sidebar: #fafafa;
   --border: #e5e5e7;
