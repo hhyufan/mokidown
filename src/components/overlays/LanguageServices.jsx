@@ -168,10 +168,12 @@ export default function LanguageServices() {
     </span>;
   }
   return <section className="language-services" aria-label={t('settings.nav.languages')}>
-    <div className="language-services__heading">
-      <div><h3>{t('languageServices.title')}</h3><p>{t('languageServices.subtitle')}</p></div>
-      <Switch size="small" checked={state.enabled} onChange={state.setEnabled} aria-label={t('languageServices.enabled')} />
-    </div>
+    {!selectedExt && (
+      <div className="language-services__heading">
+        <div><h3>{t('languageServices.title')}</h3><p>{t('languageServices.subtitle')}</p></div>
+        <Switch size="small" checked={state.enabled} onChange={state.setEnabled} aria-label={t('languageServices.enabled')} />
+      </div>
+    )}
     {!desktop && <div className="language-services__notice">{t('languageServices.desktopOnly')}</div>}
     {(error || state.loadError) && !adding && <div role="alert" className="language-services__error">{error || state.loadError}</div>}
     {selectedExt ? <div className="language-services__detail">
