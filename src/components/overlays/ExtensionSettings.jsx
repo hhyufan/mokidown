@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react';
-import { Button, Input, Space } from 'antd';
+import { Button, Input, InputNumber, Select, Space, Switch } from 'antd';
 import { FolderOpenOutlined } from '@ant-design/icons';
 import { open } from '@tauri-apps/plugin-dialog';
 import { useTranslation } from 'react-i18next';
@@ -22,7 +22,7 @@ export default function ExtensionSettings({ entry, act }) {
   const fields = config ? config.fields : [];
   const labels = config?.actions || {};
   const [values, setValues] = useState(() => ({
-    endpoint: entry.settings.endpoint || '',
+    ...Object.fromEntries(fields.filter((field) => field.type !== 'secret' && field.type !== 'directory').map((field) => [field.key, entry.settings[field.key] ?? field.default ?? (field.type === 'boolean' ? false : '')])),
     credential: '',
   }));
   const [workspace, setWorkspace] = useState(entry.settings.workspace || '');
@@ -31,7 +31,8 @@ export default function ExtensionSettings({ entry, act }) {
   const has = useMemo(() => (type) => fields.some((field) => field.type === type), [fields]);
 
   const save = async (extra = {}) => {
-    const settings = { ...entry.settings, endpoint: values.endpoint, ...extra };
+    const { credential: _credential, ...publicValues } = values;
+    const settings = { ...entry.settings, ...publicValues, ...extra };
     await useExtensionStore.getState().configure(entry.package.id, settings, values.credential);
     setValues((current) => ({ ...current, credential: '' }));
   };
@@ -82,23 +83,27 @@ export default function ExtensionSettings({ entry, act }) {
             </div>
           );
         }
+        if (field.type === 'boolean') return <label key={field.key} className="extension-settings__field">{field.label}<Switch checked={Boolean(values[field.key])} aria-label={field.label} onChange={(value) => setValues((current) => ({ ...current, [field.key]: value }))} /></label>;
+        if (field.type === 'number') return <label key={field.key} className="extension-settings__field">{field.label}<InputNumber aria-label={field.label} min={field.min} max={field.max} value={values[field.key] === '' ? null : values[field.key]} onChange={(value) => setValues((current) => ({ ...current, [field.key]: value }))} /></label>;
+        if (field.type === 'select') return <label key={field.key} className="extension-settings__field">{field.label}<Select aria-label={field.label} value={values[field.key]} options={field.options} onChange={(value) => setValues((current) => ({ ...current, [field.key]: value }))} /></label>;
         return (
           <Input
             key={field.key}
             aria-label={field.label}
             placeholder={field.placeholder || field.label}
-            value={values.endpoint}
-            onChange={(event) => setValues((current) => ({ ...current, endpoint: event.target.value }))}
+            value={values[field.key]}
+            onChange={(event) => setValues((current) => ({ ...current, [field.key]: event.target.value }))}
           />
         );
       })}
       <Space wrap>
+        <Button onClick={() => act(async () => { await save(); setDiagnosticTone('success'); setDiagnostic(t('extensions.configurationSaved')); })}>{labels.save || t('extensions.saveConfiguration')}</Button>
         {has('url') && config.test && (
           <Button onClick={() => act(async () => {
             setDiagnostic('');
             try {
               await save();
-              const base = values.endpoint.trim().replace(/\/+$/, '');
+              const base = String(values.endpoint || '').trim().replace(/\/+$/, '');
               const result = await invoke('extension_http_request', { url: `${base}${config.test.path}`, method: 'GET', body: null, credentialId: entry.package.id });
               if (result.status === 401 || result.status === 403) throw new Error(t('extensions.keyRejected'));
               if (result.status !== 200) throw new Error(`HTTP ${result.status}: ${config.test.failure || t('extensions.checkProxy')}`);

@@ -623,5 +623,13 @@
   "sync.useRemote": "使用云端版本",
   "sync.keepLocal": "保留本地",
   "extensions.checking": "正在检查插件更新…",
-  "extensions.noConfiguration": "该插件未声明配置界面。"
+  "extensions.noConfiguration": "该插件未声明配置界面。",
+  "extensions.saveConfiguration": "保存配置",
+  "extensions.configurationSaved": "配置已保存",
+  "extensions.developer": "插件开发",
+  "extensions.developerHint": "连接自己信任的本机开发服务，保存代码后自动重载。构建失败时保留上次可用版本；增加权限后需要重新连接。",
+  "extensions.developmentUrl": "本机插件开发包地址",
+  "extensions.connectDevelopment": "连接开发服务",
+  "extensions.disconnectDevelopment": "断开",
+  "extensions.developerDocs": "插件开发文档"
 }

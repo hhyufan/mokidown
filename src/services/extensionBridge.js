@@ -9,17 +9,22 @@ import useHistoryStore from '@store/useHistoryStore';
 import useVersionListStore from '@store/useVersionListStore';
 import useUpdateStore from '@store/useUpdateStore';
 import usePluginContributions from '@store/usePluginContributions';
-import { getBuffer, setBuffer } from '@utils/editorBuffer';
+import useExtensionStore from '@store/useExtensionStore';
+import useThemeStore from '@store/useThemeStore';
+import useNotificationStore from '@store/useNotificationStore';
+import { SDK_VERSION, pluginCapabilities, publicPluginConfiguration } from '../../shared/plugin-api.mjs';
+import { getBuffer, setBuffer, subscribe as subscribeBuffers } from '@utils/editorBuffer';
 import { withFileOperation } from './localFileGuard';
-import { getPluginDocument, applyPluginEdits } from './pluginEditor';
+import { getPluginDocument, applyPluginEdits, getPluginSelection, setPluginSelection } from './pluginEditor';
 import { setPluginStyle, removePluginStyle, clearPluginStyles } from './pluginStyles';
 
 export function createExtensionBridge(entry, port) {
   const { package: pkg, settings } = entry;
   let active = true;
   const pending = new Set();
+  let notices = [];
   const check = () => { if (!active) throw new Error('Plugin stopped'); };
-  const permit = (permission) => { check(); if (!pkg.permissions.includes(permission)) throw new Error(`Permission required: ${permission}`); };
+  const permit = (permission) => { check(); if (!pkg.permissions.includes(permission)) throw new Error(`PERMISSION_DENIED: ${permission}`); };
   let storage;
   let queue = Promise.resolve();
   const dispatch = async (method, args = {}) => {
@@ -27,7 +32,23 @@ export function createExtensionBridge(entry, port) {
     if (method === 'context') {
       const bytes = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(settings.workspace || ''));
       check();
-      return { endpoint: settings.endpoint || '', workspace: Boolean(settings.workspace), workspaceId: Array.from(new Uint8Array(bytes)).map((byte) => byte.toString(16).padStart(2, '0')).join(''), version: 1, apiVersion: 1, permissions: pkg.permissions };
+      return { endpoint: settings.endpoint || '', workspace: Boolean(settings.workspace), workspaceId: Array.from(new Uint8Array(bytes)).map((byte) => byte.toString(16).padStart(2, '0')).join(''), version: 1, apiVersion: 1, sdkVersion: SDK_VERSION, capabilities: pluginCapabilities(pkg.permissions), theme: useThemeStore.getState().theme, development: Boolean(entry.development), permissions: pkg.permissions };
+    }
+    if (method === 'configuration.get') return publicPluginConfiguration(pkg, settings);
+    if (method === 'theme.get') return useThemeStore.getState().theme;
+    if (method === 'host.reportError') {
+      useExtensionStore.getState().setRuntimeError(pkg.id, String(args.message || 'Plugin activation failed').slice(0, 500));
+      useExtensionStore.getState().toggle(pkg.id, false);
+      return true;
+    }
+    if (method === 'notifications.show') {
+      permit('ui.notifications');
+      notices = notices.filter((time) => time > Date.now() - 10000);
+      if (notices.length >= 8) throw new Error('RATE_LIMITED: 通知过于频繁');
+      notices.push(Date.now());
+      const tone = ['success', 'warning', 'error', 'info'].includes(args.tone) ? args.tone : 'info';
+      useNotificationStore.getState().notify(tone, pkg.name, String(args.message || '').slice(0, 500), Math.min(10000, Math.max(1500, Number(args.duration) || 4000)));
+      return true;
     }
     if (method === 'command.register') {
       if (pkg.format === 'mokidown-extension-v2') permit('commands');
@@ -69,6 +90,15 @@ export function createExtensionBridge(entry, port) {
       if (pkg.format === 'mokidown-extension-v2') permit('editor.read');
       return getPluginDocument();
     }
+    if (method === 'editor.getDocument') { permit('editor.read'); return getPluginDocument(args.documentId); }
+    if (method === 'editor.getSelection') { permit('editor.read'); return getPluginSelection(args.documentId); }
+    if (method === 'editor.setSelection') { permit('editor.write'); return setPluginSelection(args); }
+    if (method === 'editor.focusDocument') {
+      permit('editor.write');
+      if (!useEditorStore.getState().tabs.some((tab) => tab.id === args.documentId)) throw new Error('DOCUMENT_CLOSED: 文档已经关闭');
+      useEditorStore.getState().setActiveTab(args.documentId);
+      return true;
+    }
     if (method === 'editor.listDocuments') { permit('editor.read'); return getPluginDocuments(useEditorStore.getState(), settings.workspace); }
     if (method === 'editor.reloadDocument') {
       permit('editor.write'); permit('workspace.read');
@@ -93,6 +123,7 @@ export function createExtensionBridge(entry, port) {
     if (method === 'statusBar.remove') { usePluginContributions.getState().removeContribution(pkg.id, 'statusBar', args.id); return true; }
     if (method === 'fileIcon.remove') { usePluginContributions.getState().removeContribution(pkg.id, 'fileIcons', args.id); return true; }
     if (method === 'fileBadge.add') {
+      if (pkg.format === 'mokidown-extension-v2') permit('ui.fileIcons');
       if (!args.id || !/^[a-z0-9][a-z0-9.-]{1,80}$/i.test(args.id)) throw new Error('Invalid file badge id');
       const svg = sanitizePluginSvg(args.svg);
       usePluginContributions.getState().addFileBadge(pkg.id, {
@@ -106,6 +137,7 @@ export function createExtensionBridge(entry, port) {
     }
     if (method === 'fileBadge.remove') { usePluginContributions.getState().removeFileBadge(pkg.id, args.id); return true; }
     if (method === 'task.add') {
+      if (pkg.format === 'mokidown-extension-v2') permit('ui.statusBar');
       if (!args.id || !/^[a-z0-9][a-z0-9.-]{1,80}$/i.test(args.id)) throw new Error('Invalid task id');
       usePluginContributions.getState().setPluginTask(pkg.id, {
         id: args.id,
@@ -121,11 +153,12 @@ export function createExtensionBridge(entry, port) {
     }
     if (method === 'task.remove') { usePluginContributions.getState().removePluginTask(pkg.id, args.id); return true; }
     if (method === 'versions.set') {
+      if (pkg.format === 'mokidown-extension-v2') permit('editor.read');
       const path = String(args.path || '').slice(0, 1024);
       if (!path) throw new Error('Invalid version source path');
       usePluginContributions.getState().setVersionSource(pkg.id, {
         path,
-        title: String(args.title || '云端版本').slice(0, 80),
+        title: String(args.title || '版本').slice(0, 80),
         emptyText: String(args.emptyText || '暂无历史').slice(0, 120),
         items: Array.isArray(args.items) ? args.items.slice(0, 100).map((item) => ({
           id: String(item.id || '').slice(0, 160),
@@ -163,6 +196,7 @@ export function createExtensionBridge(entry, port) {
       return true;
     }
     if (method === 'editor.showVersions') {
+      if (pkg.format === 'mokidown-extension-v2') permit('editor.read');
       const state = useEditorStore.getState();
       const normalize = (value) => String(value || '').replace(/\\/g, '/');
       const info = getPluginDocuments(state, settings.workspace).find((entry) => args.path
@@ -194,8 +228,10 @@ export function createExtensionBridge(entry, port) {
     if (method.startsWith('storage.')) {
       permit('storage');
       const store = await (storage ||= load(`extension-${pkg.id}.json`)); check();
+      if (method === 'storage.keys') return (await store.keys()).filter((key) => /^[a-zA-Z0-9_.-]{1,80}$/.test(key));
       if (!/^[a-zA-Z0-9_.-]{1,80}$/.test(args.key || '')) throw new Error('Invalid storage key');
       if (method === 'storage.get') return store.get(args.key);
+      if (method === 'storage.delete') { const removed = await store.delete(args.key); check(); await store.save(); return removed; }
       if (method === 'storage.set') {
         if (JSON.stringify(args.value).length > 16 * 1024 * 1024) throw new Error('Plugin storage value too large');
         await store.set(args.key, args.value); check(); await store.save(); return true;
@@ -244,7 +280,7 @@ export function createExtensionBridge(entry, port) {
     // Serialize plugin requests to preserve storage/write ordering on shutdown.
     queue = queue.then(async () => {
       try { const value = await dispatch(data.method, data.args); if (active) port.postMessage({ id: data.id, value }); }
-      catch (error) { if (active) port.postMessage({ id: data.id, error: String(error?.message || error) }); }
+      catch (error) { if (active) port.postMessage({ id: data.id, error: String(error?.message || error), code: /^([A-Z][A-Z_]+):/.exec(error?.message)?.[1] || 'PLUGIN_ERROR' }); }
     });
   };
   port.start();
@@ -258,10 +294,29 @@ export function createExtensionBridge(entry, port) {
     port.postMessage({ type: 'event', name: 'documentsChanged', payload: documents });
   };
   const unsubscribeDocuments = useEditorStore.subscribe(documentsChanged);
+  let contentTimer;
+  const changedDocuments = new Set();
+  const unsubscribeBuffers = pkg.permissions.includes('editor.read') ? subscribeBuffers((ids) => {
+    for (const id of ids) if (useEditorStore.getState().tabs.some((tab) => tab.id === id)) changedDocuments.add(id);
+    clearTimeout(contentTimer);
+    contentTimer = setTimeout(() => {
+      if (active && changedDocuments.size) port.postMessage({ type: 'event', name: 'documentContentChanged', payload: { documentIds: [...changedDocuments] } });
+      changedDocuments.clear();
+    }, 120);
+  }) : null;
+  let previousTheme = useThemeStore.getState().theme;
+  const unsubscribeTheme = useThemeStore.subscribe((state) => {
+    if (!active || state.theme === previousTheme) return;
+    previousTheme = state.theme;
+    port.postMessage({ type: 'event', name: 'themeChanged', payload: state.theme });
+  });
   documentsChanged(useEditorStore.getState());
   const dispose = () => {
     active = false;
     unsubscribeDocuments();
+    unsubscribeBuffers?.();
+    clearTimeout(contentTimer);
+    unsubscribeTheme();
     clearPluginStyles(pkg.id);
     port.close();
     for (const requestId of pending) void invoke('extension_cancel_request', { requestId }).catch(() => {});

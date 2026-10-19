@@ -7,6 +7,12 @@
   "scripts": {
     "dev": "vite",
     "build": "vite build",
+    "prebuild": "node scripts/build-plugin-docs.mjs",
+    "plugin:pack": "node scripts/package-plugin.mjs",
+    "plugin:create": "node scripts/create-plugin.mjs",
+    "plugin:dev": "node scripts/plugin-dev.mjs",
+    "plugin:docs": "node scripts/build-plugin-docs.mjs",
+    "plugin:docs:sync": "node scripts/sync-plugin-docs.mjs",
     "lint": "eslint .",
     "format:check": "prettier --check eslint.config.js vitest.config.js vitest.setup.js scripts/check-bundle-budget.mjs scripts/check-installer-bundle-budget.mjs scripts/sync-version.mjs",
     "test": "vitest run && node --test \"scripts/*.test.mjs\"",
@@ -39,8 +45,7 @@
     "tauri:android:build:debug": "tauri android build --debug --apk",
     "test:e2e": "playwright test --config tests/playwright.config.mjs",
     "test:e2e:production": "playwright test --config tests/playwright.production.config.mjs",
-    "check:extensions": "node scripts/check-extension-boundary.mjs",
-    "plugin:pack": "node scripts/package-plugin.mjs"
+    "check:extensions": "node scripts/check-extension-boundary.mjs"
   },
   "dependencies": {
     "@ant-design/icons": "^5.2.6",

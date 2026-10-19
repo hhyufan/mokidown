@@ -623,5 +623,13 @@
   "sync.useRemote": "Use cloud version",
   "sync.keepLocal": "Keep local",
   "extensions.checking": "Checking plugin updates…",
-  "extensions.noConfiguration": "This plugin does not declare a settings form."
+  "extensions.noConfiguration": "This plugin does not declare a settings form.",
+  "extensions.saveConfiguration": "Save configuration",
+  "extensions.configurationSaved": "Configuration saved",
+  "extensions.developer": "Plugin development",
+  "extensions.developerHint": "Connect a trusted local development server to reload on save. Failed builds keep the last working package. Reconnect to approve added permissions.",
+  "extensions.developmentUrl": "Local development package URL",
+  "extensions.connectDevelopment": "Connect development server",
+  "extensions.disconnectDevelopment": "Disconnect",
+  "extensions.developerDocs": "Plugin development docs"
 }

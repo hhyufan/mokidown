@@ -1,5 +1,5 @@
 export const PLUGIN_API_VERSION = 1;
-export const PLUGIN_PERMISSIONS = ['workspace.read', 'workspace.write', 'storage', 'network', 'editor.read', 'editor.write', 'styles.markdown', 'commands', 'ui.statusBar', 'ui.fileIcons'];
+export const PLUGIN_PERMISSIONS = ['workspace.read', 'workspace.write', 'storage', 'network', 'editor.read', 'editor.write', 'styles.markdown', 'commands', 'ui.statusBar', 'ui.fileIcons', 'ui.notifications'];
 export const PACKAGE_DIGEST_MODE = 'canonical-json-v1';
 
 export function canonicalPackage(pkg) {
@@ -17,6 +17,23 @@ export async function sha256(value) {
   return Array.from(new Uint8Array(await globalThis.crypto.subtle.digest('SHA-256', bytes))).map((n) => n.toString(16).padStart(2, '0')).join('');
 }
 
+export function validatePluginConfiguration(configuration) {
+  if (configuration === undefined) return;
+  if (!configuration || typeof configuration !== 'object' || Array.isArray(configuration)) throw new Error('Invalid plugin configuration');
+  const fields = configuration.fields || [];
+  const keys = new Set();
+  if (!Array.isArray(fields) || fields.length > 32) throw new Error('A plugin supports up to 32 configuration fields');
+  for (const field of fields) {
+    if (!field || !/^[a-zA-Z][a-zA-Z0-9_.-]{0,79}$/.test(field.key || '') || ['constructor', 'prototype', '__proto__'].includes(field.key) || keys.has(field.key)
+      || !['url', 'secret', 'directory', 'text', 'boolean', 'number', 'select'].includes(field.type) || typeof field.label !== 'string' || field.label.length > 120
+      || field.type === 'secret' && field.key !== 'credential' || field.type === 'directory' && field.key !== 'workspace') throw new Error('Invalid or duplicate plugin configuration field');
+    keys.add(field.key);
+    if (field.type === 'select' && (!Array.isArray(field.options) || field.options.length > 100 || field.options.some((option) => !option || typeof option.label !== 'string' || !['string', 'number'].includes(typeof option.value)))) throw new Error('Invalid configuration select options');
+    if (field.type === 'number' && ([field.min, field.max].some((value) => value !== undefined && !Number.isFinite(value)) || field.min !== undefined && field.max !== undefined && field.min > field.max)) throw new Error('Invalid configuration number range');
+  }
+  if (configuration.test && (typeof configuration.test.path !== 'string' || !configuration.test.path.startsWith('/') || configuration.test.path.startsWith('//') || configuration.test.path.includes('\\'))) throw new Error('Configuration test must use a service-relative path');
+}
+
 export function validatePluginPackage(pkg) {
   const modern = pkg?.format === 'mokidown-extension-v2';
   const script = modern ? pkg.assets?.script : pkg?.script;
@@ -32,6 +49,7 @@ export function validatePluginPackage(pkg) {
   const styles = modern ? pkg.assets.styles || [] : [];
   if (!Array.isArray(styles) || styles.length > 16 || styles.some((style) => !/^[a-z0-9][a-z0-9.-]{0,79}$/.test(style.id || '') || style.target !== 'markdown' || typeof style.css !== 'string' || style.css.length > 128 * 1024)) throw new Error('Invalid bundled plugin styles');
   if (styles.length && !pkg.permissions.includes('styles.markdown')) throw new Error('Bundled styles require styles.markdown permission');
+  if (modern) validatePluginConfiguration(pkg.configuration);
   return { ...pkg, script, bundledStyles: styles };
 }
 

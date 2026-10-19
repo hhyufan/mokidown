@@ -340,6 +340,19 @@ const MonacoEditorComponent = forwardRef(function MonacoEditorComponent({ classN
         return { range: { startLineNumber: start.lineNumber, startColumn: start.column, endLineNumber: end.lineNumber, endColumn: end.column }, text: edit.text, forceMoveMarkers: true };
       }));
       editor.pushUndoStop();
+    }, {
+      getSelection: () => {
+        const model = editor.getModel(), range = editor.getSelection();
+        if (!model || !range) throw new Error('Editor selection unavailable');
+        return { from: model.getOffsetAt(range.getStartPosition()), to: model.getOffsetAt(range.getEndPosition()) };
+      },
+      setSelection: ({ from, to }) => {
+        const model = editor.getModel();
+        if (!model) throw new Error('Editor model unavailable');
+        const start = model.getPositionAt(from), end = model.getPositionAt(to);
+        editor.setSelection({ startLineNumber: start.lineNumber, startColumn: start.column, endLineNumber: end.lineNumber, endColumn: end.column });
+        editor.revealPositionInCenter(start); editor.focus();
+      },
     });
 
     editor.onDidChangeCursorPosition((e) => {

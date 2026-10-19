@@ -1,3 +1,4 @@
+export const SDK_VERSION = '1.3.0';
 export class PluginError extends Error {
   constructor(message, code = 'PLUGIN_ERROR') { super(message); this.name = 'PluginError'; this.code = code; }
 }
@@ -42,28 +43,47 @@ export function createPluginClient(port, { timeoutMs = 35000 } = {}) {
     return () => listeners.get(name)?.delete(callback);
   };
   const api = {
-    apiVersion: 1, rpc, signal: controller.signal,
+    apiVersion: 1, sdkVersion: SDK_VERSION, rpc, signal: controller.signal,
     context: () => rpc('context'),
-    storage: { get: (key) => rpc('storage.get', { key }), set: (key, value) => rpc('storage.set', { key, value }) },
+    capabilities: { get: async () => (await rpc('context')).capabilities || [], has: async (name) => ((await rpc('context')).capabilities || []).includes(name) },
+    configuration: { get: () => rpc('configuration.get') },
+    theme: { get: () => rpc('theme.get'), onDidChange: (callback) => on('themeChanged', callback) },
+    notifications: { show: (message, options = {}) => rpc('notifications.show', { ...options, message }) },
+    storage: { get: (key) => rpc('storage.get', { key }), set: (key, value) => rpc('storage.set', { key, value }), keys: () => rpc('storage.keys'), delete: (key) => rpc('storage.delete', { key }) },
     workspace: {
       list: (path = '') => rpc('fs.list', { path }), read: (path) => rpc('fs.read', { path }),
       write: (path, content, expectedHash = null) => rpc('fs.write', { path, content, expectedHash }),
       delete: (path, expectedHash) => rpc('fs.delete', { path, expectedHash }),
     },
     net: { request: (path, options = {}) => rpc('net.request', { path, ...options }) },
-    commands: { register: async (id, title, callback) => { commands.set(id, callback); await rpc('command.register', { id, title }); return () => { commands.delete(id); void rpc('command.unregister', { id }).catch(report); }; } },
+    commands: { register: async (id, title, callback) => {
+      const previous = commands.get(id); commands.set(id, callback);
+      try { await rpc('command.register', { id, title }); }
+      catch (error) { if (commands.get(id) === callback) { if (previous) commands.set(id, previous); else commands.delete(id); } throw error; }
+      return () => { if (commands.get(id) !== callback) return; commands.delete(id); if (!disposed) void rpc('command.unregister', { id }).catch(report); };
+    } },
     statusBar: { set: (id, item) => rpc('statusBar.addItem', { id, ...item }), remove: (id) => rpc('statusBar.remove', { id }) },
     fileIcons: { set: (id, item) => rpc('fileIcon.add', { id, ...item }), remove: (id) => rpc('fileIcon.remove', { id }) },
-  fileBadges: { set: (id, item) => rpc('fileBadge.add', { id, ...item }), remove: (id) => rpc('fileBadge.remove', { id }) },
-  tasks: { set: (id, task) => rpc('task.add', { id, ...task }), remove: (id) => rpc('task.remove', { id }) },
-    editor: { getActiveDocument: () => rpc('editor.getActiveDocument'), listDocuments: () => rpc('editor.listDocuments'), showDiff: (options) => rpc('editor.showDiff', options), reloadDocument: (documentId) => rpc('editor.reloadDocument', { documentId }), applyEdits: (documentId, expectedChecksum, edits) => rpc('editor.applyEdits', { documentId, expectedChecksum, edits }), onDidSave: (callback) => on('didSave', callback), onDidChangeDocuments: (callback) => on('documentsChanged', callback) },
+    fileBadges: { set: (id, item) => rpc('fileBadge.add', { id, ...item }), remove: (id) => rpc('fileBadge.remove', { id }) },
+    tasks: { set: (id, task) => rpc('task.add', { id, ...task }), remove: (id) => rpc('task.remove', { id }) },
+    versions: { set: (source) => rpc('versions.set', source), remove: (path) => rpc('versions.remove', { path }), onDidSelect: (callback) => on('versionSelected', callback), onDidRequestRefresh: (callback) => on('versionRefresh', callback) },
+    editor: {
+      getActiveDocument: () => rpc('editor.getActiveDocument'), getDocument: (documentId) => rpc('editor.getDocument', { documentId }),
+      listDocuments: () => rpc('editor.listDocuments'), focusDocument: (documentId) => rpc('editor.focusDocument', { documentId }),
+      getSelection: (documentId) => rpc('editor.getSelection', { documentId }),
+      setSelection: (documentId, expectedChecksum, from, to = from) => rpc('editor.setSelection', { documentId, expectedChecksum, from, to }),
+      showDiff: (options) => rpc('editor.showDiff', options), showVersions: (options) => rpc('editor.showVersions', options),
+      reloadDocument: (documentId) => rpc('editor.reloadDocument', { documentId }),
+      applyEdits: (documentId, expectedChecksum, edits) => rpc('editor.applyEdits', { documentId, expectedChecksum, edits }),
+      onDidSave: (callback) => on('didSave', callback), onDidChangeDocuments: (callback) => on('documentsChanged', callback), onDidChangeContent: (callback) => on('documentContentChanged', callback),
+    },
     styles: { setMarkdown: (id, css) => rpc('styles.set', { id, target: 'markdown', css }), remove: (id) => rpc('styles.remove', { id }) },
     on, onDispose: (callback) => { if (disposed) callback(); else cleanup.push(callback); return callback; },
     dispose: () => {
       if (disposed) return;
+      disposed = true;
       controller.abort();
       for (const callback of cleanup.reverse()) { try { callback(); } catch (error) { report(error); } }
-      disposed = true;
       for (const request of pending.values()) { clearTimeout(request.timer); request.reject(new PluginError('Plugin stopped', 'PLUGIN_STOPPED')); }
       pending.clear(); commands.clear(); listeners.clear(); port.removeEventListener('message', handle); port.close();
     },
@@ -78,7 +98,7 @@ export function definePlugin(activate) {
     client = createPluginClient(event.ports[0]);
     Promise.resolve().then(() => activate(client)).then((dispose) => { if (typeof dispose === 'function') client.onDispose(dispose); }).catch((error) => {
       console.error('[MokiDown plugin activation]', error);
-      void client.statusBar.set('activation-error', { text: error.message, tone: 'error' }).catch(() => {});
+      void client.rpc('host.reportError', { message: error.message }).catch(() => {}).finally(() => client.dispose());
     });
   };
   window.addEventListener('message', attach);
