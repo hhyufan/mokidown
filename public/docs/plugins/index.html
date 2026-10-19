@@ -1,0 +1,93 @@
+<!doctype html>
+<html lang="zh-CN" data-theme="light">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="description" content="MokiDown 插件开发指南：编辑器注入、SDK API、配置、样式、热重载与独立分发。"><title>插件开发 · MokiDown</title>
+<script>try{var t=new URLSearchParams(location.search).get('theme')||localStorage.getItem('mokidown-home-theme');document.documentElement.dataset.theme=t==='dark'||(!t&&matchMedia('(prefers-color-scheme: dark)').matches)?'dark':'light';}catch{}</script>
+<link rel="stylesheet" href="./plugin-docs.css"><script src="./plugin-docs.js" defer></script>
+</head>
+<body>
+<a class="skip-link" href="#content">跳到正文</a>
+<header class="docs-header"><a class="brand" href="https://www.miaogu.xyz" target="_blank" rel="noopener"><img src="./brand.webp" alt="MokiDown" width="148" height="36"></a><span class="header-divider"></span><span class="header-label">开发者文档</span><span class="header-spacer"></span><a class="header-github" href="https://github.com/hhyufan/mokidown" target="_blank" rel="noopener">GitHub <span aria-hidden="true">↗</span></a><button id="theme-toggle" class="icon-button" aria-label="切换深浅主题" title="切换深浅主题"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="12" cy="12" r="4"/><path d="M12 2v2m0 16v2M2 12h2m16 0h2M5 5l1.5 1.5m11 11L19 19M5 19l1.5-1.5m11-11L19 5"/></svg></button><button id="menu-toggle" class="icon-button mobile-menu" aria-label="展开目录" aria-expanded="false">☰</button></header>
+<div class="docs-layout">
+<aside class="docs-sidebar" aria-label="文档导航"><label class="search-box"><svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="8.5" cy="8.5" r="5.5"/><path d="m13 13 4 4"/></svg><input id="docs-search" type="search" placeholder="搜索文档…" aria-label="搜索文档"><kbd>/</kbd></label><div id="search-results" role="status" aria-live="polite" hidden></div><nav><div class="nav-group">开始构建</div><a href="#overview">概览</a><a href="#quickstart">快速开始</a><a href="#structure">项目结构</a><a href="#manifest">清单与配置</a><div class="nav-group">开发参考</div><a href="#api">API 能力</a><a href="#editor">文档与选区</a><a href="#ui">编辑器注入</a><a href="#styles">Markdown 样式</a><div class="nav-group">交付与维护</div><a href="#lifecycle">生命周期</a><a href="#distribution">打包与分发</a><a href="#troubleshooting">排查问题</a></nav><div class="sidebar-version"><span class="live-dot"></span> SDK 1.3.0<small>API 1 · 向后兼容</small></div></aside>
+<main id="content">
+<section id="overview" data-section class="docs-hero"><div class="eyebrow">MOKIDOWN / DEVELOPERS</div><h1>让你的想法，<br><em>成为编辑器的一部分。</em></h1><p class="hero-lead">用一个独立插件，扩展写作的每一步。<br>从 Markdown 样式到文档工具，让能力自然融入 MokiDown。</p><div class="hero-actions"><a class="button primary" href="#quickstart">创建第一个插件 <span>↗</span></a><a class="button secondary" href="#api">查阅 API <span>↓</span></a></div><div class="principles"><div><span>01</span><strong>注入，而非跳转</strong><p>状态、差异与版本，使用编辑器现有界面。</p></div><div><span>02</span><strong>独立开发与分发</strong><p>本机热重载，一个文件完成打包和交付。</p></div><div><span>03</span><strong>随时启用与卸载</strong><p>独立运行环境，关闭即撤销样式与界面贡献。</p></div></div></section>
+<section id="quickstart" data-section><div class="eyebrow">01 / GET STARTED</div><h2>从一个可运行的插件开始</h2><p>准备 Node.js 22.13+，在 MokiDown 源码目录安装依赖。脚手架会生成带配置、状态栏、选区操作和 Markdown 样式的阅读助手。</p><div class="code-block"><div class="code-header"><span>Terminal</span><button data-copy>复制</button></div><pre><code>npm ci
+npm run plugin:create -- ./my-plugins/reading example.reading
+npm run plugin:dev -- ./my-plugins/reading</code></pre></div><ol class="steps"><li><span>1</span><div><strong>连接开发服务</strong><p>打开「设置 → 语言服务 → 插件开发」，填写终端打印的 <code>http://127.0.0.1:3141/package</code>，点击连接。</p></div></li><li><span>2</span><div><strong>保存，即刻看到变化</strong><p>编辑 <code>src/index.mjs</code> 或样式。开发服务重新构建，编辑器校验新包并重载运行环境，通常约 2 秒生效。</p></div></li><li><span>3</span><div><strong>打包与交付</strong><p>执行下方命令，在 <code>releases/plugins</code> 取得带版本号和摘要的单文件包，可直接导入或发布到 GitHub Release。</p></div></li></ol><div class="code-block"><div class="code-header"><span>Terminal</span><button data-copy>复制</button></div><pre><code>npm run plugin:pack -- ./my-plugins/reading
+# 或进入生成的项目后执行 npm run dev / npm run build</code></pre></div><div class="note"><strong>开发会话只连接本机</strong><p>支持 127.0.0.1、localhost 和 IPv6 回环 HTTP 地址。会话不自动恢复，增加权限后需断开并重新连接；失败构建保留上次可用包。暂停插件即停止轮询，断开会话同时卸载运行环境。</p></div></section>
+<section id="structure" data-section><div class="eyebrow">02 / PROJECT</div><h2>小项目，完整结构</h2><div class="code-block"><div class="code-header"><span>Project</span><button data-copy>复制</button></div><pre><code>reading/
+├─ manifest.json       # 元数据、权限和配置声明
+├─ package.json        # dev / build 与本地 SDK 类型
+├─ .moki.mjs           # 本地工具入口
+└─ src/
+   ├─ index.mjs        # definePlugin 入口
+   └─ reading.css     # 可撤销的 Markdown 样式</code></pre></div><p>插件只导入 <code>@mokidown/sdk</code>，不引用编辑器内部组件或 store。开发工具随 MokiDown 源码提供；移动插件目录后可设置 <code>MOKIDOWN_TOOLS</code> 指向此源码的 <code>scripts</code> 目录。执行 <code>npm install</code> 可安装脚手架声明的本地 SDK，供编辑器类型提示使用。</p></section>
+<section id="manifest" data-section><h2>用清单说明插件需要什么</h2><p>只声明实际使用的权限。<code>fileExtensions</code> 限定工作区读写类型；没有文件操作的样式插件可以省略它。配置表单由宿主生成，保存配置会重启插件并保留启用状态。</p><div class="code-block"><div class="code-header"><span>manifest.json</span><button data-copy>复制</button></div><pre><code>{
+  "id": "example.reading",
+  "name": "阅读助手",
+  "version": "1.0.0",
+  "entry": "src/index.mjs",
+  "permissions": ["editor.read", "ui.statusBar", "styles.markdown"],
+  "configuration": {
+    "fields": [
+      {"key": "fontSize", "label": "正文字号", "type": "number", "default": 16, "min": 12, "max": 28}
+    ]
+  }
+}</code></pre></div><p>配置类型：<code>text</code>、<code>number</code>、<code>boolean</code>、<code>select</code>、<code>url</code>。<code>secret</code> 使用固定键 <code>credential</code>，<code>directory</code> 使用 <code>workspace</code>。访问密钥由宿主保存，不返回给插件；目录使用工作区 API 访问，不暴露绝对根路径。</p></section>
+<section id="api" data-section><div class="eyebrow">03 / API REFERENCE</div><h2>能力，就在需要的地方</h2><p>SDK 1.3.0 保持 <code>apiVersion: 1</code>。先查询能力，再调用新接口；旧插件保持兼容。卡片上的权限名称对应清单声明。</p><div class="code-block"><div class="code-header"><span>Capability discovery</span><button data-copy>复制</button></div><pre><code>const context = await sdk.context();
+if (await sdk.capabilities.has('editor.selection')) {
+  const selection = await sdk.editor.getSelection();
+  // selection: { documentId, from, to, text, checksum }
+}</code></pre></div><label class="api-search">筛选 API<input id="api-filter" type="search" placeholder="搜索名称、方法或权限" aria-label="筛选 API"></label><div id="api-list"><article class="api-card" data-capability="editor.documents"><div class="api-card-header"><h3>文档快照</h3><span class="permission">editor.read</span></div><p>读取当前或指定已打开文档，获取未保存正文、语言及 SHA-256。</p><div class="api-methods"><code>sdk.editor.getActiveDocument()</code><code>sdk.editor.getDocument(documentId)</code><code>sdk.editor.listDocuments()</code><code>sdk.editor.onDidChangeDocuments(callback)</code><code>sdk.editor.onDidChangeContent(callback)</code><code>sdk.editor.onDidSave(callback)</code></div></article><article class="api-card" data-capability="editor.selection"><div class="api-card-header"><h3>选区读取</h3><span class="permission">editor.read</span></div><p>读取源码编辑器的 UTF-16 选区与选中文本。</p><div class="api-methods"><code>sdk.editor.getSelection(documentId?)</code></div></article><article class="api-card" data-capability="editor.edit"><div class="api-card-header"><h3>文本编辑与定位</h3><span class="permission">editor.write</span></div><p>通过校验和编辑正文、聚焦标签与设置选区，保留撤销历史。</p><div class="api-methods"><code>sdk.editor.applyEdits(id, checksum, edits)</code><code>sdk.editor.setSelection(id, checksum, from, to?)</code><code>sdk.editor.focusDocument(id)</code><code>sdk.editor.reloadDocument(id) — also workspace.read</code></div></article><article class="api-card" data-capability="editor.diff"><div class="api-card-header"><h3>差异与版本</h3><span class="permission">editor.read</span></div><p>注入差异操作和历史列表，业务策略留在插件。</p><div class="api-methods"><code>sdk.editor.showDiff(options)</code><code>sdk.editor.showVersions(options)</code><code>sdk.versions.set(source) / remove(path)</code><code>sdk.versions.onDidSelect(callback)</code><code>sdk.versions.onDidRequestRefresh(callback)</code></div></article><article class="api-card" data-capability="workspace.files"><div class="api-card-header"><h3>授权目录</h3><span class="permission">workspace.read</span></div><p>列出和读取授权目录内声明的文件类型。</p><div class="api-methods"><code>sdk.workspace.list(path?)</code><code>sdk.workspace.read(path)</code></div></article><article class="api-card" data-capability="workspace.write"><div class="api-card-header"><h3>文件写入</h3><span class="permission">workspace.write</span></div><p>通过预期校验和创建、更新或删除文件，拒绝覆盖未保存内容。</p><div class="api-methods"><code>sdk.workspace.write(path, content, expectedHash?)</code><code>sdk.workspace.delete(path, expectedHash)</code></div></article><article class="api-card" data-capability="storage.manage"><div class="api-card-header"><h3>插件存储</h3><span class="permission">storage</span></div><p>独立持久存储，支持读取、写入、列举及删除键。</p><div class="api-methods"><code>sdk.storage.get(key) / set(key, value)</code><code>sdk.storage.keys() / delete(key)</code></div></article><article class="api-card" data-capability="network.request"><div class="api-card-header"><h3>服务请求</h3><span class="permission">network</span></div><p>向配置的服务发送 JSON 请求，密钥由宿主附加。</p><div class="api-methods"><code>sdk.net.request('/path', { method, body })</code></div></article><article class="api-card" data-capability="commands.register"><div class="api-card-header"><h3>命令</h3><span class="permission">commands</span></div><p>注册异步命令并返回操作结果，卸载时清理。</p><div class="api-methods"><code>sdk.commands.register(id, title, asyncCallback) → unsubscribe</code></div></article><article class="api-card" data-capability="ui.status"><div class="api-card-header"><h3>状态与任务</h3><span class="permission">ui.statusBar</span></div><p>注入文档状态、菜单动作和任务进度。</p><div class="api-methods"><code>sdk.statusBar.set(id, item) / remove(id)</code><code>sdk.tasks.set(id, task) / remove(id)</code></div></article><article class="api-card" data-capability="ui.files"><div class="api-card-header"><h3>文件图标与标记</h3><span class="permission">ui.fileIcons</span></div><p>按扩展名或路径注入 SVG 图标和状态标记。</p><div class="api-methods"><code>sdk.fileIcons.set(id, decoration) / remove(id)</code><code>sdk.fileBadges.set(id, decoration) / remove(id)</code></div></article><article class="api-card" data-capability="ui.notifications"><div class="api-card-header"><h3>编辑器通知</h3><span class="permission">ui.notifications</span></div><p>发送使用编辑器主题的限时通知。</p><div class="api-methods"><code>sdk.notifications.show(message, { tone: 'success', duration: 4000 })</code></div></article><article class="api-card" data-capability="styles.markdown"><div class="api-card-header"><h3>Markdown 样式</h3><span class="permission">styles.markdown</span></div><p>注入限定到 Markdown 内容区域的样式，卸载即撤销。</p><div class="api-methods"><code>sdk.styles.setMarkdown(id, css) / remove(id)</code></div></article><article class="api-card" data-capability="host.theme"><div class="api-card-header"><h3>主题与生命周期</h3><span class="permission">无需额外权限</span></div><p>查询深浅主题、监听切换，通过 AbortSignal 与清理回调释放资源。</p><div class="api-methods"><code>sdk.context()</code><code>sdk.capabilities.get() / has(name)</code><code>sdk.theme.get() / onDidChange(callback)</code><code>sdk.onDispose(callback) / signal</code></div></article><article class="api-card" data-capability="configuration.read"><div class="api-card-header"><h3>插件配置</h3><span class="permission">无需额外权限</span></div><p>读取已声明的非密钥配置；不返回访问密钥和目录绝对路径。</p><div class="api-methods"><code>sdk.configuration.get()</code></div></article></div><p id="api-empty" hidden>没有匹配的接口，试试 editor、storage 或 theme。</p><a class="text-link" href="./sdk.d.ts" download>下载完整 TypeScript 类型 ↗</a></section>
+<section id="editor" data-section><h2>读取、选择，再原子编辑</h2><p>文档快照包含未保存正文和校验和。编辑及设置选区都要求 <code>expectedChecksum</code>，避免异步返回覆盖用户后续输入。偏移使用 UTF-16，与 JavaScript 字符串一致；多个编辑范围不得重叠。</p><div class="code-block"><div class="code-header"><span>src/index.mjs</span><button data-copy>复制</button></div><pre><code>import { definePlugin } from '@mokidown/sdk';
+
+definePlugin(async (sdk) =&gt; {
+  const stop = await sdk.commands.register('reading.quote', '添加引用', async () =&gt; {
+    const selected = await sdk.editor.getSelection();
+    if (!selected?.text) return;
+    await sdk.editor.applyEdits(selected.documentId, selected.checksum, [{
+      from: selected.from, to: selected.to,
+      text: '&gt; ' + selected.text,
+    }]);
+  });
+  sdk.onDispose(stop);
+});</code></pre></div><div class="note"><strong>源码与富文本</strong><p>读取文档和样式注入支持两种模式。选区读取、选区定位及文本编辑当前使用源码编辑器，富文本模式下返回 SOURCE_EDITOR_REQUIRED。编辑走原生编辑器事务，可撤销；应用修改不会自动保存磁盘文件。</p></div><p><code>onDidChangeContent</code> 在输入暂停约 120ms 后发送 <code>{documentIds}</code>，不携带整篇正文。按需调用 <code>getDocument(id)</code> 读取；<code>onDidChangeDocuments</code> 负责标签打开、切换与关闭，<code>onDidSave</code> 负责保存事件。</p></section>
+<section id="ui" data-section><h2>融入界面，把业务留在插件</h2><p>插件在隐藏的隔离运行环境里执行。通过 SDK 注册编辑器贡献：状态栏可绑定文档，任务显示进度，文件图标支持路径或扩展名，历史源进入版本列表。无需创建独立插件页面。</p><div class="code-block"><div class="code-header"><span>Document status &amp; diff</span><button data-copy>复制</button></div><pre><code>await sdk.statusBar.set('reading.state', {
+  documentId: doc.id, text: '检查完成', tone: 'success',
+  command: 'reading.review',
+});
+await sdk.editor.showDiff({
+  path: doc.path, content: referenceText, label: '修改建议',
+  actions: [{id: 'apply.edits', title: '应用修改', command: 'reading.apply'}],
+});</code></pre></div><p>差异动作回调收到 <code>document</code>、<code>draftContent</code> 和 <code>referenceContent</code>。返回成功结果后关闭对比，抛出异常则保留界面。宿主不解释动作标题，也不承担同步、翻译或其他业务策略。编辑器只显示当前标签对应的状态；版本列表的选择和刷新通过 <code>sdk.versions</code> 事件交给插件。</p></section>
+<section id="styles" data-section><h2>写自己的 Markdown 风格</h2><p>静态样式在清单声明，动态样式通过 SDK 注入；两者都限定在 Markdown 内容内，不影响设置和工具栏。后启用的插件遵循 CSS 层叠，禁用后全部撤销。</p><div class="code-block"><div class="code-header"><span>Runtime styles</span><button data-copy>复制</button></div><pre><code>const { fontSize = 16 } = await sdk.configuration.get();
+await sdk.styles.setMarkdown('reading', `
+  :scope { font-size: ${fontSize}px; }
+  h1, h2 { color: var(--accent); }
+  blockquote { border-left: 3px solid var(--accent); }
+`);
+const stopTheme = sdk.theme.onDidChange(async (theme) =&gt; {
+  // 可以按深浅主题计算需要的样式变量。
+});
+sdk.onDispose(stopTheme);</code></pre></div><p><code>:scope</code> / <code>:root</code> 代表 Markdown 容器。支持普通规则、<code>@media</code> 和 <code>@supports</code>；嵌套语法需预先展开。不支持外部 URL、@import、@font-face、fixed / sticky。单张样式上限 128 KiB；样式 ID 相同会替换。</p></section>
+<section id="lifecycle" data-section><div class="eyebrow">04 / BUILD WITH CONFIDENCE</div><h2>明确的生命周期</h2><div class="lifecycle"><span>启用</span><i>→</i><span>独立环境</span><i>→</i><span>激活 SDK</span><i>→</i><span>注入能力</span><i>→</i><span>卸载清理</span></div><p><code>definePlugin</code> 的激活函数可返回清理函数；也可用 <code>onDispose</code> 注册多个清理回调，按注册逆序执行。关闭或更新插件后，宿主移除命令、状态、图标、版本源、样式、事件订阅和运行环境，取消宿主网络请求。</p><div class="code-block"><div class="code-header"><span>Dispose resources</span><button data-copy>复制</button></div><pre><code>definePlugin(async (sdk) =&gt; {
+  const timer = setInterval(() =&gt; refresh(), 10000);
+  sdk.onDispose(() =&gt; clearInterval(timer));
+  const stop = sdk.editor.onDidSave(() =&gt; refresh());
+  sdk.onDispose(stop);
+  // 可将 sdk.signal 交给接受 AbortSignal 的异步任务。
+  return () =&gt; releaseLocalResources();
+});</code></pre></div><p>激活失败或未捕获异常会显示运行错误并停用插件；启动未完成会报超时。命令的业务异常仅返回给调用方，不自动停用。不要吞掉业务失败后返回成功。</p></section>
+<section id="distribution" data-section><h2>一次构建，独立交付</h2><p>打包器将 JavaScript 依赖合并为单文件 IIFE，并收集清单中声明的 CSS。不要从 JavaScript import CSS。生成的文件名含版本和摘要前缀；每次正式变更应增加版本号，不替换已发布版本的资产。</p><div class="code-block"><div class="code-header"><span>Catalog entry</span><button data-copy>复制</button></div><pre><code>{
+  "id": "example.reading",
+  "name": "阅读助手",
+  "version": "1.0.0",
+  "url": "https://github.com/you/reading/releases/download/v1.0.0/example.reading-1.0.0-DIGEST.mokiplugin.json",
+  "sha256": "使用打包器输出的完整摘要",
+  "checksumMode": "canonical-json-v1"
+}</code></pre></div><p>清单摘要使用规范化 JSON：移除顶层 <code>integrity</code> 后，递归排序对象键，保留数组顺序与字符串内容，再计算 SHA-256。它<strong>不是文件原始字节摘要</strong>。包、清单、版本和内置资源必须对应；更新会逐项校验，不通过则保留当前版本。</p><p>SDK 采用语义版本号，新能力通过 capability 查询。API 1 的既有方法保持兼容；旧宿主缺少 capabilities 时 SDK 返回空列表，插件可降级到已存在的功能。</p></section>
+<section id="troubleshooting" data-section><h2>遇到问题，从这里查起</h2><div class="table-wrap"><table><thead><tr><th>错误</th><th>处理方式</th></tr></thead><tbody><tr><td>PERMISSION_DENIED</td><td>将所需权限加入清单，重新打包；开发会话增加权限后需重新连接。</td></tr><tr><td>DOCUMENT_CHANGED</td><td>重新读取快照或选区，基于最新 checksum 计算修改。</td></tr><tr><td>SOURCE_EDITOR_REQUIRED</td><td>切换源码模式后执行选区或文本编辑；样式可继续在富文本中使用。</td></tr><tr><td>PLUGIN_START_TIMEOUT</td><td>确认入口调用 definePlugin，输出为完整 IIFE，且没有未打包的依赖。</td></tr><tr><td>PLUGIN_CHECKSUM_MISMATCH</td><td>对齐清单和包版本，使用 canonical-json-v1 摘要，不使用文件原始字节摘要。</td></tr><tr><td>开发服务 503</td><td>查看终端构建错误，修复后保存。运行中的旧包不会因此被替换。</td></tr></tbody></table></div><p>文件读写仅在授权目录内进行，不能逃逸路径或覆盖未保存的编辑器内容。网络 API 仅访问配置的服务地址，RPC 默认超时 35 秒。通知每插件每 10 秒最多 8 条，展示 1.5–10 秒。版本源上限 100 项；文件列表 SVG 由宿主清理。</p></section>
+<footer class="docs-footer"><span>MokiDown · 为写作，也为你的创造。</span><a href="#overview">回到顶部 ↑</a></footer>
+</main></div>
+</body></html>

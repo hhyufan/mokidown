@@ -3,6 +3,7 @@ import { persist } from 'zustand/middleware';
 import { invoke } from '@tauri-apps/api/core';
 import officialCatalog from '@/configs/service-plugins.json';
 import { validatePluginPackage, verifyPluginPackage } from '../../shared/plugin-package.mjs';
+import { developmentPackageUrl, readDevelopmentPackage } from '@/services/pluginDevelopment';
 
 export const OFFICIAL_EXTENSIONS = officialCatalog;
 
@@ -15,6 +16,33 @@ const useExtensionStore = create(persist((set, get) => ({
   pendingUpdates: [],
   updateState: null,
   runtimeErrors: {},
+  developmentSources: [],
+  connectDevelopment: async (value) => {
+    const url = developmentPackageUrl(value);
+    const { pkg, digest } = await readDevelopmentPackage(url);
+    get().install(pkg, { digest });
+    set((state) => ({ installed: state.installed.map((entry) => entry.package.id === pkg.id ? { ...entry, enabled: true, development: true } : entry), developmentSources: [...state.developmentSources.filter((entry) => entry.id !== pkg.id), { id: pkg.id, url, token: crypto.randomUUID(), error: '' }] }));
+  },
+  refreshDevelopment: async (id) => {
+    const source = get().developmentSources.find((item) => item.id === id);
+    const previous = get().installed.find((item) => item.package.id === id);
+    if (!source || !previous?.enabled) return;
+    try {
+      const { pkg, digest } = await readDevelopmentPackage(source.url, previous.package);
+      if (get().developmentSources.find((item) => item.id === id)?.token !== source.token || get().installed.find((item) => item.package.id === id) !== previous) return;
+      if (digest !== previous.packageDigest) {
+        get().install(pkg, { digest });
+        set((state) => ({ installed: state.installed.map((entry) => entry.package.id === id ? { ...entry, enabled: true, development: true } : entry) }));
+      }
+      set((state) => ({ developmentSources: state.developmentSources.map((item) => item.id === id ? { ...item, error: '' } : item) }));
+    } catch (error) {
+      set((state) => ({ developmentSources: state.developmentSources.map((item) => item.token === source.token ? { ...item, error: String(error?.message || error) } : item) }));
+    }
+  },
+  disconnectDevelopment: (id) => {
+    get().toggle(id, false);
+    set((state) => ({ developmentSources: state.developmentSources.filter((item) => item.id !== id) }));
+  },
   setRuntimeError: (id, message) => set((state) => ({ runtimeErrors: { ...state.runtimeErrors, [id]: message } })),
   clearUpdateState: () => set({ updateState: null }),
   setCatalogUrl: (catalogUrl) => set({ catalogUrl }),
@@ -77,19 +105,25 @@ const useExtensionStore = create(persist((set, get) => ({
     } catch (error) { set({ error: String(error) }); }
   },
   installFromCatalog: async (entry) => {
-    let text;
+    let verified, bundledError;
     if (entry.bundledUrl) {
-      const resource = new URL(entry.bundledUrl, document.baseURI);
-      resource.searchParams.set('integrity', entry.sha256);
-      const response = await fetch(resource, { cache: 'no-store' });
-      if (!response.ok) throw new Error(`Bundled plugin resource unavailable (${response.status})`);
-      text = await response.text();
-    } else {
+      try {
+        const resource = new URL(entry.bundledUrl, document.baseURI);
+        resource.searchParams.set('integrity', entry.sha256);
+        const response = await fetch(resource, { cache: 'no-store' });
+        if (!response.ok) throw new Error(`Bundled plugin resource unavailable (${response.status})`);
+        verified = await verifyPluginPackage(await response.text(), entry);
+      } catch (error) { bundledError = error; }
+    }
+    // An older application/cache can still carry a previous bundled package.
+    // The remote release must pass the same descriptor and integrity checks.
+    if (!verified) {
+      if (!entry.url) throw bundledError || new Error('Plugin package URL is missing');
       const response = await invoke('extension_http_request', { url: entry.url, method: 'GET', body: null, credentialId: null });
       if (response.status !== 200) throw new Error(`Package HTTP ${response.status}`);
-      text = response.body;
+      verified = await verifyPluginPackage(response.body, entry);
     }
-    const { pkg, digest } = await verifyPluginPackage(text, entry);
+    const { pkg, digest } = verified;
     get().install(pkg, { digest });
   },
   installPackage: async (text) => { const { pkg, digest } = await verifyPluginPackage(text); get().install(pkg, { digest }); },
@@ -121,6 +155,7 @@ const useExtensionStore = create(persist((set, get) => ({
   },
   toggle: (id, enabled) => set((state) => ({ installed: state.installed.map((item) => item.package.id === id ? { ...item, enabled } : item) })),
   uninstall: async (id) => {
+    get().disconnectDevelopment(id);
     get().toggle(id, false);
     await invoke('extension_delete_credential', { id });
     set((state) => ({ installed: state.installed.filter((item) => item.package.id !== id) }));
@@ -128,7 +163,7 @@ const useExtensionStore = create(persist((set, get) => ({
 }), {
   name: 'mokidown-service-extensions',
   partialize: ({ installed, catalogUrl }) => ({ installed, catalogUrl }),
-  merge: (persisted, current) => ({ ...current, ...persisted, catalogUrl: persisted?.catalogUrl?.includes('/hhyufan/mokidown/main/plugins/catalog.json') ? '' : persisted?.catalogUrl || '' }),
+  merge: (persisted, current) => ({ ...current, ...persisted, installed: (persisted?.installed || []).map((entry) => entry.development ? { ...entry, enabled: false } : entry), catalogUrl: persisted?.catalogUrl?.includes('/hhyufan/mokidown/main/plugins/catalog.json') ? '' : persisted?.catalogUrl || '' }),
 }));
 
 export default useExtensionStore;

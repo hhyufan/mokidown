@@ -2,9 +2,9 @@
   {
     "id": "mokidown.incremental-sync",
     "name": "MokiDown 增量同步服务",
-    "version": "1.8.1",
-    "url": "https://github.com/hhyufan/mokidown-plugin-incremental-sync/releases/download/v1.8.1/mokidown.incremental-sync-1.8.1-3620cf503c5b5365.mokiplugin.json",
-    "sha256": "3620cf503c5b536577395f27fe20521db290f9af161a209d165af21e2c9f72a6",
+    "version": "1.9.0",
+    "url": "https://github.com/hhyufan/mokidown-plugin-incremental-sync/releases/download/v1.9.0/mokidown.incremental-sync-1.9.0-1fa9002f60de8bd7.mokiplugin.json",
+    "sha256": "1fa9002f60de8bd7f4d9142d5c60b6754ca11ab1703e5d3bd94d2db27c7bbd81",
     "checksumMode": "canonical-json-v1",
     "permissions": [
       "workspace.read",
@@ -24,7 +24,7 @@
     ],
     "description": "Document-scoped incremental sync with your own service and database.",
     "descriptionZh": "按当前文档显示状态，在编辑器内处理差异并同步到自建服务。",
-    "bundledUrl": "service-plugins/mokidown.incremental-sync-1.8.0-ee70fa576616ef23.mokiplugin.json",
+    "bundledUrl": "service-plugins/mokidown.incremental-sync-1.8.1-3620cf503c5b5365.mokiplugin.json",
     "updateCatalog": "https://github.com/hhyufan/mokidown-plugin-incremental-sync/releases/download/plugin-catalog/catalog.json"
   }
 ]

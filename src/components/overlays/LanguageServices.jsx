@@ -12,6 +12,7 @@ import TaskRing from '@components/ui/TaskRing';
 import { open } from '@tauri-apps/plugin-dialog';
 import { readTextFile } from '@tauri-apps/plugin-fs';
 import ExtensionSettings from './ExtensionSettings';
+import PluginDeveloperTools from './PluginDeveloperTools';
 // JavaScript / TypeScript 使用网上获取的官方品牌图标（devicon，MIT License）：
 // https://github.com/devicons/devicon
 import javascriptLogo from '@/assets/devicon/javascript-original.svg';
@@ -243,6 +244,7 @@ export default function LanguageServices() {
           <p>{t('languageServices.acceleratorHint')}</p>
         </div>
       )}
+      <PluginDeveloperTools desktop={desktop} />
       <div className="language-services__list">
         {filtered.map((plugin) => <article key={plugin.id} className="language-services__card">
           <button className="language-services__summary" type="button" onClick={() => setSelectedId(plugin.id)}>

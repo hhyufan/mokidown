@@ -4,6 +4,7 @@ import { open } from '@tauri-apps/plugin-dialog';
 import { readTextFile } from '@tauri-apps/plugin-fs';
 import { useTranslation } from 'react-i18next';
 import ExtensionSettings from './ExtensionSettings';
+import PluginDeveloperTools from './PluginDeveloperTools';
 import useExtensionStore, { OFFICIAL_EXTENSIONS } from '@store/useExtensionStore';
 
 
@@ -22,6 +23,7 @@ export default function ServiceExtensions() {
   ];
   return <section className="service-extensions">
     <h3>{t('extensions.title')}</h3><p>{t('extensions.description')}</p>
+    <PluginDeveloperTools desktop={desktop} />
     {error && <p role="alert">{error}</p>}
     {cards.map(({ descriptor, entry, official }) => <article key={descriptor.id} className="service-extensions__card">
       <div className="service-extensions__row">
