@@ -2,6 +2,7 @@ import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
 import { resolve } from 'path';
 import { readFileSync } from 'fs';
+import { checkOfficialPluginResources } from './scripts/official-plugin-resources.mjs';
 
 // Monaco ships a vendored copy of marked.js with a //# sourceMappingURL=marked.umd.js.map
 // comment, but the .map file is not included in the npm package. Vite's loadAndTransform
@@ -85,7 +86,7 @@ const webDemoEntry = (enabled) => ({
 const appVersion = JSON.parse(readFileSync(resolve(__dirname, './package.json'), 'utf-8')).version;
 
 export default defineConfig(async ({ mode }) => ({
-  plugins: [webDemoEntry(mode === 'demo' || webDemo), stripMonacoBrokenSourcemaps, assertNoMonacoNls, react()],
+  plugins: [{ name: 'verify-official-plugin-resources', apply: 'build', buildStart: () => checkOfficialPluginResources() }, webDemoEntry(mode === 'demo' || webDemo), stripMonacoBrokenSourcemaps, assertNoMonacoNls, react()],
 
   define: {
     'import.meta.env.VITE_APP_VERSION': JSON.stringify(appVersion),

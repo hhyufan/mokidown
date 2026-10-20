@@ -12,6 +12,7 @@
     "plugin:create": "node scripts/create-plugin.mjs",
     "plugin:dev": "node scripts/plugin-dev.mjs",
     "plugin:docs": "node scripts/build-plugin-docs.mjs",
+    "plugin:sync": "node scripts/official-plugin-resources.mjs --sync",
     "plugin:docs:sync": "node scripts/sync-plugin-docs.mjs",
     "lint": "eslint .",
     "format:check": "prettier --check eslint.config.js vitest.config.js vitest.setup.js scripts/check-bundle-budget.mjs scripts/check-installer-bundle-budget.mjs scripts/sync-version.mjs",
