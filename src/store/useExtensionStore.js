@@ -21,7 +21,7 @@ const useExtensionStore = create(persist((set, get) => ({
     const url = developmentPackageUrl(value);
     const { pkg, digest } = await readDevelopmentPackage(url);
     get().install(pkg, { digest });
-    set((state) => ({ installed: state.installed.map((entry) => entry.package.id === pkg.id ? { ...entry, enabled: true, development: true } : entry), developmentSources: [...state.developmentSources.filter((entry) => entry.id !== pkg.id), { id: pkg.id, url, token: crypto.randomUUID(), error: '' }] }));
+    set((state) => ({ runtimeErrors: { ...state.runtimeErrors, [pkg.id]: '' }, installed: state.installed.map((entry) => entry.package.id === pkg.id ? { ...entry, enabled: true, development: true } : entry), developmentSources: [...state.developmentSources.filter((entry) => entry.id !== pkg.id), { id: pkg.id, url, token: crypto.randomUUID(), error: '' }] }));
   },
   refreshDevelopment: async (id) => {
     const source = get().developmentSources.find((item) => item.id === id);
@@ -32,7 +32,7 @@ const useExtensionStore = create(persist((set, get) => ({
       if (get().developmentSources.find((item) => item.id === id)?.token !== source.token || get().installed.find((item) => item.package.id === id) !== previous) return;
       if (digest !== previous.packageDigest) {
         get().install(pkg, { digest });
-        set((state) => ({ installed: state.installed.map((entry) => entry.package.id === id ? { ...entry, enabled: true, development: true } : entry) }));
+        set((state) => ({ runtimeErrors: { ...state.runtimeErrors, [id]: '' }, installed: state.installed.map((entry) => entry.package.id === id ? { ...entry, enabled: true, development: true } : entry) }));
       }
       set((state) => ({ developmentSources: state.developmentSources.map((item) => item.id === id ? { ...item, error: '' } : item) }));
     } catch (error) {
@@ -150,7 +150,7 @@ const useExtensionStore = create(persist((set, get) => ({
     }
     if (credential) await invoke('extension_set_credential', { id, value: credential });
     if (wasEnabled) get().toggle(id, false);
-    set((state) => ({ installed: state.installed.map((item) => item.package.id === id ? { ...item, settings } : item) }));
+    set((state) => ({ runtimeErrors: { ...state.runtimeErrors, [id]: '' }, installed: state.installed.map((item) => item.package.id === id ? { ...item, settings } : item) }));
     if (wasEnabled) get().toggle(id, true);
   },
   toggle: (id, enabled) => set((state) => ({ installed: state.installed.map((item) => item.package.id === id ? { ...item, enabled } : item) })),

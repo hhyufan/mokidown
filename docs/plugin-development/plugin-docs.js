@@ -5,7 +5,7 @@
   setTheme(root.dataset.theme);
   themeButton.addEventListener('click', () => {
     const theme = root.dataset.theme === 'dark' ? 'light' : 'dark'; setTheme(theme);
-    try { localStorage.setItem('mokidown-home-theme', theme); } catch {}
+    try { localStorage.setItem('mokidown-home-theme', theme); } catch { /* The document also works when browser storage is unavailable. */ }
   });
   const sidebar = document.querySelector('.docs-sidebar'), menu = document.getElementById('menu-toggle');
   menu.addEventListener('click', () => { const open = sidebar.classList.toggle('is-open'); menu.setAttribute('aria-expanded', String(open)); });

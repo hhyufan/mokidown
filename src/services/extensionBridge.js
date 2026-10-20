@@ -38,7 +38,7 @@ export function createExtensionBridge(entry, port) {
     if (method === 'theme.get') return useThemeStore.getState().theme;
     if (method === 'host.reportError') {
       useExtensionStore.getState().setRuntimeError(pkg.id, String(args.message || 'Plugin activation failed').slice(0, 500));
-      useExtensionStore.getState().toggle(pkg.id, false);
+      if (!entry.development) useExtensionStore.getState().toggle(pkg.id, false);
       return true;
     }
     if (method === 'notifications.show') {

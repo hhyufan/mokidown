@@ -1,4 +1,17 @@
-# MokiDown 插件 SDK（API 1）
+# MokiDown 插件 SDK 1.3（API 1）
+
+完整网页文档：官网 `/docs/plugins/`；编辑器「语言服务 → 插件开发 → 插件开发文档」可离线打开。执行 `npm run plugin:docs` 从同一份能力清单生成网页，执行 `npm run plugin:docs:sync` 同步到同级 mde-server。
+
+## 本机开发
+
+```sh
+npm run plugin:create -- ./my-plugins/reading example.reading
+npm run plugin:dev -- ./my-plugins/reading
+```
+
+在语言服务的「插件开发」中连接终端地址，保存源码即可重载。开发连接只允许本机 HTTP，不保存为自动恢复的会话；构建失败保留旧版本，新增权限要求断开重连，停止后不接收迟到的更新。生成项目内可 `npm install` 安装 SDK 类型，使用 `npm run dev` / `npm run build` 调用源码工具；移动项目后设置 `MOKIDOWN_TOOLS`。
+
+SDK 是按能力检测的增量 API，`sdk.capabilities.get()` / `has(name)` 与 `context().sdkVersion` 用于兼容判断。旧宿主没有 capabilities 时返回空数组。
 
 官方增量同步插件随应用内置，默认关闭。在「语言服务 → 服务插件」配置服务地址、访问密钥、授权目录后启用。无需登录或访问 GitHub。GitHub 用于分发独立插件包；第三方插件可从清单安装或导入本地包。
 
@@ -101,4 +114,26 @@ v2 包使用 `apiVersion:1`、`assets.script`、`assets.styles`；包内包含 `
 
 文件名包含 id、版本和内容摘要，发布后不得覆盖。清单条目包括 id/name/version/url/sha256/checksumMode。清单 sha256 是规范化内容摘要；发布目录 SHA256SUMS 则是文件原始字节摘要，用于手动校验。应先上传包，再更新清单。版本变化必须递增 version。安装前验证包内部摘要和清单摘要；失败保留原版本和配置。仍兼容 v1 包的原始字节校验，但建议升级 v2。
 
-`npm run build:service-plugins` 生成官方包、GitHub 清单、服务端 Linux 部署归档和 SHA256SUMS。工作流 `.github/workflows/service-plugins.yml` 可手动触发或通过 service-plugins-v* 标签发布，官方清单位于 service-plugin-catalog release。
+`npm run plugin:pack -- <directory> [output-directory]` 打包独立插件。官方服务端与业务插件位于独立仓库，主项目只保留通用宿主、SDK、开发工具与资源描述。不要将服务端或同步策略导回编辑器。
+
+## SDK 1.3 新能力
+
+| 接口 | 权限与约束 |
+| --- | --- |
+| `editor.getDocument(id)` | editor.read，读取指定已打开标签的最新缓冲区 |
+| `editor.getSelection(id?)` | editor.read，源码模式，返回 UTF-16 范围、text 和 checksum |
+| `editor.setSelection(id,checksum,from,to?)` | editor.write，校验正文未变化并定位源码 |
+| `editor.focusDocument(id)` | editor.write，仅聚焦已打开标签 |
+| `editor.onDidChangeContent(cb)` | editor.read，输入暂停 120ms 后返回 `{documentIds}` |
+| `theme.get()` / `onDidChange(cb)` | 无，返回 light/dark；卸载时撤销监听 |
+| `configuration.get()` | 无，只返回已声明的非密钥、非目录配置与默认值 |
+| `notifications.show(message,{tone,duration})` | ui.notifications，每 10 秒最多 8 条，展示 1.5–10 秒 |
+| `storage.keys()` / `delete(key)` | storage，删除会持久化 |
+| `fileBadges.set(id,decoration)` / `remove(id)` | ui.fileIcons，与文件图标相同；无直接 DOM 访问 |
+| `tasks.set(id,task)` / `remove(id)` | ui.statusBar，任务可带 progress、command、reveal |
+| `versions.set(source)` / `remove(path)` | editor.read，版本源使用宿主侧边栏 |
+| `versions.onDidSelect(cb)` / `onDidRequestRefresh(cb)` | editor.read，选择、刷新回调交给插件 |
+
+配置新增 text、boolean、number、select 表单类型，仍支持 endpoint 的 url、credential 的 secret、workspace 的 directory。最多 32 个字段，键不得重复；select 使用 `{label,value}[]`，number 可声明 min/max，非密钥字段可声明 default。保存配置会重启运行环境。
+
+激活失败、脚本未捕获异常或 12 秒未握手，宿主显示错误并停止运行环境。命令失败仍通过 Promise 回执交给当前编辑器界面。所有 SDK 事件都返回取消订阅函数；`onDispose` 以逆序清理，之后 RPC 返回 PLUGIN_STOPPED。

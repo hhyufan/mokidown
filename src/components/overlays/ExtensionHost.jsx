@@ -26,16 +26,18 @@ function ExtensionFrame({ entry }) {
     const bridge = createExtensionBridge(entry, channel.port1);
     registerPluginSender(entry.package.id, bridge.send);
     let attached = false;
+    const failRuntime = (message) => {
+      useExtensionStore.getState().setRuntimeError(entry.package.id, message);
+      if (!entry.development) useExtensionStore.getState().toggle(entry.package.id, false);
+    };
     const startupTimer = setTimeout(() => {
       if (attached) return;
-      useExtensionStore.getState().setRuntimeError(entry.package.id, 'PLUGIN_START_TIMEOUT: 插件未完成启动，请检查 definePlugin 与构建输出');
-      useExtensionStore.getState().toggle(entry.package.id, false);
+      failRuntime('PLUGIN_START_TIMEOUT: 插件未完成启动，请检查 definePlugin 与构建输出');
     }, 12000);
     const attach = (event) => {
       if (event.source !== frame.contentWindow) return;
       if (event.data?.type === 'mokidown:extension-error') {
-        useExtensionStore.getState().setRuntimeError(entry.package.id, String(event.data.message || 'Plugin runtime failed').slice(0, 500));
-        useExtensionStore.getState().toggle(entry.package.id, false);
+        failRuntime(String(event.data.message || 'Plugin runtime failed').slice(0, 500));
         return;
       }
       if (event.data?.type === 'mokidown:extension-runner-ready') {
@@ -57,7 +59,8 @@ function ExtensionFrame({ entry }) {
 export default function ExtensionHost() {
   const installed = useExtensionStore((state) => state.installed);
   const sources = useExtensionStore((state) => state.developmentSources);
-  return <>{installed.filter((entry) => entry.enabled).map((entry) => <ExtensionFrame key={entry.package.id} entry={entry} />)}{sources.filter((source) => installed.some((entry) => entry.package.id === source.id && entry.enabled)).map((source) => <DevelopmentSession key={source.token} id={source.id} />)}</>;
+  const errors = useExtensionStore((state) => state.runtimeErrors);
+  return <>{installed.filter((entry) => entry.enabled && !(entry.development && errors[entry.package.id])).map((entry) => <ExtensionFrame key={entry.package.id} entry={entry} />)}{sources.filter((source) => installed.some((entry) => entry.package.id === source.id && entry.enabled)).map((source) => <DevelopmentSession key={source.token} id={source.id} />)}</>;
 }
 
 function DevelopmentSession({ id }) {
