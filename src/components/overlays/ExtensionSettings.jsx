@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useState } from 'react';
 import { Button, Input, InputNumber, Select, Space, Switch } from 'antd';
 import { FolderOpenOutlined } from '@ant-design/icons';
 import { open } from '@tauri-apps/plugin-dialog';
@@ -28,7 +28,7 @@ export default function ExtensionSettings({ entry, act }) {
   const [workspace, setWorkspace] = useState(entry.settings.workspace || '');
   const [diagnostic, setDiagnostic] = useState('');
   const [diagnosticTone, setDiagnosticTone] = useState('success');
-  const has = useMemo(() => (type) => fields.some((field) => field.type === type), [fields]);
+  const has = (type) => fields.some((field) => field.type === type);
 
   const save = async (extra = {}) => {
     const { credential: _credential, ...publicValues } = values;

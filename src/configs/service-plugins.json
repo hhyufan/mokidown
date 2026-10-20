@@ -24,7 +24,7 @@
     ],
     "description": "Document-scoped incremental sync with your own service and database.",
     "descriptionZh": "按当前文档显示状态，在编辑器内处理差异并同步到自建服务。",
-    "bundledUrl": "service-plugins/mokidown.incremental-sync-1.8.1-3620cf503c5b5365.mokiplugin.json",
+    "bundledUrl": "builtin-plugins/mokidown.incremental-sync-1.9.0-1fa9002f60de8bd7.mokiplugin.json",
     "updateCatalog": "https://github.com/hhyufan/mokidown-plugin-incremental-sync/releases/download/plugin-catalog/catalog.json"
   }
 ]
