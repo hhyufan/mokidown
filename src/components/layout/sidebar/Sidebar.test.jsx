@@ -34,3 +34,17 @@ it('keeps recent-file identity and clicks correct when the list is reordered wit
   expect(openFile).toHaveBeenCalledWith('C:/second.kt', 'second.kt');
   expect(errors.mock.calls.flat().join(' ')).not.toMatch(/unique.*key|same key|findDOMNode|Maximum update depth/);
 });
+
+it('shows outline only for Markdown and falls back to files when it becomes unavailable', () => {
+  i18n.changeLanguage('en');
+  const markdown = { id: 'md', name: 'note.md', path: '/note.md', content: '# Title' };
+  const code = { id: 'code', name: 'main.java', path: '/main.java', content: 'class Main {}' };
+  useEditorStore.setState({ tabs: [markdown, code], activeTabId: markdown.id, sidebarView: 'outline', sidebarVisible: true });
+  render(<Sidebar />);
+  expect(screen.getByRole('tab', { name: 'Outline' })).toHaveAttribute('aria-selected', 'true');
+  act(() => useEditorStore.setState({ activeTabId: code.id }));
+  expect(screen.queryByRole('tab', { name: 'Outline' })).not.toBeInTheDocument();
+  expect(screen.getByRole('tab', { name: 'Files' })).toHaveAttribute('aria-selected', 'true');
+  act(() => useEditorStore.setState({ activeTabId: markdown.id }));
+  expect(screen.getByRole('tab', { name: 'Outline' })).toHaveAttribute('aria-selected', 'true');
+});
