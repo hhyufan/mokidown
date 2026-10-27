@@ -72,6 +72,8 @@ import { loadMarkdownImageSrc, parseMarkdownLineHint, resolveMarkdownLinkPath } 
 import MermaidRenderer from './MermaidRenderer';
 import MarkdownCodePre from './MarkdownCodePre';
 import { rehypeCodeBlockIndexes } from '@utils/markdownCodeBlocks';
+import { findCodeBlock } from '@utils/knowledgeTree';
+import { useCodeBlockNavigation } from '@hooks/useCodeBlockNavigation';
 import './markdown-preview.scss';
 
 /**
@@ -312,6 +314,13 @@ const MarkdownPreview = forwardRef(function MarkdownPreview({ className }, ref) 
   // 预览树尚在构建时，旧树仍然保持可交互，从而降低长文档下编辑器、滚动条
   // 与侧边栏一起卡顿的概率。
   const content = useDeferredValue(processedContent);
+  const resolveCodeTarget = useCallback((language, index) => findCodeBlock(containerRef.current, language, index), []);
+  const beforeCodeJump = useCallback((target) => {
+    if (target.dataset.sourceLine) window.dispatchEvent(new CustomEvent('editor:jump-to-line', {
+      detail: { line: Number(target.dataset.sourceLine) },
+    }));
+  }, []);
+  const jumpToCode = useCodeBlockNavigation(activeTabId, resolveCodeTarget, !isAnalyzing && content === processedContent, beforeCodeJump);
   useDocumentScrollState(containerRef, activeTabId, 'preview', !isAnalyzing && content === processedContent);
 
   // Prism 的代码块配色随应用样式表一起打包（见 `@styles/prism-theme.scss`），
@@ -481,7 +490,7 @@ const MarkdownPreview = forwardRef(function MarkdownPreview({ className }, ref) 
 
   const components = useMemo(() => ({
     code: CodeBlock,
-    pre: (props) => <MarkdownCodePre {...props} documentId={activeTabId} filePath={documentPath} fileName={activeTab?.name || 'Markdown'} />,
+    pre: (props) => <MarkdownCodePre {...props} onTreeJump={jumpToCode} documentId={activeTabId} filePath={documentPath} fileName={activeTab?.name || 'Markdown'} />,
     h1: makeHeading('h1'),
     h2: makeHeading('h2'),
     h3: makeHeading('h3'),
@@ -547,7 +556,7 @@ const MarkdownPreview = forwardRef(function MarkdownPreview({ className }, ref) 
     img: ({ src, alt, ...props }) => (
       <MarkdownImage src={src} alt={alt} documentPath={documentPath} {...props} />
     ),
-  }), [activeTabId, activeTab?.name, documentPath, handleLinkClick]);
+  }), [activeTabId, activeTab?.name, documentPath, handleLinkClick, jumpToCode]);
 
   const isStale = isAnalyzing || content !== processedContent;
   const fontSize = previewZoomSync ? editorFontSize : (previewFontSize || editorFontSize);
