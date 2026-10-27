@@ -4,8 +4,11 @@
  */
 
 .sidebar {
-  width: 280px;
-  min-width: 280px;
+  --sidebar-actual-width: max(var(--sidebar-min-width, 220px), min(var(--sidebar-width, 280px), max(var(--sidebar-min-width, 220px), calc(100vw - 360px))));
+  position: relative;
+  width: var(--sidebar-actual-width);
+  min-width: var(--sidebar-actual-width);
+  flex-shrink: 0;
   background: var(--sidebar);
   border-right: 1px solid var(--border);
   display: flex;
@@ -14,11 +17,24 @@
   z-index: 10;
 
   &--hidden {
-    margin-left: -280px;
+    margin-left: calc(-1 * var(--sidebar-actual-width));
     opacity: 0;
     pointer-events: none;
   }
 }
+
+.sidebar__resizer {
+  position: absolute;
+  top: 0;
+  right: -3px;
+  bottom: 0;
+  width: 7px;
+  cursor: col-resize;
+  touch-action: none;
+  z-index: 20;
+  &:hover, &:focus-visible { background: var(--accent); outline: none; }
+}
+@media (max-width: 768px) { .sidebar__resizer { display: none; } }
 
 // 品牌区：应用图标 + 产品字标。
 .sidebar__header {
@@ -54,7 +70,7 @@
 }
 
 .sidebar__tab {
-  flex: 1;
+  width: 100%;
   min-width: 0;
   height: 32px;
   padding: 0 8px;
@@ -105,6 +121,29 @@
   }
 }
 
+.sidebar__tab-slot {
+  flex: 1 1 0;
+  min-width: 0;
+  overflow: hidden;
+  opacity: 1;
+  transform: translateY(0);
+  transition: flex-grow 240ms cubic-bezier(0.2, 0.8, 0.2, 1), opacity 180ms ease, transform 240ms ease;
+  &--hidden { flex-grow: 0; opacity: 0; transform: translateY(5px); pointer-events: none; }
+}
+
+// Keep the mgtree glyph, but follow the same idle/hover/active colors as the
+// other navigation icons. File icons elsewhere retain their original palette.
+.sidebar__knowledge-icon {
+  display: inline-flex;
+  align-items: center;
+  width: 14px;
+  height: 14px;
+  flex-shrink: 0;
+  fill: currentColor;
+  :is(path, rect, circle, ellipse, polygon, polyline, text, use):not([fill='none']) { fill: currentColor !important; }
+  [stroke]:not([stroke='none']) { stroke: currentColor !important; }
+}
+
 .sidebar__tab-slider {
   position: absolute;
   top: 5px;
@@ -116,7 +155,7 @@
   // 但不会亮到接近纯白。
   background: var(--surface);
   box-shadow: 0 1px 2px rgba(0, 0, 0, 0.08);
-  transition: transform 0.24s cubic-bezier(0.2, 0.8, 0.2, 1);
+  transition: transform 0.24s cubic-bezier(0.2, 0.8, 0.2, 1), width 0.24s cubic-bezier(0.2, 0.8, 0.2, 1);
   z-index: 0;
   pointer-events: none;
 }
@@ -127,6 +166,13 @@
   display: flex;
   flex-direction: column;
   overflow: hidden;
+}
+
+.sidebar__content--enter { animation: sidebar-content-enter 180ms ease-out both; }
+@keyframes sidebar-content-enter { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: translateY(0); } }
+@media (prefers-reduced-motion: reduce) {
+  .sidebar__tab-slot, .sidebar__tab-slider { transition: none; }
+  .sidebar__content--enter { animation: none; }
 }
 
 .sidebar__view {
@@ -421,10 +467,12 @@
 }
 
 @media (max-width: 768px) {
+  .sidebar__tabs { overflow-x: auto; }
+  .sidebar__tab-slot:not(.sidebar__tab-slot--hidden) { min-width: var(--tab-natural-width, 0px); }
   .sidebar {
     position: fixed;
     inset: 0 auto 0 0;
-    width: min(86vw, 320px);
+    width: min(96vw, max(320px, var(--sidebar-min-width, 220px)));
     min-width: 0;
     z-index: 40;
     box-shadow: 18px 0 48px rgba(0, 0, 0, 0.26);

@@ -16,10 +16,17 @@ import { GUEST_USER_SCOPE } from '@store/userScope';
 import { useFileManager } from '@hooks/useFileManager';
 import FileTree from './explorer/FileTree';
 import OutlineView from './outline/OutlineView';
+import SidebarResizer from './SidebarResizer';
+import SidebarTabs from './SidebarTabs';
+import KnowledgeTree from '@components/editor/KnowledgeTree';
+import { useKnowledgeTrees } from '@hooks/useKnowledgeTrees';
+import { useOpenTreeEditor } from '@hooks/useOpenTreeEditor';
+import { useEditorBufferContent } from '@hooks/useEditorBufferContent';
 import Timeline from '@components/history/Timeline';
 import PluginPanel from './PluginPanel';
 
 import FileTypeIcon from '@components/ui/FileTypeIcon';
+import TreeExpansionIcon from '@components/ui/TreeExpansionIcon';
 import AppMark from '@components/ui/AppMark';
 import MokiStatusEmpty from '@components/moki/MokiStatusEmpty';
 import { openExternal } from '@utils/tauriApi';
@@ -160,13 +167,13 @@ function OutlineToolbar() {
         title={t('sidebar.outline.collapseAll')}
         onClick={() => window.dispatchEvent(new CustomEvent('outline:collapseAll'))}
       >
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="4 14 10 14 10 20" /><polyline points="20 10 14 10 14 4" /><line x1="14" y1="10" x2="21" y2="3" /><line x1="3" y1="21" x2="10" y2="14" /></svg>
+        <TreeExpansionIcon collapse />
       </ToolbarButton>
       <ToolbarButton
         title={t('sidebar.outline.expandAll')}
         onClick={() => window.dispatchEvent(new CustomEvent('outline:expandAll'))}
       >
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="15 3 21 3 21 9" /><polyline points="9 21 3 21 3 15" /><line x1="21" y1="3" x2="14" y2="10" /><line x1="3" y1="21" x2="10" y2="14" /></svg>
+        <TreeExpansionIcon />
       </ToolbarButton>
     </div>
   );
@@ -276,6 +283,7 @@ function RecentList({ onOpenStats }) {
  * @returns {JSX.Element} 对应页签图标。
  */
 function SidebarTabIcon({ id }) {
+  if (id === 'knowledge') return <span className="sidebar__knowledge-icon"><FileTypeIcon extension="mgtree" size={14} /></span>;
   if (id === 'explorer') {
     return (
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
@@ -310,6 +318,16 @@ function SidebarTabIcon({ id }) {
 function Sidebar({ onOpenSettings, onOpenStats }) {
   const { t } = useTranslation();
   const { sidebarVisible, sidebarView, setSidebarView } = useEditorStore();
+  const activeTab = useEditorStore((s) => s.tabs.find((tab) => tab.id === s.activeTabId));
+  const sidebarWidth = useEditorStore((s) => s.sidebarWidth);
+  const sidebarMinWidth = useEditorStore((s) => s.sidebarMinWidth);
+  const setSidebarMinWidth = useEditorStore((s) => s.setSidebarMinWidth);
+  const source = useEditorBufferContent(activeTab?.id, activeTab?.content || '');
+  const isMarkdown = /\.(md|markdown|mdx)$/i.test(activeTab?.name || '');
+  const trees = useKnowledgeTrees(activeTab?.path || '', source, isMarkdown);
+  const openTreeEditor = useOpenTreeEditor();
+  const effectiveView = sidebarView === 'knowledge' && !trees.length ? (isMarkdown ? 'outline' : 'explorer')
+    : sidebarView === 'outline' && !isMarkdown ? 'explorer' : sidebarView;
   const { toggleTheme } = useThemeStore();
 
   const themeButtonRef = useRef(null);
@@ -329,11 +347,11 @@ function Sidebar({ onOpenSettings, onOpenStats }) {
   }, []);
 
   const tabs = [
-    { id: 'explorer', label: t('sidebar.tab.explorer') },
-    { id: 'outline', label: t('sidebar.tab.outline') },
-    { id: 'recent', label: t('sidebar.tab.recent') },
+    { id: 'explorer', label: t('sidebar.tab.explorer'), visible: true },
+    { id: 'outline', label: t('sidebar.tab.outline'), visible: isMarkdown },
+    { id: 'knowledge', label: t('knowledgeTree.title'), visible: trees.length > 0 },
+    { id: 'recent', label: t('sidebar.tab.recent'), visible: true },
   ];
-  const activeIndex = Math.max(0, tabs.findIndex((tab) => tab.id === sidebarView));
 
   // 主题切换优先使用 View Transition API 做径向过渡；若运行环境不支持，
   // 则自动回退为直接切换，确保旧环境不受影响。
@@ -360,7 +378,8 @@ function Sidebar({ onOpenSettings, onOpenStats }) {
   }
 
   return (
-    <aside className={cn('sidebar', !sidebarVisible && 'sidebar--hidden')}>
+    <aside className={cn('sidebar', !sidebarVisible && 'sidebar--hidden')} style={{ '--sidebar-width': `${sidebarWidth}px`, '--sidebar-min-width': `${sidebarMinWidth}px` }}>
+      <SidebarResizer />
       <div className="sidebar__header">
         {/* 品牌区：应用图标 + 产品字标（蓝边白字「MokiDown」）。
             两者的尺寸都走组件参数——AppMark 会把 --app-mark-size 内联下发，
@@ -369,31 +388,15 @@ function Sidebar({ onOpenSettings, onOpenStats }) {
         <AppMark size={20} variant="wordmark" className="sidebar__wordmark" />
       </div>
 
-      <div className="sidebar__tabs" role="tablist" aria-label={t('sidebar.tabs')}>
-        <div
-          className="sidebar__tab-slider"
-          style={{
-            width: `calc((100% - 10px) / ${tabs.length})`,
-            transform: `translateX(${activeIndex * 100}%)`,
-          }}
-        />
-        {tabs.map((tab) => (
-          <button
-            key={tab.id}
-            type="button"
-            role="tab"
-            aria-selected={sidebarView === tab.id}
-            className={cn('sidebar__tab', sidebarView === tab.id && 'sidebar__tab--active')}
-            onClick={() => setSidebarView(tab.id)}
-          >
-            <SidebarTabIcon id={tab.id} />
-            <span>{tab.label}</span>
-          </button>
-        ))}
-      </div>
+      <SidebarTabs items={tabs} activeId={effectiveView} onChange={setSidebarView} onMinWidthChange={setSidebarMinWidth} renderIcon={SidebarTabIcon} />
 
-      <div className="sidebar__content">
-        {sidebarView === 'explorer' && (
+      <div key={effectiveView} className="sidebar__content sidebar__content--enter">
+        {effectiveView === 'knowledge' && <div className="knowledge-tree__list">
+          {trees.map((tree) => <KnowledgeTree key={`${activeTab?.id}:${tree.key}`} source={tree.source}
+            onOpen={tree.path ? () => openTreeEditor(tree.path) : undefined}
+            title={tree.path?.split(/[\\/]/).pop()} onJump={(language, index) => useEditorStore.getState().requestKnowledgeJump(language, index)} />)}
+        </div>}
+        {effectiveView === 'explorer' && (
           <div className="sidebar__view">
             <ExplorerToolbar />
             <FileTree />
@@ -401,13 +404,13 @@ function Sidebar({ onOpenSettings, onOpenStats }) {
             <PluginPanel />
           </div>
         )}
-        {sidebarView === 'outline' && (
+        {effectiveView === 'outline' && (
           <div className="sidebar__view">
             <OutlineToolbar />
             <OutlineView />
           </div>
         )}
-        {sidebarView === 'recent' && (
+        {effectiveView === 'recent' && (
           <RecentList onOpenStats={onOpenStats} />
         )}
       </div>
