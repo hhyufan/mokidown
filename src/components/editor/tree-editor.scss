@@ -1,4 +1,14 @@
+@use '../../assets/styles/inline-code' as inline;
+
 .moki-tree {
+  --md-tint: color-mix(in srgb, var(--accent) 45%, #ffffff);
+  --md-tint-soft: color-mix(in srgb, var(--md-tint) 16%, transparent);
+  --tree-step: calc(var(--tree-font-size, 14px) * 1.714286);
+  --tree-row-height: calc(var(--tree-font-size, 14px) * 2.428571);
+  --tree-mid: calc(var(--tree-row-height) / 2);
+  --tree-toggle-size: calc(var(--tree-font-size, 14px) * 0.857143);
+  --tree-toggle-half: calc(var(--tree-toggle-size) / 2);
+  --tree-center: calc(var(--tree-step) / 2);
   display: flex;
   flex-direction: column;
   position: relative;
@@ -16,7 +26,7 @@
     min-height: 48px;
     padding: 8px 18px;
     border-bottom: 1px solid var(--border-light);
-    background: color-mix(in srgb, var(--sidebar) 65%, var(--surface));
+    background: transparent;
   }
   &__tools { display: flex; align-items: center; gap: 4px; flex-wrap: wrap; }
   &__tools .ant-btn { width: 28px; height: 28px; color: var(--text-sec); border-radius: var(--radius-sm); }
@@ -28,9 +38,8 @@
   &__count { display: flex; align-items: center; gap: 7px; white-space: nowrap; color: var(--text-sec); font-size: 11px; }
   &__scroll { flex: 1; min-height: 0; overflow: auto; overscroll-behavior: contain; }
   &__canvas { padding: 24px 22px 64px; min-width: fit-content; }
-  &__node { display: flex; align-items: center; gap: 9px; min-height: 34px; padding: 2px 8px 2px 3px; }
-  &__icon { flex-shrink: 0; color: var(--text-sec); font-size: 16px; }
-  &__icon--folder { color: var(--warning); }
+  &__node { display: flex; align-items: flex-start; gap: 0.65em; min-height: var(--tree-row-height); padding: 2px 8px 2px 3px; }
+  &__icon { flex-shrink: 0; color: var(--text-sec); font-size: 1.142857em; height: calc(var(--tree-row-height) - 4px); }
   &__node--linked &__icon { color: var(--accent); }
   &__title {
     border: 0;
@@ -42,18 +51,43 @@
     cursor: text;
     white-space: pre-wrap;
     overflow-wrap: anywhere;
-    line-height: 1.7;
-    code { font: 0.9em var(--font-editor); padding: 2px 5px; border-radius: 4px; color: var(--accent); background: var(--accent-bg); }
+    line-height: calc(var(--tree-row-height) - 8px);
+    code { @include inline.inline-code; }
   }
   &__title:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; border-radius: 3px; }
   &__node--linked &__title { color: var(--accent); }
-  &__reference { display: inline-flex; align-items: center; gap: 5px; margin-left: 4px; font: 10px var(--font-editor); color: var(--text-sec); white-space: nowrap;
+  &__reference { display: inline-flex; align-items: center; gap: 5px; margin-left: 4px; height: calc(var(--tree-row-height) - 4px); font: 0.714286em var(--font-editor); color: var(--text-sec); white-space: nowrap;
     span { padding: 1px 5px; border: 1px solid var(--border); border-radius: 4px; }
   }
   &__actions { display: flex; gap: 2px; margin-left: auto; opacity: 0; transition: opacity 120ms; }
+  &__reference--editable {
+    flex-shrink: 0; padding: 0 4px; border: 0; border-radius: 4px; background: transparent; cursor: pointer;
+    &:hover, &:focus-visible { color: var(--accent); background: var(--accent-bg); }
+    &:focus-visible { outline: 1px solid var(--accent); outline-offset: 2px; }
+  }
+  &__reference--empty {
+    opacity: 0; transition: opacity 120ms;
+    > span { border: 0; padding: 0; }
+  }
+  &__node:hover &__reference--empty, &__node:focus-within &__reference--empty { opacity: 1; }
   &__node:hover &__actions, &__node:focus-within &__actions { opacity: 1; }
   &__actions .ant-btn { height: 24px; width: 24px; font-size: 12px; }
-  &__input { min-width: 160px; width: 100%; font: inherit; border-color: var(--accent); background: var(--surface); color: var(--text); }
+  &__edit-field {
+    display: inline-block;
+    min-width: min(var(--tree-edit-width, 12ch), 100%); min-height: var(--tree-edit-height, 0px);
+    width: max-content; max-width: 100%;
+    font: inherit; color: inherit;
+  }
+  &__node--linked &__edit-field { color: var(--accent); }
+  &__rich-input.ProseMirror {
+    min-width: 0; min-height: var(--tree-edit-height, calc(var(--tree-row-height) - 4px));
+    margin: 0; padding: 2px 0;
+    font: inherit; line-height: calc(var(--tree-row-height) - 8px);
+    white-space: pre-wrap; overflow-wrap: anywhere; cursor: text;
+    border: 0; border-radius: 0; outline: none; box-shadow: none; background: transparent; color: inherit;
+    &:hover, &:focus, &:focus-visible { border: 0; outline: none; box-shadow: none; background: transparent; }
+    &::selection, *::selection { background: var(--selection-bg); }
+  }
   &__empty { min-height: 280px; height: 100%; display: flex; align-items: center; justify-content: center; flex-direction: column; gap: 14px; padding: 32px; text-align: center;
     > .anticon { color: var(--accent); font-size: 36px; padding: 20px; background: var(--accent-bg); border-radius: 20px; }
     strong { font-size: 14px; font-weight: 500; }
@@ -61,6 +95,17 @@
   }
   &__hint { padding: 9px 18px; font-size: 10px; color: var(--text-sec); border-top: 1px solid var(--border-light); }
   &__top { position: absolute; right: 20px; bottom: 48px; border: 1px solid var(--border); border-radius: 50%; width: 32px; height: 32px; color: var(--accent); background: var(--surface); box-shadow: var(--shadow); cursor: pointer; }
+  &__corner-controls { display: flex; justify-content: flex-end; gap: 2px; padding: 6px 8px; flex-shrink: 0; }
+  &__corner-controls button {
+    display: flex; align-items: center; justify-content: center; padding: 0;
+    color: var(--text-sec); width: 28px; height: 28px; border: 0;
+    border-radius: var(--radius-sm); background: none; cursor: pointer;
+    transition: background 150ms, color 150ms;
+    svg { width: 16px; height: 16px; }
+    &:hover { color: var(--text); background: var(--hover); }
+    &:focus-visible { outline: 1px solid var(--accent); outline-offset: 2px; }
+  }
+  &__toolbar > &__corner-controls { padding: 0; margin-left: auto; }
 
   .ant-tree { font: var(--tree-font-size) var(--font-app); color: var(--text); background: transparent; }
   // Rows meet edge to edge. Spacing belongs inside the title, so ancestor
@@ -69,41 +114,84 @@
   .ant-tree .ant-tree-node-content-wrapper { border-radius: var(--radius-sm); min-width: 0; transition: background 120ms; }
   .ant-tree .ant-tree-node-content-wrapper:hover { background: var(--hover); }
   .ant-tree .ant-tree-node-content-wrapper.ant-tree-node-selected { background: var(--accent-bg); }
-  .ant-tree .ant-tree-indent-unit { width: 24px; }
-  .ant-tree .ant-tree-indent-unit::before { inset-inline-end: auto; left: 12px; top: 0; bottom: 0; border-color: var(--border); }
-  .ant-tree .ant-tree-switcher {
-    align-self: stretch;
-    display: flex;
-    justify-content: center;
-    align-items: flex-start;
-    width: 24px;
-    margin-inline-end: 0;
-    padding: 0;
-    color: var(--text-sec);
-    // Use the same connector for leaves and folders, including collapsed
-    // branches. 参考线照旧穿过箭头栏，保持连续；箭头本身不铺底色，线从它透过去。
-    &::before { left: 12px; top: 0; bottom: 0; width: 0; height: auto; border-left: 1px solid var(--border); border-radius: 0; background: none; }
-    &::after { content: ''; position: absolute; left: 12px; right: 0; top: 17px; border-top: 1px solid var(--border); }
-    &:not(.ant-tree-switcher-noop):hover::before { background: none; }
+  // Every level uses one coordinate system. Native leaf guides are disabled
+  // so branch/leaf rows cannot disagree about row height or indentation.
+  .ant-tree .ant-tree-indent { display: flex; align-self: stretch; }
+  .ant-tree .ant-tree-indent-unit { position: relative; flex: 0 0 var(--tree-step); width: var(--tree-step); height: auto; align-self: stretch; }
+  .ant-tree .ant-tree-indent-unit::before {
+    content: ''; position: absolute; inset: auto;
+    inset-inline-start: calc(var(--tree-center) - 0.5px);
+    top: 0; bottom: 0; width: 1px; border: 0; background: var(--border);
   }
-  .ant-tree .moki-tree__last > .ant-tree-switcher::before { bottom: auto; height: 17px; }
-  // Root rows have no indent guides, so the branch line above them leads
-  // nowhere. Keep the chevron and the horizontal connector to the children.
-  .ant-tree .ant-tree-treenode:not(:has(.ant-tree-indent-unit)) > .ant-tree-switcher::before { display: none; }
+  .ant-tree .ant-tree-indent-unit-end::before { display: none; }
+  .ant-tree .ant-tree-switcher {
+    width: var(--tree-step); min-height: var(--tree-row-height);
+    line-height: var(--tree-row-height); margin-inline-end: 0;
+    color: var(--text-sec); background-color: transparent;
+    background-image: linear-gradient(var(--border), var(--border)), linear-gradient(var(--border), var(--border));
+    background-repeat: no-repeat;
+    background-position: calc(var(--tree-center) - 0.5px) top, calc(var(--tree-center) - 0.5px) bottom;
+    background-size: 1px calc(var(--tree-mid) - var(--tree-toggle-half)), 1px calc(100% - var(--tree-mid) - var(--tree-toggle-half));
+    &::before { top: calc(var(--tree-mid) - var(--tree-center)); width: var(--tree-step); height: var(--tree-step); border-radius: 4px; }
+    &::after {
+      content: ''; position: absolute;
+      inset-inline-start: calc(var(--tree-center) + var(--tree-toggle-half)); inset-inline-end: 0;
+      top: calc(var(--tree-mid) - 0.5px); border-top: 1px solid var(--border); pointer-events: none;
+    }
+  }
+  .ant-tree .ant-tree-switcher-line-icon {
+    position: absolute; top: calc(var(--tree-mid) - var(--tree-toggle-half));
+    inset-inline-start: calc(var(--tree-center) - var(--tree-toggle-half));
+    width: var(--tree-toggle-size); height: var(--tree-toggle-size); line-height: var(--tree-toggle-size);
+    background: transparent; font-size: var(--tree-toggle-size); vertical-align: 0;
+  }
   .ant-tree .ant-tree-switcher-leaf-line { display: none; }
-  // 箭头保留常驻底色：参考线照旧穿过箭头栏以保持连续，中间由这块底色断开，
-  // 视觉上才像树枝被箭头「让开」而不是被压住。
-  // 底色在背景图模式下会换成与壁纸对位的 image-surface，见 background-surfaces.scss。
-  .moki-tree__chevron { position: relative; z-index: 1; margin-top: 9px; width: 16px; height: 16px; line-height: 16px; background: var(--surface); border-radius: 4px; }
-  .moki-tree__chevron svg { display: block; width: 16px; height: 16px; transition: transform 150ms ease; }
-  .ant-tree .ant-tree-switcher_close .moki-tree__chevron svg { transform: rotate(0deg); }
-  .ant-tree .ant-tree-switcher_open .moki-tree__chevron svg { transform: rotate(90deg); }
-  // hover 只改图标颜色，绝不动背景：一动背景，壁纸模式下就会露出那块
-  // 与底图错位的色块，反而比不 hover 更难看。
-  .ant-tree .ant-tree-switcher:hover .moki-tree__chevron { color: var(--accent); }
+  .ant-tree .ant-tree-switcher-noop {
+    background-size: 1px 100%, 0 0;
+    &::after { inset-inline-start: var(--tree-center); }
+  }
+  .ant-tree .moki-tree__last > .ant-tree-switcher { background-size: 1px calc(var(--tree-mid) - var(--tree-toggle-half)), 0 0; }
+  .ant-tree .moki-tree__last > .ant-tree-switcher-noop { background-size: 1px var(--tree-mid), 0 0; }
+  .ant-tree .moki-tree__root--first > .ant-tree-switcher {
+    background-size: 0 0, 1px calc(100% - var(--tree-mid) - var(--tree-toggle-half));
+  }
+  .ant-tree .moki-tree__root--first > .ant-tree-switcher-noop { background-size: 0 0, 1px calc(100% - var(--tree-mid)); }
+  .ant-tree .moki-tree__root--first.moki-tree__root--last > .ant-tree-switcher { background-size: 0 0, 0 0; }
+
 }
 
-@media (hover: none) { .moki-tree__actions { opacity: 1; } }
+.moki-tree__jump-form {
+  display: flex; flex-direction: column; gap: 12px; width: 290px; max-width: calc(100vw - 64px);
+  label { display: flex; flex-direction: column; gap: 5px; font-size: 12px; color: var(--text-sec); }
+  .ant-select, .ant-input-number { width: 100%; }
+  .moki-tree__jump-modes {
+    display: grid; grid-template-columns: 1fr 1fr; gap: 6px; margin: 0; padding: 0; border: 0; min-width: 0;
+    legend { padding: 0; margin-bottom: 6px; font-size: 12px; color: var(--text-sec); }
+  }
+  .moki-tree__jump-choice {
+    position: relative; display: flex; align-items: center; padding: 8px; border: 1px solid var(--border);
+    border-radius: 6px; cursor: pointer; color: var(--text); background: transparent;
+    transition: background 120ms, border-color 120ms;
+    input { position: absolute; width: 1px; height: 1px; opacity: 0; }
+    &:hover { background: var(--hover); }
+    &:focus-within { outline: 1px solid var(--accent); outline-offset: 2px; }
+    &.is-selected { border-color: var(--accent); color: var(--accent); background: var(--accent-bg); }
+  }
+  .moki-tree__jump-fields { display: flex; gap: 10px; > label { flex: 1; min-width: 0; } > .moki-tree__jump-amount { flex: 0 0 100px; } }
+  .moki-tree__jump-help { margin: -2px 0 0; font-size: 11px; line-height: 1.5; color: var(--text-sec); min-height: 33px; }
+  &-actions { display: flex; justify-content: flex-end; gap: 8px; padding-top: 10px; border-top: 1px solid var(--border-light); }
+  .moki-tree__jump-remove { margin-right: auto; padding-inline: 4px; }
+}
+
+.moki-tree-jump-popup .ant-popover-inner { border: 1px solid var(--border); border-radius: 10px; }
+.moki-tree-jump-popup[class*='-leave'] { display: none; }
+
+html[data-theme='dark'] .moki-tree {
+  --md-tint: var(--accent);
+  --md-tint-soft: color-mix(in srgb, var(--md-tint) 32%, transparent);
+}
+
+@media (hover: none) { .moki-tree__actions, .moki-tree__reference--empty { opacity: 1; } }
 @media (max-width: 640px) {
   .moki-tree__toolbar { padding: 6px 10px; }
   .moki-tree__canvas { padding: 16px 10px 48px; }
