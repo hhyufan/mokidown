@@ -1,6 +1,6 @@
 // Keep source lines intact: visual edits must not rewrite comments, blank lines,
 // indentation or jump expressions elsewhere in the document.
-export const TREE_JUMP = />([a-zA-Z][\w#-]*)(?:\[(\d+)\]|(\+\+)|\+=(\d+))?\s*$/;
+export const TREE_JUMP = />(c\+\+|[a-zA-Z][\w#-]*)(?:\[(\d+)\]|(\+\+)|\+=(\d+))?\s*$/i;
 
 export function parseTreeText(text = '') {
   const roots = [];

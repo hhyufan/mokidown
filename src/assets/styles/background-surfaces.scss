@@ -32,16 +32,8 @@ body.moki-has-background,
   .editor-content__renderer-error,
   .editor-content__renderer-error button,
   .timeline__count,
-  .moki-tree__input,
   .moki-tree__top {
     background: var(--moki-glass-surface);
-  }
-
-  // 箭头保留常驻底色（靠它把参考线干净地断开），但底色不能是实色或玻璃灰，
-  // 那会在底图上留下一块错位的小方块。改用与面包屑下拉同一套 image-surface：
-  // 把工作区壁纸按同一坐标系重绘进来，看着就是底图本身。
-  .moki-tree .moki-tree__chevron {
-    @include background-popup.image-surface;
   }
 
   .sidebar__tabs,
@@ -117,16 +109,9 @@ body.moki-has-background,
   }
 
   .moki-tree { background: transparent; }
-  .moki-tree__toolbar { background: var(--moki-glass-surface); }
   .moki-tree .ant-tree .ant-tree-node-content-wrapper:hover {
     background: var(--moki-glass-hover);
   }
-  // 箭头 hover 不能换底色：它常驻的是与壁纸对位的 image-surface，
-  // 换成玻璃色就会露出错位色块，同时把参考线又盖回去。
-  .moki-tree .ant-tree .ant-tree-switcher:hover .moki-tree__chevron {
-    color: var(--accent);
-  }
-
   .output-console__settings input,
   .problems__toolbar input,
   .problems__toolbar select {
@@ -187,7 +172,9 @@ body.moki-has-background,
  * 选择器写在顶层——html 不能作为 body 的后代，无法在上面那个块里嵌套。
  */
 html[data-theme='dark'] body.moki-has-background .md-preview :not(pre) > code,
-html[data-theme='dark'] .app--background .md-preview :not(pre) > code {
+html[data-theme='dark'] .app--background .md-preview :not(pre) > code,
+html[data-theme='dark'] body.moki-has-background .moki-tree__title code,
+html[data-theme='dark'] .app--background .moki-tree__title code {
   background: color-mix(in srgb, var(--md-tint) 32%, transparent);
 }
 
@@ -245,6 +232,12 @@ body.moki-has-background {
     }
   }
 
+  .moki-tree-jump-popup {
+    &[class*='-enter'], &[class*='-appear'] {
+      animation: none !important; transform: none !important; opacity: 1 !important;
+    }
+  }
+
   // 背景色完全遮住下层组件，图片及透明度与工作区一致。
   // 不改定位、滚动容器或子元素层级，保留 antd 的布局与虚拟列表行为。
   //
@@ -255,6 +248,7 @@ body.moki-has-background {
   .ant-select-dropdown,
   .editor-content__run,
   .footer__dropdown,
+  .moki-tree-jump-popup .ant-popover-inner,
   .sort-dropdown,
   .ft,
   .ft__heading-panel,

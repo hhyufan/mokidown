@@ -16,6 +16,10 @@ import {
   useState,
 } from 'react';
 import { createRoot } from 'react-dom/client';
+import { createPortal } from 'react-dom';
+import MarkdownTreeBlock from './MarkdownTreeBlock';
+import { useCodeBlockNavigation } from '@hooks/useCodeBlockNavigation';
+import { normalizeCodeLanguage } from '@utils/knowledgeTree';
 import { Milkdown, MilkdownProvider, useEditor } from '@milkdown/react';
 import { Editor, commandsCtx, defaultValueCtx, editorViewCtx, editorViewOptionsCtx, rootCtx, serializerCtx } from '@milkdown/kit/core';
 import {
@@ -1112,6 +1116,7 @@ function isNonEditablePreviewTarget(target) {
  */
 function createNonEditablePreviewSelectionHandler(getEditor) {
   return function stopNonEditablePreviewSelection(event) {
+    if (event.target.closest?.('.knowledge-tree')) return;
     if (event.target.closest?.('img[src], .milkdown-media-inline')) return;
     if (event.target.closest?.('[data-type="html_block"]')) return;
     if (!isNonEditablePreviewTarget(event.target)) return;
@@ -1374,6 +1379,9 @@ function MilkdownInner({
   const saveTimerRef = useRef(null);
   const publishedMarkdownRef = useRef(null);
   const mermaidRootsRef = useRef(new Map());
+  const [treePreviews, setTreePreviews] = useState([]);
+  const treePreviewId = useRef(0);
+  const treePreviewSources = useRef(new Map());
   const imageCleanupsRef = useRef([]);
   const mediaToolsRef = useRef(null);
   const getMediaView = useCallback(() => {
@@ -1462,7 +1470,14 @@ function MilkdownInner({
           copyIcon: copyIconSvg,
           onCopy: () => useToastStore.getState().toast(i18n.t('preview.copiedToClipboard')),
           renderLanguage: (language) => getLangDisplay(language),
-          renderPreview: renderCodeBlockPreview,
+          renderPreview: (language, source, applyPreview) => {
+            if (!/^(tree|mgtree)$/i.test(language || '')) return renderCodeBlockPreview(language, source, applyPreview);
+            const id = ++treePreviewId.current;
+            treePreviewSources.current.set(String(id), source);
+            // Milkdown sanitizes and clones the preview HTML. Mount into the
+            // actual placeholder after that clone reaches the editor DOM.
+            return `<div class="milkdown-knowledge-tree" data-tree-preview="${id}" contenteditable="false"></div>`;
+          },
           previewToggleButton: (previewOnlyMode) => (previewOnlyMode ? editIconSvg : previewIconSvg),
           previewOnlyByDefault: true,
           previewLabel: 'Preview',
@@ -1506,6 +1521,20 @@ function MilkdownInner({
     editorRef.current = editor;
     return editor;
   }, [activeTabId, content, readOnly, publishEditorContent]);
+
+  const resolveCodeTarget = useCallback((language, index) => {
+    const view = getMediaView();
+    if (!view || !Number.isSafeInteger(index) || index < 1) return null;
+    let count = 0;
+    let target = null;
+    view.state.doc.descendants((node, pos) => {
+      if (node.type.name !== 'code_block' || normalizeCodeLanguage(node.attrs.language || '') !== normalizeCodeLanguage(language)) return;
+      if (++count === index) target = view.nodeDOM(pos);
+      return false;
+    });
+    return target instanceof HTMLElement ? target : null;
+  }, [getMediaView]);
+  const jumpToCode = useCodeBlockNavigation(activeTabId, resolveCodeTarget, !editorInfo.loading);
 
   useEffect(() => {
     if (editorInfo.loading || readOnly) return undefined;
@@ -1684,6 +1713,25 @@ function MilkdownInner({
   useEffect(() => {
     const wrapper = wrapperRef.current;
     if (!wrapper) return undefined;
+    const refresh = () => {
+      const next = [...wrapper.querySelectorAll('.milkdown-knowledge-tree[data-tree-preview]')]
+        .map((element) => ({ element, id: element.dataset.treePreview, source: treePreviewSources.current.get(element.dataset.treePreview) }))
+        .filter((entry) => entry.source !== undefined);
+      setTreePreviews((entries) => {
+        if (entries.length === next.length && entries.every((entry, index) => entry.element === next[index].element)) return entries;
+        for (const entry of entries) if (!next.some((item) => item.id === entry.id)) treePreviewSources.current.delete(entry.id);
+        return next;
+      });
+    };
+    const observer = new MutationObserver(refresh);
+    observer.observe(wrapper, { childList: true, subtree: true });
+    refresh();
+    return () => observer.disconnect();
+  }, []);
+
+  useEffect(() => {
+    const wrapper = wrapperRef.current;
+    if (!wrapper) return undefined;
 
     const handleLinkClick = (event) => {
       if (getEventTargetElement(event.target)?.closest('.milkdown-media-inline')) return;
@@ -1767,6 +1815,7 @@ function MilkdownInner({
     if (!wrapper) return undefined;
 
     const focusBlank = (event) => {
+      if (event.target.closest?.('.knowledge-tree')) return;
       editorRef.current?.action((ctx) => handleMilkdownBlankPointerDown(ctx.get(editorViewCtx), event));
     };
     wrapper.addEventListener('pointerdown', focusBlank, true);
@@ -1856,6 +1905,8 @@ function MilkdownInner({
       }}
     >
       <Milkdown />
+      {treePreviews.map((entry) => createPortal(<MarkdownTreeBlock source={entry.source} filePath={documentPath}
+        onJump={jumpToCode} />, entry.element, entry.id))}
       <MilkdownTooltips rootRef={wrapperRef} readOnly={readOnly} />
       <MilkdownMediaTools key={activeTabId} ref={mediaToolsRef} rootRef={wrapperRef} getView={getMediaView}
         ready={!editorInfo.loading} readOnly={readOnly} />

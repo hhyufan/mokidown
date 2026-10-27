@@ -1,0 +1,58 @@
+.knowledge-tree {
+  --tree-font-size: 12px;
+  flex: 0 0 auto;
+  min-width: 0;
+  background: transparent;
+  overflow: visible;
+  font-size: var(--tree-font-size);
+  .moki-tree__canvas { padding: 8px 8px 16px; min-width: 0; }
+  .moki-tree__node { gap: 7px; }
+  .moki-tree__title { cursor: pointer; }
+  .moki-tree__scroll { overflow: visible; }
+  &__header {
+    position: sticky;
+    top: 0;
+    z-index: 5;
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    padding: 6px 8px 6px 12px;
+    min-height: 40px;
+    font-size: 12px;
+    font-weight: 600;
+    background: transparent;
+    border-bottom: 1px solid var(--border-light);
+  }
+  &__heading { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  &__header .moki-tree__corner-controls { padding: 0; margin-left: auto; }
+  .moki-tree__node--jumping { animation: knowledge-node-arrival 4s ease-out both; border-radius: 4px; }
+}
+.knowledge-tree__list { overflow: auto; min-height: 0; flex: 1; }
+.md-preview .knowledge-tree { border: 1px solid var(--border); border-radius: 6px; margin: 16px 0; }
+.md-preview .knowledge-tree-target {
+  position: relative;
+  &::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    z-index: 2;
+    border-radius: inherit;
+    pointer-events: none;
+    background: linear-gradient(110deg, color-mix(in srgb, var(--accent) 12%, transparent), color-mix(in srgb, var(--accent) 6%, transparent));
+    box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent) 50%, transparent);
+    animation: knowledge-code-arrival 4s ease-out both;
+  }
+}
+@keyframes knowledge-code-arrival {
+  0% { opacity: 0; }
+  8%, 55% { opacity: 1; }
+  100% { opacity: 0; }
+}
+@keyframes knowledge-node-arrival {
+  0%, 25% { background-color: color-mix(in srgb, var(--accent) 16%, transparent); box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent) 40%, transparent); }
+  100% { background-color: transparent; box-shadow: inset 0 0 0 1px transparent; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .md-preview .knowledge-tree-target::after { animation: none; opacity: 0.65; }
+  .knowledge-tree .moki-tree__node--jumping { animation: none; background-color: color-mix(in srgb, var(--accent) 16%, transparent); box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent) 40%, transparent); }
+}

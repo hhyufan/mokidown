@@ -53,6 +53,18 @@ const useEditorStore = create(
       tabsRevision: 0,
       sidebarVisible: true,
       sidebarView: 'explorer',
+      sidebarWidth: 280,
+      sidebarMinWidth: 220,
+      setSidebarMinWidth: (width) => set((s) => {
+        const minimum = Math.max(220, Math.ceil(Number(width) || 220));
+        return s.sidebarMinWidth === minimum ? s : { sidebarMinWidth: minimum };
+      }),
+      setSidebarWidth: (width) => set((s) => ({ sidebarWidth: Math.max(s.sidebarMinWidth, Math.min(Math.max(640, s.sidebarMinWidth), Number(width) || 280)) })),
+      knowledgeJump: null,
+      requestKnowledgeJump: (language, index) => set((s) => ({
+        knowledgeJump: { tabId: s.activeTabId, language, index, nonce: Date.now() },
+        viewMode: s.viewMode === 'edit' ? 'split' : s.viewMode,
+      })),
       viewMode: 'edit',
       toolbarVisible: false,
       splitRatio: 0.5,
@@ -488,6 +500,7 @@ const useEditorStore = create(
       partialize: (state) => ({
         sidebarVisible: state.sidebarVisible,
         sidebarView: state.sidebarView,
+        sidebarWidth: state.sidebarWidth,
         viewMode: state.viewMode,
         toolbarVisible: state.toolbarVisible,
         splitRatio: state.splitRatio,

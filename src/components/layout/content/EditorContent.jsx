@@ -475,6 +475,9 @@ function EditorContent() {
     let syncRaf = 0;
     const syncScroll = () => {
       syncRaf = 0;
+      // Explicit tree navigation takes priority over delayed code highlighting,
+      // image loading and initial editor scroll synchronization.
+      if (previewEl.querySelector('.knowledge-tree-target')) return;
       const editorViewportHeight = editor.getLayoutInfo?.().height || 0;
       const editorScrollable = Math.max(0, (editor.getScrollHeight?.() || 0) - editorViewportHeight);
       const previewScrollable = Math.max(0, previewEl.scrollHeight - previewEl.clientHeight);
