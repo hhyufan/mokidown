@@ -1,6 +1,8 @@
 /**
  * Markdown 预览区样式，覆盖正文排版、块级内容与延迟渲染提示状态。
  */
+@use '../../assets/styles/inline-code' as inline;
+
 .md-preview {
   flex: 1;
   // 只写 overflow-y 会让横向的 visible 被算成 auto：预览容器自己就变成横向滚动容器，
@@ -295,13 +297,7 @@
   // 行内代码：蓝调透明底 + 4px 圆角，文字沿用正文颜色。
   // 左右留 4px 外边距，chip 不会和相邻文字贴在一起。
   code {
-    font-family: var(--font-editor);
-    font-size: 0.88em;
-    margin: 0 4px;
-    padding: 2px 4px;
-    border-radius: var(--md-radius-sm);
-    background: var(--md-tint-soft);
-    color: inherit;
+    @include inline.inline-code;
   }
 
   pre {

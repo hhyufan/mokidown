@@ -1,0 +1,10 @@
+// Shared by Markdown/Milkdown and rendered tree titles, including editing.
+@mixin inline-code {
+  font-family: var(--font-editor);
+  font-size: 0.88em;
+  margin: 0 4px;
+  padding: 2px 4px;
+  border-radius: var(--md-radius-sm, 4px);
+  background: var(--md-tint-soft);
+  color: inherit;
+}
