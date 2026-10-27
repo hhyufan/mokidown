@@ -1,9 +1,8 @@
 import { useMemo, useRef, useState } from 'react';
-import { Button, Input, Tooltip, Tree } from 'antd';
+import { Button, Tooltip } from 'antd';
 import {
-  ApartmentOutlined, PlusOutlined, ExpandAltOutlined, ShrinkOutlined,
-  ZoomInOutlined, ZoomOutOutlined, OneToOneOutlined, FolderOutlined,
-  FolderOpenOutlined, FileTextOutlined, CodeOutlined, CloseCircleOutlined,
+  ApartmentOutlined, PlusOutlined,
+  ZoomInOutlined, ZoomOutOutlined, OneToOneOutlined, CloseCircleOutlined,
   VerticalAlignTopOutlined,
 } from '@ant-design/icons';
 import { useTranslation } from 'react-i18next';
@@ -12,19 +11,14 @@ import useConfigStore from '@store/useConfigStore';
 import { useEditorBufferContent } from '../../hooks/useEditorBufferContent';
 import { useDocumentScrollState } from '@hooks/useDocumentScrollState';
 import { getBuffer, setBuffer } from '@utils/editorBuffer';
-import { isImeComposing } from '@utils/keyboard';
 import { editTreeSource, flattenTree, parseTreeText } from '@utils/mgtree';
 import { useEditorContextMenu } from '@hooks/useEditorContextMenu';
 import EditorContextMenu from './EditorContextMenu';
 import { MENU_MOD } from '@utils/contextMenuShortcuts';
+import TreeView, { InlineTreeTitle, TreeNodeRow, TreeControls } from './TreeView';
+import TreeNodeEditor from './TreeNodeEditor';
+import TreeJumpEditor from './TreeJumpEditor';
 import './tree-editor.scss';
-
-function InlineTitle({ title }) {
-  return title.split(/(`[^`]+`)/g).map((part, index) => (
-    part.startsWith('`') && part.endsWith('`')
-      ? <code key={index}>{part.slice(1, -1)}</code> : part
-  ));
-}
 
 function readExpanded(storageKey) {
   try {
@@ -44,16 +38,14 @@ export default function TreeEditor({ className = '', onAutoSave, onSourceChange 
   const storageKey = `mokidown-tree-expanded:${tab?.path || tabId}`;
   const [expanded, setExpanded] = useState(() => readExpanded(storageKey));
   const [editing, setEditing] = useState(null);
-  const [value, setValue] = useState('');
+  const [jumpEditing, setJumpEditing] = useState(null);
+  const [editSize, setEditSize] = useState(null);
+  const titleRefs = useRef(new Map());
+  const lastWrite = useRef(null);
   const [zoom, setZoom] = useState(1);
   const [showTop, setShowTop] = useState(false);
   const scrollRef = useRef(null);
   useDocumentScrollState(scrollRef, tabId, 'tree');
-  const composingRef = useRef(false);
-  const pendingBlurRef = useRef(false);
-  const suppressImeEnterRef = useRef(false);
-  const cancelledRef = useRef(false);
-  const inputValueRef = useRef('');
   const { menu, openMenu, closeMenu } = useEditorContextMenu(`${tabId}:${source}`);
 
   const updateExpanded = (keys) => {
@@ -61,13 +53,14 @@ export default function TreeEditor({ className = '', onAutoSave, onSourceChange 
     try { localStorage.setItem(storageKey, JSON.stringify(keys)); } catch { /* Storage may be unavailable. */ }
   };
 
-  const commit = (operation) => {
+  const commit = (operation, expectedSource = source) => {
     // Reject stale row actions while the source pane has a pending render.
     const current = getBuffer(tabId, tab?.content || '');
-    if (current !== source) { setEditing(null); return; }
+    if (current !== expectedSource) { setEditing(null); return; }
     const next = editTreeSource(current, operation);
     if (next === current) return;
     if (!onSourceChange?.(next)) setBuffer(tabId, next);
+    lastWrite.current = { tabId, source: next };
     useEditorStore.getState().markTabDirty(tabId, true);
     useEditorStore.getState().setCharacterCount(next.length);
     onAutoSave?.();
@@ -75,19 +68,30 @@ export default function TreeEditor({ className = '', onAutoSave, onSourceChange 
   };
 
   const startEdit = (node) => {
-    cancelledRef.current = false;
-    pendingBlurRef.current = false;
-    suppressImeEnterRef.current = false;
-    inputValueRef.current = node.originalText;
-    setValue(node.originalText);
+    const title = titleRefs.current.get(node.key);
+    setEditSize(title ? { width: title.offsetWidth, height: title.offsetHeight } : null);
     setEditing(node.key);
   };
 
-  const saveEdit = (node) => {
-    if (cancelledRef.current || composingRef.current) return;
-    const nextValue = inputValueRef.current.trim();
-    if (nextValue) commit({ type: 'rename', node, value: nextValue });
+  const saveEdit = (node, title) => {
+    const cleanTitle = title.trim();
+    if (cleanTitle) {
+      // Keep the original operator, index and spacing out of the title editor.
+      const suffix = node.jumpLanguage ? node.originalText.slice(node.title.length) : '';
+      commit({ type: 'rename', node, value: cleanTitle + suffix });
+    }
     setEditing(null);
+  };
+  const saveJump = (node, suffix) => {
+    const current = getBuffer(tabId, tab?.content || '');
+    // A field losing focus saves its title before this form submits. Rebase
+    // that local write while still rejecting changes from the source editor.
+    if (current !== source && (lastWrite.current?.tabId !== tabId || lastWrite.current.source !== current)) return false;
+    const latest = flattenTree(parseTreeText(current)).find((item) => item.lineIndex === node.lineIndex);
+    if (!latest) return false;
+    const value = latest.title + (suffix ? ` ${suffix}` : '');
+    if (value === latest.originalText) return true;
+    return commit({ type: 'rename', node: latest, value }, current) !== undefined;
   };
 
   const addNode = (parent) => {
@@ -120,7 +124,7 @@ export default function TreeEditor({ className = '', onAutoSave, onSourceChange 
   };
 
   const handleContextMenu = (event, node = null) => {
-    if (event.target.closest('input')) return;
+    if (event.target.closest('input, textarea, [contenteditable="true"]')) return;
     const item = (key, run, extra = {}) => ({ key, label: t(`tree.${key}`), run, ...extra });
     const items = node ? [
       { key: 'copy', label: t('editor.menu.copy'), shortcut: `${MENU_MOD}+C`, run: () => navigator.clipboard.writeText(node.originalText) },
@@ -146,71 +150,33 @@ export default function TreeEditor({ className = '', onAutoSave, onSourceChange 
     </Tooltip>
   );
 
-  const renderNode = (node, index, siblings) => {
-    const branch = node.children.length > 0;
-    const Icon = branch ? (expanded.includes(node.key) ? FolderOpenOutlined : FolderOutlined)
-      : node.jumpLanguage ? CodeOutlined : FileTextOutlined;
-    return {
-      key: node.key,
-      className: index === siblings.length - 1 ? 'moki-tree__last' : '',
-      title: (
-        <div className={`moki-tree__node ${node.jumpLanguage ? 'moki-tree__node--linked' : ''}`} onContextMenu={(event) => handleContextMenu(event, node)}>
-          <Icon className={`moki-tree__icon ${branch ? 'moki-tree__icon--folder' : ''}`} />
+  const renderTitle = (node) => (
+        <TreeNodeRow node={node} actions={renderActions(node)} reference={<TreeJumpEditor node={node}
+          open={jumpEditing?.tabId === tabId && jumpEditing.key === node.key}
+          onOpenChange={(open) => setJumpEditing((previous) => open ? { tabId, key: node.key }
+            : previous?.tabId === tabId && previous.key === node.key ? null : previous)}
+          onApply={(suffix) => saveJump(node, suffix)} />}
+          onContextMenu={(event) => handleContextMenu(event, node)}>
           {editing === node.key ? (
-            <Input autoFocus className="moki-tree__input" size="small" value={value}
-              aria-label={t('tree.editNode')} placeholder={t('tree.inputHint')}
-              onFocus={(event) => event.target.select()}
-              onChange={(event) => { inputValueRef.current = event.target.value; setValue(event.target.value); }}
-              onCompositionStart={() => { composingRef.current = true; }}
-              onCompositionEnd={(event) => {
-                composingRef.current = false;
-                inputValueRef.current = event.currentTarget.value;
-                suppressImeEnterRef.current = true;
-                setTimeout(() => { suppressImeEnterRef.current = false; }, 0);
-                // Clicking an IME candidate can blur the input before the final
-                // input event. Commit after composition and that input event land.
-                if (pendingBlurRef.current) {
-                  pendingBlurRef.current = false;
-                  setTimeout(() => saveEdit(node), 0);
-                }
-              }}
-              onBlur={() => {
-                if (composingRef.current) pendingBlurRef.current = true;
-                else saveEdit(node);
-              }}
-              onKeyDown={(event) => {
-                event.stopPropagation();
-                if (isImeComposing(event) || composingRef.current) return;
-                if (event.key === 'Enter' && suppressImeEnterRef.current) return;
-                if (event.key === 'Enter') { event.preventDefault(); saveEdit(node); }
-                if (event.key === 'Escape') { cancelledRef.current = true; setEditing(null); }
-              }}
-            />
+            <TreeNodeEditor key={node.key} source={node.title} size={editSize}
+              onSave={(title) => saveEdit(node, title)} onCancel={() => setEditing(null)} />
           ) : (
             <Tooltip title={t('tree.editHint')} placement="top" mouseEnterDelay={0.3}>
-              <button type="button" className="moki-tree__title" onClick={(event) => { event.stopPropagation(); startEdit(node); }}>
-                <InlineTitle title={node.title || t('tree.newNode')} />
+              <button type="button" className="moki-tree__title"
+                ref={(element) => { if (element) titleRefs.current.set(node.key, element); else titleRefs.current.delete(node.key); }}
+                onClick={(event) => { event.stopPropagation(); startEdit(node); }}>
+                <InlineTreeTitle title={node.title || t('tree.newNode')} />
               </button>
             </Tooltip>
           )}
-          {node.jumpLanguage && editing !== node.key && (
-            <Tooltip title={node.originalText} placement="top" mouseEnterDelay={0.3}>
-              <span className="moki-tree__reference">
-                {node.jumpLanguage}<span>{node.jumpIndex}</span>
-              </span>
-            </Tooltip>
-          )}
-          {editing !== node.key && (
+        </TreeNodeRow>
+  );
+  const renderActions = (node) => editing !== node.key && (
             <span className="moki-tree__actions" onClick={(event) => event.stopPropagation()}>
               {action('addChild', <PlusOutlined />, () => addNode(node))}
               {action('deleteNode', <CloseCircleOutlined />, () => deleteNode(node), { danger: true })}
             </span>
-          )}
-        </div>
-      ),
-      children: node.children.map(renderNode),
-    };
-  };
+          );
 
   return (
     <section className={`moki-tree ${className}`} aria-label={t('tree.title')} style={{ '--tree-font-size': `${fontSize}px` }} onContextMenu={(event) => handleContextMenu(event)}>
@@ -218,8 +184,6 @@ export default function TreeEditor({ className = '', onAutoSave, onSourceChange 
       <div className="moki-tree__toolbar">
         <div className="moki-tree__tools">
           {action('addRoot', <PlusOutlined />, () => addNode(null), { className: 'moki-tree__add' })}
-          {action('expandAll', <ExpandAltOutlined />, () => updateExpanded(flat.filter((node) => node.children.length).map((node) => node.key)))}
-          {action('collapseAll', <ShrinkOutlined />, () => updateExpanded([]))}
           <span className="moki-tree__separator" />
           {action('zoomIn', <ZoomInOutlined />, () => setZoom((z) => Math.min(3, z + 0.2)), { disabled: zoom >= 3 })}
           {action('zoomOut', <ZoomOutOutlined />, () => setZoom((z) => Math.max(0.5, z - 0.2)), { disabled: zoom <= 0.5 })}
@@ -227,13 +191,14 @@ export default function TreeEditor({ className = '', onAutoSave, onSourceChange 
           <span className="moki-tree__zoom">{Math.round(zoom * 100)}%</span>
         </div>
         <span className="moki-tree__count"><ApartmentOutlined />{t('tree.nodeCount', { count: flat.length })}</span>
+        <TreeControls onExpandAll={() => updateExpanded(flat.filter((node) => node.children.length).map((node) => node.key))}
+          onCollapseAll={() => updateExpanded([])} />
       </div>
       <div className="moki-tree__scroll" ref={scrollRef} onScroll={(event) => setShowTop(event.currentTarget.scrollTop > 240)}>
         {nodes.length ? (
           <div className="moki-tree__canvas" style={{ zoom }}>
-            <Tree treeData={nodes.map(renderNode)} expandedKeys={expanded} onExpand={updateExpanded}
-              blockNode showIcon={false} showLine={{ showLeafIcon: false }}
-              switcherIcon={<span className="moki-tree__chevron"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><path d="m6 3 5 5-5 5" /></svg></span>} />
+            <TreeView nodes={nodes} expandedKeys={expanded} onExpand={updateExpanded}
+              renderTitle={renderTitle} />
           </div>
         ) : (
           <div className="moki-tree__empty">
@@ -242,7 +207,7 @@ export default function TreeEditor({ className = '', onAutoSave, onSourceChange 
           </div>
         )}
       </div>
-      <div className="moki-tree__hint">{t('tree.hint')}</div>
+      <div className="moki-tree__hint">{t('tree.hint', { shortcut: `${MENU_MOD}+E` })}</div>
       {showTop && <button className="moki-tree__top" type="button" aria-label={t('tree.backToTop')}
         onClick={() => scrollRef.current?.scrollTo({ top: 0, behavior: 'smooth' })}><VerticalAlignTopOutlined /></button>}
     </section>

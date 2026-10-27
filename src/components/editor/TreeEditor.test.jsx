@@ -1,6 +1,6 @@
 import * as ReactRuntime from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import useEditorStore from '@store/useEditorStore';
 import { clearBuffer, getBuffer, setBuffer } from '@utils/editorBuffer';
 import TreeEditor from './TreeEditor';
@@ -14,6 +14,8 @@ vi.mock('react-i18next', () => ({
 }));
 
 const tabId = 'tree-editor-test';
+const originalRangeRects = Object.getOwnPropertyDescriptor(Range.prototype, 'getClientRects');
+const originalRangeBounds = Object.getOwnPropertyDescriptor(Range.prototype, 'getBoundingClientRect');
 function setup(source = 'Root\n  Child >js++\nOther\n', props = {}) {
   setBuffer(tabId, source);
   const tab = { id: tabId, name: 'test.mgtree', content: source, modified: false };
@@ -24,28 +26,45 @@ function setup(source = 'Root\n  Child >js++\nOther\n', props = {}) {
 beforeEach(() => {
   localStorage.clear();
   window.matchMedia = vi.fn().mockImplementation(() => ({ matches: false, addListener: vi.fn(), removeListener: vi.fn() }));
+  Object.defineProperty(Range.prototype, 'getClientRects', { configurable: true, value: () => [] });
+  Object.defineProperty(Range.prototype, 'getBoundingClientRect', { configurable: true, value: () => new DOMRect() });
 });
-afterEach(() => { cleanup(); clearBuffer(tabId); });
+afterEach(() => {
+  cleanup(); clearBuffer(tabId);
+  if (originalRangeRects) Object.defineProperty(Range.prototype, 'getClientRects', originalRangeRects);
+  else delete Range.prototype.getClientRects;
+  if (originalRangeBounds) Object.defineProperty(Range.prototype, 'getBoundingClientRect', originalRangeBounds);
+  else delete Range.prototype.getBoundingClientRect;
+});
+
+async function replaceTitle(element, html) {
+  await act(async () => {
+    element.innerHTML = html;
+    fireEvent.input(element);
+  });
+}
 
 describe('visual tree editing', () => {
-  it('expands nodes and saves edited jump syntax to the shared buffer', async () => {
+  it('edits rendered inline code while preserving the independent jump expression', async () => {
     const onAutoSave = vi.fn();
     setup(undefined, { onAutoSave });
     fireEvent.click(screen.getByRole('button', { name: 'tree.expandAll' }));
     fireEvent.click(screen.getByRole('button', { name: 'Child' }));
-    fireEvent.change(screen.getByRole('textbox', { name: 'tree.editNode' }), { target: { value: 'Edited `code` >js[3]' } });
+    expect(screen.getByRole('textbox', { name: 'tree.editNode' })).toHaveTextContent('Child');
+    expect(screen.getByRole('textbox', { name: 'tree.editNode' })).not.toHaveTextContent('>js');
+    await replaceTitle(screen.getByRole('textbox', { name: 'tree.editNode' }), 'Edited <code>code</code>');
     fireEvent.keyDown(screen.getByRole('textbox', { name: 'tree.editNode' }), { key: 'Enter' });
-    expect(getBuffer(tabId)).toContain('  Edited `code` >js[3]');
+    expect(getBuffer(tabId)).toContain('  Edited `code` >js++');
     expect(onAutoSave).toHaveBeenCalledOnce();
     await waitFor(() => expect(screen.getByRole('button', { name: 'Edited code' })).toBeInTheDocument());
     expect(useEditorStore.getState().tabs[0].modified).toBe(true);
   });
 
-  it('cancels with Escape and does not commit IME confirmation Enter', () => {
+  it('cancels with Escape and does not commit IME confirmation Enter', async () => {
     setup();
     fireEvent.click(screen.getByRole('button', { name: 'Root' }));
     const input = screen.getByRole('textbox', { name: 'tree.editNode' });
-    fireEvent.change(input, { target: { value: '中文' } });
+    await replaceTitle(input, '中文');
     fireEvent.compositionStart(input);
     fireEvent.keyDown(input, { key: 'Enter', isComposing: true });
     expect(getBuffer(tabId)).toContain('Root');
@@ -60,11 +79,11 @@ describe('visual tree editing', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Root' }));
     const input = screen.getByRole('textbox', { name: 'tree.editNode' });
     fireEvent.compositionStart(input);
-    fireEvent.change(input, { target: { value: 'zhong' } });
+    await replaceTitle(input, 'zhong');
     fireEvent.blur(input);
     expect(getBuffer(tabId)).toContain('Root');
     fireEvent.compositionEnd(input);
-    fireEvent.change(input, { target: { value: '中文' } });
+    await replaceTitle(input, '中文');
     await waitFor(() => expect(getBuffer(tabId)).toContain('中文\n'));
   });
 
@@ -96,11 +115,11 @@ describe('visual tree editing', () => {
     expect(labels.map((label, index) => label?.startsWith(['Root', 'Child', 'Other'][index]))).toEqual([true, true, true]);
   });
 
-  it('routes split edits through Monaco and ignores stale row actions', () => {
+  it('routes split edits through Monaco and ignores stale row actions', async () => {
     const onSourceChange = vi.fn((next) => { setBuffer(tabId, next); return true; });
     setup(undefined, { onSourceChange });
     fireEvent.click(screen.getByRole('button', { name: 'Root' }));
-    fireEvent.change(screen.getByRole('textbox', { name: 'tree.editNode' }), { target: { value: 'Changed' } });
+    await replaceTitle(screen.getByRole('textbox', { name: 'tree.editNode' }), 'Changed');
     fireEvent.blur(screen.getByRole('textbox', { name: 'tree.editNode' }));
     expect(onSourceChange).toHaveBeenCalledWith('Changed\n  Child >js++\nOther\n');
     setBuffer(tabId, 'New source');
