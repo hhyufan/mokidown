@@ -404,3 +404,43 @@ test('jump popups are exclusive and reuse the opaque wallpaper surface in both t
   await page.keyboard.press('Escape');
   await expect(visible).toHaveCount(0);
 });
+
+test('knowledge headers stay outside the tree scrollbar and show aligned wallpaper', async ({ page }) => {
+  await openDocument(page, 'preview');
+  await page.evaluate(async () => {
+    const store = window.treeTrial.store.getState();
+    store.openFile({ path: 'C:/notes/lesson.mgtree', name: 'lesson.mgtree',
+      content: 'Examples\n' + Array.from({ length: 100 }, (_, index) => `  Example ${index + 1} >js[1]`).join('\n') });
+    store.setActiveTab('C:/notes/lesson.md');
+  });
+  await page.getByRole('tab', { name: /Knowledge tree|知识树/ }).click();
+  const tree = page.locator('.sidebar .knowledge-tree').filter({ has: page.locator('.knowledge-tree__heading', { hasText: 'lesson.mgtree' }) });
+  await expect(tree.getByRole('button', { name: 'Example 100', exact: true })).toBeVisible();
+  const header = tree.locator('.knowledge-tree__header');
+  const list = page.locator('.sidebar .knowledge-tree__list');
+  const top = await header.evaluate((element) => element.getBoundingClientRect().top);
+  await tree.locator('.moki-tree__scroll').evaluate((element) => { element.scrollTop = 220; });
+  expect(await header.evaluate((element) => element.getBoundingClientRect().top)).toBeCloseTo(top, 0);
+  expect(await list.evaluate((element) => element.scrollHeight <= element.clientHeight + 1)).toBe(true);
+  expect(await tree.locator('.moki-tree__scroll').evaluate((element) => element.getBoundingClientRect().top
+    >= element.previousElementSibling.getBoundingClientRect().bottom)).toBe(true);
+  await page.evaluate(async () => {
+    const { saveBackgroundImage } = await import('/src/utils/backgroundImage.js');
+    const { default: config } = await import('/src/store/useConfigStore.js');
+    const id = await saveBackgroundImage(new Blob(['<svg xmlns="http://www.w3.org/2000/svg" width="400" height="300"><rect width="400" height="300" fill="#8ca7c0"/></svg>'], { type: 'image/svg+xml' }));
+    config.getState().setConfig('backgroundImage', id);
+    config.getState().setConfig('backgroundEnabled', true);
+  });
+  await expect.poll(() => header.evaluate((element) => {
+    const style = getComputedStyle(element);
+    const context = document.createElement('canvas').getContext('2d');
+    context.fillStyle = style.backgroundColor; context.fillRect(0, 0, 1, 1);
+    return { opaque: context.getImageData(0, 0, 1, 1).data[3] === 255,
+      wallpaper: style.backgroundImage.includes('blob:'), aligned: element.style.getPropertyValue('--moki-popup-y') !== '' };
+  })).toEqual({ opaque: true, wallpaper: true, aligned: true });
+  const badge = tree.locator('.moki-tree__reference').nth(10);
+  await badge.hover();
+  await expect(page.getByRole('tooltip')).toHaveText(/Go to javascript code block 1|Go to js code block 1|跳到 js 的第 1 个代码块/);
+  await expect(page.locator('.sidebar [title]')).toHaveCount(0);
+  await page.screenshot({ path: '.cache/knowledge-tree-header-surface.png' });
+});

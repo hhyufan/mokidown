@@ -137,7 +137,7 @@ export const milkdownMediaImageView = $view(imageSchema.node, () => (initialNode
     if (!empty) {
       dom.setAttribute('src', node.attrs.src);
       dom.setAttribute('alt', node.attrs.alt || '');
-      dom.setAttribute('title', node.attrs.title || '');
+      dom.dataset.mokiTooltip = node.attrs.title || '';
     }
   };
   updateAttrs();
@@ -156,7 +156,7 @@ export const milkdownMediaImageView = $view(imageSchema.node, () => (initialNode
       if (sourceChanged) updateAttrs();
       else if (!empty) {
         dom.setAttribute('alt', node.attrs.alt || '');
-        dom.setAttribute('title', node.attrs.title || '');
+        dom.dataset.mokiTooltip = node.attrs.title || '';
       }
       return true;
     },

@@ -1,3 +1,4 @@
+import { Tooltip } from 'antd';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { flattenTree, parseTreeText } from '@utils/mgtree';
@@ -32,7 +33,7 @@ export default function KnowledgeTree({ source, onJump, onOpen, title }) {
   return <section className="moki-tree knowledge-tree" aria-label={t('knowledgeTree.title')} contentEditable={false}
     onPointerDown={(event) => event.stopPropagation()} onMouseDown={(event) => event.stopPropagation()}>
     <div className="knowledge-tree__header">
-      <span className="knowledge-tree__heading" title={title || t('knowledgeTree.title')}>{title || t('knowledgeTree.title')}</span>
+      <Tooltip title={title || t('knowledgeTree.title')} mouseEnterDelay={0.3}><span className="knowledge-tree__heading" >{title || t('knowledgeTree.title')}</span></Tooltip>
       <TreeControls onExpandAll={() => setExpanded(branches)} onCollapseAll={() => setExpanded([])} onOpen={onOpen} />
     </div>
     <div className="moki-tree__scroll"><div className="moki-tree__canvas">

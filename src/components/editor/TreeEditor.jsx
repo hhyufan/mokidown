@@ -208,8 +208,8 @@ export default function TreeEditor({ className = '', onAutoSave, onSourceChange 
         )}
       </div>
       <div className="moki-tree__hint">{t('tree.hint', { shortcut: `${MENU_MOD}+E` })}</div>
-      {showTop && <button className="moki-tree__top" type="button" aria-label={t('tree.backToTop')}
-        onClick={() => scrollRef.current?.scrollTo({ top: 0, behavior: 'smooth' })}><VerticalAlignTopOutlined /></button>}
+      {showTop && <Tooltip title={t('tree.backToTop')}><button className="moki-tree__top" type="button" aria-label={t('tree.backToTop')}
+        onClick={() => scrollRef.current?.scrollTo({ top: 0, behavior: 'smooth' })}><VerticalAlignTopOutlined /></button></Tooltip>}
     </section>
   );
 }
