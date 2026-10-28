@@ -69,7 +69,7 @@ function Footer() {
   const activeTabId = useEditorStore((s) => s.activeTabId);
   const cursorPosition = useEditorStore((s) => s.cursorPosition);
   const characterCount = useEditorStore((s) => s.characterCount);
-  
+
   const tasksOpen = useUpdateStore((s) => s.open);
   // 当前该在状态栏露出的任务（更新或语言服务安装），以及它的确定进度（没有则为 undefined）。
   const { active: activeTask } = useTasks();
@@ -148,7 +148,7 @@ function Footer() {
 
   const handleSegmentClick = useCallback(async (index) => {
     if (isWebDemo()) {
-      notifyWebDemo('在网页预览中不能浏览本机文件夹，请使用桌面版 MokiDown。');
+      notifyWebDemo(t('webDemo.browseFolder'));
       return;
     }
     if (openDropdown === index) {
@@ -170,7 +170,7 @@ function Footer() {
     } catch (_) {
       setOpenDropdown(null);
     }
-  }, [pathSegments, openDropdown, activeTab?.path]);
+  }, [pathSegments, openDropdown, activeTab?.path, t]);
 
   const handleContextMenu = useCallback(async (e, index) => {
     e.preventDefault();
@@ -221,12 +221,14 @@ function Footer() {
   return (
     <footer className="footer">
       <div className="footer__left">
-        <button className="footer__toggle-sidebar" onClick={toggleSidebar}>
+        <Tooltip title={t('topbar.toggleSidebar')} placement="top" mouseEnterDelay={0.3}>
+        <button type="button" className="footer__toggle-sidebar" aria-label={t('topbar.toggleSidebar')} onClick={toggleSidebar}>
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
             <rect x="3" y="3" width="18" height="18" rx="2" />
             <line x1="9" y1="3" x2="9" y2="21" />
           </svg>
         </button>
+        </Tooltip>
         {showModeToggle && (
           <>
             <span className="footer__sep" />
@@ -237,6 +239,7 @@ function Footer() {
             >
               <button
                 className="footer__mode-toggle"
+                aria-label={viewMode === 'edit' ? t('footer.switchToPreview') : t('footer.switchToCode')}
                 onClick={toggleEditPreview}
                 type="button"
               >

@@ -37,7 +37,7 @@ const useUpdateStore = create((set, get) => ({
   total: 0,
   check: async ({ startup = false } = {}) => {
     if (isWebDemo()) {
-      if (!startup) notifyWebDemo('检查更新需要在桌面版 MokiDown 中使用。');
+      if (!startup) notifyWebDemo(i18n.t('webDemo.checkUpdates'));
       return;
     }
     void checkPluginUpdates();

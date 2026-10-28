@@ -1,3 +1,4 @@
+import i18n from '@/i18n';
 import useNotificationStore from '@store/useNotificationStore';
 
 /**
@@ -13,6 +14,6 @@ export const isWebDemo = () => typeof __MOKI_WEB_DEMO__ !== 'undefined' && __MOK
  *
  * @param {string} [message] 面向访客的说明。
  */
-export function notifyWebDemo(message = '这个操作需要在桌面版 MokiDown 中使用，网页预览暂不支持。') {
-  useNotificationStore.getState().notify('info', '网页预览', message);
+export function notifyWebDemo(message = i18n.t('webDemo.desktopRequired')) {
+  useNotificationStore.getState().notify('info', i18n.t('webDemo.title'), message);
 }

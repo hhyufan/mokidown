@@ -12,7 +12,7 @@ afterEach(cleanup);
 vi.mock('@tauri-apps/api/app', () => ({ getVersion: vi.fn().mockResolvedValue('0.1.2') }));
 vi.mock('react-i18next', async (importOriginal) => ({
   ...(await importOriginal()),
-  useTranslation: () => ({ t: (key) => key }),
+  useTranslation: () => ({ t: (key, values) => values?.name ? `${key}：${values.name}` : key }),
 }));
 
 beforeEach(() => {
@@ -84,7 +84,7 @@ it('语言服务的安装也进任务列表，带百分比，用分割线上的�
   expect(screen.getByRole('progressbar')).toHaveAttribute('aria-valuenow', '30');
   // 关闭按钮取代了原先占一整行的"取消"按钮。
   expect(screen.queryByRole('button', { name: 'languageServices.cancel' })).not.toBeInTheDocument();
-  fireEvent.click(screen.getByRole('button', { name: 'tasks.closeTask：Markdown · Marksman' }));
+  fireEvent.click(screen.getByRole('button', { name: 'tasks.closeNamedTask：Markdown · Marksman' }));
   expect(cancelInstall).toHaveBeenCalledWith('mde.marksman');
 });
 
@@ -101,7 +101,7 @@ it('失败的安装任务用同一个关闭按钮清掉，而不是取消', () =
   // 状态行不能再说"安装"，否则和下面的报错自相矛盾。
   expect(screen.getByText('tasks.pluginFailed')).toBeVisible();
   expect(screen.getByRole('alert')).toHaveTextContent('error sending request');
-  fireEvent.click(screen.getByRole('button', { name: 'tasks.closeTask：mde.jdktls' }));
+  fireEvent.click(screen.getByRole('button', { name: 'tasks.closeNamedTask：mde.jdktls' }));
   expect(dismissOperation).toHaveBeenCalledWith('mde.jdktls');
   expect(cancelInstall).not.toHaveBeenCalled();
 });
@@ -113,14 +113,14 @@ it('有可用更新时只留安装按钮，关掉这条任务即回到空闲', (
   expect(screen.getByRole('button', { name: 'update.install' })).toBeVisible();
   // "稍后"由关闭按钮承担，不再单独占一行。
   expect(screen.queryByRole('button', { name: 'update.later' })).not.toBeInTheDocument();
-  fireEvent.click(screen.getByRole('button', { name: /tasks\.closeTask/ }));
+  fireEvent.click(screen.getByRole('button', { name: /tasks\.closeNamedTask/ }));
   expect(reset).toHaveBeenCalledOnce();
 });
 
 it('正在下载的更新不给关闭按钮（中止不了，不能假装能）', () => {
   useUpdateStore.setState({ stage: 'downloading', version: '0.1.4' });
   render(<TaskList />);
-  expect(screen.queryByRole('button', { name: /tasks\.closeTask/ })).not.toBeInTheDocument();
+  expect(screen.queryByRole('button', { name: /tasks\.closeNamedTask/ })).not.toBeInTheDocument();
 });
 
 it('更新与语言服务同时进行时，两条任务并列显示', () => {

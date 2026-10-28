@@ -4,7 +4,7 @@ import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import TaskStatusIndicator from './TaskStatusIndicator';
 
 globalThis.React = React;
-vi.mock('react-i18next', () => ({ useTranslation: () => ({ t: (key) => key }) }));
+vi.mock('react-i18next', async (importOriginal) => ({ ...(await importOriginal()), useTranslation: () => ({ t: (key) => key }) }));
 afterEach(cleanup);
 
 const ring = () => document.querySelector('.task-ring');

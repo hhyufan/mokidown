@@ -1,3 +1,4 @@
+import { Tooltip } from 'antd';
 import './footer.scss';
 import useSteadyStatus from '@hooks/useSteadyStatus';
 
@@ -15,10 +16,10 @@ const Spinner = () => (
 export default function PluginStatusPill({ item: incoming, onActivate }) {
   const item = useSteadyStatus(incoming);
   return (
-    <button
+    <Tooltip title={item.title || item.text} mouseEnterDelay={0.3}><button
       type="button"
       className={`plugin-status plugin-status--${item.tone || 'info'}${item.busy ? ' is-busy' : ''}`}
-      title={item.title || item.text}
+
       onClick={() => onActivate?.()}
     >
       <span className="plugin-status__icon">
@@ -29,6 +30,6 @@ export default function PluginStatusPill({ item: incoming, onActivate }) {
             : <span aria-hidden="true">●</span>}
       </span>
       <span key={item.text} className="plugin-status__label">{item.text}</span>
-    </button>
+    </button></Tooltip>
   );
 }

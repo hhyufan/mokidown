@@ -1,4 +1,5 @@
 import { useEffect } from 'react';
+import { Tooltip } from 'antd';
 import { useTranslation } from 'react-i18next';
 import useUpdateStore from '@store/useUpdateStore';
 import useLspStore from '@store/useLspStore';
@@ -40,9 +41,11 @@ export default function TaskList() {
     <section className="task-panel" aria-label={t('tasks.title')}>
       <div className="task-header">
         <h3>{tasks.length ? t('tasks.title') : t('tasks.empty')}</h3>
+        <Tooltip title={t('tasks.hide')}>
         <button type="button" aria-label={t('tasks.hide')} onClick={update.dismiss}>
           &times;
         </button>
+        </Tooltip>
       </div>
       <div className="task-list">
         {tasks.map((task) => {
@@ -76,14 +79,16 @@ export default function TaskList() {
                   </button>
                 )}
                 {task.close && (
+                  <Tooltip title={t('tasks.closeNamedTask', { name: task.name })}>
                   <button
                     type="button"
                     className="task-close"
-                    aria-label={`${t('tasks.closeTask')}：${task.name}`}
+                    aria-label={t('tasks.closeNamedTask', { name: task.name })}
                     onClick={() => closeTask(task)}
                   >
                     &times;
                   </button>
+                  </Tooltip>
                 )}
               </div>
             <p className="task-status" role="status">
