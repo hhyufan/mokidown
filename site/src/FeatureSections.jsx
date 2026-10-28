@@ -76,7 +76,7 @@ function FeatureBlock({ index, scene, active }) {
         </div>
         <div className="feature-block__stage">
           <div className="feature-block__frame">
-            <FeatureScenes slide={index} active={active} />
+            <FeatureScenes slide={index} active={active} loop />
           </div>
         </div>
       </div>

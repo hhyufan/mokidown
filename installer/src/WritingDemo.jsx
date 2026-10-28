@@ -1,3 +1,4 @@
+import i18n from '../../src/i18n';
 import { useEffect, useRef, useState } from 'react';
 import {
   Editor,
@@ -66,7 +67,7 @@ export default function WritingDemo({ onComplete }) {
           editable: () => false,
           attributes: {
             class: 'milkdown-editor milkdown-editor--readonly ProseMirror',
-            'aria-label': '所见即所得自动输入演示',
+            'aria-label': i18n.t('installer.autotypeRichText'),
           },
         }));
       })
