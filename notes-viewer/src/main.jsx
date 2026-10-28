@@ -1,5 +1,9 @@
 ﻿import React, { useEffect, useState } from 'react';
 import { createRoot } from 'react-dom/client';
+import { useRef } from 'react';
+import MilkdownTooltips from '@components/editor/MilkdownTooltips';
+import rehypeTooltipTitles from '@utils/rehypeTooltipTitles';
+import '@/i18n';
 import { Tree, Tooltip } from 'antd';
 import { CodeOutlined } from '@ant-design/icons';
 import ReactMarkdown from 'react-markdown';
@@ -90,18 +94,24 @@ function Code({ className, children, inline }) {
   return <code className={className}>{children}</code>;
 }
 
-export function mountMarkdown(el, markdown) {
-  const root = createRoot(el);
-  root.render(
-    <div className="md-preview">
+function MarkdownContent({ markdown }) {
+  const rootRef = useRef(null);
+  return (
+    <div className="md-preview" ref={rootRef}>
       <ReactMarkdown
         remarkPlugins={[remarkGfm, remarkMath]}
-        rehypePlugins={[rehypeRaw, rehypeKatex, [rehypeSanitize, sanitizeSchema]]}
+        rehypePlugins={[rehypeRaw, rehypeKatex, [rehypeSanitize, sanitizeSchema], rehypeTooltipTitles]}
         components={{ code: Code }}
       >
         {markdown}
       </ReactMarkdown>
+      <MilkdownTooltips rootRef={rootRef} readOnly />
     </div>,
   );
+}
+
+export function mountMarkdown(el, markdown) {
+  const root = createRoot(el);
+  root.render(<MarkdownContent markdown={markdown} />);
   return { unmount: () => root.unmount() };
 }
