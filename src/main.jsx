@@ -23,6 +23,7 @@ import './i18n';
 // 由父页面通过 postMessage 下发主题；桌面端与同源构建下为空操作。
 installWebThemeBridge();
 import '@styles/index.scss';
+import NativeTitleTooltips from '@components/ui/NativeTitleTooltips';
 import '@styles/prism-theme.scss';
 import '@styles/antd-overrides.scss';
 
@@ -53,6 +54,7 @@ ReactDOM.createRoot(document.getElementById('root')).render(
   <Root>
     <StyleProvider hashPriority="high">
       <ThemedConfigProvider>
+        <NativeTitleTooltips />
         <Suspense fallback={null}>
           <SplashHandover>
             <App />

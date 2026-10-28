@@ -1,12 +1,13 @@
 /**
  * 中英文案完整性检查。
  *
- * 两类问题在这里拦下：
+ * 检查范围包括应用和安装器：
  *  1. 两个语言文件的键不一致（漏翻译）。
  *  2. 代码里引用了不存在的键——`t('x.y')` 找不到时 i18next 会把键名原样显示到
  *     界面上（例如按钮上出现 `settings.shortcuts.howTo`），这类问题靠肉眼很容易漏。
+ *  3. 空文案以及中英文插值参数不一致。
  *
- * 只检查字面量键；模板拼接（`` t(`a.${b}`) ``）无法静态解析，按前缀豁免。
+ * 检查 t / i18n.t 的字面量键和条件分支；模板拼接（`` t(`a.${b}`) ``）不作静态推断。
  */
 import { readFileSync, readdirSync, statSync } from 'node:fs';
 import { join, relative, sep } from 'node:path';
@@ -39,13 +40,32 @@ const enKeys = new Set(Object.keys(LOCALES.en));
 for (const key of zhKeys) if (!enKeys.has(key)) problems.push(`en_us.json 缺少键：${key}`);
 for (const key of enKeys) if (!zhKeys.has(key)) problems.push(`zh_cn.json 缺少键：${key}`);
 
+const placeholders = (value) => [...new Set([...String(value).matchAll(/\{\{\s*-?\s*([\w.]+)(?:\s*,[^}]*)?\s*\}\}/g)].map((match) => match[1]))].sort().join(',');
+for (const key of zhKeys) {
+  for (const [locale, values] of Object.entries(LOCALES)) {
+    // Idle update status deliberately renders no label.
+    if (typeof values[key] !== 'string' || (key !== 'update.idle' && !values[key].trim())) problems.push(`${locale} 的 ${key} 文案为空或不是字符串`);
+  }
+  if (enKeys.has(key) && placeholders(LOCALES.zh[key]) !== placeholders(LOCALES.en[key])) {
+    problems.push(`${key} 中英文插值参数不一致`);
+  }
+}
+
 // 2. 代码里引用的字面量键必须存在。
-const quoted = /(?<![\w.])t\(\s*(['"])([A-Za-z][\w.]*)\1/g;
+const quoted = /(?<![\w])(?:i18n\.)?t\(\s*(['"])([A-Za-z][\w.]*)\1/g;
 const referenced = new Set();
-for (const file of collectFiles(join(root, 'src'))) {
+for (const file of [...collectFiles(join(root, 'src')), ...collectFiles(join(root, 'installer/src'))]) {
   const source = readFileSync(file, 'utf8');
   for (const match of source.matchAll(quoted)) {
     referenced.add(`${match[2]}\u0000${relative(root, file).split(sep).join('/')}`);
+  }
+  // Include literal alternatives in t(condition ? 'a.b' : 'c.d').
+  for (const call of source.matchAll(/\bt\(\s*([^\n)]*)/g)) {
+    const argument = call[1].split(',')[0];
+    if (!argument.includes('?')) continue;
+    for (const match of argument.matchAll(/(['"])([A-Za-z][\w]*\.[\w.]+)\1/g)) {
+      referenced.add(`${match[2]}\u0000${relative(root, file).split(sep).join('/')}`);
+    }
   }
 }
 for (const entry of referenced) {
