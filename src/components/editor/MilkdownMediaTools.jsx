@@ -414,7 +414,7 @@ const MilkdownMediaTools = forwardRef(function MilkdownMediaTools(
               }
               onChange={(event) => change({ text: event.target.value })}
             />
-            <Input
+            <Tooltip title={surface.address} mouseEnterDelay={0.3}><Input
               ref={inputRef}
               id="milkdown-media-address"
               size="small"
@@ -423,9 +423,9 @@ const MilkdownMediaTools = forwardRef(function MilkdownMediaTools(
               status={error ? 'error' : undefined}
               aria-label={t(surface.kind === 'image' ? 'media.imageAddress' : 'media.linkAddress')}
               placeholder={t('media.addressPlaceholder')}
-              title={surface.address}
+
               onChange={(event) => change({ address: event.target.value })}
-            />
+            /></Tooltip>
             {surface.kind === 'image' && (
               <Tooltip title={t('media.chooseFile')}>
                 <button
@@ -538,6 +538,7 @@ const MilkdownMediaTools = forwardRef(function MilkdownMediaTools(
                             </button>
                           </Tooltip>
                         )}
+                        <Tooltip title={t('media.save')}>
                         <button
                           type="button"
                           aria-label={t('media.save')}
@@ -545,6 +546,7 @@ const MilkdownMediaTools = forwardRef(function MilkdownMediaTools(
                         >
                           <CheckOutlined />
                         </button>
+                        </Tooltip>
                         {previewEdit.error && <span role="alert">{previewEdit.error}</span>}
                       </div>
                     )}
