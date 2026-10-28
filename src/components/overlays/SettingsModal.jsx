@@ -1,19 +1,19 @@
 
 import { useState, useEffect } from 'react';
-import { Modal, Menu, Switch, Select, Input, InputNumber, Button, Space } from 'antd';
+import { Modal, Menu, Switch, Select, Input, InputNumber, Button, Space, Tooltip } from 'antd';
 import { useResponsiveLayout } from '@hooks/useResponsiveLayout';
 import {
   SettingOutlined,
   BgColorsOutlined,
   EditOutlined,
   DownloadOutlined,
-  
+
   PlusOutlined,
   MinusOutlined,
 
   ExportOutlined,
   ImportOutlined,
-  
+
   InfoCircleOutlined,
   GithubOutlined,
   StarFilled,
@@ -53,7 +53,7 @@ const NAV_ICONS = {
   editor: <EditOutlined />,
   shortcuts: <ThunderboltOutlined />,
   languages: <AppstoreOutlined />,
-  
+
   about: <InfoCircleOutlined />,
 };
 
@@ -63,7 +63,7 @@ function SettingsModal({ open: openProp, onClose }) {
   const { t, i18n } = useTranslation();
   const [activeNav, setActiveNav] = useState('general');
   const [settingsBusy, setSettingsBusy] = useState(false);
-  
+
   const [appVersion, setAppVersion] = useState('');
   const [installerUrl, setInstallerUrl] = useState(INSTALLER_URL);
   // The browser demo has no native shell. Resolve the newest installer link
@@ -83,7 +83,7 @@ function SettingsModal({ open: openProp, onClose }) {
   }, []);
   const config = useConfigStore();
   const updateStage = useUpdateStore((s) => s.stage);
-  
+
   const notify = useNotificationStore((s) => s.notify);
   const { isMobileLayout, isPortrait } = useResponsiveLayout();
   // 手机竖屏下把设置面板当作全屏抽屉处理，给内部双栏布局留出纵向堆叠空间；
@@ -466,13 +466,18 @@ function SettingsModal({ open: openProp, onClose }) {
  * @param {string} props.label 字号设置名称。
  */
 function FontSizeControl({ label, value, onChange, disabled = false }) {
+  const { t } = useTranslation();
   return <Space.Compact className="setting-font-size">
-    <Button disabled={disabled} aria-label={`${label} −`} icon={<MinusOutlined />}
+    <Tooltip title={t('settings.fontSize.decrease', { label })}>
+    <Button disabled={disabled} aria-label={t('settings.fontSize.decrease', { label })} icon={<MinusOutlined />}
       onClick={() => onChange(Math.max(10, (value || 14) - 1))} />
+    </Tooltip>
     <InputNumber aria-label={label} min={10} max={24} step={1} disabled={disabled}
       value={value} onChange={onChange} />
-    <Button disabled={disabled} aria-label={`${label} +`} icon={<PlusOutlined />}
+    <Tooltip title={t('settings.fontSize.increase', { label })}>
+    <Button disabled={disabled} aria-label={t('settings.fontSize.increase', { label })} icon={<PlusOutlined />}
       onClick={() => onChange(Math.min(24, (value || 14) + 1))} />
+    </Tooltip>
   </Space.Compact>;
 }
 

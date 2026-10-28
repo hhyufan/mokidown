@@ -1,3 +1,5 @@
+import { useTranslation } from 'react-i18next';
+import { Tooltip } from 'antd';
 import { useState } from 'react';
 import { ReloadOutlined } from '@ant-design/icons';
 import ChevronIcon from '@components/ui/ChevronIcon';
@@ -15,6 +17,7 @@ const normalize = (value) => String(value || '').replace(/\\/g, '/');
  * to local history; title and entries come from the plugin.
  */
 export default function PluginPanel() {
+  const { t } = useTranslation();
   const [expanded, setExpanded] = useState(false);
   const tabs = useEditorStore((s) => s.tabs);
   const activeTabId = useEditorStore((s) => s.activeTabId);
@@ -26,6 +29,7 @@ export default function PluginPanel() {
   return (
     <section className={`timeline${expanded ? ' timeline--open' : ''}`} aria-label={source.title}>
       <header className="timeline__header">
+        <Tooltip title={t(expanded ? 'tree.collapseAll' : 'tree.expandAll')}>
         <button
           type="button"
           className="timeline__toggle"
@@ -35,20 +39,23 @@ export default function PluginPanel() {
         >
           <ChevronIcon className="timeline__chevron" />
         </button>
+        </Tooltip>
         <span className="timeline__label">{source.title}</span>
         <span className="timeline__count">{source.items.length}</span>
+        <Tooltip title={t('history.refresh')}>
         <button
           type="button"
           className="timeline__refresh"
-          aria-label="刷新"
+          aria-label={t('history.refresh')}
           onClick={() => sendToPlugin(source.pluginId, { type: 'event', name: 'versionRefresh' })}
         >
           <ReloadOutlined />
         </button>
+        </Tooltip>
       </header>
       <div className="timeline__body" aria-hidden={!expanded}>
         <ul className="timeline__list">
-          {source.items.length === 0 && <li className="timeline__placeholder">{source.emptyText || '暂无历史'}</li>}
+          {source.items.length === 0 && <li className="timeline__placeholder">{source.emptyText || t('history.empty')}</li>}
           {source.items.map((item) => (
             <li key={item.id}>
               <button

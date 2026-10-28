@@ -130,7 +130,7 @@ function FileTree() {
     setDeleting(true);
 
     let localDeleted = false;
-    
+
     try {
 
       const deleteResult = await deleteFileApi(file.path);
@@ -138,13 +138,13 @@ function FileTree() {
         throw new Error(deleteResult.error || `Failed to delete ${file.path}`);
       }
       localDeleted = true;
-      
+
       if (useFileStore.getState().isBookmarked(file.path)) {
         useFileStore.getState().toggleBookmark(file.path);
       }
       useFileStore.getState().removeRecentFile(file.path);
     } catch (err) {
-      
+
       useNotificationStore.getState().notify('error', t('notification.error'), String(err));
     } finally {
       if (localDeleted) {
@@ -570,7 +570,7 @@ function FileTree() {
         {sortedFiles.map((file) => {
           const ext = file.name.split('.').pop() || '';
           const isActive = activeTabId === file.path;
-          
+
           return (
             <div
               key={file.path}
@@ -613,13 +613,13 @@ function FileTree() {
                         });
                       });
                       return badge
-                        ? <span className="file-tree__item-badge" title={badge.title || ''} dangerouslySetInnerHTML={{ __html: badge.svg }} />
+                        ? <Tooltip title={badge.title || ''} mouseEnterDelay={0.3}><span className="file-tree__item-badge"  dangerouslySetInnerHTML={{ __html: badge.svg }} /></Tooltip>
                         : null;
                     })()}
                   </span>
                 </Tooltip>
               )}
-              
+
               {!file.is_dir && renamingPath !== file.path && (
                 <Tooltip title={t('sidebar.explorer.deleteFile')} placement="top" mouseEnterDelay={0.3}>
                 <span

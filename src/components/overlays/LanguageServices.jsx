@@ -9,8 +9,6 @@ import useExtensionStore, { OFFICIAL_EXTENSIONS } from '@store/useExtensionStore
 import { openExternal } from '@utils/tauriApi';
 import { getMaterialIcons, loadMaterialIcons } from '@utils/materialIcons';
 import TaskRing from '@components/ui/TaskRing';
-import { open } from '@tauri-apps/plugin-dialog';
-import { readTextFile } from '@tauri-apps/plugin-fs';
 import ExtensionSettings from './ExtensionSettings';
 import PluginDeveloperTools from './PluginDeveloperTools';
 // JavaScript / TypeScript 使用网上获取的官方品牌图标（devicon，MIT License）：
@@ -38,7 +36,6 @@ const LANGUAGE_ICONS = {
 // 并排等大（JS 居左、TS 居右），共同代表二者。
 const TS_JS = 'TS_JS';
 
-const kindLabel = (_descriptor, language) => String(language || '').startsWith('zh') ? '服务插件' : 'Service plugin';
 
 /**
  * 解析插件应使用的图标组件名。
@@ -182,7 +179,7 @@ export default function LanguageServices() {
       <div className="language-services__detail-heading">
         <span className="language-services__icon language-services__icon--large" aria-hidden="true">{(selectedExt.descriptor.name || '?').slice(0, 2)}</span>
         <div><h4>{selectedExt.descriptor.name}</h4>
-          <p>{kindLabel(selectedExt.descriptor, i18n.language)} · v{selectedExt.entry?.package?.version || selectedExt.descriptor.version || '1.0.0'}</p></div>
+          <p>{t('extensions.servicePluginLabel')} · v{selectedExt.entry?.package?.version || selectedExt.descriptor.version || '1.0.0'}</p></div>
       </div>
       <p className="language-services__detail-description">{(() => {
         // Description comes from the installed plugin package first; the
@@ -256,17 +253,17 @@ export default function LanguageServices() {
           <div className="language-services__card-bottom"><span className="language-services__languages">{plugin.languages.join(' · ')}</span>{actions(plugin)}</div>
           {state.operations[plugin.id]?.phase === 'error' && <p className="language-services__error" role="alert">{state.operations[plugin.id].text}</p>}
         </article>)}
-        {extensionCards.map(({ descriptor, entry, official, catalogItem }) => <article key={descriptor.id} className="language-services__card">
+        {extensionCards.map(({ descriptor, entry, catalogItem }) => <article key={descriptor.id} className="language-services__card">
           <button className="language-services__summary" type="button" onClick={() => setSelectedExtId(descriptor.id)}>
             <span className="language-services__icon" aria-hidden="true">{(descriptor.name || '?').slice(0, 2)}</span>
             <span className="language-services__summary-content">
               <strong>{descriptor.name}</strong>
               <span className="language-services__description">{i18n.language.startsWith('zh') ? descriptor.descriptionZh || descriptor.description : descriptor.description || descriptor.descriptionZh}</span>
-              <span className="language-services__meta">{kindLabel(descriptor, i18n.language)}{entry?.package?.version ? ` · v${entry.package.version}` : ''}</span>
+              <span className="language-services__meta">{t('extensions.servicePluginLabel')}{entry?.package?.version ? ` · v${entry.package.version}` : ''}</span>
             </span>
           </button>
           <div className="language-services__card-bottom">
-            <span className="language-services__languages">{catalogItem ? t('extensions.notInstalled') : kindLabel(descriptor)}</span>
+            <span className="language-services__languages">{catalogItem ? t('extensions.notInstalled') : t('extensions.servicePluginLabel')}</span>
             {catalogItem
               ? <Button size="small" icon={<CloudDownloadOutlined />} disabled={!desktop} onClick={() => act(() => extState.installFromCatalog(descriptor))}>{t('extensions.install')}</Button>
               : <Button size="small" icon={entry?.enabled ? <StopOutlined /> : <CheckOutlined />} disabled={!desktop} onClick={() => act(async () => {

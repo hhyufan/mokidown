@@ -1,3 +1,4 @@
+import i18n from '@/i18n';
 /**
  * ?????????
  *
@@ -29,8 +30,8 @@ const useNotificationStore = create((set) => ({
     let nextMessage = message;
     if (webDemo && type === 'error' && technical.test(`${title} ${message}`)) {
       nextType = 'info';
-      nextTitle = '网页预览';
-      nextMessage = '这个操作需要在桌面版 MokiDown 中使用，网页预览暂不支持。';
+      nextTitle = i18n.t('webDemo.title');
+      nextMessage = i18n.t('webDemo.desktopRequired');
     }
     const id = ++notifId;
     set((state) => ({

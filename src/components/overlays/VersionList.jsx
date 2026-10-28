@@ -1,3 +1,4 @@
+import { useTranslation } from 'react-i18next';
 import { Modal } from 'antd';
 import useVersionListStore from '@store/useVersionListStore';
 import useHistoryStore from '@store/useHistoryStore';
@@ -9,6 +10,7 @@ import { sendToPlugin } from '@utils/pluginBus';
  * a `versionSelected` event so it can react on its own.
  */
 export default function VersionList() {
+  const { t } = useTranslation();
   const state = useVersionListStore();
   if (!state.open) return null;
   const pick = (item) => {
@@ -32,7 +34,7 @@ export default function VersionList() {
   return (
     <Modal open title={state.title} footer={null} onCancel={state.close} width={520}>
       <div className="version-list">
-        {state.items.length === 0 && <p className="version-list__empty">暂无版本</p>}
+        {state.items.length === 0 && <p className="version-list__empty">{t('extensions.noVersions')}</p>}
         {state.items.map((item) => (
           <button key={item.id} type="button" className="version-list__item" onClick={() => pick(item)}>
             <span className="version-list__label">{item.label || item.id}</span>

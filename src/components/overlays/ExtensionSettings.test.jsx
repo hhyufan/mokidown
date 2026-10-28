@@ -5,7 +5,7 @@ import ExtensionSettings from './ExtensionSettings';
 import useExtensionStore from '@store/useExtensionStore';
 globalThis.React=React;
 vi.mock('@tauri-apps/api/core',()=>({invoke:vi.fn()}));
-vi.mock('react-i18next',()=>({useTranslation:()=>({t:key=>key})}));
+vi.mock('react-i18next', async (importOriginal) => ({ ...(await importOriginal()), useTranslation: () => ({ t: (key) => key }) }));
 afterEach(()=>{cleanup();useExtensionStore.setState({installed:[]});});
 it('saves typed configuration fields independently and preserves the enabled plugin',async()=>{
  const pkg={format:'mokidown-extension-v1',id:'example.settings',name:'Settings',version:'1.0.0',script:'',permissions:[],fileExtensions:[],configuration:{fields:[{key:'label',label:'Display label',type:'text',default:'Read'},{key:'fontSize',label:'Font size',type:'number',default:16,min:12,max:28},{key:'showCount',label:'Show count',type:'boolean',default:true},{key:'density',label:'Density',type:'select',default:'compact',options:[{label:'Compact',value:'compact'},{label:'Comfortable',value:'comfortable'}]}]}};

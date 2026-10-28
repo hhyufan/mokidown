@@ -1,4 +1,6 @@
 import { useEffect, useRef } from 'react';
+import { useTranslation } from 'react-i18next';
+import { Tooltip } from 'antd';
 import useNotificationStore from '@store/useNotificationStore';
 import { cn } from '@utils/classNames';
 import './notification.scss';
@@ -35,6 +37,7 @@ const ICONS = {
  * 负责展示图标、标题、附加消息与自动消失进度条。
  */
 function NotificationItem({ notification }) {
+  const { t } = useTranslation();
   const dismiss = useNotificationStore((s) => s.dismiss);
   const progressRef = useRef(null);
 
@@ -57,9 +60,11 @@ function NotificationItem({ notification }) {
         <div className="notif__title">{notification.title}</div>
         {notification.message && <div className="notif__message">{notification.message}</div>}
       </div>
-      <button className="notif__close" onClick={() => dismiss(notification.id)}>
+      <Tooltip title={t('notification.dismiss')}>
+      <button type="button" className="notif__close" aria-label={t('notification.dismiss')} onClick={() => dismiss(notification.id)}>
         &times;
       </button>
+      </Tooltip>
       <div className="notif__progress" ref={progressRef} style={{ width: '100%' }} />
     </div>
   );

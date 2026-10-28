@@ -8,10 +8,12 @@ import { flushEditorBuffer, getBuffer, subscribe } from '@utils/editorBuffer';
 import MonacoConflictDiff from './MonacoConflictDiff';
 import './external-file-conflict.scss';
 import i18n from '@/i18n';
+import { useTranslation } from 'react-i18next';
 
 const { Paragraph, Text } = Typography;
 
 function ExternalFileConflictModal({ conflict, onKeep, onUseDisk, onSaveAs, onClose }) {
+  useTranslation();
   const tab = useEditorStore((state) => state.tabs.find((item) => item.id === conflict?.tabId));
   const theme = useThemeStore((state) => state.theme);
   const { fontSize, fontFamily, lineHeight, tabSize } = useConfigStore();

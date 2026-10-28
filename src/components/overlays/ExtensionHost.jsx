@@ -1,3 +1,4 @@
+import i18n from '@/i18n';
 import { useEffect, useRef } from 'react';
 import useExtensionStore from '@store/useExtensionStore';
 import usePluginContributions from '@store/usePluginContributions';
@@ -32,7 +33,7 @@ function ExtensionFrame({ entry }) {
     };
     const startupTimer = setTimeout(() => {
       if (attached) return;
-      failRuntime('PLUGIN_START_TIMEOUT: 插件未完成启动，请检查 definePlugin 与构建输出');
+      failRuntime(i18n.t('pluginErrors.startTimeout'));
     }, 12000);
     const attach = (event) => {
       if (event.source !== frame.contentWindow) return;

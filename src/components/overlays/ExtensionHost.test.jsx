@@ -8,7 +8,7 @@ globalThis.React = React;
 const mocks = vi.hoisted(() => ({ stop: vi.fn(), bridge: vi.fn() }));
 vi.mock('@/services/extensionBridge', () => ({ createExtensionBridge: (...args) => { mocks.bridge(...args); return { dispose: mocks.stop, send: vi.fn() }; } }));
 vi.mock('antd', () => ({ Button: ({ children, ...props }) => <button {...props}>{children}</button> }));
-vi.mock('react-i18next', () => ({ useTranslation: () => ({ t: (key) => key }) }));
+vi.mock('react-i18next', async (importOriginal) => ({ ...(await importOriginal()), useTranslation: () => ({ t: (key) => key }) }));
 afterEach(() => { cleanup(); useExtensionStore.setState({ installed: [], activeId: null }); vi.unstubAllGlobals(); vi.clearAllMocks(); });
 
 it('creates no plugin realm while disabled and disposes the whole realm when stopped', () => {
