@@ -1,3 +1,4 @@
+import i18n from '../../src/i18n';
 import { MoonOutlined, SunOutlined } from '@ant-design/icons';
 import { useEffect, useState } from 'react';
 import useDemoComplete from './useDemoComplete';
@@ -7,10 +8,10 @@ function ThemeFrame({ dark, children }) {
     <div className="scene-theme-frame" data-theme={dark ? 'dark' : 'light'}>
       {children}
       <div className="scene-theme-footer">
-        <span className="scene-theme-switch" aria-label={dark ? '切换浅色主题' : '切换深色主题'}>
+        <span className="scene-theme-switch" aria-label={dark ? i18n.t('theme.switchLight') : i18n.t('theme.switchDark')}>
           {dark ? <SunOutlined /> : <MoonOutlined />}
         </span>
-        <span>{dark ? '深色主题' : '浅色主题'}</span>
+        <span>{dark ? i18n.t('theme.dark') : i18n.t('theme.light')}</span>
         <span>UTF-8 · LF</span>
       </div>
     </div>

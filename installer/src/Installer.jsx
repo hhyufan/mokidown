@@ -1,3 +1,6 @@
+import { Tooltip } from 'antd';
+import i18n from '../../src/i18n';
+import { useTranslation } from 'react-i18next';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { invoke, isTauri } from '@tauri-apps/api/core';
 import { listen } from '@tauri-apps/api/event';
@@ -6,22 +9,23 @@ import { open } from '@tauri-apps/plugin-dialog';
 import wordmark from '../../src/assets/mokidown-wordmark.webp';
 import FeatureScenes from './FeatureScenes';
 import './installer.css';
+import './scrollbar.css';
 
-const scenes = [
+const getScenes = () => [
   {
     label: 'WYSIWYG',
     title: (
       <>
-        写下这一刻，
+        {i18n.t('installer.writeMoment')}
         <br />
-        <em>即刻成为好文章。</em>
+        <em>{i18n.t('installer.becomeArticle')}</em>
       </>
     ),
     description: (
       <>
-        输入 Markdown，文字自然成形。
+        {i18n.t('installer.markdownInput')}
         <br />
-        标题、强调与引用，就在笔下呈现。
+        {i18n.t('installer.formatAsYouWrite')}
       </>
     ),
   },
@@ -29,16 +33,16 @@ const scenes = [
     label: 'WRITE',
     title: (
       <>
-        落笔即所见，
+        {i18n.t('installer.seeAsYouWrite')}
         <br />
-        <em>专注每个想法。</em>
+        <em>{i18n.t('installer.focusIdeas')}</em>
       </>
     ),
     description: (
       <>
-        Markdown 源码与实时预览并肩呈现。
+        {i18n.t('installer.sideBySide')}
         <br />
-        从第一行文字，到完整的创作。
+        {i18n.t('installer.firstLine')}
       </>
     ),
   },
@@ -46,16 +50,16 @@ const scenes = [
     label: 'LANGUAGE',
     title: (
       <>
-        写作的细节，
+        {i18n.t('installer.writingDetails')}
         <br />
-        <em>也有贴心的帮手。</em>
+        <em>{i18n.t('installer.helpAtHand')}</em>
       </>
     ),
     description: (
       <>
-        Markdown 语言服务，辅助链接补全与检查。
+        {i18n.t('installer.languageHelp')}
         <br />
-        让文档之间的连接，更顺畅。
+        {i18n.t('installer.connectDocuments')}
       </>
     ),
   },
@@ -63,16 +67,16 @@ const scenes = [
     label: 'PERSONALIZE',
     title: (
       <>
-        白昼或深夜，
+        {i18n.t('installer.dayOrNight')}
         <br />
-        <em>都恰好合心意。</em>
+        <em>{i18n.t('installer.justRight')}</em>
       </>
     ),
     description: (
       <>
-        浅深主题、背景与编辑布局，
+        {i18n.t('installer.customize')}
         <br />
-        让写作空间成为你喜欢的模样。
+        {i18n.t('installer.yourSpace')}
       </>
     ),
   },
@@ -80,32 +84,35 @@ const scenes = [
     label: 'ORGANIZE',
     title: (
       <>
-        让零散灵感，
+        {i18n.t('installer.scatteredIdeas')}
         <br />
-        <em>慢慢连成体系。</em>
+        <em>{i18n.t('installer.buildKnowledge')}</em>
       </>
     ),
     description: (
       <>
-        用文档树与知识树整理笔记，
+        {i18n.t('installer.organizeNotes')}
         <br />
-        让每个想法，都有迹可循。
+        {i18n.t('installer.traceIdeas')}
       </>
     ),
   },
 ];
-const stages = {
-  ready: '准备安装',
-  preparing: '准备安装文件',
-  runtime: '检查运行环境',
-  copying: '写入应用文件',
-  registering: '注册应用与文件关联',
-  shortcuts: '创建快捷方式',
-  complete: '安装完成',
-  error: '安装未完成',
-};
+const getStages = () => ({
+  ready: i18n.t('installer.ready'),
+  preparing: i18n.t('installer.preparing'),
+  runtime: i18n.t('installer.runtime'),
+  copying: i18n.t('installer.copying'),
+  registering: i18n.t('installer.registering'),
+  shortcuts: i18n.t('installer.shortcuts'),
+  complete: i18n.t('installer.complete'),
+  error: i18n.t('installer.error'),
+});
 
 export default function Installer() {
+  useTranslation();
+  const scenes = getScenes();
+  const stages = getStages();
   const native = isTauri();
   const [slide, setSlide] = useState(0);
   const nextSlideTimer = useRef(null);
@@ -114,7 +121,7 @@ export default function Installer() {
     if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
     clearTimeout(nextSlideTimer.current);
     nextSlideTimer.current = setTimeout(() => {
-      setSlide((current) => (current === finishedSlide ? (current + 1) % scenes.length : current));
+      setSlide((current) => (current === finishedSlide ? (current + 1) % getScenes().length : current));
     }, 1000);
   }, []);
   const [directory, setDirectory] = useState('');
@@ -183,7 +190,7 @@ export default function Installer() {
       return;
     }
     try {
-      const path = await open({ directory: true, multiple: false, title: '选择安装位置' });
+      const path = await open({ directory: true, multiple: false, title: i18n.t('installer.chooseDirectory') });
       if (path) setDirectory(path);
     } catch (e) {
       setError(String(e));
@@ -253,18 +260,18 @@ export default function Installer() {
       <div className="titlebar" data-tauri-drag-region>
         <div className="brand" data-tauri-drag-region>
           <img className="brand-wordmark" src={wordmark} alt="MokiDown" />
-          <span>INSTALLER</span>
+          <span>{i18n.t('installer.label')}</span>
         </div>
         <div className="window-actions">
-          <button aria-label="最小化" onClick={() => native && getCurrentWindow().minimize()}>
+          <Tooltip title={i18n.t('installer.minimize')} mouseEnterDelay={0.3}><button  aria-label={i18n.t('installer.minimize')} onClick={() => native && getCurrentWindow().minimize()}>
             −
-          </button>
-          <button aria-label="关闭安装器" onClick={close}>
+          </button></Tooltip>
+          <Tooltip title={i18n.t('installer.close')} mouseEnterDelay={0.3}><button  aria-label={i18n.t('installer.close')} onClick={close}>
             ×
-          </button>
+          </button></Tooltip>
         </div>
       </div>
-      <section className="feature" aria-label="MokiDown 功能介绍">
+      <section className="feature" aria-label={i18n.t('installer.features')}>
         {scenes.map((scene, index) => (
           <div
             key={scene.label}
@@ -277,16 +284,16 @@ export default function Installer() {
             <h1>
               {done ? (
                 <>
-                  一切已就绪，
+                  {i18n.t('installer.allReady')}
                   <br />
-                  <em>开始新的创作。</em>
+                  <em>{i18n.t('installer.newCreation')}</em>
                 </>
               ) : (
                 scene.title
               )}
             </h1>
             <p className="description">
-              {done ? '你的写作空间已经准备好了。让 Moki 陪你记录下一个想法。' : scene.description}
+              {done ? i18n.t('installer.workspaceReady') : scene.description}
             </p>
           </div>
         ))}
@@ -312,44 +319,45 @@ export default function Installer() {
               role="img"
               aria-label={
                 [
-                  '浅色 Moki 演示所见即所得，蓝白运动鞋',
-                  '浅色 Moki 书写，蓝白运动鞋',
-                  '浅色 Moki 检查语言服务，蓝白运动鞋',
-                  '深色 Moki 切换主题，深蓝运动鞋',
-                  '浅色 Moki 整理文件，蓝白系带运动鞋',
+                  i18n.t('installer.mokiRichText'),
+                  i18n.t('installer.mokiWrite'),
+                  i18n.t('installer.mokiLanguage'),
+                  i18n.t('installer.mokiTheme'),
+                  i18n.t('installer.mokiOrganize'),
                 ][index]
               }
             />
           ))}
         </div>
-        <nav className="dots" aria-label="切换功能介绍">
+        <nav className="dots" aria-label={i18n.t('installer.switchFeature')}>
           {scenes.map((scene, index) => (
-            <button
-              key={scene.label}
-              aria-label={scene.label}
+            <Tooltip key={scene.label} title={i18n.t('installer.featureSlide', { number: index + 1 })} mouseEnterDelay={0.3}><button
+
+              aria-label={i18n.t('installer.featureSlide', { number: index + 1 })}
+
               aria-pressed={slide === index}
               className={`dot ${slide === index ? 'active' : ''}`}
               onClick={() => setSlide(index)}
             >
               <i aria-hidden="true" />
-            </button>
+            </button></Tooltip>
           ))}
         </nav>
       </section>
       <footer className="install-panel">
-        {native ? null : <div className="preview-badge">交互设计预览 · 不会安装文件</div>}
+        {native ? null : <div className="preview-badge">{i18n.t('installer.previewNotice')}</div>}
         <div className="status-row" role="status">
           <span className="status-dot" />
           <strong>
             {done
               ? update
-                ? '更新完成，欢迎回来'
-                : '欢迎来到你的新工作区'
+                ? i18n.t('installer.updatedWelcome')
+                : i18n.t('installer.welcome')
               : busy
                 ? stages[status.stage]
                 : update
-                  ? '准备更新 MokiDown'
-                  : '为下一个灵感，留一个位置。'}
+                  ? i18n.t('installer.prepareUpdate')
+                  : i18n.t('installer.nextIdea')}
           </strong>
           <span className="percentage">
             {busy || done ? `${Math.round(status.percent)}%` : 'READY WHEN YOU ARE'}
@@ -358,7 +366,7 @@ export default function Installer() {
         <div
           className="progress"
           role="progressbar"
-          aria-label="安装阶段进度"
+          aria-label={i18n.t('installer.stageProgress')}
           aria-valuemin={0}
           aria-valuemax={100}
           aria-valuenow={status.percent}
@@ -382,7 +390,7 @@ export default function Installer() {
             >
               <path d="M3 7a2 2 0 0 1 2-2h5l2 2h7a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" />
             </svg>
-            <label htmlFor="install-path">{update ? '更新位置' : '安装位置'}</label>
+            <label htmlFor="install-path">{update ? i18n.t('installer.updateLocation') : i18n.t('installer.installLocation')}</label>
             <input
               id="install-path"
               value={directory}
@@ -393,7 +401,7 @@ export default function Installer() {
             {/* 更新时目录来自注册表里上次的安装位置，不让改——改了会装出第二份 */}
             {update ? null : (
               <button className="text-button" onClick={chooseDirectory}>
-                <span>更改</span>
+                <span>{i18n.t('installer.change')}</span>
                 <svg
                   viewBox="0 0 20 20"
                   fill="none"
@@ -419,20 +427,20 @@ export default function Installer() {
             <p>
               {done
                 ? update
-                  ? '更新完成，正在启动 MokiDown…'
-                  : '安装完成，正在启动 MokiDown…'
+                  ? i18n.t('installer.launchUpdated')
+                  : i18n.t('installer.launchInstalled')
                 : busy
                   ? update
-                    ? '正在更新，请保持窗口开启。'
-                    : '正在准备你的写作空间，请保持窗口开启。'
+                    ? i18n.t('installer.updating')
+                    : i18n.t('installer.installingHelp')
                   : update
-                    ? '将保留你的设置、文档与快捷方式'
+                    ? i18n.t('installer.preserveSettings')
                     : ''}
             </p>
           )}
           {error ? (
             <button className="primary" onClick={install}>
-              重试安装
+              {i18n.t('installer.retry')}
             </button>
           ) : (
             !update &&
@@ -441,10 +449,10 @@ export default function Installer() {
                 {busy ? (
                   <>
                     <i className="button-spinner" />
-                    正在安装
+                    {i18n.t('installer.installing')}
                   </>
                 ) : (
-                  '开始安装'
+                  i18n.t('installer.start')
                 )}
               </button>
             )
@@ -454,11 +462,11 @@ export default function Installer() {
       {(confirmClose || showNotes) && (
         <div className="dialog-backdrop">
           <div className="dialog" role="dialog" aria-modal="true">
-            <h2>{confirmClose ? '安装正在进行' : '这是交互设计预览'}</h2>
+            <h2>{confirmClose ? i18n.t('installer.inProgress') : i18n.t('installer.previewTitle')}</h2>
             <p>
               {confirmClose
-                ? '为避免留下未完成的安装，请等待当前安装结束。'
-                : '正式安装器支持选择目录和静默安装，当前浏览器页面只演示界面与动效。'}
+                ? i18n.t('installer.wait')
+                : i18n.t('installer.previewHelp')}
             </p>
             <button
               className="primary"
@@ -467,7 +475,7 @@ export default function Installer() {
                 setShowNotes(false);
               }}
             >
-              知道了
+              {i18n.t('installer.understood')}
             </button>
           </div>
         </div>

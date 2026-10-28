@@ -1,0 +1,88 @@
+/* Installer native scrollbars match MokiDown: 6px blue thumb, transparent track, hover fade. */
+@property --moki-scrollbar-color {
+  syntax: '<color>';
+  inherits: true;
+  initial-value: transparent;
+}
+
+:root {
+  --moki-scrollbar-thumb: rgba(64, 145, 255, 0.25);
+  --moki-scrollbar-thumb-hover: rgba(64, 145, 255, 0.42);
+  --moki-scrollbar-thumb-active: rgba(64, 145, 255, 0.55);
+  --moki-scrollbar-track: transparent;
+  --moki-scrollbar-fade-in: 100ms;
+  --moki-scrollbar-fade-out: 800ms;
+}
+
+html[data-theme='dark'] {
+  --moki-scrollbar-thumb: rgba(64, 145, 255, 0.42);
+  --moki-scrollbar-thumb-hover: rgba(64, 145, 255, 0.6);
+  --moki-scrollbar-thumb-active: rgba(64, 145, 255, 0.72);
+}
+
+@media (hover: hover) {
+  * {
+    --moki-scrollbar-color: transparent;
+    transition: --moki-scrollbar-color var(--moki-scrollbar-fade-out) linear;
+  }
+
+  *:hover {
+    --moki-scrollbar-color: var(--moki-scrollbar-thumb);
+    transition-duration: var(--moki-scrollbar-fade-in);
+  }
+}
+
+* {
+  --moki-scrollbar-color: transparent;
+  scrollbar-width: thin;
+  scrollbar-color: var(--moki-scrollbar-color) var(--moki-scrollbar-track);
+}
+
+@media (hover: none) {
+  * {
+    --moki-scrollbar-color: var(--moki-scrollbar-thumb);
+  }
+}
+@supports selector(::-webkit-scrollbar) {
+  * {
+    scrollbar-width: auto;
+    scrollbar-color: auto;
+  }
+}
+
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--moki-scrollbar-color);
+  border-radius: 3px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--moki-scrollbar-thumb-hover);
+}
+
+::-webkit-scrollbar-thumb:active {
+  background: var(--moki-scrollbar-thumb-active);
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-button {
+  display: none;
+  width: 0;
+  height: 0;
+}
+
+::-webkit-scrollbar-corner {
+  background: transparent;
+}
+
+
+@media (prefers-reduced-motion: reduce) {
+  :root { --moki-scrollbar-fade-in: 0ms; --moki-scrollbar-fade-out: 0ms; }
+}
