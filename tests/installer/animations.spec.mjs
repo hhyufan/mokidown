@@ -39,26 +39,15 @@ test('theme changes reveal a circular layer from the toggle without changing the
   expect(await page.locator('html').getAttribute('data-theme')).toBe(initialTheme);
 });
 
-test('knowledge tree is built from a root with actual inline naming and increasing node count', async ({
-  page,
-}) => {
+test('knowledge sidebar navigates three Markdown code blocks', async ({ page }) => {
   await page.goto('/');
   await page.getByRole('button', { name: 'ORGANIZE', exact: true }).click();
-  await expect(page.locator('.moki-tree__count')).toHaveText('0 个节点');
-  await expect(page.getByLabel('新节点名称')).toBeVisible();
-  await expect(page.getByText('我的知识空间', { exact: true })).toBeVisible();
-  await expect(page.locator('.moki-tree__count')).toHaveText('2 个节点');
-  await expect(page.locator('.scene-tree-demo')).toHaveAttribute('data-complete', 'true', {
-    timeout: 12000,
-  });
-  await expect(page.locator('.moki-tree__count')).toHaveText('7 个节点');
-  await expect(page.getByText('收藏的句子', { exact: true })).toBeVisible();
-  await expect(page.getByLabel('新节点名称')).toHaveCount(0);
+  await expect(page.locator('.scene-knowledge-preview')).toBeVisible();
+  await expect(page.locator('.scene-knowledge-code.is-target')).toContainText('const message', { timeout: 5000 });
+  await expect(page.locator('.scene-knowledge-code.is-target')).toContainText('console.log', { timeout: 5000 });
   await page.screenshot({ path: 'test-results/installer-tree-animation.png' });
-  await page.getByRole('button', { name: 'WRITE', exact: true }).click();
-  await page.waitForTimeout(500);
-  await page.getByRole('button', { name: 'ORGANIZE', exact: true }).click();
-  await expect(page.locator('.moki-tree__count')).toHaveText('0 个节点');
+  await expect(page.locator('.scene-knowledge-code.is-target')).toContainText('notes.push', { timeout: 5000 });
+  await expect(page.locator('.scene-knowledge-editor, .moki-tree-jump-popup')).toHaveCount(0);
 });
 
 test('first scene types checked and unchecked tasks without scrolling', async ({ page }) => {
@@ -114,5 +103,6 @@ test('reduced motion shows finished split and tree demos and a static theme', as
   await page.getByRole('button', { name: 'PERSONALIZE', exact: true }).click();
   await expect(page.locator('.scene-theme-ripple')).toHaveCount(0);
   await page.getByRole('button', { name: 'ORGANIZE', exact: true }).click();
-  await expect(page.locator('.moki-tree__count')).toHaveText('7 个节点');
+  await expect(page.locator('.scene-knowledge-preview')).toBeVisible();
+  await expect(page.locator('.scene-knowledge-nav .moki-tree__node')).toHaveCount(6);
 });

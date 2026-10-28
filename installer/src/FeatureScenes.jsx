@@ -1,24 +1,12 @@
+import i18n from '../../src/i18n';
 import { lazy, Suspense, useCallback, useEffect, useRef, useState } from 'react';
 import ReactMarkdown from 'react-markdown';
 import LanguageDemo from './LanguageDemo';
 import SplitDemo from './SplitDemo';
 import ThemeDemo from './ThemeDemo';
-import TreeDemo from './TreeDemo';
+
 import remarkGfm from 'remark-gfm';
-import { Tree, ConfigProvider, Input, theme as antdTheme } from 'antd';
-import {
-  FolderOpenOutlined,
-  FileTextOutlined,
-  PlusOutlined,
-  ExpandAltOutlined,
-  ShrinkOutlined,
-  ZoomInOutlined,
-  ZoomOutOutlined,
-  ApartmentOutlined,
-  OneToOneOutlined,
-} from '@ant-design/icons';
 import FileIcon from '../../src/components/ui/FileTypeIcon';
-import { flattenTree } from '../../src/utils/mgtree';
 import '../../src/components/editor/markdown-preview.scss';
 import '../../src/components/layout/sidebar/explorer/file-tree.scss';
 import '../../src/components/layout/tab-bar/tabbar.scss';
@@ -26,6 +14,7 @@ import '../../src/components/layout/sidebar/sidebar.scss';
 import '../../src/components/editor/tree-editor.scss';
 import './feature-scenes.css';
 
+const TreeDemo = lazy(() => import('./TreeDemo'));
 const WritingDemo = lazy(() => import('./WritingDemo'));
 
 const markdown =
@@ -65,153 +54,7 @@ function PanelHeader({ name, extension = 'md' }) {
   );
 }
 
-function FileList() {
-  return (
-    <div className="scene-files">
-      <div className="sidebar__tabs">
-        <div className="sidebar__tab-slider" style={{ width: 'calc((100% - 10px) / 3)' }} />
-        <span className="sidebar__tab sidebar__tab--active">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6">
-            <path d="M3 7V5h7l2 2h9v12H3z" />
-          </svg>
-          文件
-        </span>
-        <span className="sidebar__tab">大纲</span>
-        <span className="sidebar__tab">最近</span>
-      </div>
-      <div className="sidebar__toolbar">
-        <span className="sidebar__toolbar-label">文件</span>
-        <span className="stb">
-          <PlusOutlined />
-        </span>
-        <span className="stb">
-          <FolderOpenOutlined />
-        </span>
-      </div>
-      <div className="scene-folder">
-        <FileIcon isFolder size={16} /> 我的工作区
-      </div>
-      {['开始创作.md', '灵感笔记.md', '我的知识树.mgtree'].map((name, i) => (
-        <div className={`file-tree__item${i === 2 ? ' file-tree__item--active' : ''}`} key={name}>
-          <span className="file-tree__item-icon">
-            <FileIcon fileName={name} size={16} />
-          </span>
-          <span className="file-tree__item-name">{name}</span>
-        </div>
-      ))}
-      <div className="scene-history">
-        <svg
-          viewBox="0 0 16 16"
-          fill="none"
-          stroke="currentColor"
-          strokeWidth="1.5"
-          aria-hidden="true"
-        >
-          <path d="m6 3 5 5-5 5" />
-        </svg>
-        本地历史 <span className="scene-history-count">0</span>
-      </div>
-    </div>
-  );
-}
-
-function TreePreview({ nodes, editing }) {
-  const toNode = (node, index, siblings) => ({
-    key: node.key,
-    className: index === siblings.length - 1 ? 'moki-tree__last' : '',
-    title: (
-      <div className="moki-tree__node">
-        {node.children.length ? (
-          <FolderOpenOutlined className="moki-tree__icon moki-tree__icon--folder" />
-        ) : (
-          <FileTextOutlined className="moki-tree__icon" />
-        )}
-        {editing?.key === node.key ? (
-          <span
-            className="scene-tree-input-wrap"
-            style={{ '--scene-input-length': editing.value.length }}
-          >
-            <Input
-              className="moki-tree__input"
-              size="small"
-              value={editing.value}
-              readOnly
-              tabIndex={-1}
-              aria-label="新节点名称"
-            />
-            <span className="scene-typing-caret" aria-hidden="true" />
-          </span>
-        ) : (
-          <span className="moki-tree__title">{node.title}</span>
-        )}
-      </div>
-    ),
-    children: node.children.map(toNode),
-  });
-  return (
-    <ConfigProvider
-      theme={{
-        algorithm:
-          typeof document !== 'undefined' && document.documentElement.dataset.theme === 'dark'
-            ? antdTheme.darkAlgorithm
-            : antdTheme.defaultAlgorithm,
-        token: {
-          fontFamily: 'var(--font-app)',
-          colorPrimary: '#4091ff',
-          colorText: '#2c2c2e',
-          fontSize: 14,
-        },
-      }}
-    >
-      <section className="moki-tree" style={{ '--tree-font-size': '14px' }}>
-        <div className="moki-tree__toolbar">
-          <div className="moki-tree__tools">
-            <span className="ant-btn moki-tree__add">
-              <PlusOutlined />
-            </span>
-            {[
-              ExpandAltOutlined,
-              ShrinkOutlined,
-              ZoomInOutlined,
-              ZoomOutOutlined,
-              OneToOneOutlined,
-            ].map((Icon, i) => (
-              <span className="ant-btn" key={i}>
-                <Icon />
-              </span>
-            ))}
-            <span className="moki-tree__zoom">100%</span>
-          </div>
-          <span className="moki-tree__count">
-            <ApartmentOutlined />
-            {flattenTree(nodes).length} 个节点
-          </span>
-        </div>
-        <div className="moki-tree__canvas">
-          <Tree
-            treeData={nodes.map(toNode)}
-            expandedKeys={flattenTree(nodes).map((node) => node.key)}
-            selectedKeys={editing ? [editing.key] : []}
-            motion={null}
-            showLine={{ showLeafIcon: false }}
-            blockNode
-            selectable={false}
-            switcherIcon={
-              <span className="moki-tree__chevron">
-                <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5">
-                  <path d="m6 3 5 5-5 5" />
-                </svg>
-              </span>
-            }
-          />
-        </div>
-        <div className="moki-tree__hint">双击文字可编辑 · Enter 确认 · Esc 取消</div>
-      </section>
-    </ConfigProvider>
-  );
-}
-
-export default function FeatureScenes({ slide, active, onComplete }) {
+export default function FeatureScenes({ slide, active, onComplete, loop = false }) {
   const [retained, setRetained] = useState(active);
   const activeRef = useRef(active);
   activeRef.current = active;
@@ -229,7 +72,7 @@ export default function FeatureScenes({ slide, active, onComplete }) {
   }, [slide, onComplete]);
   if (slide === 0)
     return (
-      <div className="feature-scene scene-wysiwyg" aria-label="所见即所得组件展示">
+      <div className="feature-scene scene-wysiwyg" aria-label={i18n.t('installer.richTextDemo')}>
         <div className="scene-surface scene-editor-card">
           <PanelHeader name="灵感随笔.md" />
           <div className="scene-demo-body">
@@ -240,7 +83,7 @@ export default function FeatureScenes({ slide, active, onComplete }) {
             )}
           </div>
           <div className="scene-editor-footer">
-            <span>所见即所得</span>
+            <span>{i18n.t('installer.richText')}</span>
             <span>Markdown</span>
           </div>
         </div>
@@ -248,7 +91,7 @@ export default function FeatureScenes({ slide, active, onComplete }) {
     );
   if (slide === 2)
     return (
-      <div className="feature-scene scene-language" aria-label="Markdown 语言服务组件展示">
+      <div className="feature-scene scene-language" aria-label={i18n.t('installer.languageDemo')}>
         <div className="scene-surface scene-editor-card">
           <PanelHeader name="阅读清单.md" />
           {present && <LanguageDemo onComplete={complete} />}
@@ -257,7 +100,7 @@ export default function FeatureScenes({ slide, active, onComplete }) {
     );
   if (slide === 3)
     return (
-      <div className="feature-scene scene-themes" aria-label="浅深主题组件展示">
+      <div className="feature-scene scene-themes" aria-label={i18n.t('installer.themesDemo')}>
         {present && (
           <ThemeDemo onComplete={complete}>
             <PanelHeader name="开始创作.md" />
@@ -268,22 +111,12 @@ export default function FeatureScenes({ slide, active, onComplete }) {
     );
   if (slide === 4)
     return (
-      <div className="feature-scene scene-organize" aria-label="文件列表与知识树组件展示">
-        <div className="scene-surface scene-files-card">
-          <FileList />
-        </div>
-        <div className="scene-surface scene-tree-card">
-          <PanelHeader name="我的知识树.mgtree" extension="mgtree" />
-          {present && (
-            <TreeDemo onComplete={complete}>
-              {(nodes, editing) => <TreePreview nodes={nodes} editing={editing} />}
-            </TreeDemo>
-          )}
-        </div>
+      <div className="feature-scene scene-organize" aria-label={i18n.t('installer.organizeDemo')}>
+        {present && <Suspense fallback={null}><TreeDemo onComplete={complete} loop={loop} /></Suspense>}
       </div>
     );
   return (
-    <div className="feature-scene scene-write" aria-label="源码与 Markdown 预览组件展示">
+    <div className="feature-scene scene-write" aria-label={i18n.t('installer.splitDemo')}>
       <div className="scene-surface scene-editor-card">
         <PanelHeader name="开始创作.md" />
         {present && <SplitDemo onComplete={complete} />}

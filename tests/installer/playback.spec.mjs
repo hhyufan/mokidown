@@ -46,14 +46,10 @@ for (const [scene, selector, next] of [
   });
 }
 
-test('history chevron is an aligned SVG and theme controls fit inside the footer', async ({
+test('theme controls fit inside the footer', async ({
   page,
 }) => {
   await page.goto('/');
-  const chevron = page.locator('.scene-history svg');
-  expect(await chevron.evaluate((element) => [element.clientWidth, element.clientHeight])).toEqual([
-    16, 16,
-  ]);
   await page.getByRole('button', { name: 'PERSONALIZE', exact: true }).click();
   const fits = await page.locator('.scene-theme-demo > .scene-theme-frame').evaluate((frame) => {
     const footer = frame.querySelector('.scene-theme-footer');

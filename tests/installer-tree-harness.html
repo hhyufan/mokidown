@@ -1,0 +1,11 @@
+<!doctype html><html><head><meta charset="utf-8"></head><body><div id="root"></div>
+<script type="module">
+import React from 'react';
+import { createRoot } from 'react-dom/client';
+import i18n from '/src/i18n/index.js';
+import FeatureScenes from '/installer/src/FeatureScenes.jsx';
+import '/installer/src/installer.css';
+await i18n.changeLanguage(new URLSearchParams(location.search).get('locale') || 'en_us');
+window.completed = 0;
+createRoot(document.getElementById('root')).render(React.createElement(FeatureScenes, { slide: 4, active: true, onComplete: () => { window.completed++; } }));
+</script></body></html>

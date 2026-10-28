@@ -1,3 +1,4 @@
+import i18n from '../../src/i18n';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import useDemoClock from './useDemoClock';
@@ -14,7 +15,7 @@ export default function SplitDemo({ onComplete }) {
   useDemoComplete(count === source.length, onComplete);
   return (
     <div className="scene-editor-split" data-complete={count === source.length}>
-      <div className="scene-code" aria-label="Markdown 源码自动输入演示">
+      <div className="scene-code" aria-label={i18n.t('installer.autotypeSource')}>
         {text.split('\n').map((line, index, lines) => (
           <div key={index}>
             <span className="scene-line-number">{index + 1}</span>
@@ -37,7 +38,7 @@ export default function SplitDemo({ onComplete }) {
       </div>
       <div
         className="md-preview scene-markdown scene-split-preview"
-        aria-label="随输入实时渲染的预览"
+        aria-label={i18n.t('installer.livePreview')}
       >
         <ReactMarkdown remarkPlugins={[remarkGfm]}>{text}</ReactMarkdown>
       </div>

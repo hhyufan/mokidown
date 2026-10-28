@@ -1,3 +1,4 @@
+import i18n from '../../src/i18n';
 import { useEffect, useState } from 'react';
 import { FileTextOutlined, CheckCircleOutlined } from '@ant-design/icons';
 import useDemoComplete from './useDemoComplete';
@@ -27,7 +28,7 @@ export default function LanguageDemo({ onComplete }) {
     <div
       className="scene-language-demo"
       data-complete={step === 2}
-      aria-label="Markdown 链接补全与诊断演示"
+      aria-label={i18n.t('installer.linkDemo')}
     >
       <div className="scene-language-source">
         <div>
@@ -55,14 +56,14 @@ export default function LanguageDemo({ onComplete }) {
             <span>
               <b>no</b>tes.md
             </span>
-            <small>文档</small>
+            <small>{i18n.t('installer.document')}</small>
           </div>
           <div className="scene-completion-row">
             <FileTextOutlined />
             <span>
               <b>no</b>tebook.md
             </span>
-            <small>文档</small>
+            <small>{i18n.t('installer.document')}</small>
           </div>
           <div className="scene-completion-detail">
             阅读笔记 <span>Enter ↵</span>
@@ -73,22 +74,22 @@ export default function LanguageDemo({ onComplete }) {
         {step === 2 ? (
           <>
             <CheckCircleOutlined />
-            <span>链接已补全 · 文档引用有效</span>
+            <span>{i18n.t('installer.linkComplete')}</span>
           </>
         ) : step === 1 ? (
           <>
             <FileTextOutlined />
-            <span>选择文档，补全相对路径</span>
+            <span>{i18n.t('installer.selectDocument')}</span>
           </>
         ) : (
           <>
             <span className="scene-diagnostic-dot" />
-            <span>检查文档引用与链接路径</span>
+            <span>{i18n.t('installer.checkReferences')}</span>
           </>
         )}
       </div>
       <div className="scene-editor-footer">
-        <span>Markdown · 语言服务演示</span>
+        <span>{i18n.t('installer.languageFooter')}</span>
         <span>UTF-8 · LF</span>
       </div>
     </div>

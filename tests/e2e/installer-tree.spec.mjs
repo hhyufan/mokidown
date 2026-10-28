@@ -1,0 +1,36 @@
+import { expect, test } from '@playwright/test';
+test('sidebar clicks scroll Markdown and preserve navigation layout', async ({ page }) => {
+  await page.emulateMedia({ reducedMotion: 'reduce' });
+  await page.goto('/tests/installer-tree-harness.html');
+  await expect(page.locator('.scene-knowledge-code .token.keyword').first()).toHaveText('const');
+  const nav = page.locator('.scene-knowledge-nav');
+  await nav.getByRole('button', { name: 'Organize reading notes', exact: true }).click();
+  await expect(page.locator('.scene-knowledge-code.is-target')).toContainText('notes.push');
+  await expect.poll(() => page.locator('.scene-knowledge-preview').evaluate(el => el.scrollTop)).toBeGreaterThan(200);
+  await nav.getByRole('button', { name: 'Run Hello Moki', exact: true }).click();
+  await expect(page.locator('.scene-knowledge-code.is-target')).toContainText('const message');
+  await expect(page.locator('.scene-knowledge-editor, .moki-tree-jump-popup')).toHaveCount(0);
+  const divider = page.getByRole('separator');
+  await divider.focus();
+  await divider.press('ArrowRight');
+  await expect(divider).toHaveAttribute('aria-valuenow', '320');
+  await page.screenshot({ path: '.cache/installer-tree-preview.png' });
+});
+test('automatic navigation highlights both sides and completes', async ({ page }) => {
+  await page.clock.install();
+  await page.goto('/tests/installer-tree-harness.html?locale=zh_cn');
+  await expect(page.locator('.scene-knowledge-preview')).toBeVisible();
+  await page.clock.fastForward(1600);
+  await page.clock.runFor(100);
+  await expect(page.locator('.scene-knowledge-code.is-target')).toContainText('const message');
+  await expect(page.locator('.moki-tree__node--jumping')).toContainText('Hello Moki');
+  await page.clock.fastForward(3000);
+  await page.clock.runFor(400);
+  await expect(page.locator('.scene-knowledge-code.is-target')).toContainText('console.log');
+  await expect(page.locator('.moki-tree__node--jumping')).toContainText('message');
+  await page.clock.fastForward(3000);
+  await page.clock.runFor(400);
+  await expect(page.locator('.scene-knowledge-code.is-target')).toContainText('notes.push');
+  await page.clock.fastForward(3500);
+  await expect.poll(() => page.evaluate(() => window.completed)).toBe(1);
+});
