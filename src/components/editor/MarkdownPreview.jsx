@@ -20,6 +20,8 @@ import { useEditorBufferContent } from '@hooks/useEditorBufferContent';
 import { useDocumentScrollState } from '@hooks/useDocumentScrollState';
 import { useMarkdownAnalysis } from '@hooks/useMarkdownAnalysis';
 import ReactMarkdown from 'react-markdown';
+import MilkdownTooltips from './MilkdownTooltips';
+import rehypeTooltipTitles from '@utils/rehypeTooltipTitles';
 import remarkGfm from 'remark-gfm';
 import remarkMath from 'remark-math';
 import remarkMarkdownHtml from '@utils/remarkMarkdownHtml';
@@ -161,6 +163,7 @@ const rehypePlugins = [
   [rehypeSanitize, sanitizeSchema],
   rehypeKatex,
   rehypeCodeBlockIndexes,
+  rehypeTooltipTitles,
 ];
 
 /**
@@ -350,7 +353,8 @@ const MarkdownPreview = forwardRef(function MarkdownPreview({ className }, ref) 
       const tag = document.createElement('button');
       tag.className = 'lang-tag';
       tag.textContent = displayLang;
-      tag.title = i18n.t('preview.copiedToClipboard');
+      tag.dataset.mokiTooltip = i18n.t('editor.copyCode');
+      tag.setAttribute('aria-label', i18n.t('editor.copyCode'));
       tag.addEventListener('click', () => {
         navigator.clipboard.writeText(code.textContent || '').then(() => {
           toast(i18n.t('preview.copiedToClipboard'));
@@ -477,7 +481,7 @@ const MarkdownPreview = forwardRef(function MarkdownPreview({ className }, ref) 
         anchor?.textContent || '',
         anchor?.getAttribute?.('aria-label') || '',
         anchor?.querySelector?.('img')?.getAttribute?.('alt') || '',
-        anchor?.querySelector?.('img')?.getAttribute?.('title') || '',
+        anchor?.querySelector?.('img')?.dataset?.mokiTooltip || '',
       ].filter(Boolean).join(' '));
     if (lineHint?.line) {
       window.setTimeout(() => {
@@ -581,6 +585,7 @@ const MarkdownPreview = forwardRef(function MarkdownPreview({ className }, ref) 
       }}
     >
       <MarkdownView content={content} components={components} />
+      <MilkdownTooltips rootRef={containerRef} readOnly />
       <EditorContextMenu menu={menu} onClose={closeMenu} />
     </div>
   );
