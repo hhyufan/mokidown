@@ -4,11 +4,11 @@ import { Tooltip } from 'antd';
 import { useTranslation } from 'react-i18next';
 
 const selectors =
-  '[data-moki-tooltip], .milkdown-code-block .copy-button, .milkdown-code-block .language-button, .milkdown-code-block .preview-toggle-button, .md-preview__html-block-preview, [data-type="math_inline"], [data-type="math_block"]';
+  '[data-moki-tooltip], [title]:not(iframe), .milkdown-code-block .copy-button, .milkdown-code-block .language-button, .milkdown-code-block .preview-toggle-button, .md-preview__html-block-preview, [data-type="math_inline"], [data-type="math_block"]';
 
 // Milkdown owns these node views (including Vue controls). Delegate events and
 // anchor Antd to a portal rather than wrapping or replacing ProseMirror DOM.
-export default function MilkdownTooltips({ rootRef, readOnly }) {
+export default function MilkdownTooltips({ rootRef, readOnly, nativeOnly = false }) {
   const { t } = useTranslation();
   const id = useId();
   const [tip, setTip] = useState(null);
@@ -23,6 +23,11 @@ export default function MilkdownTooltips({ rootRef, readOnly }) {
       setTip(null);
     };
     const label = (element) => {
+      if (nativeOnly) return element.dataset.mokiNativeTooltip || '';
+      if (element.hasAttribute('title') && element.tagName !== 'IFRAME') {
+        element.dataset.mokiTooltip = element.getAttribute('title');
+        element.removeAttribute('title');
+      }
       if (element.dataset.mokiTooltip) return element.dataset.mokiTooltip;
       if (element.matches('.copy-button')) return t('editor.copyCode');
       if (element.matches('.language-button')) return t('editor.chooseCodeLanguage');
@@ -39,9 +44,10 @@ export default function MilkdownTooltips({ rootRef, readOnly }) {
       return '';
     };
     const show = (event) => {
-      const element = event.target.closest?.(selectors);
+      const element = event.target.closest?.(nativeOnly ? '[data-moki-native-tooltip]' : selectors);
       if (!element || !root.contains(element) || element.disabled || element.closest('[hidden]'))
         return;
+      if (nativeOnly && element.closest('.md-preview, .milkdown-editor')) return;
       if (hovered.current === element) return;
       hide();
       const title = label(element);
@@ -67,6 +73,14 @@ export default function MilkdownTooltips({ rootRef, readOnly }) {
     };
     const annotate = (node) => {
       if (!(node instanceof Element)) return;
+      const titled = [...node.querySelectorAll('[title]:not(iframe)')];
+      if (node.matches('[title]:not(iframe)')) titled.push(node);
+      for (const element of titled) {
+        if (nativeOnly && element.closest('.md-preview, .milkdown-editor')) continue;
+        element.dataset[nativeOnly ? 'mokiNativeTooltip' : 'mokiTooltip'] = element.getAttribute('title');
+        element.removeAttribute('title');
+      }
+      if (nativeOnly) return;
       const controls = [
         ...node.querySelectorAll('.copy-button, .language-button, .preview-toggle-button'),
       ];
@@ -77,9 +91,12 @@ export default function MilkdownTooltips({ rootRef, readOnly }) {
     annotate(root);
     const observer = new MutationObserver((records) => {
       if (hovered.current && !hovered.current.isConnected) hide();
-      for (const record of records) for (const node of record.addedNodes) annotate(node);
+      for (const record of records) {
+        if (record.type === 'attributes') annotate(record.target);
+        else for (const node of record.addedNodes) annotate(node);
+      }
     });
-    observer.observe(root, { childList: true, subtree: true });
+    observer.observe(root, { childList: true, subtree: true, attributes: true, attributeFilter: ['title'] });
     root.addEventListener('mouseover', show);
     root.addEventListener('mouseout', leave);
     root.addEventListener('focusin', show);
@@ -98,7 +115,7 @@ export default function MilkdownTooltips({ rootRef, readOnly }) {
       document.removeEventListener('scroll', hide, true);
       window.removeEventListener('resize', hide);
     };
-  }, [rootRef, readOnly, t]);
+  }, [rootRef, readOnly, nativeOnly, t]);
   useEffect(() => {
     const element = tip?.element;
     if (!element) return undefined;
@@ -111,7 +128,7 @@ export default function MilkdownTooltips({ rootRef, readOnly }) {
   }, [tip, id]);
   if (!tip) return null;
   return createPortal(
-    <Tooltip id={id} open title={tip.title} placement="top" trigger={[]} destroyOnHidden>
+    <Tooltip id={id} open title={tip.title} placement="top" trigger={[]} destroyOnHidden styles={{ root: { pointerEvents: 'none' } }}>
       <span
         aria-hidden="true"
         style={{ position: 'fixed', ...tip.rect, pointerEvents: 'none', zIndex: -1 }}
