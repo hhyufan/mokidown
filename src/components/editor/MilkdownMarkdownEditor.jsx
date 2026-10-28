@@ -1760,7 +1760,7 @@ function MilkdownInner({
           anchor.textContent || '',
           anchor.getAttribute('aria-label') || '',
           anchor.querySelector('img')?.getAttribute('alt') || '',
-          anchor.querySelector('img')?.getAttribute('title') || '',
+          anchor.querySelector('img')?.dataset.mokiTooltip || '',
         ].filter(Boolean).join(' '));
 
       void openFileFromPath(target.path, fileName).then(() => {

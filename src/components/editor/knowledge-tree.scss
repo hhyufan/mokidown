@@ -20,14 +20,19 @@
     min-height: 40px;
     font-size: 12px;
     font-weight: 600;
-    background: transparent;
+    background: var(--surface);
     border-bottom: 1px solid var(--border-light);
   }
   &__heading { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   &__header .moki-tree__corner-controls { padding: 0; margin-left: auto; }
   .moki-tree__node--jumping { animation: knowledge-node-arrival 4s ease-out both; border-radius: 4px; }
 }
-.knowledge-tree__list { overflow: auto; min-height: 0; flex: 1; }
+.knowledge-tree__list {
+  display: flex; flex-direction: column; overflow: hidden; min-height: 0; flex: 1;
+  > .knowledge-tree { flex: 1 1 0; min-height: 0; overflow: hidden; }
+  .knowledge-tree__header { position: relative; top: auto; flex-shrink: 0; }
+  .moki-tree__scroll { overflow: auto; min-height: 0; flex: 1; }
+}
 .md-preview .knowledge-tree { border: 1px solid var(--border); border-radius: 6px; margin: 16px 0; }
 .md-preview .knowledge-tree-target {
   position: relative;

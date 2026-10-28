@@ -10,12 +10,13 @@ export function InlineTreeTitle({ title }) {
 }
 
 export function TreeNodeRow({ node, children, actions, onContextMenu, showReference = true, highlighted = false, reference }) {
+  const { t } = useTranslation();
   return <div className={`moki-tree__node ${node.jumpLanguage ? 'moki-tree__node--linked' : ''} ${highlighted ? 'moki-tree__node--jumping' : ''}`} onContextMenu={onContextMenu}>
     {node.jumpLanguage && <CodeOutlined className="moki-tree__icon" />}
     {children}
-    {reference ?? (node.jumpLanguage && showReference && <span className="moki-tree__reference" title={node.originalText}>
+    {reference ?? (node.jumpLanguage && showReference && <Tooltip title={t('knowledgeTree.jumpToCode', { language: node.jumpLanguage, index: node.jumpIndex })} mouseEnterDelay={0.3}><span className="moki-tree__reference" >
       {node.jumpLanguage}<span>{node.jumpIndex}</span>
-    </span>)}
+    </span></Tooltip>)}
     {actions}
   </div>;
 }

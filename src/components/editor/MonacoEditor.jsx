@@ -1,3 +1,4 @@
+import i18n from '@/i18n';
 /**
  * @file Monaco 编辑器封装模块。
  *
@@ -331,7 +332,7 @@ const MonacoEditorComponent = forwardRef(function MonacoEditorComponent({ classN
       }
     });
     const stopPluginEditor = registerPluginEditor(() => currentTabIdRef.current, (edits) => {
-      if (isComposing) throw new Error('EDITOR_COMPOSING: 请等待输入法完成当前输入');
+      if (isComposing) throw new Error(i18n.t('pluginErrors.composing'));
       const model = editor.getModel();
       if (!model) throw new Error('Editor model unavailable');
       editor.pushUndoStop();
