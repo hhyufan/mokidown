@@ -1,3 +1,4 @@
+import i18n from '@/i18n';
 import { sanitizePluginSvg } from './pluginSvg';
 import { validateStatusActions } from './pluginStatusActions';
 import { getPluginDocuments } from './pluginDocuments';
@@ -44,7 +45,7 @@ export function createExtensionBridge(entry, port) {
     if (method === 'notifications.show') {
       permit('ui.notifications');
       notices = notices.filter((time) => time > Date.now() - 10000);
-      if (notices.length >= 8) throw new Error('RATE_LIMITED: 通知过于频繁');
+      if (notices.length >= 8) throw new Error(i18n.t('pluginErrors.rateLimited'));
       notices.push(Date.now());
       const tone = ['success', 'warning', 'error', 'info'].includes(args.tone) ? args.tone : 'info';
       useNotificationStore.getState().notify(tone, pkg.name, String(args.message || '').slice(0, 500), Math.min(10000, Math.max(1500, Number(args.duration) || 4000)));
@@ -95,7 +96,7 @@ export function createExtensionBridge(entry, port) {
     if (method === 'editor.setSelection') { permit('editor.write'); return setPluginSelection(args); }
     if (method === 'editor.focusDocument') {
       permit('editor.write');
-      if (!useEditorStore.getState().tabs.some((tab) => tab.id === args.documentId)) throw new Error('DOCUMENT_CLOSED: 文档已经关闭');
+      if (!useEditorStore.getState().tabs.some((tab) => tab.id === args.documentId)) throw new Error(i18n.t('pluginErrors.documentClosed'));
       useEditorStore.getState().setActiveTab(args.documentId);
       return true;
     }
@@ -128,7 +129,7 @@ export function createExtensionBridge(entry, port) {
       const svg = sanitizePluginSvg(args.svg);
       usePluginContributions.getState().addFileBadge(pkg.id, {
         id: args.id,
-        title: String(args.title || '插件标记').slice(0, 80),
+        title: String(args.title || i18n.t('extensions.defaultMarker')).slice(0, 80),
         extensions: Array.isArray(args.extensions) ? args.extensions.map((ext) => String(ext).toLowerCase()).slice(0, 32) : [],
         paths: Array.isArray(args.paths) ? args.paths.map((path) => String(path)) : [],
         svg,
@@ -158,8 +159,8 @@ export function createExtensionBridge(entry, port) {
       if (!path) throw new Error('Invalid version source path');
       usePluginContributions.getState().setVersionSource(pkg.id, {
         path,
-        title: String(args.title || '版本').slice(0, 80),
-        emptyText: String(args.emptyText || '暂无历史').slice(0, 120),
+        title: String(args.title || i18n.t('extensions.versions')).slice(0, 80),
+        emptyText: String(args.emptyText || i18n.t('history.empty')).slice(0, 120),
         items: Array.isArray(args.items) ? args.items.slice(0, 100).map((item) => ({
           id: String(item.id || '').slice(0, 160),
           label: String(item.label || '').slice(0, 160),
@@ -248,9 +249,9 @@ export function createExtensionBridge(entry, port) {
       try {
         const result = await invoke('extension_http_request', { url: url.href, method: args.method || 'GET', body: args.body === undefined ? null : JSON.stringify(args.body), credentialId: pkg.id, requestId });
         check();
-        if (result.status >= 300 && result.status < 400) throw new Error(`SERVICE_REDIRECT: 服务返回 HTTP ${result.status} 跳转，请填写最终的 API 地址。`);
+        if (result.status >= 300 && result.status < 400) throw new Error(i18n.t('pluginErrors.redirect', { status: result.status }));
         try { return { status: result.status, data: JSON.parse(result.body) }; }
-        catch { throw new Error(`SERVICE_INVALID_RESPONSE: 服务返回 HTTP ${result.status} 非 JSON 响应，请检查 API 路径、反代或隧道状态。`); }
+        catch { throw new Error(i18n.t('pluginErrors.invalidResponse', { status: result.status })); }
       } finally { pending.delete(requestId); }
     }
     if (method.startsWith('fs.')) {

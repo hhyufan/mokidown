@@ -52,9 +52,9 @@ import './sidebar.scss';
 function ToolbarButton({ title, onClick, children }) {
   return (
     <Tooltip title={title} placement="bottom" mouseEnterDelay={0.3}>
-      <div className="stb" onClick={onClick}>
+      <button type="button" className="stb" aria-label={title} onClick={onClick}>
         {children}
-      </div>
+      </button>
     </Tooltip>
   );
 }
@@ -237,7 +237,7 @@ function RecentList({ onOpenStats }) {
         <div className="sidebar__recent-list">
           {sortedFiles.map((f) => {
             const isBookmarked = useFileStore.getState().isBookmarked(f.path);
-            
+
             const titleText = f.path;
             return (
               <Tooltip key={f.path} title={titleText} placement="right" mouseEnterDelay={0.5}>
@@ -247,7 +247,7 @@ function RecentList({ onOpenStats }) {
                 >
                   <span className="sidebar__recent-icon">
                     <FileTypeIcon extension={f.ext} fileName={f.name} />
-                    
+
                   </span>
                   <span className="sidebar__recent-name">{f.name}</span>
                   {isBookmarked && (

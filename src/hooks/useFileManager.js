@@ -160,7 +160,7 @@ async function rememberSavedDiskVersion(path, content, metadata) {
 export function useFileManager() {
   const {
     openFile: openTab,
-    
+
     markTabSaved,
     createUntitledTab,
     updateTabPath,
@@ -269,7 +269,7 @@ export function useFileManager() {
     const tab = typeof tabId === 'string' ? getLiveTabById(tabId) : useEditorStore.getState().getActiveTab();
     if (!tab) return;
     const content = getBuffer(tab.id, tab.content);
-    
+
     if (!tab.path) {
       // Desktop drafts stay in memory until an explicit Save / Save As action.
       if (!isAndroid) return;
@@ -294,11 +294,11 @@ export function useFileManager() {
   const loadDirectory = useCallback(async (dirPath) => {
     if (webDemo && !window.__TAURI_INTERNALS__) {
       if (!isWebPath(dirPath)) {
-        notify('info', '网页预览', '请使用桌面版打开本地目录。');
+        notify('info', i18n.t('webDemo.title'), i18n.t('webDemo.openDirectory'));
         return;
       }
       if (/^web:(\/\/?)?$/.test(String(dirPath).replace(/\/+$/, ''))) {
-        notify('info', '网页预览', '这已经是演示工作区的根目录。');
+        notify('info', i18n.t('webDemo.title'), i18n.t('webDemo.rootDirectory'));
         return;
       }
     }
@@ -326,11 +326,11 @@ export function useFileManager() {
   const loadFilesOnly = useCallback(async (dirPath) => {
     if (webDemo && !window.__TAURI_INTERNALS__) {
       if (!isWebPath(dirPath)) {
-        notify('info', '网页预览', '请使用桌面版打开本地目录。');
+        notify('info', i18n.t('webDemo.title'), i18n.t('webDemo.openDirectory'));
         return;
       }
       if (/^web:(\/\/?)?$/.test(String(dirPath).replace(/\/+$/, ''))) {
-        notify('info', '网页预览', '这已经是演示工作区的根目录。');
+        notify('info', i18n.t('webDemo.title'), i18n.t('webDemo.rootDirectory'));
         return;
       }
     }
@@ -359,7 +359,7 @@ export function useFileManager() {
 
     if (isAndroid) {
       // 优先走 SAF 目录选择器，让用户可访问 Documents、Downloads、SD 卡
-      
+
       // Documents 目录，保持旧行为而不是直接退回未命名标签。
       if (isAndroidSafAvailable()) {
         try {
@@ -556,10 +556,10 @@ export function useFileManager() {
    */
   const openFileFromPath = useCallback(async (filePath, fileName) => {
     if (webDemo && !window.__TAURI_INTERNALS__ && !isWebPath(filePath)) {
-      notify('info', '网页预览', '请使用桌面版打开本地文件。');
+      notify('info', i18n.t('webDemo.title'), i18n.t('webDemo.openFile'));
       return;
     }
-    
+
     // external 标签打开；首次保存再走另存为并把本地路径登记到服务端。
 
     try {
@@ -571,7 +571,7 @@ export function useFileManager() {
           await readFileMetadata(filePath),
         );
         const ext = fileName.split('.').pop() || '';
-        
+
         const alreadyOpen = Boolean(useEditorStore.getState().getTabByPath(filePath));
         openTab({
           name: fileName,
@@ -692,7 +692,7 @@ export function useFileManager() {
 
       if (webDemo && !window.__TAURI_INTERNALS__) {
         if (!window.showOpenFilePicker) {
-          notify('info', '网页预览', '当前浏览器不支持选择本地文件，请使用桌面版 MokiDown。');
+          notify('info', i18n.t('webDemo.title'), i18n.t('webDemo.filePicker'));
           return;
         }
         try {
@@ -751,7 +751,7 @@ export function useFileManager() {
   const saveTab = useCallback(async (tabId) => {
     // 实时正文保存在 editorBuffer 中，`tab.content` 只是上一次持久化的快照。
     // 这里统一通过 getLiveTabById 取最新缓冲内容，避免把过期正文落盘/推云
-    
+
     const activeId = useEditorStore.getState().activeTabId;
     flushEditorBuffer(tabId || activeId);
     const tab = getLiveTabById(tabId || activeId);
@@ -829,7 +829,7 @@ export function useFileManager() {
         if (result.success) {
           const name = path.split(/[\\/]/).pop();
           const ext = name.split('.').pop() || '';
-          
+
           updateTabPath(tab.id, path, name);
           markTabSaved(path, tab.content);
           addRecentFile({ name, path, ext });
@@ -909,7 +909,7 @@ export function useFileManager() {
     try {
       if (webDemo && !window.__TAURI_INTERNALS__) {
         if (!window.showDirectoryPicker) {
-          notify('info', '网页预览', '当前浏览器不支持选择文件夹，请使用桌面版 MokiDown。');
+          notify('info', i18n.t('webDemo.title'), i18n.t('webDemo.folderPicker'));
           return;
         }
         const dirHandle = await window.showDirectoryPicker();

@@ -81,16 +81,16 @@ it('adjusts both font sizes with compact controls without deprecated InputNumber
   );
   fireEvent.click(screen.getByText('外观'));
   expect(screen.getByRole('spinbutton', { name: '预览字号' })).toHaveValue('14');
-  fireEvent.click(screen.getByRole('button', { name: '预览字号 +' }));
+  fireEvent.click(screen.getByRole('button', { name: '增大预览字号' }));
   expect(useConfigStore.getState().previewFontSize).toBe(15);
   act(() => useConfigStore.setState({ previewZoomSync: true }));
-  expect(screen.getByRole('button', { name: '预览字号 +' })).toBeDisabled();
+  expect(screen.getByRole('button', { name: '增大预览字号' })).toBeDisabled();
   expect(screen.getByRole('spinbutton', { name: '预览字号' })).toBeDisabled();
   fireEvent.click(screen.getByText('编辑器'));
-  fireEvent.click(screen.getByRole('button', { name: '编辑区字号 −' }));
+  fireEvent.click(screen.getByRole('button', { name: '减小编辑区字号' }));
   expect(useConfigStore.getState().fontSize).toBe(13);
   act(() => useConfigStore.setState({ fontSize: 24 }));
-  fireEvent.click(screen.getByRole('button', { name: '编辑区字号 +' }));
+  fireEvent.click(screen.getByRole('button', { name: '增大编辑区字号' }));
   expect(useConfigStore.getState().fontSize).toBe(24);
   expect(errors.mock.calls.flat().join(' ')).not.toMatch(
     /addonAfter|addonBefore|findDOMNode|Maximum update depth/,

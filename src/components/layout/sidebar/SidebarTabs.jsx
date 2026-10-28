@@ -1,3 +1,4 @@
+import { Tooltip } from 'antd';
 import { useLayoutEffect, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
 import { cn } from '@utils/classNames';
@@ -61,13 +62,13 @@ export default function SidebarTabs({ items, activeId, onChange, onMinWidthChang
     {items.map((item) => <div key={item.id}
       className={cn('sidebar__tab-slot', !item.visible && 'sidebar__tab-slot--hidden')}
       aria-hidden={!item.visible || undefined}>
-      <button ref={(element) => { if (element) buttons.current.set(item.id, element); else buttons.current.delete(item.id); }}
-        type="button" role="tab" title={item.label} disabled={!item.visible} tabIndex={item.visible ? 0 : -1}
+      <Tooltip title={item.label} mouseEnterDelay={0.3}><button ref={(element) => { if (element) buttons.current.set(item.id, element); else buttons.current.delete(item.id); }}
+        type="button" role="tab"  disabled={!item.visible} tabIndex={item.visible ? 0 : -1}
         aria-selected={item.visible && activeId === item.id}
         className={cn('sidebar__tab', activeId === item.id && item.visible && 'sidebar__tab--active')}
         onClick={() => onChange(item.id)}>
         <Icon id={item.id} /><span>{item.label}</span>
-      </button>
+      </button></Tooltip>
     </div>)}
   </div>;
 }

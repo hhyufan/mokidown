@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Button, Input, InputNumber, Select, Space, Switch } from 'antd';
+import { Tooltip, Button, Input, InputNumber, Select, Space, Switch } from 'antd';
 import { FolderOpenOutlined } from '@ant-design/icons';
 import { open } from '@tauri-apps/plugin-dialog';
 import { useTranslation } from 'react-i18next';
@@ -49,7 +49,7 @@ export default function ExtensionSettings({ entry, act }) {
         <iframe
           className="extension-settings__html"
           sandbox=""
-          title="plugin configuration"
+          title={t('extensions.configuration')}
           srcDoc={`<!doctype html><meta charset="utf-8"><style>${typeof config.css === 'string' ? config.css : ''}</style>${config.html}`}
         />
       )}
@@ -70,9 +70,9 @@ export default function ExtensionSettings({ entry, act }) {
           return (
             <div key={field.key} className="extension-settings__directory">
               <FolderOpenOutlined className="extension-settings__folder" />
-              <span className="extension-settings__path" title={workspace || ''}>
+              <Tooltip title={workspace || ''} mouseEnterDelay={0.3}><span className="extension-settings__path" >
                 {workspace || t('extensions.noWorkspace')}
-              </span>
+              </span></Tooltip>
               <Button size="small" onClick={() => act(async () => {
                 const picked = await open({ directory: true, multiple: false });
                 if (typeof picked === 'string') {

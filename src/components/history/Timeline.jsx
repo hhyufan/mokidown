@@ -102,6 +102,7 @@ export default function Timeline() {
   return (
     <section className={`timeline${expanded ? ' timeline--open' : ''}`}>
       <header className="timeline__header">
+        <Tooltip title={t(expanded ? 'tree.collapseAll' : 'tree.expandAll')}>
         <button
           type="button"
           className="timeline__toggle"
@@ -111,6 +112,7 @@ export default function Timeline() {
         >
           <ChevronIcon className="timeline__chevron" />
         </button>
+        </Tooltip>
         <span className="timeline__label">{t('history.title')}</span>
         <span className="timeline__count">{entries.length}</span>
         <Tooltip title={t('history.refresh')} placement="top" mouseEnterDelay={0.3}>

@@ -15,7 +15,7 @@ import './titlebar.scss';
 function TbBtn({ title, className = 'titlebar__btn', onClick, children }) {
   return (
     <Tooltip title={title} placement="bottom" mouseEnterDelay={0.3}>
-      <button className={className} onClick={onClick} type="button">
+      <button className={className} aria-label={title} onClick={onClick} type="button">
         {children}
       </button>
     </Tooltip>

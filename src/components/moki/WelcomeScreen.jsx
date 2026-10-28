@@ -35,7 +35,7 @@ export default function WelcomeScreen() {
       aria-label={t('moki.welcomeLabel')}
     >
       <div className="moki-welcome__content">
-        <span className="moki-eyebrow">MokiDown / YOUR IDEAS, AT HOME</span>
+        <span className="moki-eyebrow">{t('moki.tagline')}</span>
         <h1>{t('moki.welcomeTitle')}</h1>
         <h2 className="moki-welcome__task-heading">{t('moki.startTask')}</h2>
         <div className="moki-welcome__actions">

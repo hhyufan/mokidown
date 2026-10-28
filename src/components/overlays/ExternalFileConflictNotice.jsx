@@ -2,10 +2,12 @@ import * as React from 'react';
 import { lazy, Suspense, useState } from 'react';
 import { Tooltip } from 'antd';
 import i18n from '@/i18n';
+import { useTranslation } from 'react-i18next';
 
 const ExternalFileConflictModal = lazy(() => import('./ExternalFileConflictModal'));
 
 export default function ExternalFileConflictNotice({ conflict, onKeep, onUseDisk, onSaveAs }) {
+  useTranslation();
   const [reviewOpen, setReviewOpen] = useState(false);
   return (
     <React.Fragment>
