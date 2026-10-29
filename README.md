@@ -26,7 +26,7 @@
 MokiDown 是基于 Tauri 2、React、Monaco 与 Milkdown 的开源 Markdown 编辑器。本地优先：默认读写本地文件，无需登录、无需联网。
 
 <p align="center">
-  <img src="screenshots/main.png" width="880" alt="MokiDown 主界面" />
+  <img src="screenshots/hero-demo.gif" width="1920" alt="MokiDown 动态演示：所见即所得编辑与代码运行、分屏编辑、明暗主题、知识树编辑与代码跳转" />
 </p>
 
 ## 功能
