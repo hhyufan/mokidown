@@ -26,7 +26,7 @@
 MokiDown is an open-source Markdown editor built with Tauri 2, React, Monaco, and Milkdown. Local-first: it reads and writes local files by default, with no sign-in and no network required.
 
 <p align="center">
-  <img src="screenshots/hero-demo.gif" width="1920" alt="MokiDown in action: WYSIWYG editing and code execution, split editing, light and dark themes, knowledge tree editing and code navigation" />
+  <img src="screenshots/hero-demo.gif" width="1920" alt="MokiDown in action: create a blank note, write task lists, code blocks and tables, run code in WYSIWYG, edit in split view, switch themes, edit knowledge trees and navigate to code" />
 </p>
 
 ## Features
