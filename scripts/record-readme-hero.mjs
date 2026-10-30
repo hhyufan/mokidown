@@ -10,6 +10,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { chromium } from 'playwright';
 import { startLosslessVideo } from './hero-lossless-video.mjs';
+import { authorHeroNote } from './hero-author-note.mjs';
 
 const root = fileURLToPath(new URL('..', import.meta.url));
 const require = createRequire(process.env.MDE_SCREENSHOT_RUNTIME
@@ -34,7 +35,6 @@ const chapters = [];
 const errors = [];
 let stage = 'setup';
 
-const markdown = '# 让灵感，在这里落笔。\n\n> 写文档，尝试代码，连接自己的知识。\n\n## 今天的灵感\n\n从一个想法开始。\n\n- [x] 记录灵感\n- [ ] 把灵感变成作品\n\n## 在笔记里验证想法\n\n解释与代码留在同一页，让每次尝试都有迹可循。\n\n```javascript\nconst ideas = ["记录", "尝试", "连接"];\nconst message = ideas.join(" → ");\nconsole.log(message);\n```\n\n## 从想法到作品\n\n| 步骤 | 行动 |\n| --- | --- |\n| 记录 | 用 Markdown 写下灵感 |\n| 尝试 | 让代码与笔记相互验证 |\n| 连接 | 用知识树整理自己的路径 |\n\n```javascript\nconst notebook = {\n  title: "我的知识工作台",\n  localFirst: true,\n  ideas: ["写作", "实践", "连接"]\n};\nconsole.log(notebook.title);\n```\n\n**本地优先**，每一页笔记都属于你。\n';
 const tree = '我的知识工作台\n  自由书写\n    所见即所得\n    Markdown 与分屏预览\n  代码实践\n    运行 `ideas.join()` >javascript[1]\n    整理 `notebook` >javascript++\n  知识连接\n    阅读与积累\n';
 
 try {
@@ -85,9 +85,9 @@ try {
   }
   const notes = path.join(artifacts, 'notes');
   await fs.mkdir(notes, { recursive: true });
-  await fs.writeFile(path.join(notes, '灵感笔记.md'), markdown);
+  await fs.writeFile(path.join(notes, '灵感笔记.md'), '');
   await fs.writeFile(path.join(notes, '灵感笔记.mgtree'), tree);
-  await page.evaluate(async ({ markdown, tree, notes }) => {
+  await page.evaluate(async () => {
     const config = (await import('/src/store/useConfigStore.js')).default;
     const image = await fetch('/src/assets/characters/' + encodeURIComponent('昼夜双生的星光书页.png')).then(res => res.blob());
     const id = await (await import('/src/utils/backgroundImage.js')).saveBackgroundImage(image);
@@ -96,19 +96,11 @@ try {
       backgroundTransparency: { light: 85, dark: 85 } });
     await (await import('/src/i18n/index.js')).default.changeLanguage('zh');
     const store = (await import('/src/store/useEditorStore.js')).default;
-    store.setState({ tabs: [], tabRenderList: [], activeTabId: null });
-    store.getState().openFile({ path: notes + '/灵感笔记.mgtree', name: '灵感笔记.mgtree', content: tree });
-    const treeId = store.getState().activeTabId;
-    store.getState().openFile({ path: notes + '/灵感笔记.md', name: '灵感笔记.md', content: markdown });
-    const mdId = store.getState().activeTabId;
-    const files = (await import('/src/store/useFileStore.js')).default;
-    files.getState().addRecentFile({ path: treeId, name: '灵感笔记.mgtree' });
-    files.getState().addRecentFile({ path: mdId, name: '灵感笔记.md' });
-    store.setState({ viewMode: 'preview', sidebarView: 'knowledge', sidebarVisible: true, sidebarWidth: 330 });
+    store.setState({ tabs: [], tabRenderList: [], activeTabId: null, viewMode: 'preview',
+      sidebarView: 'explorer', sidebarVisible: true, sidebarWidth: 330 });
     (await import('/src/store/useThemeStore.js')).default.getState().setTheme('light');
-  }, { markdown, tree, notes: notes.replace(/\\/g, '/') });
-  await page.locator('.milkdown-editor').waitFor({ timeout: 30000 });
-  await page.locator('.sidebar .knowledge-tree').waitFor();
+  });
+  await page.locator('.moki-action--primary').waitFor({ timeout: 30000 });
   await page.evaluate(() => document.fonts.ready);
   await page.waitForTimeout(1600);
   assert.equal(await page.evaluate(() => getComputedStyle(document.documentElement).getPropertyValue('--moki-background-opacity').trim()), '0.15');
@@ -167,16 +159,18 @@ try {
     pointer = { x, y };
     pointerMoving = false;
   };
-  const moveTo = async locator => {
+  const moveTo = async (locator, options = {}) => {
+    await locator.scrollIntoViewIfNeeded();
     const box = await locator.boundingBox(); assert.ok(box);
-    await glide(box.x + box.width / 2, box.y + box.height / 2);
+    await glide(box.x + (options.position?.x ?? box.width / 2), box.y + (options.position?.y ?? box.height / 2));
   };
-  const click = async locator => { await moveTo(locator); await hold(160); await locator.click(); await hold(120); };
-  const typeText = async text => {
+  const click = async (locator, options) => { await moveTo(locator, options); await hold(160); await locator.click(options); await hold(120); };
+  const doubleClick = async locator => { await moveTo(locator); await hold(160); await locator.dblclick({ delay: 100 }); await hold(120); };
+  const typeText = async (text, { pace = 'prose' } = {}) => {
     let index = 0;
     for (const char of text) {
       await page.keyboard.insertText(char);
-      await hold(/[，。·]/.test(char) ? 220 : [75, 110, 85, 140][index++ % 4]);
+      await hold(pace === 'code' ? 26 : /[，。·]/.test(char) ? 150 : [55, 80, 65, 95][index++ % 4]);
     }
   };
   // Only this recording session replaces the desktop-only execution boundary.
@@ -211,14 +205,31 @@ try {
   recorder = await startLosslessVideo(page, ffmpeg, videoPath, { ...recordingSize, fps, isMoving: () => pointerMoving });
   recordingStartedAt = Date.now();
 
-  await chapter('所见即所得');
-  await hold(1500);
-  const paragraph = page.locator('.milkdown-editor p').filter({ hasText: /^从一个想法开始。$/ });
-  await click(paragraph); await page.keyboard.press('End'); await page.keyboard.press('Enter');
-  await page.waitForFunction(() => document.querySelector('#demo-cursor')?.dataset.kind === 'text');
-  await typeText('让 '); await page.keyboard.type('**'); await typeText('灵感'); await page.keyboard.type('** ');
-  await typeText('自然成形，记录每一次发现。');
-  await hold(1100); await snapshot('01-wysiwyg');
+  await authorHeroNote(page, { click, doubleClick, typeText, hold, chapter, snapshot });
+  // Bind the authored sample to the recording workspace, then attach its tree.
+  // All Markdown content comes from the UI interactions above.
+  const authoredSource = await page.evaluate(async ({ notes, tree }) => {
+    const store = (await import('/src/store/useEditorStore.js')).default;
+    const { flushEditorBuffer, getBuffer } = await import('/src/utils/editorBuffer.js');
+    const state = store.getState();
+    flushEditorBuffer(state.activeTabId);
+    const source = getBuffer(state.activeTabId);
+    if (!source.includes('console.log(ideas.join') || !source.includes('写下灵感')) {
+      throw new Error('The authored document must be captured before attaching its knowledge tree');
+    }
+    const mdPath = notes + '/灵感笔记.md';
+    state.updateTabPath(state.activeTabId, mdPath, '灵感笔记.md');
+    store.getState().openFile({ path: notes + '/灵感笔记.mgtree', name: '灵感笔记.mgtree', content: tree });
+    store.getState().setActiveTab(mdPath);
+    const files = (await import('/src/store/useFileStore.js')).default;
+    files.getState().addRecentFile({ path: mdPath, name: '灵感笔记.md' });
+    files.getState().addRecentFile({ path: notes + '/灵感笔记.mgtree', name: '灵感笔记.mgtree' });
+    return source;
+  }, { notes: notes.replace(/\\/g, '/'), tree });
+  await fs.writeFile(path.join(notes, '灵感笔记.md'), authoredSource);
+  await page.getByRole('tab', { name: '知识树', exact: true }).waitFor();
+  await click(page.getByRole('tab', { name: '知识树', exact: true }));
+  await page.locator('.sidebar .knowledge-tree').waitFor();
 
   await chapter('所见即所得 · 真实运行代码');
   await click(page.locator('.sidebar .knowledge-tree').getByRole('button', { name: '运行 ideas.join()', exact: true }));
@@ -347,7 +358,8 @@ try {
     transparency: { light: 85, dark: 85 }, viewport: { width: 1280, height: 800 },
     output: 'screenshots/hero-demo.gif', resolution: recordingSize, colours: 256, frames: metadata.pages, fps, durationMs, capture: captured, fullFrameChecks,
     bytes: (await fs.stat(output)).size, backend: 'headless browser demo adapter; actual isolated Node.js execution', cursor: 'ghost-cursor paths; live CSS hit-testing; pointer hidden while typing', pointerStats,
-    caret: 'native blinking caret, preserved by continuous video capture', chapters, errors };
+    caret: 'native blinking caret, preserved by continuous video capture',
+    authoring: { createdFromBlank: true, newDocumentViaUI: true, basicSyntax: ['headings', 'emphasis', 'quote', 'tasks', 'fenced-code', 'table'], source: authoredSource }, chapters, errors };
   await fs.writeFile(path.join(artifacts, 'report.json'), JSON.stringify(report, null, 2));
   console.log(JSON.stringify(report, null, 2));
 } catch (error) {
