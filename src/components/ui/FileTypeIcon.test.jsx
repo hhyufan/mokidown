@@ -42,6 +42,21 @@ describe('folder icon integration', () => {
     expect(getFolderIconUrl('ngrx-actions')).toContain('folder-ngrx-actions');
     expect(getFolderIconUrl('vuex-store')).toContain('folder-vuex-store');
     expect(getFolderIconUrl('root')).toContain('folder-root');
+    for (const name of ['mysql', 'tomcat', 'en', 'zh', 'users', 'user']) {
+      expect(getFolderIconUrl(name)).toMatch(/data:image\/svg|\.svg/);
+    }
+    expect(getFolderIconUrl('ssh')).toContain('folder-console');
+    expect(getFolderIconUrl('jdk')).toContain('folder-java');
+    expect(getFolderIconUrl('share')).toContain('folder-shared');
+    expect(getFolderIconUrl('ndk')).toContain('folder-android');
+    expect(getFolderIconUrl('kotlinc')).toContain('folder-kotlin');
+    expect(getFolderIconUrl('microsoft')).toContain('folder-windows');
+    expect(getFolderIconUrl('installer')).toContain('folder-download');
+    expect(getFolderIconUrl('artifacts')).toContain('folder-packages');
+    expect(getFolderIconUrl('sites')).toContain('folder-public');
+    expect(getFolderIconUrl('network')).toContain('folder-server');
+    expect(getFolderIconUrl('charsets')).toContain('folder-font');
+    expect(getFolderIconUrl('default')).toContain('folder-config');
   });
 
   it('handles case, hidden folders, paths, and expanded icons', () => {
@@ -88,6 +103,8 @@ describe('folder icon integration', () => {
       ['Makefile', /makefile/],
       ['README.md', /readme/],
       ['notes.md', /markdown/],
+      ['data.pdb', /mysql-dolphin|data:image\/svg/],
+      ['app.swidtag', /swidtag|data:image\/svg/],
       ['DumpStack.log.tmp', /0097a7|tmp\.svg/],
       ['data.tmp', /0097a7|tmp\.svg/],
     ];

@@ -1,0 +1,338 @@
+[
+  {
+    "name": "annotation",
+    "file": "annotation.svg",
+    "type": "java",
+    "source": "自绘：参考 Atom Material Icons 截图的配色与图形"
+  },
+  {
+    "name": "aspect",
+    "file": "aspect.svg",
+    "type": "java",
+    "source": "自绘：参考 Atom Material Icons 截图的配色与图形"
+  },
+  {
+    "name": "chain",
+    "file": "chain.svg",
+    "type": "java",
+    "source": "自绘：参考 Atom Material Icons 截图的配色与图形"
+  },
+  {
+    "name": "config",
+    "file": "config.svg",
+    "type": "java",
+    "source": "自绘：参考 Atom Material Icons 截图的配色与图形"
+  },
+  {
+    "name": "context",
+    "file": "context.svg",
+    "type": "java",
+    "source": "自绘：参考 Atom Material Icons 截图的配色与图形"
+  },
+  {
+    "name": "controller",
+    "file": "controller.svg",
+    "type": "java",
+    "source": "自绘：参考 Atom Material Icons 截图的配色与图形"
+  },
+  {
+    "name": "dto",
+    "file": "dto.svg",
+    "type": "java",
+    "source": "自绘：参考 Atom Material Icons 截图的配色与图形"
+  },
+  {
+    "name": "entity",
+    "file": "entity.svg",
+    "type": "java",
+    "source": "自绘：参考 Atom Material Icons 截图的配色与图形"
+  },
+  {
+    "name": "enums",
+    "file": "enums.svg",
+    "type": "java",
+    "source": "自绘：参考 Atom Material Icons 截图的配色与图形"
+  },
+  {
+    "name": "exception",
+    "file": "exception.svg",
+    "type": "java",
+    "source": "自绘：参考 Atom Material Icons 截图的配色与图形"
+  },
+  {
+    "name": "extension",
+    "file": "extension.svg",
+    "type": "java",
+    "source": "自绘：参考 Atom Material Icons 截图的配色与图形"
+  },
+  {
+    "name": "filter",
+    "file": "filter.svg",
+    "type": "java",
+    "source": "自绘：参考 Atom Material Icons 截图的配色与图形"
+  },
+  {
+    "name": "global",
+    "file": "global.svg",
+    "type": "java",
+    "source": "自绘：参考 Atom Material Icons 截图的配色与图形"
+  },
+  {
+    "name": "handler",
+    "file": "handler.svg",
+    "type": "java",
+    "source": "自绘：参考 Atom Material Icons 截图的配色与图形"
+  },
+  {
+    "name": "listener",
+    "file": "listener.svg",
+    "type": "java",
+    "source": "自绘：参考 Atom Material Icons 截图的配色与图形"
+  },
+  {
+    "name": "mapper",
+    "file": "mapper.svg",
+    "type": "java",
+    "source": "自绘：参考 Atom Material Icons 截图的配色与图形"
+  },
+  {
+    "name": "point",
+    "file": "point.svg",
+    "type": "java",
+    "source": "自绘：参考 Atom Material Icons 截图的配色与图形"
+  },
+  {
+    "name": "request",
+    "file": "request.svg",
+    "type": "java",
+    "source": "自绘：参考 Atom Material Icons 截图的配色与图形"
+  },
+  {
+    "name": "response",
+    "file": "response.svg",
+    "type": "java",
+    "source": "自绘：参考 Atom Material Icons 截图的配色与图形"
+  },
+  {
+    "name": "runner",
+    "file": "runner.svg",
+    "type": "java",
+    "source": "自绘：参考 Atom Material Icons 截图的配色与图形"
+  },
+  {
+    "name": "service",
+    "file": "service.svg",
+    "type": "java",
+    "source": "自绘：参考 Atom Material Icons 截图的配色与图形"
+  },
+  {
+    "name": "util",
+    "file": "util.svg",
+    "type": "java",
+    "source": "自绘：参考 Atom Material Icons 截图的配色与图形"
+  },
+  {
+    "name": "wrapper",
+    "file": "wrapper.svg",
+    "type": "java",
+    "source": "自绘：参考 Atom Material Icons 截图的配色与图形"
+  },
+  {
+    "name": ".mvn",
+    "file": "mvn.svg",
+    "type": "copy",
+    "source": "自建：material 的 Maven 羽毛路径，单色填充"
+  },
+  {
+    "name": ".sys",
+    "file": "sys.svg",
+    "type": "custom",
+    "source": "自绘：Windows 四格窗（系统/驱动文件）"
+  },
+  {
+    "name": ".csharp",
+    "file": "csharp.svg",
+    "type": "copy",
+    "source": "自建：csharp.svg 路径 + 品牌紫文件夹"
+  },
+  {
+    "name": "mybatis",
+    "file": "mybatis.svg",
+    "type": "glyph",
+    "source": "自建组合：文件夹 + 品牌字母「M」"
+  },
+  {
+    "name": "mysql",
+    "file": "mysql.svg",
+    "type": "dolphin-folder",
+    "source": "自建组合：material 文件夹 + vscode-icons 的海豚路径（与文件图标同一海豚）"
+  },
+  {
+    "name": "mysql 文件",
+    "file": "mysql-dolphin.svg",
+    "type": "dolphin-file",
+    "source": "自绘组合：海豚文件图标（.pdb / .frm / .ibd / .myd 等 MySQL 文件共用）"
+  },
+  {
+    "name": "spring",
+    "file": "spring.svg",
+    "type": "devicon",
+    "source": "自建组合：material 文件夹 + devicon 的 Spring 叶子"
+  },
+  {
+    "name": "ssh",
+    "file": "ssh.svg",
+    "type": "copy",
+    "source": "库内现成 folder-console.svg（终端/远程）"
+  },
+  {
+    "name": "Users",
+    "file": "users.svg",
+    "type": "users",
+    "source": "自建组合：文件夹 + 双人形轮廓"
+  },
+  {
+    "name": "home",
+    "file": "home.svg",
+    "type": "copy",
+    "source": "库内现成 folder-home.svg（主目录）"
+  },
+  {
+    "name": "user",
+    "file": "user.svg",
+    "type": "user",
+    "source": "自建组合：文件夹 + 单人形轮廓"
+  },
+  {
+    "name": ".swidtag",
+    "file": "swidtag.svg",
+    "type": "custom",
+    "source": "自绘：软件标识标签（SWID tag）"
+  },
+  {
+    "name": "zh",
+    "file": "zh.svg",
+    "type": "glyph",
+    "source": "自建组合：文件夹 + 文字「文」"
+  },
+  {
+    "name": "en",
+    "file": "en.svg",
+    "type": "font-a",
+    "source": "参考 folder-font：蓝文件夹 + 浅蓝 A 字形（复用 folder-font 的字母路径，换色）"
+  },
+  {
+    "name": "tomcat",
+    "file": "tomcat.svg",
+    "type": "devicon-multi",
+    "source": "自建组合：品牌橙文件夹 + devicon 的彩色 Tomcat"
+  },
+  {
+    "name": "python",
+    "file": "python.svg",
+    "type": "copy",
+    "source": "库内现成 folder-python.svg"
+  },
+  {
+    "name": "jdk",
+    "file": "jdk.svg",
+    "type": "copy",
+    "source": "库内现成 folder-java.svg（JDK 直接用）"
+  },
+  {
+    "name": "kotlin",
+    "file": "kotlin.svg",
+    "type": "copy",
+    "source": "库内现成 folder-kotlin.svg"
+  },
+  {
+    "name": "kotlinc",
+    "file": "kotlinc.svg",
+    "type": "copy",
+    "source": "复用库内 folder-kotlin.svg（Kotlin 编译器目录）"
+  },
+  {
+    "name": "NDK",
+    "file": "ndk.svg",
+    "type": "copy",
+    "source": "库内现成 folder-android.svg（Android NDK）"
+  },
+  {
+    "name": "share",
+    "file": "share.svg",
+    "type": "copy",
+    "source": "库内现成 folder-shared.svg"
+  },
+  {
+    "name": "charsets",
+    "file": "charsets.svg",
+    "type": "copy",
+    "source": "库内语义 folder-font.svg（字符集/字体）"
+  },
+  {
+    "name": "default",
+    "file": "default.svg",
+    "type": "copy",
+    "source": "库内语义 folder-config.svg（默认配置）"
+  },
+  {
+    "name": "AppData",
+    "file": "appdata.svg",
+    "type": "copy",
+    "source": "库内现成 folder-windows.svg（Windows 系统目录）"
+  },
+  {
+    "name": "Local",
+    "file": "local.svg",
+    "type": "copy",
+    "source": "复用 folder-windows.svg"
+  },
+  {
+    "name": "Roming",
+    "file": "roming.svg",
+    "type": "copy",
+    "source": "复用 folder-windows.svg（Roaming）"
+  },
+  {
+    "name": "Microsoft",
+    "file": "microsoft.svg",
+    "type": "copy",
+    "source": "复用 folder-windows.svg"
+  },
+  {
+    "name": "NetWork",
+    "file": "network.svg",
+    "type": "copy",
+    "source": "库内语义 folder-server.svg（网络目录）"
+  },
+  {
+    "name": "dist",
+    "file": "dist.svg",
+    "type": "copy",
+    "source": "库内现成 folder-dist.svg"
+  },
+  {
+    "name": "artifacts",
+    "file": "artifacts.svg",
+    "type": "copy",
+    "source": "库内语义 folder-packages.svg（构建产物）"
+  },
+  {
+    "name": "sites",
+    "file": "sites.svg",
+    "type": "copy",
+    "source": "库内语义 folder-public.svg（站点）"
+  },
+  {
+    "name": "installer",
+    "file": "installer.svg",
+    "type": "copy",
+    "source": "库内语义 folder-download.svg（安装包）"
+  },
+  {
+    "name": "image",
+    "file": "image.svg",
+    "type": "copy",
+    "source": "库内现成 folder-images.svg（模糊匹配 *image*）"
+  }
+]
