@@ -17,26 +17,9 @@ const iconUrls = Object.fromEntries(
   ]),
 );
 
-// 语言/技术栈目录没有 folder-* 图标时，退回同名的品牌图标（文件图标）。
-// 上游只提供了 csharp.svg / visualstudio.svg，没有 folder-csharp。
-const brandAssets = import.meta.glob([
-  '/node_modules/material-icon-theme/icons/csharp.svg',
-  '/node_modules/material-icon-theme/icons/visualstudio.svg',
-], {
-  eager: true,
-  query: '?url&no-inline',
-  import: 'default',
-});
-const brandUrls = Object.fromEntries(
-  Object.entries(brandAssets).map(([path, url]) => [
-    path.split('/').pop().replace(/\.svg$/, ''),
-    url,
-  ]),
-);
-
 /**
  * 上游 5.40 提供了图标文件，但 folderNames 没登记对应目录名的情况。
- * 这里只补数据缺口，语义按图标本身的含义来。
+ * 只补 folder-* 图标（保持文件夹形状），不使用文件/品牌图标充当目录图标。
  */
 const FOLDER_ALIASES = {
   react: 'folder-react-components',
@@ -62,15 +45,6 @@ const FOLDER_ALIASES = {
   root: 'folder-root',
 };
 
-/** 目录名直接对应品牌图标（没有 folder-* 版本时）。 */
-const BRAND_FOLDERS = {
-  csharp: 'csharp',
-  'c-sharp': 'csharp',
-  cs: 'csharp',
-  dotnet: 'visualstudio',
-  '.net': 'visualstudio',
-};
-
 export function getFolderIconUrl(folderName = '', isExpanded = false) {
   const name = String(folderName).replace(/\\/g, '/').replace(/\/+$/, '').split('/').pop().toLowerCase();
   const names = isExpanded ? folderNamesExpanded : folderNames;
@@ -78,9 +52,6 @@ export function getFolderIconUrl(folderName = '', isExpanded = false) {
 
   const alias = FOLDER_ALIASES[name];
   if (alias) return iconUrls[isExpanded ? `${alias}-open` : alias] || iconUrls[alias] || null;
-
-  const brand = BRAND_FOLDERS[name];
-  if (brand) return brandUrls[brand] || null;
 
   return null;
 }
