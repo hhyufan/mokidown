@@ -10,6 +10,7 @@ import {
   fileExtensions,
   iconDefinitions,
 } from 'material-icon-theme/dist/material-icons.json';
+import tmpIconUrl from '../assets/file-icons/tmp.svg?url';
 
 // 只引用图标资源，不把 SVG 内联进 JS；Vite 会为每个文件生成一个 URL。
 const assets = import.meta.glob('/node_modules/material-icon-theme/icons/*.svg', {
@@ -35,6 +36,11 @@ const lowerFileNames = new Map(
 const lowerExtensions = new Map(
   Object.entries(fileExtensions).map(([extension, icon]) => [extension.toLowerCase(), icon]),
 );
+
+/** 上游没有、由本地补充的扩展名图标（时钟取自 folder-temp 的非文件夹部分）。 */
+const LOCAL_EXTENSION_ICONS = {
+  tmp: tmpIconUrl,
+};
 
 /** 图标定义名 → SVG URL。 */
 function iconUrl(iconName) {
@@ -73,5 +79,6 @@ export function getFileIconUrl(fileName = '', extension = '') {
   const raw = String(extension || '').trim() || (name.includes('.') ? name.split('.').pop() : '');
   const normalized = raw.replace(/^\./, '').toLowerCase();
   if (!normalized) return null;
+  if (LOCAL_EXTENSION_ICONS[normalized]) return LOCAL_EXTENSION_ICONS[normalized];
   return iconUrl(lowerExtensions.get(normalized) || fileExtensions[normalized]) || null;
 }

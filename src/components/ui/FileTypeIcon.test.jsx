@@ -85,6 +85,8 @@ describe('folder icon integration', () => {
       ['Makefile', /makefile/],
       ['README.md', /readme/],
       ['notes.md', /markdown/],
+      ['DumpStack.log.tmp', /0097a7|tmp\.svg/],
+      ['data.tmp', /0097a7|tmp\.svg/],
     ];
     for (const [fileName, pattern] of cases) {
       const { container } = render(<FileTypeIcon fileName={fileName} />);
