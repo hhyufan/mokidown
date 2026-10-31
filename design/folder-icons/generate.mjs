@@ -168,7 +168,7 @@ for (const item of items) {
   } else if (item.type === 'dolphin-folder') {
     fs.writeFileSync(outPath, `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16">${folderBase(item.color)}${dolphinMarkup(item.motive, 'translate(2.4 0.14) scale(0.42)')}</svg>\n`);
   } else if (item.type === 'dolphin-file') {
-    fs.writeFileSync(outPath, `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16">${dolphinMarkup(item.color, 'translate(-1.9 -4.1) scale(0.55)')}</svg>\n`);
+    fs.writeFileSync(outPath, `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16">${dolphinMarkup(item.color, 'translate(-1 -2.8) scale(0.5)')}</svg>\n`);
     sourceImg = 'vscode-icons dolphin';
   } else if (item.type === 'brand') {
     const d = [...fs.readFileSync(`${ICONS}/${item.icon}.svg`, 'utf8').matchAll(/<path[^>]*\sd="([^"]+)"/g)].map((m) => m[1])[0];
