@@ -3,6 +3,7 @@ import {
   folderNamesExpanded,
 } from 'material-icon-theme/dist/material-icons.json';
 import folderCsharpUrl from '../assets/file-icons/folder-csharp.svg?url';
+import folderMvnUrl from '../assets/file-icons/folder-mvn.svg?url';
 
 // Only bundle folder assets. Keep SVGs as local files instead of inlining the
 // entire collection into JavaScript; Vite also resolves these URLs in web demos.
@@ -55,6 +56,9 @@ const LOCAL_FOLDER_ICONS = {
   'c-sharp': folderCsharpUrl,
   cs: folderCsharpUrl,
   dotnet: folderCsharpUrl,
+  mvn: folderMvnUrl,
+  '.mvn': folderMvnUrl,
+  maven: folderMvnUrl,
 };
 
 export function getFolderIconUrl(folderName = '', isExpanded = false) {
