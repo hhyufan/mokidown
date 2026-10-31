@@ -1,5 +1,8 @@
-import { useEffect, useState } from 'react';
+import { lazy, Suspense, useEffect, useState } from 'react';
 import { getMaterialIcons, loadMaterialIcons } from '@utils/materialIcons';
+import { getFileIconUrl } from '@utils/fileIcons';
+
+const FolderTypeIcon = lazy(() => import('./FolderTypeIcon'));
 
 const EXTENSION_ALIASES = {
   markdown: 'md',
@@ -61,7 +64,7 @@ function LightweightFallback({
   );
 }
 
-function FileTypeIcon(props) {
+function MaterialFileTypeIcon(props) {
   const { extension = '', fileName = '', size = 16, className = '', isFolder = false, isExpanded = false } = props;
   const [FullIcon, setFullIcon] = useState(() => getMaterialIcons()?.FileIcon);
   // .mgtree 是本应用自定义的树格式：用图标集里的多色树形图标，而不是通用文档图标。
@@ -106,7 +109,7 @@ function FileTypeIcon(props) {
   }, []);
 
   // 树文件优先用多色树形图标；图标模块尚未加载时回落到下面带颜色的占位图。
-  if (ext === 'mgtree' && TreeIcon) {
+  if (!isFolder && ext === 'mgtree' && TreeIcon) {
     return <TreeIcon width={size} height={size} className={className} aria-hidden="true" />;
   }
 
@@ -121,6 +124,36 @@ function FileTypeIcon(props) {
       isExpanded={isExpanded}
     />
   );
+}
+
+function FileTypeIcon(props) {
+  if (props.isFolder) {
+    const fallback = <MaterialFileTypeIcon {...props} />;
+    return (
+      <Suspense fallback={<LightweightFallback {...props} />}>
+        <FolderTypeIcon {...props} fallback={fallback} />
+      </Suspense>
+    );
+  }
+
+  // 官方完整映射（fileNames + fileExtensions）优先，覆盖第三方包里的裁剪表。
+  const iconUrl = getFileIconUrl(props.fileName, props.extension);
+  if (iconUrl) {
+    const size = props.size || 16;
+    return (
+      <img
+        src={iconUrl}
+        width={size}
+        height={size}
+        className={props.className}
+        alt=""
+        aria-hidden="true"
+        draggable={false}
+      />
+    );
+  }
+
+  return <MaterialFileTypeIcon {...props} />;
 }
 
 export default FileTypeIcon;
