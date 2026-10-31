@@ -28,6 +28,11 @@ describe('folder icon integration', () => {
     for (const url of urls) expect(url).not.toBe(fallback);
     expect(getFolderIconUrl('dev')).toContain('folder-development.clone.svg');
     expect(getFolderIconUrl('constructor')).toBe(fallback);
+    expect(getFolderIconUrl('react')).toContain('folder-react-components.svg');
+    expect(getFolderIconUrl('react-components')).toContain('folder-react-components.svg');
+    expect(getFolderIconUrl('redux')).toContain('folder-redux-actions');
+    expect(getFolderIconUrl('state')).toContain('folder-ngrx-state');
+    expect(getFolderIconUrl('react', true)).toContain('folder-react-components-open.svg');
   });
 
   it('handles case, hidden folders, paths, and expanded icons', () => {
