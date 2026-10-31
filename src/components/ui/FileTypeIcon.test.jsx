@@ -33,6 +33,12 @@ describe('folder icon integration', () => {
     expect(getFolderIconUrl('redux')).toContain('folder-redux-actions');
     expect(getFolderIconUrl('state')).toContain('folder-ngrx-state');
     expect(getFolderIconUrl('react', true)).toContain('folder-react-components-open.svg');
+    expect(getFolderIconUrl('csharp')).toContain('csharp.svg');
+    expect(getFolderIconUrl('CSharp')).toBe(getFolderIconUrl('csharp'));
+    expect(getFolderIconUrl('dotnet')).toContain('visualstudio.svg');
+    expect(getFolderIconUrl('ngrx-actions')).toContain('folder-ngrx-actions');
+    expect(getFolderIconUrl('vuex-store')).toContain('folder-vuex-store');
+    expect(getFolderIconUrl('root')).toContain('folder-root');
   });
 
   it('handles case, hidden folders, paths, and expanded icons', () => {
