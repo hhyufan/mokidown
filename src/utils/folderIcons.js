@@ -2,6 +2,7 @@ import {
   folderNames,
   folderNamesExpanded,
 } from 'material-icon-theme/dist/material-icons.json';
+import folderCsharpUrl from '../assets/file-icons/folder-csharp.svg?url';
 
 // Only bundle folder assets. Keep SVGs as local files instead of inlining the
 // entire collection into JavaScript; Vite also resolves these URLs in web demos.
@@ -45,6 +46,17 @@ const FOLDER_ALIASES = {
   root: 'folder-root',
 };
 
+/**
+ * 本地补充的文件夹图标：官方没有 folder-csharp，用同一套文件夹形状 + C# 品牌色
+ * 与单色 Logo 合成（Logo 取 csharp.svg 的路径，颜色比品牌色浅）。
+ */
+const LOCAL_FOLDER_ICONS = {
+  csharp: folderCsharpUrl,
+  'c-sharp': folderCsharpUrl,
+  cs: folderCsharpUrl,
+  dotnet: folderCsharpUrl,
+};
+
 export function getFolderIconUrl(folderName = '', isExpanded = false) {
   const name = String(folderName).replace(/\\/g, '/').replace(/\/+$/, '').split('/').pop().toLowerCase();
   const names = isExpanded ? folderNamesExpanded : folderNames;
@@ -52,6 +64,9 @@ export function getFolderIconUrl(folderName = '', isExpanded = false) {
 
   const alias = FOLDER_ALIASES[name];
   if (alias) return iconUrls[isExpanded ? `${alias}-open` : alias] || iconUrls[alias] || null;
+
+  const local = LOCAL_FOLDER_ICONS[name];
+  if (local) return local;
 
   return null;
 }
