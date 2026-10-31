@@ -36,6 +36,9 @@ describe('folder icon integration', () => {
     expect(getFolderIconUrl('csharp')).toMatch(/folder-csharp|data:image\/svg/);
     expect(getFolderIconUrl('CSharp')).toBe(getFolderIconUrl('csharp'));
     expect(getFolderIconUrl('dotnet')).toBe(getFolderIconUrl('csharp'));
+    expect(getFolderIconUrl('.mvn')).toMatch(/folder-mvn|data:image\/svg/);
+    expect(getFolderIconUrl('mvn')).toBe(getFolderIconUrl('.mvn'));
+    expect(getFolderIconUrl('maven')).toBe(getFolderIconUrl('.mvn'));
     expect(getFolderIconUrl('ngrx-actions')).toContain('folder-ngrx-actions');
     expect(getFolderIconUrl('vuex-store')).toContain('folder-vuex-store');
     expect(getFolderIconUrl('root')).toContain('folder-root');
