@@ -22,7 +22,18 @@ import usePluginContributions from '@store/usePluginContributions';
 import ChevronIcon from '@components/ui/ChevronIcon';
 import { isSafUri, safDisplayName } from '@utils/tauriApi';
 import FileNameField, { splitFileName, DEFAULT_FILE_EXTENSION } from './FileNameField';
+import VirtualFileList from './VirtualFileList';
+import { sortDirectoryContents } from '@utils/directoryContents';
+import { getFileIconUrl } from '@utils/fileIcons';
+import { getFolderIconUrl } from '@utils/folderIcons';
+import folderDefaultUrl from '../../../../assets/file-icons/folder-default.svg?url';
+import fileDefaultUrl from '../../../../assets/file-icons/file-default.svg?url';
+import { ensureDirectoryRange, getIndexedFile } from '@/services/workspaceFiles';
 import './file-tree.scss';
+
+function FileRowTooltip({ defer, children, ...props }) {
+  return defer ? children : <Tooltip {...props}>{children}</Tooltip>;
+}
 
 /**
  * 根据面包屑索引重建可跳转的目录路径。
@@ -86,6 +97,9 @@ function getParentDir(currentDir) {
 function FileTree() {
   const { t } = useTranslation();
   const files = useFileStore((s) => s.files);
+  const directoryIndex = useFileStore((s) => s.directoryIndex);
+  const directoryLoading = useFileStore((s) => s.directoryLoading);
+  const directoryError = useFileStore((s) => s.directoryError);
   const fileBadges = usePluginContributions((s) => s.fileBadges);
   const currentDir = useFileStore((s) => s.currentDir);
   const historyIndex = useFileStore((s) => s.historyIndex);
@@ -109,6 +123,7 @@ function FileTree() {
   // 行内重命名：记录正在改的那一项，以及拆开的主名与后缀
   // （拆开是为了复用与新建完全相同的输入行——那里主名与后缀是两个控件）。
   const [renamingPath, setRenamingPath] = useState(null);
+  const [renamingEntry, setRenamingEntry] = useState(null);
   const [renamingStem, setRenamingStem] = useState('');
   const [renamingExt, setRenamingExt] = useState('');
   const [breadcrumbExpanded, setBreadcrumbExpanded] = useState(false);
@@ -322,11 +337,12 @@ function FileTree() {
    * @param {Event} [event] 触发事件，用于拦住冒泡（否则会顺带打开文件）。
    * @returns {void}
    */
-  const startRenaming = useCallback((file, event) => {
+  const startRenaming = useCallback((file, event, index) => {
     event?.stopPropagation();
     // 双击会先触发两次单击，其中一次可能已经把文件打开了；这里只关心进入编辑态。
     const { stem, extension } = splitFileName(file.name);
     setRenamingPath(file.path);
+    setRenamingEntry({ file, index });
     setRenamingStem(stem);
     setRenamingExt(extension);
   }, []);
@@ -338,6 +354,7 @@ function FileTree() {
    */
   const cancelRenaming = useCallback(() => {
     setRenamingPath(null);
+    setRenamingEntry(null);
     setRenamingStem('');
     setRenamingExt('');
   }, []);
@@ -364,23 +381,14 @@ function FileTree() {
   // 切换目录时重置新建文件状态，并恢复面包屑折叠态。
   useEffect(() => {
     cancelCreatingFile();
+    cancelRenaming();
     setBreadcrumbExpanded(false);
   }, [currentDir]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // 文件与目录排序规则：目录优先，其次按用户选择字段排序。
-  const sortedFiles = useMemo(() => {
-    const direction = sortOrder === 'desc' ? -1 : 1;
-    return [...files].sort((a, b) => {
-      if (a.is_dir && !b.is_dir) return -1;
-      if (!a.is_dir && b.is_dir) return 1;
-      let cmp = 0;
-      if (sortBy === 'size') cmp = (a.size || 0) - (b.size || 0);
-      else if (sortBy === 'time') cmp = (a.modified || 0) - (b.modified || 0);
-      else cmp = a.name.localeCompare(b.name, undefined, { numeric: true, sensitivity: 'base' });
-      if (cmp === 0) cmp = a.name.localeCompare(b.name, undefined, { numeric: true, sensitivity: 'base' });
-      return cmp * direction;
-    });
-  }, [files, sortBy, sortOrder]);
+  const snapshotId = directoryIndex?.id;
+  const sortedFiles = useMemo(() => snapshotId ? [] : sortDirectoryContents(files, { sortBy, sortOrder }),
+    [snapshotId, files, sortBy, sortOrder]);
 
   // 面包屑展示数据。
   const breadcrumbParts = currentDir
@@ -565,20 +573,47 @@ function FileTree() {
       </div>
 
       <DeleteFileModal file={deleteTarget} loading={deleting} onConfirm={confirmDeletion} onCancel={() => { if (!deletingRef.current) setDeleteTarget(null); }} />
-      {/* 文件列表主体。 */}
-      <div className="file-tree__list">
-        {sortedFiles.map((file) => {
+      {directoryLoading && <div className="file-tree__status" role="status">{t('sidebar.explorer.loadingDirectory')}</div>}
+      {directoryError && <div className="file-tree__status" role="alert">{directoryError}</div>}
+      {/* Only visible rows exist in the DOM; native directories retain a bounded page cache. */}
+      <VirtualFileList
+        key={`${currentDir}:${sortBy}:${sortOrder}`}
+        count={directoryIndex?.total ?? sortedFiles.length}
+        dataVersion={directoryIndex?.id}
+        loadingLabel={t('sidebar.explorer.loadingFiles')}
+        onRangeChange={directoryIndex ? ensureDirectoryRange : undefined}
+        pinnedIndex={renamingEntry?.index}
+        renderRow={(index, style, { deferDetails }) => {
+          const file = renamingEntry?.index === index ? renamingEntry.file
+            : directoryIndex ? getIndexedFile(directoryIndex, index) : sortedFiles[index];
+          if (!file) return <div key={`pending-${index}`} className="file-tree__item file-tree__item--pending" style={style} aria-hidden="true" />;
           const ext = file.name.split('.').pop() || '';
           const isActive = activeTabId === file.path;
 
           return (
             <div
               key={file.path}
+              style={style}
+              role="listitem"
+              data-details={deferDetails ? 'deferred' : 'ready'}
+              aria-setsize={directoryIndex?.total ?? sortedFiles.length}
+              aria-posinset={index + 1}
               className={cn('file-tree__item', isActive && 'file-tree__item--active')}
               onClick={() => handleFileClick(file)}
             >
               <span className="file-tree__item-icon">
-                {file.is_dir
+                {deferDetails ? (() => {
+                  // Fast scrolling: skip the stateful FileTypeIcon, but still resolve the
+                  // real icon through the pure URL lookups so rows do not all turn into
+                  // the same brown folder / grey document placeholder.
+                  const deferredIcon = file.is_dir
+                    ? getFolderIconUrl(file.name)
+                    : getFileIconUrl(file.name, ext);
+                  if (deferredIcon) {
+                    return <img className="file-tree__deferred-icon" src={deferredIcon} width={16} height={16} alt="" draggable={false} />;
+                  }
+                  return <img className="file-tree__deferred-icon" src={file.is_dir ? folderDefaultUrl : fileDefaultUrl} width={16} height={16} alt="" draggable={false} />;
+                })() : file.is_dir
                   ? <FileTypeIcon fileName={file.name} isFolder />
                   : <FileTypeIcon extension={ext} fileName={file.name} />}
               </span>
@@ -593,15 +628,15 @@ function FileTree() {
                   autoFocus
                 />
               ) : (
-                <Tooltip title={file.name} placement="right" mouseEnterDelay={0.5}>
+                <FileRowTooltip defer={deferDetails} title={file.name} placement="right" mouseEnterDelay={0.5}>
                   <span
                     className="file-tree__item-name"
                     // 双击名字进入重命名，与资源管理器一致；不用额外按钮占位。
-                    onDoubleClick={(e) => { startRenaming(file, e); }}
+                    onDoubleClick={(e) => { startRenaming(file, e, index); }}
                   >
                     {file.name}
                     {(() => {
-                      if (file.is_dir) return null;
+                      if (deferDetails || file.is_dir) return null;
                       const extension = (file.name.split('.').pop() || '').toLowerCase();
                       const normalize = (value) => String(value || '').replace(/\\/g, '/');
                       const badge = fileBadges.find((entry) => {
@@ -617,11 +652,11 @@ function FileTree() {
                         : null;
                     })()}
                   </span>
-                </Tooltip>
+                </FileRowTooltip>
               )}
 
               {!file.is_dir && renamingPath !== file.path && (
-                <Tooltip title={t('sidebar.explorer.deleteFile')} placement="top" mouseEnterDelay={0.3}>
+                <FileRowTooltip defer={deferDetails} title={t('sidebar.explorer.deleteFile')} placement="top" mouseEnterDelay={0.3}>
                 <span
                   className="file-tree__item-del"
                   onClick={(e) => { handleDeleteFile(file, e); }}
@@ -631,11 +666,12 @@ function FileTree() {
                     <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
                   </svg>
                 </span>
-                </Tooltip>
+                </FileRowTooltip>
               )}
             </div>
           );
-        })}
+        }}
+      />
 
         {/* 行内新建文件输入行，固定追加在列表底部。 */}
         {isCreatingFile && (
@@ -659,7 +695,6 @@ function FileTree() {
             />
           </div>
         )}
-      </div>
     </div>
   );
 
