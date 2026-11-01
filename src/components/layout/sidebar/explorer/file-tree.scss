@@ -257,7 +257,12 @@
   flex: 1;
   min-height: 0;
   overflow-y: auto;
-  padding: 4px 0;
+  padding: 0;
+  overflow-anchor: none;
+
+  &[data-scrolling='fast'] .file-tree__item {
+    transition: none;
+  }
 
   &::-webkit-scrollbar {
     width: 4px;
@@ -265,6 +270,22 @@
   &::-webkit-scrollbar-track {
     background: transparent;
   }
+}
+
+.file-tree__status {
+  flex-shrink: 0;
+  padding: 6px 16px;
+  color: var(--text-sec);
+  font-size: 12px;
+  overflow-wrap: anywhere;
+}
+
+.file-tree__item--pending::after {
+  content: '';
+  width: 65%;
+  height: 8px;
+  border-radius: 4px;
+  background: var(--hover);
 }
 
 .file-tree__item {
@@ -416,4 +437,13 @@
     color: var(--error);
     background: rgba(255, 59, 48, 0.08);
   }
+}
+
+/* Fast-scroll rows use a plain <img> with the resolved icon URL instead of the
+   stateful FileTypeIcon, so deferred rows keep their real icons. */
+.file-tree__deferred-icon {
+  display: block;
+  width: 16px;
+  height: 16px;
+  flex: 0 0 16px;
 }
