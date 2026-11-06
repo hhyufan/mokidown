@@ -14,7 +14,7 @@ import useFileStore, { getScopedRecentFiles } from '@store/useFileStore';
 
 import { GUEST_USER_SCOPE } from '@store/userScope';
 import { useFileManager } from '@hooks/useFileManager';
-import FileTree from './explorer/FileTree';
+import ExplorerModes from './explorer/ExplorerModes';
 import OutlineView from './outline/OutlineView';
 import SidebarResizer from './SidebarResizer';
 import SidebarTabs from './SidebarTabs';
@@ -49,10 +49,10 @@ import './sidebar.scss';
  * @param {import('react').ReactNode} props.children 按钮图标或内容。
  * @returns {JSX.Element} 统一样式的工具栏按钮。
  */
-function ToolbarButton({ title, onClick, children }) {
+function ToolbarButton({ title, onClick, children, disabled = false }) {
   return (
     <Tooltip title={title} placement="bottom" mouseEnterDelay={0.3}>
-      <button type="button" className="stb" aria-label={title} onClick={onClick}>
+      <button type="button" className="stb" aria-label={title} onClick={onClick} disabled={disabled}>
         {children}
       </button>
     </Tooltip>
@@ -116,7 +116,13 @@ function renderSortDropdown({ sortBy, sortOrder, setSortBy, setSortOrder, t, clo
  */
 function ExplorerToolbar() {
   const { t } = useTranslation();
-  const { sortBy, sortOrder, setSortBy, setSortOrder } = useFileStore();
+  const sortBy = useFileStore((state) => state.sortBy);
+  const sortOrder = useFileStore((state) => state.sortOrder);
+  const setSortBy = useFileStore((state) => state.setSortBy);
+  const setSortOrder = useFileStore((state) => state.setSortOrder);
+  const explorerMode = useFileStore((state) => state.explorerMode);
+  const setExplorerMode = useFileStore((state) => state.setExplorerMode);
+  const projectRootCollapsed = useFileStore((state) => state.projectRootCollapsed);
   const { saveCurrentFile, openFolderDialog, createFileWithDialog } = useFileManager();
 
   const [sortOpen, setSortOpen] = useState(false);
@@ -124,7 +130,19 @@ function ExplorerToolbar() {
 
   return (
     <div className="sidebar__toolbar">
-      <span className="sidebar__toolbar-label">{t('sidebar.explorer.title')}</span>
+      <span className="sidebar__toolbar-label sidebar__explorer-heading">
+        {t(explorerMode === 'project' ? 'sidebar.project.title' : 'sidebar.explorer.title')}
+        <Tooltip title={t(explorerMode === 'project' ? 'sidebar.project.switchToFiles' : 'sidebar.project.switchToProject')} placement="bottom">
+          <button type="button" className="sidebar__mode-toggle"
+            aria-label={t(explorerMode === 'project' ? 'sidebar.project.switchToFiles' : 'sidebar.project.switchToProject')}
+            aria-pressed={explorerMode === 'project'}
+            onClick={() => setExplorerMode(explorerMode === 'project' ? 'files' : 'project')}>
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+              <path d="M19 7H5m4-4L5 7l4 4M5 17h14m-4-4 4 4-4 4" />
+            </svg>
+          </button>
+        </Tooltip>
+      </span>
       <div style={{ position: 'relative' }}>
         <Dropdown
           open={sortOpen}
@@ -141,7 +159,7 @@ function ExplorerToolbar() {
           </span>
         </Dropdown>
       </div>
-      <ToolbarButton title={t('sidebar.explorer.newFile')} onClick={createFileWithDialog}>
+      <ToolbarButton title={t('sidebar.explorer.newFile')} onClick={createFileWithDialog} disabled={explorerMode === 'project' && projectRootCollapsed}>
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M12 5v14M5 12h14" /></svg>
       </ToolbarButton>
       <ToolbarButton title={t('sidebar.explorer.save')} onClick={saveCurrentFile}>
@@ -399,7 +417,7 @@ function Sidebar({ onOpenSettings, onOpenStats }) {
         {effectiveView === 'explorer' && (
           <div className="sidebar__view">
             <ExplorerToolbar />
-            <FileTree />
+            <ExplorerModes />
             <Timeline />
             <PluginPanel />
           </div>

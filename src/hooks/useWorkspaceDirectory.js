@@ -4,6 +4,7 @@ import useNotificationStore from '@store/useNotificationStore';
 import { getDirectoryContents, isSafUri, onDirectoryChanged, startDirectoryWatching, stopDirectoryWatching } from '@utils/tauriApi';
 import { sortDirectoryContents } from '@utils/directoryContents';
 import i18n from '@/i18n';
+import { loadWorkspaceFiles, usesDirectoryIndex } from '@/services/workspaceFiles';
 
 // Mount once in App. File action consumers must not own native watchers.
 export function useWorkspaceDirectory(isAndroid) {
@@ -28,6 +29,10 @@ export function useWorkspaceDirectory(isAndroid) {
       refreshing = true;
       const requestRevision = revision;
       try {
+        if (usesDirectoryIndex(currentDir)) {
+          await loadWorkspaceFiles(currentDir, { isCurrent: () => !disposed && revision === requestRevision });
+          return;
+        }
         const contents = await getDirectoryContents(currentDir);
         const state = useFileStore.getState();
         if (!disposed && state.currentDir === currentDir && revision === requestRevision) {

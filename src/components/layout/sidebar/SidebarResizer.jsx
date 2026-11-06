@@ -22,10 +22,16 @@ export default function SidebarResizer() {
     onPointerDown={(event) => {
       if (event.button !== 0) return;
       event.preventDefault();
+      event.currentTarget.dataset.resizing = 'true';
       event.currentTarget.setPointerCapture(event.pointerId);
       drag.current = { x: event.clientX, width: event.currentTarget.parentElement.getBoundingClientRect().width };
     }}
     onPointerMove={(event) => { if (drag.current) update(drag.current.width + event.clientX - drag.current.x); }}
-    onPointerUp={(event) => { drag.current = null; event.currentTarget.releasePointerCapture(event.pointerId); }}
-    onPointerCancel={() => { drag.current = null; }} onLostPointerCapture={() => { drag.current = null; }} />;
+    onPointerUp={(event) => {
+      drag.current = null;
+      delete event.currentTarget.dataset.resizing;
+      if (event.currentTarget.hasPointerCapture(event.pointerId)) event.currentTarget.releasePointerCapture(event.pointerId);
+    }}
+    onPointerCancel={(event) => { drag.current = null; delete event.currentTarget.dataset.resizing; }}
+    onLostPointerCapture={(event) => { drag.current = null; delete event.currentTarget.dataset.resizing; }} />;
 }
