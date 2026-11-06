@@ -1,0 +1,25 @@
+// A handle owns its layout track. Never enlarge the pointer target with negative
+// offsets or pseudo-elements over a neighbouring pane's scrollbar.
+$track-size: 3px;
+
+@mixin surface {
+  position: relative;
+  flex-shrink: 0;
+  overflow: hidden;
+  z-index: 1;
+  cursor: col-resize;
+  touch-action: none;
+  user-select: none;
+  background: linear-gradient(var(--border), var(--border)) center / 1px 100% no-repeat;
+
+  &:hover,
+  &:focus-visible,
+  &[data-resizing='true'] {
+    background-image: linear-gradient(var(--accent), var(--accent));
+  }
+
+  &:focus-visible {
+    outline: none;
+    box-shadow: inset 0 0 0 1px var(--accent);
+  }
+}

@@ -58,10 +58,17 @@ const useFileStore = create(
       dirHistory: [],
       historyIndex: -1,
       files: [],
+      directoryIndex: null,
+      directoryLoading: false,
+      directoryError: '',
       recentFiles: [],
       bookmarkedPaths: [],
       sortBy: 'name',
       sortOrder: 'asc',
+      explorerMode: 'files',
+      // Project tree root collapsed: the New File action is disabled there.
+      projectRootCollapsed: false,
+      setExplorerMode: (mode) => set({ explorerMode: mode === 'project' ? 'project' : 'files' }),
 
       // `setCurrentDir` 会推进目录浏览历史；若只是刷新同一路径的文件列表，应
       // 交给 `useFileManager.loadFilesOnly()`，避免回退栈被重复目录污染。
@@ -112,12 +119,15 @@ const useFileStore = create(
         set({
           currentDir: '',
           files: [],
+          directoryIndex: null,
+          directoryLoading: false,
+          directoryError: '',
           dirHistory: [],
           historyIndex: -1,
         }),
 
       /** ?????????????????? */
-      setFiles: (files) => set({ files }),
+      setFiles: (files) => set({ files, directoryIndex: null, directoryLoading: false, directoryError: '' }),
 
       /**
        * 追加最近文件时，只重排当前用户自己的列表，其他账号数据保持原样。
@@ -231,6 +241,7 @@ const useFileStore = create(
         currentDir: state.currentDir,
         sortBy: state.sortBy,
         sortOrder: state.sortOrder,
+        explorerMode: state.explorerMode,
       }),
     }
   )
