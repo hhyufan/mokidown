@@ -227,6 +227,90 @@ test('a formula block can be selected and exited without changing its expression
   expect(await page.evaluate(() => window.trial.markdown())).toContain('x^2+y^2');
 });
 
+test('typing double dollars and a space opens a formula editor that shows only its body', async ({ page }) => {
+  const errors = [];
+  page.on('pageerror', (error) => errors.push(error.message));
+  await open(page, '');
+  await page.evaluate(() => window.trial.selectTextblock(0));
+  await page.keyboard.type('$$ ');
+  const source = page.locator('.md-preview__math-source--block');
+  await expect(source).toBeVisible();
+  await expect(source).toHaveText('');
+  await page.keyboard.type('x^2+1');
+  await page.keyboard.press('Enter');
+  await page.keyboard.type('+2');
+  expect(await source.textContent()).toBe('x^2+1\n+2');
+  await page.keyboard.press('Control+Enter');
+  await expect(page.locator('.md-preview__math--block .katex')).toBeVisible();
+  expect(await page.evaluate(() => window.trial.markdown())).toContain('$$\nx^2+1\n+2\n$$');
+  expect(errors).toEqual([]);
+});
+
+test('Backspace and Delete remove a blank formula and leave a writable paragraph', async ({ page }) => {
+  await open(page, '');
+  await page.evaluate(() => window.trial.selectTextblock(0));
+  await page.keyboard.type('$$ ');
+  const source = page.locator('.md-preview__math-source--block');
+  await expect(source).toHaveText('');
+  await page.keyboard.press('Backspace');
+  await expect(source).toHaveCount(0);
+  await page.keyboard.press('Control+z');
+  await expect(source).toHaveText('');
+  await page.keyboard.press('Delete');
+  await expect(source).toHaveCount(0);
+  await page.keyboard.type('Prose');
+  await expect(page.locator('.milkdown-editor > p')).toHaveText('Prose');
+  expect(await page.evaluate(() => window.trial.markdown().trim())).toBe('Prose');
+});
+
+test('an empty rendered formula can be deleted between existing paragraphs', async ({ page }) => {
+  await open(page, 'Before\n\n$$\n$$\n\nAfter');
+  const formula = page.locator('.md-preview__math--block');
+  await formula.click();
+  await page.keyboard.press('Delete');
+  await expect(formula).toHaveCount(0);
+  await expect(page.locator('.milkdown-editor > p')).toHaveText(['Before', 'After']);
+});
+
+test('two undos after Backspace opens formula source restore the two previous edits', async ({ page }) => {
+  const errors = [];
+  page.on('pageerror', (error) => errors.push(error.message));
+  await open(page, 'Before\n\n$$\nx^2\n$$\n');
+  await page.evaluate(() => window.trial.selectTextblock(0, 'end'));
+  await page.keyboard.type('!');
+  await page.locator('.md-preview__math--block').click();
+  await page.keyboard.press('Backspace');
+  const source = page.locator('.md-preview__math-source--block');
+  await expect(source).toBeVisible();
+  await expect.poll(() => page.evaluate(() => window.trial.buffer())).toContain('$$\nx^\n$$');
+  const rendered = page.locator('.md-preview__math--block');
+  const undo = page.locator('[role="menuitem"][aria-keyshortcuts="Control+Z"]');
+  await source.click({ button: 'right' });
+  await undo.click();
+  await expect(rendered).toHaveAttribute('data-value', 'x^2');
+  await expect.poll(() => page.evaluate(() => window.trial.buffer())).toContain('$$\nx^2\n$$');
+  await rendered.click({ button: 'right' });
+  await undo.click();
+  await expect(page.locator('.milkdown-editor > p')).toHaveText('Before');
+  await page.keyboard.press('Control+y');
+  await page.keyboard.press('Control+y');
+  await expect(source).toBeVisible();
+  expect(errors).toEqual([]);
+});
+
+test('folding two adjacent formula sources maps the second replacement to the changed document', async ({ page }) => {
+  await open(page, 'After');
+  await page.evaluate(() => window.trial.dispatch(({ schema, tr }) => {
+    const source = (value) => schema.nodes.math_source_block.create(null, schema.text(value));
+    return tr.insert(0, [source('x + x + x + x'), source('y')]);
+  }));
+  const formulas = page.locator('.md-preview__math--block');
+  await expect(formulas).toHaveCount(2);
+  await expect(formulas.nth(0)).toHaveAttribute('data-value', 'x + x + x + x');
+  await expect(formulas.nth(1)).toHaveAttribute('data-value', 'y');
+  await expect(page.locator('.milkdown-editor > p')).toHaveText('After');
+});
+
 test('readonly preview has no continuation controls and never changes its document', async ({ page }) => {
   await page.goto(`/tests/milkdown-flow-harness.html?readonly&content=${encodeURIComponent(table)}`);
   await expect(page.locator('.milkdown-editor--readonly')).toBeVisible();

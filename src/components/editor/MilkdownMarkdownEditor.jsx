@@ -53,6 +53,7 @@ import { listener, listenerCtx } from '@milkdown/kit/plugin/listener';
 import { codeBlockComponent, codeBlockConfig } from '@milkdown/kit/component/code-block';
 import { $ctx, $inputRule, $nodeSchema, $prose, $remark, getMarkdown, insert, replaceRange } from '@milkdown/kit/utils';
 import { toggleMark } from '@milkdown/kit/prose/commands';
+import { closeHistory, isHistoryTransaction } from '@milkdown/kit/prose/history';
 import { InputRule } from '@milkdown/kit/prose/inputrules';
 import { NodeSelection, Plugin, TextSelection } from '@milkdown/kit/prose/state';
 import { findChildren } from '@milkdown/kit/prose';
@@ -355,7 +356,7 @@ const mathSourceBlockSchema = $nodeSchema(mathSourceBlockType, () => ({
   toMarkdown: {
     match: (node) => node.type.name === mathSourceBlockType,
     runner: (state, node) => {
-      state.addNode('html', undefined, node.textContent);
+      state.addNode('math', undefined, node.textContent);
     },
   },
   parseMarkdown: {
@@ -561,7 +562,7 @@ function parseTableSource(source, schema, schemaTypes) {
 const mathInlineInputRule = $inputRule(
   (ctx) => new InputRule(/(?:\$)([^$]+)(?:\$)$/, (state, match, start, end) => {
     const value = match[1] || '';
-    if (!value) return null;
+    if (!value || state.doc.resolve(start).parent.type === mathSourceInlineSchema.type(ctx)) return null;
     return state.tr.replaceWith(start, end, mathInlineSchema.type(ctx).create({ value }));
   })
 );
@@ -569,16 +570,17 @@ const mathInlineInputRule = $inputRule(
 /**
  * 块级数学公式输入规则。
  *
- * 当用户输入 `$$` 起始标记时，将当前块切换为数学块节点。
+ * 当用户输入 `$$` 起始标记时，创建只含公式正文的可编辑块。
  */
 const mathBlockInputRule = $inputRule(
   (ctx) => new InputRule(/^\$\$\s$/, (state, _match, start, end) => {
-    const resolved = state.doc.resolve(start);
-    return resolved.node(-1).canReplaceWith(
-      resolved.index(-1),
-      resolved.indexAfter(-1),
-      mathBlockSchema.type(ctx)
-    ) ? state.tr.delete(start, end).setBlockType(start, start, mathBlockSchema.type(ctx)) : null;
+    const $start = state.doc.resolve(start);
+    const sourceType = mathSourceBlockSchema.type(ctx);
+    if (!$start.parent.isTextblock || $start.parentOffset || end !== $start.end()
+      || !$start.node(-1).canReplaceWith($start.index(-1), $start.indexAfter(-1), sourceType)) return null;
+    const from = $start.before();
+    const tr = state.tr.replaceWith(from, $start.after(), sourceType.create());
+    return tr.setSelection(TextSelection.create(tr.doc, from + 1)).scrollIntoView();
   })
 );
 
@@ -614,6 +616,22 @@ const mathValueEditPlugin = $prose((ctx) => {
   ].includes(node?.type);
   const deleteOne = (source, fromEnd) => (fromEnd ? source.slice(0, -1) : source.slice(1));
 
+  const removeEmptyMathBlock = (view, pos, node, fromEnd) => {
+    const { state } = view;
+    const $pos = state.doc.resolve(pos);
+    const index = $pos.index();
+    const tr = closeHistory(state.tr);
+    if ($pos.parent.canReplace(index, index + 1)) {
+      tr.delete(pos, pos + node.nodeSize);
+      tr.setSelection(TextSelection.near(tr.doc.resolve(pos), fromEnd ? -1 : 1));
+    } else {
+      tr.replaceWith(pos, pos + node.nodeSize, state.schema.nodes.paragraph.create());
+      tr.setSelection(TextSelection.create(tr.doc, pos + 1));
+    }
+    view.dispatch(tr.scrollIntoView());
+    return true;
+  };
+
   const deleteInSourceNode = (view, event) => {
     if (event.key !== 'Backspace' && event.key !== 'Delete') return false;
     const { selection, schema } = view.state;
@@ -629,6 +647,10 @@ const mathValueEditPlugin = $prose((ctx) => {
     const start = $from.start(depth);
     const offset = $from.pos - start;
     const source = node.textContent || '';
+    if (node.type === blockSourceType && !source) {
+      event.preventDefault();
+      return removeEmptyMathBlock(view, pos, node, event.key === 'Backspace');
+    }
     if ((event.key === 'Backspace' && offset <= 0) || (event.key === 'Delete' && offset >= source.length)) return false;
 
     const nextOffset = event.key === 'Backspace' ? offset - 1 : offset;
@@ -663,20 +685,16 @@ const mathValueEditPlugin = $prose((ctx) => {
 
   const replaceMathWithSource = (view, pos, node, fromEnd) => {
     const value = node.attrs.value || '';
-    const nextValue = value
-      ? (fromEnd ? value.slice(0, -1) : value.slice(1))
-      : '';
     const isInline = node.type === inlineType;
-    const source = isInline ? `$${nextValue}$` : `$$\n${nextValue}\n$$`;
+    if (!isInline && !value) return removeEmptyMathBlock(view, pos, node, fromEnd);
+    const nextValue = deleteOne(value, fromEnd);
+    const source = isInline ? `$${nextValue}$` : nextValue;
     const schema = view.state.schema;
-    const replacement = isInline
-      ? inlineSourceType.create(null, schema.text(source))
-      : blockSourceType.create(null, schema.text(source));
+    const replacement = (isInline ? inlineSourceType : blockSourceType).create(null, source ? schema.text(source) : null);
     const tr = view.state.tr
       .replaceWith(pos, pos + node.nodeSize, replacement)
       .setMeta(mathSourceEditMeta, true);
-    const cursorPos = Math.min(pos + 1 + source.length - (isInline ? 1 : 3), tr.doc.content.size);
-    tr.setSelection(TextSelection.create(tr.doc, Math.max(pos + 1, cursorPos)));
+    tr.setSelection(TextSelection.create(tr.doc, pos + 1 + source.length - Number(isInline)));
     view.dispatch(tr.scrollIntoView());
     return true;
   };
@@ -690,36 +708,43 @@ const mathValueEditPlugin = $prose((ctx) => {
 
   return new Plugin({
     appendTransaction(transactions, _oldState, newState) {
-      if (transactions.some((tr) => tr.getMeta(mathSourceEditMeta) || tr.getMeta(markdownSourceEditMeta))) return null;
+      // Undo and redo already restore the intended node and selection.
+      if (transactions.some((tr) => {
+        const root = tr.getMeta('appendedTransaction') || tr;
+        return isHistoryTransaction(root) || root.getMeta(mathSourceEditMeta) || root.getMeta(markdownSourceEditMeta);
+      })) return null;
       let tr = null;
+      const replaceSource = (pos, node, replacement) => {
+        tr ||= newState.tr;
+        // Earlier replacements change positions in tr.doc, while descendants visits newState.doc.
+        tr.replaceWith(tr.mapping.map(pos, 1), tr.mapping.map(pos + node.nodeSize, -1), replacement);
+      };
 
       newState.doc.descendants((node, pos) => {
         const source = node.textContent || '';
-        if (node.type === inlineSourceType) {
-          const match = /^\$([\s\S]*)\$$/.exec(source);
-          if (!match) return;
-          tr = (tr || newState.tr).replaceWith(pos, pos + node.nodeSize, inlineType.create({ value: match[1] || '' }));
-          return;
-        }
-
-        if (node.type === blockSourceType) {
-          const match = /^\$\$\n?([\s\S]*?)\n?\$\$$/.exec(source);
-          if (!match) return;
-          tr = (tr || newState.tr).replaceWith(pos, pos + node.nodeSize, blockType.create({ value: match[1] || '' }));
+        if (node.type === inlineSourceType || node.type === blockSourceType) {
+          const { from, to } = newState.selection;
+          if (from > pos && to < pos + node.nodeSize) return false;
+          if (node.type === blockSourceType) {
+            replaceSource(pos, node, blockType.create({ value: source }));
+          } else {
+            const match = /^\$([\s\S]*)\$$/.exec(source);
+            if (match) replaceSource(pos, node, inlineType.create({ value: match[1] }));
+          }
           return;
         }
 
         if (node.type === imageSourceType) {
           const attrs = parseImageSource(source);
           if (!attrs) return;
-          tr = (tr || newState.tr).replaceWith(pos, pos + node.nodeSize, imageType.create(attrs));
+          replaceSource(pos, node, imageType.create(attrs));
           return;
         }
 
         if (node.type === tableSourceType) {
           const tableNode = parseTableSource(source, newState.schema, tableTypes);
           if (!tableNode) return;
-          tr = (tr || newState.tr).replaceWith(pos, pos + node.nodeSize, tableNode);
+          replaceSource(pos, node, tableNode);
         }
       });
 
