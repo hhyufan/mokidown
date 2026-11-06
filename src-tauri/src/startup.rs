@@ -92,6 +92,7 @@ pub fn splash_ready(
     if window.label() != "splash" {
         return Err("Only the splash window can announce its first frame".into());
     }
+    #[cfg(not(target_os = "android"))]
     if is_after_update_launch() {
         let _ = window.close();
         return Ok(());

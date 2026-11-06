@@ -27,12 +27,12 @@ src-tauri/gen/android/app/src/main/*
 src-tauri/gen/android/app/src/main/java/*
 !src-tauri/gen/android/app/src/main/java/com/
 src-tauri/gen/android/app/src/main/java/com/*
-!src-tauri/gen/android/app/src/main/java/com/mde/
-src-tauri/gen/android/app/src/main/java/com/mde/*
-!src-tauri/gen/android/app/src/main/java/com/mde/app/
-src-tauri/gen/android/app/src/main/java/com/mde/app/*
-!src-tauri/gen/android/app/src/main/java/com/mde/app/MainActivity.kt
-!src-tauri/gen/android/app/src/main/java/com/mde/app/SafBridge.kt
+!src-tauri/gen/android/app/src/main/java/com/mokidown/
+src-tauri/gen/android/app/src/main/java/com/mokidown/*
+!src-tauri/gen/android/app/src/main/java/com/mokidown/app/
+src-tauri/gen/android/app/src/main/java/com/mokidown/app/*
+!src-tauri/gen/android/app/src/main/java/com/mokidown/app/MainActivity.kt
+!src-tauri/gen/android/app/src/main/java/com/mokidown/app/SafBridge.kt
 
 # ===========================
 # Environment variables
