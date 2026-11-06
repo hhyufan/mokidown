@@ -49,6 +49,45 @@ test('draft delimiters are muted, completed formatting is solid, and clicking it
   await expect(editor.locator('.moki-markdown-marker:visible')).toHaveCount(0);
 });
 
+test('horizontal arrows enter each visible marker character before crossing a line boundary', async ({ page }) => {
+  const editor = await openEditor(page, 'Above\n\n**bold**');
+  await page.evaluate(() => window.trial.selectTextblock(1));
+  const position = () => page.evaluate(() => window.trial.state().selection.anchor);
+  const start = await position();
+  const marker = editor.locator('.moki-markdown-marker--with-caret');
+  for (const before of ['*', '']) {
+    await page.keyboard.press('ArrowLeft');
+    await expect(marker).toHaveAttribute('data-marker-before', before);
+    expect(await position()).toBe(start);
+  }
+  await page.keyboard.press('ArrowLeft');
+  expect(await position()).toBe(start - 2);
+  for (const before of ['', '*', '**']) {
+    await page.keyboard.press('ArrowRight');
+    await expect(marker).toHaveAttribute('data-marker-before', before);
+    expect(await position()).toBe(start);
+  }
+  await page.keyboard.press('ArrowRight');
+  expect(await position()).toBe(start + 1);
+  expect(await page.evaluate(() => window.trial.markdown().trimEnd())).toBe('Above\n\n**bold**');
+  expect(await page.evaluate(() => window.trial.dirty())).toBe(false);
+});
+
+test('moving left from prose lands after the closing code fence and inserts outside it', async ({ page }) => {
+  const editor = await openEditor(page, '`321`1');
+  await page.evaluate(() => window.trial.selectTextblock(0, 'end'));
+  await page.keyboard.press('ArrowLeft');
+  await expect(editor.locator('.moki-markdown-marker--with-caret')).toHaveAttribute('data-marker-before', '`');
+  await page.keyboard.type('A');
+  await expect(editor.locator('code')).toHaveText('321');
+  expect(await page.evaluate(() => window.trial.markdown().trimEnd())).toBe('`321`A1');
+  await page.evaluate(() => window.trial.selectTextblock(0));
+  for (let i = 0; i < 4; i++) await page.keyboard.press('ArrowRight');
+  await expect(editor.locator('.moki-markdown-marker--with-caret')).toHaveAttribute('data-marker-before', '`');
+  await page.keyboard.type('B');
+  expect(await page.evaluate(() => window.trial.markdown().trimEnd())).toBe('`321`BA1');
+});
+
 test('links and formulas render immediately after typing and reveal their syntax at the leading boundary', async ({ page }) => {
   const editor = await openEditor(page);
   await editor.click();
