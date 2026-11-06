@@ -26,6 +26,7 @@ import {
   commonmark,
   bulletListSchema,
   createCodeBlockCommand,
+  createCodeBlockInputRule,
   emphasisSchema,
   imageSchema,
   insertHrCommand,
@@ -137,6 +138,9 @@ import MilkdownTooltips from './MilkdownTooltips';
 import { milkdownMediaEditor, milkdownMediaImageView } from './milkdownMedia';
 import { openExternal } from '@utils/tauriApi';
 import './markdown-preview.scss';
+import { milkdownBlockSelection, milkdownInlineLinkRule, milkdownInlineSyntaxSource, milkdownLiveSyntax } from './milkdownLiveSyntax';
+import { CODE_FENCE_LANGUAGE_EVENT } from '@utils/markdownCodeFence';
+import MarkdownCodeLanguageMenu from './MarkdownCodeLanguageMenu';
 
 /**
  * 代码语言到展示名称的映射表。
@@ -1380,6 +1384,15 @@ function MilkdownInner({
   const publishedMarkdownRef = useRef(null);
   const mermaidRootsRef = useRef(new Map());
   const [treePreviews, setTreePreviews] = useState([]);
+  const [codeLanguageMenu, setCodeLanguageMenu] = useState(null);
+  const closeCodeLanguageMenu = useCallback(() => setCodeLanguageMenu(null), []);
+  useEffect(() => {
+    const root = wrapperRef.current;
+    if (!root || readOnly) return undefined;
+    const open = (event) => setCodeLanguageMenu(event.detail);
+    root.addEventListener(CODE_FENCE_LANGUAGE_EVENT, open);
+    return () => root.removeEventListener(CODE_FENCE_LANGUAGE_EVENT, open);
+  }, [readOnly]);
   const treePreviewId = useRef(0);
   const treePreviewSources = useRef(new Map());
   const imageCleanupsRef = useRef([]);
@@ -1503,7 +1516,7 @@ function MilkdownInner({
       })
       .use(markdownHtmlPlugin)
       .use(milkdownTableKeys)
-      .use(commonmark)
+      .use(commonmark.filter((plugin) => plugin !== createCodeBlockInputRule))
       .use(gfm.filter((plugin) => plugin !== insertTableInputRule))
       .use(milkdownTableView)
       .use(htmlBlockSchema)
@@ -1514,9 +1527,11 @@ function MilkdownInner({
       .use(milkdownMediaEditor)
       .use(milkdownMediaImageView)
       .use(codeBlockComponent)
+      .use(milkdownBlockSelection)
       .use(listener);
 
-    if (!readOnly) editor.use(milkdownMarkdownPaste).use(clipboard).use(milkdownEditingFlow).use(milkdownGapCursor);
+    if (!readOnly) editor.use(milkdownMarkdownPaste).use(clipboard).use(milkdownEditingFlow).use(milkdownGapCursor)
+      .use(milkdownInlineSyntaxSource).use(milkdownLiveSyntax).use(milkdownInlineLinkRule);
 
     editorRef.current = editor;
     return editor;
@@ -1911,6 +1926,7 @@ function MilkdownInner({
       <MilkdownMediaTools key={activeTabId} ref={mediaToolsRef} rootRef={wrapperRef} getView={getMediaView}
         ready={!editorInfo.loading} readOnly={readOnly} />
       <EditorContextMenu menu={menu} onClose={closeMenu} />
+      <MarkdownCodeLanguageMenu request={codeLanguageMenu} onClose={closeCodeLanguageMenu} />
     </div>
   );
 }

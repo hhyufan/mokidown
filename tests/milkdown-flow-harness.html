@@ -62,6 +62,15 @@ window.trial = {
     editor.dispatch(editor.state.tr.setSelection(TextSelection.create(editor.state.doc,
       edge === 'end' ? pos + node.nodeSize - 1 : pos + 1))); editor.focus();
   },
+  selectParagraph(text) {
+    const editor = view();
+    let position;
+    editor.state.doc.descendants((node, pos) => {
+      if (position == null && node.type.name === 'paragraph' && node.textContent === text) position = pos + 1;
+    });
+    editor.dispatch(editor.state.tr.setSelection(TextSelection.create(editor.state.doc, position)));
+    editor.focus();
+  },
   paste(text, html = '', mode) {
     const data = new DataTransfer(); data.setData('text/plain', text);
     if (html) data.setData('text/html', html);

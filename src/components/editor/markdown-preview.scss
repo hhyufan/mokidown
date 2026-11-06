@@ -26,6 +26,7 @@
   // 比 vitality 原始的 8px 更克制，markdown 区块不会比 UI 面板还圆。
   --md-radius-sm: 4px;
   --md-radius: var(--radius-sm);
+  --md-heading-marker-gap: 6px;
   --md-duration: 0.2s;
   --md-ease: cubic-bezier(0.65, 0.05, 0.36, 1);
   // markdown 底色基调：取 UI 主蓝，也就是侧栏 GitHub 按钮那支淡蓝
@@ -99,7 +100,7 @@
 
     &::before {
       content: '#';
-      margin-right: 6px;
+      margin-inline-end: var(--md-heading-marker-gap);
       color: var(--md-hash);
     }
   }
@@ -149,6 +150,11 @@
     color: var(--text);
 
     p:last-child { margin-bottom: 0; }
+  }
+
+  .moki-block-selected {
+    box-shadow: inset 0 0 0 100vmax var(--selection-bg);
+    &::selection, ::selection { background: transparent; }
   }
 
   ul, ol {
@@ -382,6 +388,38 @@
     // Keep a real hit area below the final block, including short documents.
     padding-bottom: 3em;
     h1::before, h2::before { pointer-events: none; }
+
+    &:not(.ProseMirror-hideselection) { caret-color: var(--text); }
+    .moki-markdown-marker { display: none; }
+
+    &.ProseMirror-focused {
+      .moki-markdown-marker, .moki-markdown-ghost {
+        color: color-mix(in srgb, var(--text) 56%, transparent);
+      }
+      .moki-markdown-marker {
+        display: inline;
+        font-family: var(--font-editor);
+        font-weight: 400;
+        font-style: normal;
+        pointer-events: none;
+        user-select: none;
+        white-space: pre-wrap;
+        &::before { content: attr(data-moki-marker); }
+      }
+      .moki-markdown-heading-marker {
+        font: inherit;
+        margin-inline-end: var(--md-heading-marker-gap);
+      }
+      .moki-markdown-heading-source::before { content: none; }
+      .moki-markdown-math-source {
+        > * { display: none; }
+        &::before {
+          content: attr(data-moki-math-source);
+          font-family: var(--font-editor);
+          color: var(--text-sec);
+        }
+      }
+    }
   }
 
   .ProseMirror {

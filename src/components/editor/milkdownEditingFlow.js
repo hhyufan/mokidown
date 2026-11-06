@@ -1,5 +1,8 @@
 import { Plugin, PluginKey, NodeSelection, TextSelection } from '@milkdown/kit/prose/state';
 import { gapCursor, GapCursor } from '@milkdown/kit/prose/gapcursor';
+import { closeHistory, redo, undo } from '@milkdown/kit/prose/history';
+import { Fragment } from '@milkdown/kit/prose/model';
+import { liftListItem } from '@milkdown/kit/prose/schema-list';
 import { EditorView as CodeMirrorView } from '@codemirror/view';
 import { $prose } from '@milkdown/kit/utils';
 import { isImeComposing } from '@utils/keyboard';
@@ -103,13 +106,57 @@ export function handleMilkdownBlankPointerDown(view, event) {
   event.preventDefault(); event.stopPropagation(); return true;
 }
 
+function outdentListLine(view) {
+  const { state } = view;
+  const { $from, empty } = state.selection;
+  if (!empty || $from.parentOffset || $from.parent.type.name !== 'paragraph' || $from.depth < 3) return false;
+  const item = $from.node(-1), list = $from.node(-2);
+  if (item.type.name !== 'list_item' || !['bullet_list', 'ordered_list'].includes(list.type.name)) return false;
+  const paragraphIndex = $from.index(-1);
+  if (!paragraphIndex) {
+    if ($from.depth < 4 || $from.node(-3).type.name !== 'list_item' || !$from.parent.content.size) return false;
+    return liftListItem(item.type)(state, (tr) => view.dispatch(closeHistory(tr)));
+  }
+
+  // Split the list at the current item, leaving the preceding blocks in it.
+  // The continuation and any following blocks of that item keep their order.
+  const itemIndex = $from.index(-2), listPos = $from.before($from.depth - 2);
+  const precedingItem = item.copy(item.content.cutByIndex(0, paragraphIndex));
+  const preceding = list.copy(list.content.cutByIndex(0, itemIndex).append(Fragment.from(precedingItem)));
+  let replacement = Fragment.from(preceding).append(item.content.cutByIndex(paragraphIndex, item.childCount));
+  if (itemIndex + 1 < list.childCount) {
+    const attrs = list.type.name === 'ordered_list' ? { ...list.attrs, order: list.attrs.order + itemIndex + 1 } : list.attrs;
+    replacement = replacement.append(Fragment.from(list.type.create(attrs, list.content.cutByIndex(itemIndex + 1, list.childCount))));
+  }
+  const $list = state.doc.resolve(listPos);
+  if (!$list.parent.canReplace($list.index(), $list.index() + 1, replacement)) return false;
+  const tr = closeHistory(state.tr).replaceWith(listPos, listPos + list.nodeSize, replacement);
+  tr.setSelection(TextSelection.create(tr.doc, listPos + preceding.nodeSize + 1));
+  view.dispatch(tr.scrollIntoView());
+  return true;
+}
+
 // Capture at the wrapper because CodeMirror owns its keyboard events and the
 // normal ProseMirror keymap does not see them.
 export function handleMilkdownBlockKeyDown(view, event) {
   if (!view.editable || view.composing || isImeComposing(event) || event.altKey) return false;
   const target = event.target instanceof Element ? event.target : null;
   if (!target || target.closest('input, textarea, button, select, .md-code-execution-mount')) return false;
+  if ((event.ctrlKey || event.metaKey) && view.dom?.contains(target)) {
+    const key = event.key.toLowerCase();
+    const command = key === 'z' ? (event.shiftKey ? redo : undo) : key === 'y' && !event.shiftKey ? redo : null;
+    if (command?.(view.state, view.dispatch)) {
+      event.preventDefault();
+      event.stopPropagation();
+      if (!target.isConnected) view.focus();
+      return true;
+    }
+  }
   if (!['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Enter', 'Home', 'End', 'Backspace', 'Delete'].includes(event.key)) return false;
+  if (event.key === 'Enter' && !event.ctrlKey && !event.metaKey && !event.shiftKey && !target.closest('.cm-editor')
+    && outdentListLine(view)) {
+    event.preventDefault(); event.stopPropagation(); return true;
+  }
   const { selection } = view.state;
   if (['Backspace', 'Delete'].includes(event.key) && selection.empty
     && !event.ctrlKey && !event.metaKey && !event.shiftKey) {
