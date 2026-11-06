@@ -1,11 +1,12 @@
 import { expect, it } from 'vitest';
 import { decodeTextBytes, encodeTextBytes, MAX_TEXT_BYTES } from './textFilePolicy';
 
-it('strictly round-trips UTF-8 and BOM UTF-16 including emoji and CRLF', () => {
-  for (const encoding of ['UTF-8', 'UTF-16LE', 'UTF-16BE']) {
+it('strictly round-trips UTF-8 and UTF-16 including BOM, emoji and CRLF', () => {
+  for (const encoding of ['UTF-8', 'UTF-8-BOM', 'UTF-16LE', 'UTF-16BE']) {
     const content = '中文 😀\r\nnext';
     expect(decodeTextBytes(encodeTextBytes(content, encoding))).toEqual({ content, encoding });
   }
+  expect([...encodeTextBytes('中文', 'UTF-8-BOM').slice(0, 3)]).toEqual([0xef, 0xbb, 0xbf]);
 });
 
 it('a BOM never exempts the body from binary/encoding checks', () => {
