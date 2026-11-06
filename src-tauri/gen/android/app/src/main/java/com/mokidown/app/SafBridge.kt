@@ -1,4 +1,4 @@
-package com.mde.app
+package com.mokidown.app
 
 import android.content.ContentUris
 import android.content.Intent
@@ -220,6 +220,11 @@ class SafBridge(private val host: MainActivity) {
                 while (true) {
                     val n = input.read(tmp)
                     if (n <= 0) break
+                    // Bound allocations even when provider size metadata is stale/unknown.
+                    if (buf.size().toLong() + n > 20L * 1024 * 1024) {
+                        return JSONObject().put("ok", false).put("kind", "too-large")
+                            .put("message", "File exceeds the text size limit").toString()
+                    }
                     buf.write(tmp, 0, n)
                 }
                 buf.toByteArray()
