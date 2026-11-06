@@ -12,6 +12,7 @@ export function setLocalFileComposing(composing) {
 // neither a captured Zustand state nor a watcher event is a disk snapshot.
 async function inspectFile(path, isCurrent = () => true, flushEditor = false) {
   for (let attempt = 0; attempt < 3; attempt += 1) {
+    if (!useEditorStore.getState().tabs.some((tab) => tab.path === path)) return null;
     const baseline = getDiskBaseline(path);
     const disk = await readFileContent(path).catch(() => null);
     if (!isCurrent()) return null;
@@ -24,7 +25,7 @@ async function inspectFile(path, isCurrent = () => true, flushEditor = false) {
     const diskContent = disk?.content || '';
     return {
       state, tab, disk, editorContent, diskContent,
-      outcome: disk?.success ? classifyFileVersions({
+      outcome: disk?.blockedReason && disk.blockedReason !== 'missing' ? 'blocked' : disk?.success ? classifyFileVersions({
         baseContent: baseline?.content ?? tab.content ?? '', editorContent, diskContent,
       }) : 'unavailable',
     };
@@ -40,10 +41,11 @@ function clearConflict(path) {
 function reportConflict(path, version) {
   const { state, tab, disk, diskContent } = version;
   const conflict = state.externalFileConflict;
-  const kind = disk?.success ? 'modified' : 'removed';
-  if (conflict?.path === path && conflict.kind === kind && conflict.diskContent === disk?.content) return;
+  const kind = version.outcome === 'blocked' ? 'blocked' : disk?.success ? 'modified' : 'removed';
+  if (conflict?.path === path && conflict.kind === kind && conflict.diskContent === disk?.content && conflict.blockedReason === disk?.blockedReason) return;
   state.setExternalFileConflict({
     path, tabId: tab.id, kind,
+    ...(kind === 'blocked' ? { blockedReason: disk.blockedReason, message: disk.message } : {}),
     ...(disk?.success ? { diskContent, encoding: disk.encoding || tab.encoding,
       lineEnding: disk.line_ending || tab.lineEnding } : {}),
   });
@@ -66,7 +68,7 @@ export function saveExistingFile(path, _content, encoding, _tabId) {
     const version = await inspectFile(path, () => !inputComposing, true);
     if (!version) return { success: false, superseded: true };
     const { state, tab, outcome, editorContent, diskContent } = version;
-    if (outcome === 'conflict' || outcome === 'unavailable') {
+    if (outcome === 'conflict' || outcome === 'unavailable' || outcome === 'blocked') {
       reportConflict(path, version);
       return { success: false, conflict: true };
     }
@@ -91,6 +93,10 @@ export function reconcileFileChange(path, { isCurrent, confirmMissing = false } 
     const version = await inspectFile(path, isCurrent);
     if (!version) return 'superseded';
     const { state, tab, outcome, diskContent } = version;
+    if (outcome === 'blocked') {
+      reportConflict(path, version);
+      return outcome;
+    }
     if (outcome === 'unavailable') {
       if (confirmMissing) reportConflict(path, version);
       return outcome;

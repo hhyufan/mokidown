@@ -48,3 +48,23 @@ it('reads the current editor before hashing a recovery draft, then ignores it on
   readFileContent.mockResolvedValue({ success: true, content: 'last input' });
   expect(await loadRecoveryCandidates()).toEqual([]);
 });
+
+it('provides the full disk version for a Monaco comparison without modifying the recovery draft', async () => {
+  await flushRecoverySnapshot();
+  const snapshot = writeRecoverySnapshot.mock.calls.at(-1)[0];
+  readRecoverySnapshot.mockResolvedValue(snapshot);
+  const diskContent = `${'unchanged line\n'.repeat(80)}disk version`;
+  readFileContent.mockResolvedValue({ success: true, content: diskContent });
+  const candidates = await loadRecoveryCandidates();
+  expect(candidates[0]).toMatchObject({ content: 'draft', diskContent, diskState: 'changed' });
+  expect(snapshot.tabs[0]).not.toHaveProperty('diskContent');
+});
+
+it('keeps a draft without reading binary disk content into its comparison', async () => {
+  await flushRecoverySnapshot();
+  readRecoverySnapshot.mockResolvedValue(writeRecoverySnapshot.mock.calls.at(-1)[0]);
+  readFileContent.mockResolvedValue({ success: false, blockedReason: 'binary' });
+  const candidates = await loadRecoveryCandidates();
+  expect(candidates[0]).toMatchObject({ content: 'draft', diskState: 'blocked' });
+  expect(candidates[0]).not.toHaveProperty('diskContent');
+});
