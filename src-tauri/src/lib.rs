@@ -303,6 +303,50 @@ async fn read_file_head(path: String, limit: u32) -> Result<Vec<u8>, String> {
     Ok(buffer)
 }
 
+#[tauri::command]
+fn read_clipboard_for_paste() -> Result<String, String> {
+    #[cfg(windows)]
+    {
+        use windows_sys::Win32::Foundation::HGLOBAL;
+        use windows_sys::Win32::System::DataExchange::{
+            CloseClipboard, GetClipboardData, IsClipboardFormatAvailable, OpenClipboard,
+        };
+        use windows_sys::Win32::System::Memory::{GlobalLock, GlobalSize, GlobalUnlock};
+        const CF_UNICODETEXT: u32 = 13;
+        // Keep the clipboard open and the system-owned buffer locked while copying the text.
+        unsafe {
+            if OpenClipboard(0) == 0 {
+                return Err(std::io::Error::last_os_error().to_string());
+            }
+            let read = || {
+                if IsClipboardFormatAvailable(CF_UNICODETEXT) == 0 {
+                    return Ok(String::new());
+                }
+                let handle = GetClipboardData(CF_UNICODETEXT) as HGLOBAL;
+                if handle.is_null() {
+                    return Err(std::io::Error::last_os_error().to_string());
+                }
+                let size = GlobalSize(handle) / std::mem::size_of::<u16>();
+                let data = GlobalLock(handle).cast::<u16>();
+                if data.is_null() {
+                    return Err(std::io::Error::last_os_error().to_string());
+                }
+                let units = std::slice::from_raw_parts(data, size);
+                let text = String::from_utf16_lossy(
+                    units.split(|unit| *unit == 0).next().unwrap_or_default(),
+                );
+                GlobalUnlock(handle);
+                Ok(text)
+            };
+            let result = read();
+            CloseClipboard();
+            result
+        }
+    }
+    #[cfg(not(windows))]
+    Err("System clipboard paste is unavailable on this platform".into())
+}
+
 /// 根据路径扩展名推断二进制文件预览所需的 MIME 类型。
 fn guess_mime_from_path(path: &Path) -> &'static str {
     match path
@@ -381,6 +425,7 @@ async fn save_file(
     let target_encoding = encoding.as_deref().unwrap_or("UTF-8");
     let encoding_obj = Encoding::for_label(target_encoding.as_bytes()).unwrap_or(UTF_8);
     let encoded_bytes = match target_encoding.to_ascii_uppercase().as_str() {
+        "UTF-8-BOM" => [text_file::UTF8_BOM, content.as_bytes()].concat(),
         "UTF-16LE" => text_file::encode_utf16(&content, true),
         "UTF-16BE" => text_file::encode_utf16(&content, false),
         _ => encoding_obj.encode(&content).0.into_owned(),
@@ -400,7 +445,16 @@ async fn save_file(
                 content: None,
                 file_path: Some(file_path),
                 file_name: Some(file_name),
-                encoding: Some(encoding_obj.name().to_string()),
+                encoding: Some(
+                    if target_encoding.eq_ignore_ascii_case("UTF-8-BOM") {
+                        "UTF-8-BOM"
+                    } else if encoding_obj.name() == "gb18030" {
+                        "GB18030"
+                    } else {
+                        encoding_obj.name()
+                    }
+                    .to_string(),
+                ),
                 line_ending: Some(detect_line_ending(&content)),
             })
         }
@@ -1758,6 +1812,7 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             read_file_content,
             read_file_head,
+            read_clipboard_for_paste,
             read_binary_file,
             write_file_content,
             save_file,
@@ -1873,20 +1928,35 @@ mod tests {
     }
 
     #[test]
-    fn editor_commands_preserve_utf16_and_reject_binary_reads() {
+    fn editor_commands_preserve_text_encoding_and_reject_binary_reads() {
         let root = tempfile::tempdir().unwrap();
         let path = root.path().join("text.txt").to_string_lossy().to_string();
-        for encoding in ["UTF-16LE", "UTF-16BE"] {
+        for (encoding, prefix) in [
+            ("UTF-8-BOM", text_file::UTF8_BOM),
+            ("UTF-16LE", &[0xff, 0xfe][..]),
+            ("UTF-16BE", &[0xfe, 0xff][..]),
+            ("GB18030", &[0xd6, 0xd0, 0xce, 0xc4][..]),
+        ] {
             let saved = tauri::async_runtime::block_on(save_file(
                 path.clone(),
                 "中文 😀\r\n".into(),
                 Some(encoding.into()),
             ))
             .unwrap();
-            assert!(saved.success);
+            assert!(saved.success, "{encoding}: {}", saved.message);
+            assert_eq!(saved.encoding.as_deref(), Some(encoding));
+            assert!(fs::read(&path).unwrap().starts_with(prefix));
             let read = tauri::async_runtime::block_on(read_file_content(path.clone())).unwrap();
             assert_eq!(read.content.as_deref(), Some("中文 😀\r\n"));
             assert_eq!(read.encoding.as_deref(), Some(encoding));
+            let saved_again = tauri::async_runtime::block_on(save_file(
+                path.clone(),
+                "中文 😀\r\n新增内容\r\n".into(),
+                read.encoding,
+            ))
+            .unwrap();
+            assert!(saved_again.success, "{encoding}: {}", saved_again.message);
+            assert!(fs::read(&path).unwrap().starts_with(prefix));
         }
         fs::write(&path, b"\xef\xbb\xbftext\0binary").unwrap();
         assert_eq!(

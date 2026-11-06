@@ -1,6 +1,7 @@
 import { useEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { useTranslation } from 'react-i18next';
+import { hasNativeMenuClipboard, readMenuClipboardText } from '@utils/menuClipboard';
 import './monaco-context-menu.scss';
 
 const isMac = /Mac|iPod|iPhone|iPad/.test(navigator.platform);
@@ -46,6 +47,26 @@ export default function MonacoContextMenu({ visible, x, y, onClose, editorRef })
     setTimeout(() => editor.focus(), 50);
   };
 
+  const paste = async (event) => {
+    if (!hasNativeMenuClipboard()) return trigger('editor.action.clipboardPasteAction')(event);
+    event.preventDefault();
+    event.stopPropagation();
+    onClose();
+    const editor = editorRef.current;
+    const model = editor?.getModel();
+    if (!model) return;
+    editor.focus();
+    const version = model.getVersionId();
+    try {
+      const text = await readMenuClipboardText();
+      if (text && editorRef.current?.getModel() === model && model.getVersionId() === version) {
+        editor.trigger('contextmenu', 'paste', { text, pasteOnNewLine: false, multicursorText: null });
+      }
+    } catch (error) {
+      console.error('Unable to paste from the system clipboard:', error);
+    }
+  };
+
   // 菜单项顺序与常见编辑器右键菜单保持一致，分隔项仅用于视觉分组。
   const items = [
     { key: 'undo', label: t('editor.menu.undo'), shortcut: `${Mod}+Z`, action: trigger('undo') },
@@ -53,7 +74,7 @@ export default function MonacoContextMenu({ visible, x, y, onClose, editorRef })
     { key: 's1', type: 'separator' },
     { key: 'cut', label: t('editor.menu.cut'), shortcut: `${Mod}+X`, action: trigger('editor.action.clipboardCutAction') },
     { key: 'copy', label: t('editor.menu.copy'), shortcut: `${Mod}+C`, action: trigger('editor.action.clipboardCopyAction') },
-    { key: 'paste', label: t('editor.menu.paste'), shortcut: `${Mod}+V`, action: trigger('editor.action.clipboardPasteAction') },
+    { key: 'paste', label: t('editor.menu.paste'), shortcut: `${Mod}+V`, action: paste },
     { key: 's2', type: 'separator' },
     { key: 'selectAll', label: t('editor.menu.selectAll'), shortcut: `${Mod}+A`, action: trigger('editor.action.selectAll') },
     { key: 's3', type: 'separator' },
