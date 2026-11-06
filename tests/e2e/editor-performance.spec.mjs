@@ -66,6 +66,39 @@ test('tab switching reuses Monaco and document models while preserving edits, un
   expect(await page.evaluate(() => window.editorTrial.monaco.editor.getModels().length)).toBe(0);
 });
 
+test('reopening a virtual Monaco document clears redo entries from its disposed model', async ({ page }) => {
+  const errors = [];
+  page.on('pageerror', (error) => errors.push(error.message));
+  await loadApplication(page);
+  const file = { path: 'virtual.md', name: 'virtual.md', content: 'initial' };
+  const open = () => page.evaluate((doc) => window.editorTrial.store.getState().openFile(doc), file);
+  await open();
+  const lines = page.locator('.monaco-editor .view-lines');
+  await expect(lines).toContainText('initial');
+  await page.evaluate(async () => {
+    const { monaco } = window.editorTrial;
+    const editor = monaco.editor.getEditors()[0];
+    for (const suffix of ['a', 'b']) {
+      const end = editor.getModel().getLineMaxColumn(1);
+      editor.executeEdits('test', [{ range: new monaco.Range(1, end, 1, end), text: suffix }]);
+      editor.pushUndoStop();
+    }
+    await editor.getModel().undo();
+  });
+  await expect(lines).toContainText('initiala');
+  await page.evaluate((id) => window.editorTrial.store.getState().closeTab(id), file.path);
+  await expect(page.locator('.editor-content__welcome')).toBeVisible();
+  await open();
+  await expect(lines).toContainText('initial');
+  expect(await page.evaluate(async () => {
+    const model = window.editorTrial.monaco.editor.getEditors()[0].getModel();
+    const canRedo = model.canRedo();
+    await model.redo();
+    return canRedo;
+  })).toBe(false);
+  expect(errors).toEqual([]);
+});
+
 test('large split preview and outline share one persistent analysis worker and coalesce input bursts', async ({ page }) => {
   test.setTimeout(60000);
   await page.addInitScript(() => {
