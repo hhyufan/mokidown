@@ -1,4 +1,4 @@
-package com.mde.app
+package com.mokidown.app
 
 import android.content.Intent
 import android.net.Uri
