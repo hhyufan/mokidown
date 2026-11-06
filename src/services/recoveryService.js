@@ -123,12 +123,12 @@ export async function loadRecoveryCandidates() {
     try {
       const disk = await readFileContent(draft.path);
       if (!disk?.success) {
-        candidates.push({ ...draft, diskState: 'missing' });
+        candidates.push({ ...draft, diskState: disk.blockedReason && disk.blockedReason !== 'missing' ? 'blocked' : 'missing' });
         continue;
       }
       const diskHash = await hashText(disk.content || '');
       if (diskHash !== draft.recoveryHash) {
-        candidates.push({ ...draft, diskState: diskHash === draft.lastSavedHash ? 'unchanged' : 'changed' });
+        candidates.push({ ...draft, diskContent: disk.content || '', diskState: diskHash === draft.lastSavedHash ? 'unchanged' : 'changed' });
       }
     } catch {
       candidates.push({ ...draft, diskState: 'missing' });

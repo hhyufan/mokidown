@@ -38,6 +38,21 @@ it('restores order, current tab and view state while skipping missing files and 
   expect(disk.read).toHaveBeenCalledTimes(3);
 });
 
+it('skips blocked clean files while preserving legacy unsaved text without watching the blocked path', async () => {
+  save([tab('/binary.md'), { ...tab('/draft.md'), modified: true, content: 'unsaved text' }, tab('/normal.md')], '/normal.md');
+  disk.watch.mockClear();
+  window.__TAURI_INTERNALS__ = {};
+  disk.read.mockImplementation(async (path) => path === '/normal.md'
+    ? { success: true, content: 'normal' } : { success: false, blockedReason: 'binary' });
+  try {
+    const session = await import('./editorSession');
+    await session.restoreEditorSession();
+    expect(useEditorStore.getState().tabs.map((tab) => tab.path)).toEqual(['/draft.md', '/normal.md']);
+    expect(getBuffer('/draft.md')).toBe('unsaved text');
+    expect(disk.watch.mock.calls).toEqual([['/normal.md']]);
+  } finally { delete window.__TAURI_INTERNALS__; }
+});
+
 it('cannot overwrite the previous snapshot before asynchronous restoration completes', async () => {
   save([tab('/a.md')], '/a.md');
   let complete;

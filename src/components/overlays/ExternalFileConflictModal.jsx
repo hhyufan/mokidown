@@ -54,7 +54,8 @@ function ExternalFileConflictModal({ conflict, onKeep, onUseDisk, onSaveAs, onCl
       <Alert
         type="warning"
         showIcon
-        message={conflict.kind === 'removed' ? i18n.t('sync.conflict.removedMessage') : i18n.t('sync.conflict.changedMessage')}
+        message={conflict.kind === 'blocked' ? conflict.message || i18n.t('sync.conflict.noticeBlocked')
+          : conflict.kind === 'removed' ? i18n.t('sync.conflict.removedMessage') : i18n.t('sync.conflict.changedMessage')}
         description={i18n.t('sync.conflict.changedHint')}
       />
       <Paragraph ellipsis={{ rows: 2 }} style={{ marginTop: 16 }}>
