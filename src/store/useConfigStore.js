@@ -8,6 +8,7 @@ import { persist } from 'zustand/middleware';
 import { readInitialLanguage } from '@/i18n/language';
 import { DEFAULT_HOTKEYS, findHotkeyConflicts, resolveHotkeys } from '@/configs/hotkeys';
 import { validateKeybinding } from '@utils/keybinding';
+import { normalizeMarkdownPairSettings } from '@utils/markdownPairs';
 
 const DEVICE_LOCAL_CONFIG_KEYS = new Set([
   'workspacePath',
@@ -44,6 +45,7 @@ const useConfigStore = create(
       lineHeight: 24,
       previewLineHeight: 24,
       previewZoomSync: true,
+      ...normalizeMarkdownPairSettings(),
       tabSize: 2,
       wordWrap: true,
       lineNumbers: true,
@@ -164,6 +166,7 @@ const useConfigStore = create(
         // 键位表补齐缺失动作、剔除已下线的动作 id：旧版本遗留的数据不该让
         // “未绑定”或幽灵动作进入设置界面。
         merged.hotkeys = resolveHotkeys(persisted?.hotkeys);
+        Object.assign(merged, normalizeMarkdownPairSettings(persisted || {}, current));
         return merged;
       },
     }

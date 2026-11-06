@@ -77,6 +77,7 @@ import { rehypeCodeBlockIndexes } from '@utils/markdownCodeBlocks';
 import { findCodeBlock } from '@utils/knowledgeTree';
 import { useCodeBlockNavigation } from '@hooks/useCodeBlockNavigation';
 import './markdown-preview.scss';
+import { observePreviewBlockSelection } from './previewBlockSelection';
 
 /**
  * 将标题文本归一化为可复用的锚点标识。
@@ -317,6 +318,9 @@ const MarkdownPreview = forwardRef(function MarkdownPreview({ className }, ref) 
   // 预览树尚在构建时，旧树仍然保持可交互，从而降低长文档下编辑器、滚动条
   // 与侧边栏一起卡顿的概率。
   const content = useDeferredValue(processedContent);
+  useEffect(() => {
+    if (containerRef.current) return observePreviewBlockSelection(containerRef.current);
+  }, [content]);
   const resolveCodeTarget = useCallback((language, index) => findCodeBlock(containerRef.current, language, index), []);
   const beforeCodeJump = useCallback((target) => {
     if (target.dataset.sourceLine) window.dispatchEvent(new CustomEvent('editor:jump-to-line', {

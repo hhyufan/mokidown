@@ -462,6 +462,11 @@
 }
 
 // ── 提示框 ─────────────────────────────────────────────────────────────────
+.ant-dropdown.moki-code-language-dropdown .ant-dropdown-menu .ant-dropdown-menu-item:focus-visible {
+  outline: 1px solid color-mix(in srgb, var(--accent) 65%, transparent);
+  outline-offset: -1px;
+}
+
 .ant-tooltip .ant-tooltip-inner {
   font-size: 11px;
   padding: 4px 8px;
