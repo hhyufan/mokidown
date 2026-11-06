@@ -51,7 +51,8 @@ function LightweightFallback({
   if (isFolder) {
     return (
       <svg className={className} width={size} height={size} viewBox="0 0 24 24" aria-hidden="true">
-        <path fill={isExpanded ? '#dcb67a' : '#c69c5d'} d="M3 5.5A1.5 1.5 0 0 1 4.5 4H9l2 2h8.5A1.5 1.5 0 0 1 21 7.5v10a1.5 1.5 0 0 1-1.5 1.5h-15A1.5 1.5 0 0 1 3 17.5z" />
+        <path fill="#c69c5d" d="M3 5.5A1.5 1.5 0 0 1 4.5 4H9l2 2h8.5A1.5 1.5 0 0 1 21 7.5v10a1.5 1.5 0 0 1-1.5 1.5h-15A1.5 1.5 0 0 1 3 17.5z" />
+        {isExpanded && <path fill="#dcb67a" d="M5 9h16.5a1 1 0 0 1 .97 1.25l-2 7.5A1.7 1.7 0 0 1 18.8 19H4.5a1.5 1.5 0 0 1-1.45-1.88l1-7.2A1 1 0 0 1 5 9Z" />}
       </svg>
     );
   }
