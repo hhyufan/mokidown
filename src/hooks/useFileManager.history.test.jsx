@@ -3,7 +3,7 @@ import { act, renderHook } from '@testing-library/react';
 import { invoke } from '@tauri-apps/api/core';
 import useEditorStore from '@store/useEditorStore';
 import useFileStore from '@store/useFileStore';
-import { historyCapture } from '@utils/tauriApi';
+import { historyCapture, readFileContent } from '@utils/tauriApi';
 import { clearBuffer } from '@utils/editorBuffer';
 import { clearDiskBaselines } from '@/services/localFileGuard';
 import { useFileManager } from './useFileManager';
@@ -13,7 +13,7 @@ vi.mock('@tauri-apps/api/core', () => ({ invoke: vi.fn() }));
 vi.mock('@/i18n', () => ({ default: { t: (key) => key } }));
 
 const path = 'C:\\notes\\unchanged.txt';
-beforeEach(() => {
+beforeEach(async () => {
   vi.clearAllMocks();
   clearBuffer(path);
   clearDiskBaselines();
@@ -25,6 +25,8 @@ beforeEach(() => {
     if (['history_capture', 'start_file_watching'].includes(command)) return;
     throw new Error(`Unexpected command: ${command}`);
   });
+  await readFileContent(path);
+  vi.clearAllMocks();
 });
 afterEach(() => {
   clearBuffer(path);
@@ -46,6 +48,16 @@ it('forces the opening baseline once, and forces a new baseline after closing an
 it('keeps periodic and exit captures deduplicated by default', async () => {
   await historyCapture(path, 'unchanged');
   expect(invoke).toHaveBeenCalledWith('history_capture', { filePath: path, content: 'unchanged', force: false });
+});
+
+it.each(['binary', 'too-large', 'invalid-encoding', 'unreadable', 'not-file'])('rejects opening %s files without adding tabs, recents, history or watchers', async (kind) => {
+  useFileStore.setState({ recentFiles: [] });
+  invoke.mockRejectedValueOnce({ kind, message: 'blocked file' });
+  const { result } = renderHook(() => useFileManager());
+  await act(() => result.current.openFileFromPath(path, 'unchanged.txt'));
+  expect(useEditorStore.getState().tabs).toEqual([]);
+  expect(useFileStore.getState().recentFiles).toEqual([]);
+  expect(invoke.mock.calls.map(([command]) => command)).toEqual(['read_file_content']);
 });
 
 it('passes the rollback source and forced capture through the native bridge', async () => {
