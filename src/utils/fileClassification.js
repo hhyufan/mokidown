@@ -21,8 +21,8 @@ export function clearClassificationCache() {
  * @param {Uint8Array|number[]|null} bytes 文件头部字节。
  * @returns {'text'|'binary'|'invalid-encoding'|'unreadable'} 判定结果。
  */
-export function sniffTextHead(bytes, { partial = true } = {}) {
-  try { decodeTextBytes(bytes, { partial }); return 'text'; }
+export function sniffTextHead(bytes, { partial = true, allowLegacy = false } = {}) {
+  try { decodeTextBytes(bytes, { partial, allowLegacy }); return 'text'; }
   catch (error) { return error.kind || 'unreadable'; }
 }
 
@@ -52,7 +52,10 @@ export async function classifyFile(path, { maxBytes = MAX_TEXT_BYTES } = {}) {
   try { head = await readFileHead(path, HEAD_BYTES); }
   catch { return { kind: 'unreadable', info }; }
   if (head == null || head.length === 0) return { kind: 'unreadable', info };
-  const result = { kind: sniffTextHead(head, { partial: info.size > head.length }), info };
+  const result = { kind: sniffTextHead(head, {
+    partial: info.size > head.length,
+    allowLegacy: !/^(?:web|content):/i.test(path),
+  }), info };
   if (modified && result.kind !== 'unreadable') cache.set(key, result);
   if (cache.size > CACHE_LIMIT) cache.clear();
   return result;

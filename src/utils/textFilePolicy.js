@@ -11,7 +11,9 @@ export class TextFileError extends Error {
   }
 }
 
-export function decodeTextBytes(bytes, { partial = false } = {}) {
+const utf8Bom = [0xef, 0xbb, 0xbf];
+
+export function decodeTextBytes(bytes, { partial = false, allowLegacy = false } = {}) {
   if (bytes == null) throw new TextFileError('unreadable');
   const data = bytes instanceof Uint8Array ? bytes : Uint8Array.from(bytes);
   if (data.byteLength > MAX_TEXT_BYTES) throw new TextFileError('too-large');
@@ -19,7 +21,8 @@ export function decodeTextBytes(bytes, { partial = false } = {}) {
     || (data[0] === 0 && data[1] === 0 && data[2] === 0xfe && data[3] === 0xff)) {
     throw new TextFileError('invalid-encoding');
   }
-  const encoding = data[0] === 0xff && data[1] === 0xfe ? 'UTF-16LE'
+  const hasUtf8Bom = utf8Bom.every((byte, index) => data[index] === byte);
+  let encoding = data[0] === 0xff && data[1] === 0xfe ? 'UTF-16LE'
     : data[0] === 0xfe && data[1] === 0xff ? 'UTF-16BE' : 'UTF-8';
   if (encoding === 'UTF-8' && data.includes(0)) throw new TextFileError('binary');
   let content;
@@ -27,7 +30,16 @@ export function decodeTextBytes(bytes, { partial = false } = {}) {
     // A sampled head may end inside a character; a complete read must not.
     content = new TextDecoder(encoding, { fatal: true }).decode(data, { stream: partial });
   } catch {
-    throw new TextFileError('invalid-encoding');
+    if (encoding !== 'UTF-8' || hasUtf8Bom || !allowLegacy) throw new TextFileError('invalid-encoding');
+    try {
+      content = new TextDecoder('gb18030', { fatal: true }).decode(data, { stream: partial });
+    } catch {
+      throw new TextFileError('invalid-encoding');
+    }
+    if (!/[\u3400-\u9fff\u{20000}-\u{323af}][\s\S]*[\u3400-\u9fff\u{20000}-\u{323af}]/u.test(content)) {
+      throw new TextFileError('invalid-encoding');
+    }
+    encoding = 'GB18030';
   }
   let controls = 0, length = 0;
   for (const character of content) {
@@ -37,10 +49,17 @@ export function decodeTextBytes(bytes, { partial = false } = {}) {
     length++;
   }
   if (length && controls / length > .3) throw new TextFileError('binary');
-  return { content, encoding };
+  return { content, encoding: hasUtf8Bom ? 'UTF-8-BOM' : encoding };
 }
 
 export function encodeTextBytes(content, encoding = 'UTF-8') {
+  if (/^UTF-8-BOM$/i.test(encoding)) {
+    const body = new TextEncoder().encode(content);
+    const bytes = new Uint8Array(utf8Bom.length + body.length);
+    bytes.set(utf8Bom);
+    bytes.set(body, utf8Bom.length);
+    return bytes;
+  }
   if (!/^UTF-16(?:LE|BE)$/i.test(encoding)) return new TextEncoder().encode(content);
   const littleEndian = encoding.toUpperCase() === 'UTF-16LE';
   const bytes = new Uint8Array(2 + content.length * 2), view = new DataView(bytes.buffer);

@@ -1,4 +1,5 @@
 //! Bounded, strict text reads shared by editor entry points and local history.
+use encoding_rs::{DecoderResult, GB18030};
 use serde::Serialize;
 use std::fs::File;
 use std::io::{self, Read};
@@ -6,6 +7,22 @@ use std::path::Path;
 
 pub const MAX_TEXT_BYTES: u64 = 20 * 1024 * 1024;
 const HEAD_BYTES: u64 = 8 * 1024;
+pub const UTF8_BOM: &[u8] = b"\xef\xbb\xbf";
+
+fn decode_legacy_chinese(bytes: &[u8], partial: bool) -> Option<String> {
+    let mut decoder = GB18030.new_decoder_without_bom_handling();
+    let mut content =
+        String::with_capacity(decoder.max_utf8_buffer_length_without_replacement(bytes.len())?);
+    let (result, _) = decoder.decode_to_string_without_replacement(bytes, &mut content, !partial);
+    // Require evidence of Chinese text before interpreting ambiguous non-UTF-8 bytes.
+    (result == DecoderResult::InputEmpty
+        && content
+            .matches(|c: char| matches!(c as u32, 0x3400..=0x9fff | 0x20000..=0x323af))
+            .take(2)
+            .count()
+            == 2)
+        .then_some(content)
+}
 
 #[derive(Debug, Serialize)]
 pub struct TextFileError {
@@ -72,23 +89,27 @@ fn decode(bytes: &[u8], partial: bool) -> Result<TextDocument, TextFileError> {
                 if little { "UTF-16LE" } else { "UTF-16BE" },
             )
         } else {
-            let mut body = bytes.strip_prefix(&[0xef, 0xbb, 0xbf]).unwrap_or(bytes);
+            let has_bom = bytes.starts_with(UTF8_BOM);
+            let body = bytes.strip_prefix(UTF8_BOM).unwrap_or(bytes);
             if body.contains(&0) {
                 return Err(TextFileError::new("binary"));
             }
-            if let Err(error) = std::str::from_utf8(body) {
-                if partial && error.error_len().is_none() {
-                    body = &body[..error.valid_up_to()];
-                } else {
-                    return Err(TextFileError::new("invalid-encoding"));
-                }
+            let encoding = if has_bom { "UTF-8-BOM" } else { "UTF-8" };
+            match std::str::from_utf8(body) {
+                Ok(text) => (text.to_owned(), encoding),
+                Err(error) if partial && error.error_len().is_none() => (
+                    std::str::from_utf8(&body[..error.valid_up_to()])
+                        .unwrap()
+                        .to_owned(),
+                    encoding,
+                ),
+                Err(_) if !has_bom => (
+                    decode_legacy_chinese(body, partial)
+                        .ok_or_else(|| TextFileError::new("invalid-encoding"))?,
+                    "GB18030",
+                ),
+                Err(_) => return Err(TextFileError::new("invalid-encoding")),
             }
-            (
-                std::str::from_utf8(body)
-                    .map_err(|_| TextFileError::new("invalid-encoding"))?
-                    .to_string(),
-                "UTF-8",
-            )
         };
     let mut controls = 0;
     let mut length = 0;
@@ -192,6 +213,11 @@ mod tests {
     fn only_sampled_heads_allow_incomplete_trailing_characters() {
         let head = b"text \xf0\x9f";
         assert_eq!(decode(head, true).unwrap().content, "text ");
+        assert!(decode(head, false).is_err());
+        let head = b"AAA\xb2\xe2\xca\xd42\r\n\xd6\xd0\xce";
+        let text = decode(head, true).unwrap();
+        assert_eq!(text.content, "AAA测试2\r\n中");
+        assert_eq!(text.encoding, "GB18030");
         assert!(decode(head, false).is_err());
     }
 
