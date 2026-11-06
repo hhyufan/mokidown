@@ -1,0 +1,66 @@
+.moki-dialog-root.moki-recovery-root {
+  .ant-modal-wrap { overflow: hidden; }
+  .ant-modal { padding-bottom: 0; }
+  .ant-modal-content {
+    display: flex;
+    flex-direction: column;
+    height: min(820px, calc(100dvh - 32px));
+    max-height: calc(100dvh - 32px);
+  }
+  .ant-modal-header, .ant-modal-footer { flex: 0 0 auto; }
+  .ant-modal .ant-modal-body {
+    display: flex;
+    flex-direction: column;
+    flex: 1;
+    min-height: 0;
+    max-height: none;
+    overflow: hidden;
+    > .ant-alert { flex: 0 0 auto; }
+  }
+}
+.recovery-modal__workspace {
+  display: grid;
+  flex: 1;
+  min-height: 0;
+  grid-template-columns: minmax(180px, 240px) minmax(0, 1fr);
+  grid-template-rows: minmax(0, 1fr);
+  gap: 16px;
+  margin-top: 16px;
+}
+.moki-recovery-root .recovery-modal__list {
+  margin: 0;
+  min-height: 0;
+  overflow: auto;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+}
+.moki-recovery-root .recovery-modal__draft {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 10px;
+  &:last-child { padding-bottom: 10px; }
+  &--active { background: var(--accent-light); }
+  .ant-checkbox-wrapper { margin-top: 2px; }
+}
+.recovery-modal__file {
+  flex: 1; min-width: 0; padding: 0; border: 0; background: transparent;
+  text-align: left; color: var(--text); cursor: pointer; font: inherit;
+  &:focus-visible { outline: 1px solid var(--accent); outline-offset: 2px; border-radius: 2px; }
+}
+.recovery-modal__name { display: block; font-size: 13px; font-weight: 600; overflow-wrap: anywhere; }
+.recovery-modal__location { display: block; margin-top: 4px; color: var(--text-sec); font-size: 11px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.recovery-modal__comparison { display: flex; flex-direction: column; min-width: 0; min-height: 0; overflow: hidden; }
+.moki-recovery-root .recovery-modal__path { margin: 0 0 4px; }
+.recovery-modal__state { flex: 0 0 auto; margin-bottom: 8px; color: var(--text-sec); font-size: 12px; }
+.conflict-dialog__diff.recovery-modal__diff { display: flex; flex: 1; min-height: 0; margin: 0; }
+.recovery-modal__diff .conflict-dialog__diff-shell { display: flex; flex-direction: column; min-height: 0; }
+.recovery-modal__diff .conflict-dialog__pane-labels { flex: 0 0 auto; }
+.recovery-modal__loading { display: grid; place-items: center; flex: 1; min-height: 0; color: var(--text-sec); }
+.recovery-modal__diff .conflict-dialog__monaco { flex: 1; height: auto; min-height: 0; }
+@media (max-width: 700px) {
+  .recovery-modal__workspace {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: minmax(48px, min(20dvh, 130px)) minmax(0, 1fr);
+  }
+}

@@ -45,6 +45,7 @@ export default function MonacoConflictDiff({
   const originalModelRef = useRef(null);
   const modifiedModelRef = useRef(null);
   const [highlighterReady, setHighlighterReady] = useState(isMonacoShikiReady());
+  const [editorReady, setEditorReady] = useState(false);
   const [paneWidths, setPaneWidths] = useState({ left: 0, right: 0 });
 
   const language = useMemo(() => getFileLanguage(fileName || ''), [fileName]);
@@ -119,6 +120,7 @@ export default function MonacoConflictDiff({
       diffEditorRef.current = diffEditor;
       originalModelRef.current = originalModel;
       modifiedModelRef.current = modifiedModel;
+      setEditorReady(true);
 
       initMonacoShiki().then(() => {
         if (disposed) return;
@@ -140,19 +142,23 @@ export default function MonacoConflictDiff({
   }, []);
 
   useEffect(() => {
-    if (!wrapperRef.current) return undefined;
+    if (!wrapperRef.current || !editorReady) return undefined;
+    let frameId = null;
 
     /**
      * 同步左右编辑窗格的实际宽度，用于让顶部标签栏与 Monaco 分栏保持对齐。
      */
     const syncPaneWidths = () => {
+      frameId = null;
       const root = wrapperRef.current;
       if (!root) return;
       const leftPane = root.querySelector('.editor.original');
       const rightPane = root.querySelector('.editor.modified');
-      const nextLeft = leftPane?.getBoundingClientRect().width || 0;
-      const nextRight = rightPane?.getBoundingClientRect().width || 0;
-      if (!nextLeft || !nextRight) return;
+      // Use layout pixels, including Monaco's center gutter. Viewport rects
+      // are scaled while the modal opens and would misalign the header.
+      const nextLeft = rightPane?.offsetLeft || 0;
+      const nextRight = root.clientWidth - nextLeft;
+      if (!leftPane?.offsetWidth || !rightPane?.offsetWidth || !nextLeft || !nextRight) return;
       setPaneWidths((prev) =>
         prev.left === nextLeft && prev.right === nextRight
           ? prev
@@ -160,8 +166,9 @@ export default function MonacoConflictDiff({
       );
     };
 
-    const frameId = requestAnimationFrame(syncPaneWidths);
-    const observer = new ResizeObserver(syncPaneWidths);
+    const schedule = () => { if (frameId == null) frameId = requestAnimationFrame(syncPaneWidths); };
+    schedule();
+    const observer = new ResizeObserver(schedule);
     observer.observe(wrapperRef.current);
 
     const leftPane = wrapperRef.current.querySelector('.editor.original');
@@ -169,13 +176,13 @@ export default function MonacoConflictDiff({
     if (leftPane) observer.observe(leftPane);
     if (rightPane) observer.observe(rightPane);
 
-    window.addEventListener('resize', syncPaneWidths);
+    window.addEventListener('resize', schedule);
     return () => {
-      cancelAnimationFrame(frameId);
+      if (frameId != null) cancelAnimationFrame(frameId);
       observer.disconnect();
-      window.removeEventListener('resize', syncPaneWidths);
+      window.removeEventListener('resize', schedule);
     };
-  }, [original, modified]);
+  }, [original, modified, editorReady]);
 
   useEffect(() => {
     if (originalModelRef.current && originalModelRef.current.getValue() !== original) {

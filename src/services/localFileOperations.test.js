@@ -45,6 +45,28 @@ afterEach(() => {
 });
 
 describe('local file save/watch coordination', () => {
+  it.each(['binary', 'too-large', 'invalid-encoding', 'unreadable', 'not-file'])('preserves the buffer and baseline when disk becomes %s, then resumes after recovery', async (kind) => {
+    setBuffer(path, 'my unsaved edits');
+    invoke.mockRejectedValueOnce({ kind, message: 'blocked disk' });
+    expect(await reconcileFileChange(path)).toBe('blocked');
+    expect(getBuffer(path)).toBe('my unsaved edits');
+    expect(getDiskBaseline(path).content).toBe('base');
+    expect(useEditorStore.getState().externalFileConflict).toMatchObject({ kind: 'blocked', blockedReason: kind });
+    expect(useEditorStore.getState().externalFileConflict).not.toHaveProperty('diskContent');
+    invoke.mockRejectedValueOnce({ kind, message: 'blocked disk' });
+    expect(await saveExistingFile(path)).toMatchObject({ success: false, conflict: true });
+    expect(invoke.mock.calls.some(([command]) => command === 'save_file')).toBe(false);
+    expect(await saveExistingFile(path)).toMatchObject({ success: true });
+    expect(diskContent).toBe('my unsaved edits');
+    expect(useEditorStore.getState().externalFileConflict).toBeNull();
+  });
+
+  it('does not read files after their editor tab has closed', async () => {
+    useEditorStore.setState({ tabs: [], tabRenderList: [] });
+    expect(await reconcileFileChange(path)).toBe('superseded');
+    expect(invoke).not.toHaveBeenCalled();
+  });
+
   it('flushes a delayed editor before writing and clears dirty state for that exact snapshot', async () => {
     const stop = registerEditorBufferFlusher(() => path, () => {
       setBuffer(path, 'latest editor text');

@@ -46,16 +46,3 @@
   .ant-checkbox + span { min-width: 0; overflow-wrap: anywhere; }
 }
 .moki-dialog-root .recovery-modal__path { margin: 6px 0; font-size: 12px; color: var(--text-sec); }
-.recovery-modal__preview {
-  margin: 0;
-  padding: 10px 12px;
-  max-height: 104px;
-  overflow: auto;
-  white-space: pre-wrap;
-  overflow-wrap: anywhere;
-  font: 12px/1.6 var(--font-mono, monospace);
-  color: var(--text-sec);
-  background: var(--surface);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-sm);
-}
