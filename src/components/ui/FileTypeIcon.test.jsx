@@ -45,6 +45,9 @@ describe('folder icon integration', () => {
     for (const name of ['mysql', 'tomcat', 'en', 'zh', 'users', 'user']) {
       expect(getFolderIconUrl(name)).toMatch(/data:image\/svg|\.svg/);
     }
+    for (const name of ['csharp', 'dotnet', '.mvn', 'maven', 'mysql', 'tomcat', 'en', 'english', 'zh', 'users', 'user']) {
+      expect(getFolderIconUrl(name, true)).not.toBe(getFolderIconUrl(name));
+    }
     expect(getFolderIconUrl('ssh')).toContain('folder-console');
     expect(getFolderIconUrl('jdk')).toContain('folder-java');
     expect(getFolderIconUrl('share')).toContain('folder-shared');
