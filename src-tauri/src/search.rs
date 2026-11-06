@@ -19,6 +19,11 @@ pub struct SearchOptions {
     case_sensitive: bool,
     #[serde(default)]
     include_excluded: bool,
+    #[serde(default)]
+    filename_only: bool,
+    #[serde(default)]
+    include_folders: bool,
+    recursive: Option<bool>,
 }
 
 #[derive(Serialize)]
@@ -169,6 +174,9 @@ fn scan(
     options: &SearchOptions,
     cancelled: &AtomicBool,
 ) -> Result<SearchResponse, String> {
+    if options.filename_only && !content {
+        return scan_names(root, query, limit, options, cancelled);
+    }
     fs::read_dir(root).map_err(|error| format!("Cannot search {}: {error}", root.display()))?;
     let mut response = SearchResponse::default();
     let mut pending = vec![root.to_path_buf()];
@@ -264,6 +272,82 @@ fn scan(
     Ok(response)
 }
 
+// Explorer filename searches stream entries and keep only a bounded result set.
+// Unlike the ranked quick-open search, there is no need to sort entire folders.
+fn scan_names(
+    root: &Path,
+    query: &str,
+    limit: usize,
+    options: &SearchOptions,
+    cancelled: &AtomicBool,
+) -> Result<SearchResponse, String> {
+    let mut directories = vec![fs::read_dir(root).map_err(|error| error.to_string())?];
+    let needle = normalized(query, options.case_sensitive);
+    let mut response = SearchResponse::default();
+    while let Some(directory) = directories.last_mut() {
+        if cancelled.load(Ordering::Relaxed) {
+            break;
+        }
+        let Some(entry) = directory.next() else {
+            directories.pop();
+            continue;
+        };
+        let Ok(entry) = entry else {
+            response.skipped_files += 1;
+            continue;
+        };
+        let Ok(kind) = entry.file_type() else {
+            response.skipped_files += 1;
+            continue;
+        };
+        if kind.is_symlink() {
+            continue;
+        }
+        let path = entry.path();
+        let name = entry.file_name().to_string_lossy().into_owned();
+        if (kind.is_file() || (kind.is_dir() && options.include_folders))
+            && normalized(&name, options.case_sensitive).contains(&needle)
+        {
+            if response.results.len() == limit {
+                response.truncated = true;
+                break;
+            }
+            response.results.push(SearchResult {
+                name: name.clone(),
+                path: path.to_string_lossy().into_owned(),
+                is_dir: kind.is_dir(),
+                matched_line: None,
+                line_number: None,
+                column_number: None,
+                match_length: None,
+                score: 0,
+            });
+        }
+        let lower = name.to_lowercase();
+        if kind.is_dir()
+            && options.recursive != Some(false)
+            && (options.include_excluded
+                || !(name.starts_with('.')
+                    || [
+                        "node_modules",
+                        "target",
+                        "dist",
+                        "build",
+                        "vendor",
+                        "__pycache__",
+                    ]
+                    .contains(&lower.as_str())))
+        {
+            match fs::read_dir(path) {
+                Ok(children) => directories.push(children),
+                Err(_) => response.skipped_files += 1,
+            }
+        }
+    }
+    response.results.sort_by(|a, b| a.path.cmp(&b.path));
+    Ok(response)
+}
+
 #[tauri::command]
 pub async fn search_files(
     dir_path: String,
@@ -308,6 +392,67 @@ pub async fn cancel_search(task_id: String) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn explorer_names_include_folders_respect_case_and_do_not_match_parent_paths() {
+        let root = tempfile::tempdir().unwrap();
+        fs::create_dir(root.path().join("Git")).unwrap();
+        fs::write(root.path().join("Git").join("readme.md"), "git").unwrap();
+        fs::write(root.path().join("git.md"), "").unwrap();
+        let mut options = SearchOptions {
+            filename_only: true,
+            include_folders: true,
+            include_excluded: true,
+            ..SearchOptions::default()
+        };
+        let run = |options: &SearchOptions, limit| {
+            scan(
+                root.path(),
+                "git",
+                false,
+                limit,
+                options,
+                &AtomicBool::new(false),
+            )
+            .unwrap()
+        };
+        let response = run(&options, 1000);
+        assert_eq!(response.results.len(), 2);
+        assert!(response.results.iter().any(|result| result.is_dir));
+        assert!(run(&options, 1).truncated);
+        options.case_sensitive = true;
+        assert_eq!(run(&options, 1000).results.len(), 1);
+        options.case_sensitive = false;
+        options.recursive = Some(false);
+        assert_eq!(
+            scan(
+                root.path(),
+                "readme",
+                false,
+                1000,
+                &options,
+                &AtomicBool::new(false)
+            )
+            .unwrap()
+            .results
+            .len(),
+            0
+        );
+        options.recursive = Some(true);
+        assert_eq!(
+            scan(
+                root.path(),
+                "readme",
+                false,
+                1000,
+                &options,
+                &AtomicBool::new(false)
+            )
+            .unwrap()
+            .results
+            .len(),
+            1
+        );
+    }
     #[test]
     fn includes_dotfiles_code_and_fuzzy_paths() {
         let root = tempfile::tempdir().unwrap();
@@ -409,6 +554,7 @@ mod tests {
         let options = SearchOptions {
             include_excluded: true,
             case_sensitive: true,
+            ..SearchOptions::default()
         };
         assert_eq!(
             scan(

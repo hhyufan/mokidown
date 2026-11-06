@@ -13,6 +13,7 @@
  */
 
 import i18n from '@/i18n';
+import { decodeTextBytes, encodeTextBytes, MAX_TEXT_BYTES, TextFileError } from './textFilePolicy';
 
 const SAF_SCHEME = 'content://';
 
@@ -294,22 +295,6 @@ function bytesToBase64(bytes) {
 }
 
 /**
- * 根据字节头推断文本编码。
- *
- * 当前桥接层只显式区分 UTF-8 与带 BOM 的 UTF-8，返回值保留为统一的
- * 大写编码名，便于与上层编辑器元信息保持一致。
- *
- * @param {Uint8Array} bytes 文件原始字节。
- * @returns {string} 推断出的编码名称。
- */
-function detectEncodingFromBytes(bytes) {
-  if (bytes.length >= 3 && bytes[0] === 0xef && bytes[1] === 0xbb && bytes[2] === 0xbf) {
-    return 'UTF-8';
-  }
-  return 'UTF-8';
-}
-
-/**
  * 统计文本内容所使用的换行风格。
  *
  * @param {string} content 文本内容。
@@ -333,36 +318,36 @@ function detectLineEnding(content) {
 export async function readFileText(uri) {
   const b = getBridge();
   if (!b) throw new Error('AndroidSaf bridge unavailable');
+  const info = await statUri(uri);
+  if (!info.is_file) throw new TextFileError('not-file');
+  if (info.size > MAX_TEXT_BYTES) throw new TextFileError('too-large');
   const data = parseJson(b.readFile(uri));
   if (!data || data.ok === false) {
+    if (data?.kind) throw new TextFileError(data.kind, data.message);
     throwIfError(data);
     throw new Error(i18n.t('error.safRead'));
   }
   const bytes = base64ToBytes(data.content_base64 || '');
-  const decoder = new TextDecoder('utf-8');
-  const content = decoder.decode(bytes);
-  // 去掉 UTF-8 BOM，避免它被再次带回编辑器缓冲区。
-  const stripped = content.startsWith('\uFEFF') ? content.slice(1) : content;
+  const { content, encoding } = decodeTextBytes(bytes);
   return {
-    content: stripped,
-    encoding: detectEncodingFromBytes(bytes),
-    lineEnding: detectLineEnding(stripped),
+    content,
+    encoding,
+    lineEnding: detectLineEnding(content),
     size: data.size,
   };
 }
 
 /**
- * 以 UTF-8 文本形式写入 SAF 文件。
+ * 按原文本编码写入 SAF 文件（UTF-8 或带 BOM 的 UTF-16）。
  *
  * @param {string} uri 目标文件 URI。
  * @param {string} content 待写入的文本内容。
  * @returns {Promise<{size: number}>} 写入后的文件大小信息。
  */
-export async function writeFileText(uri, content) {
+export async function writeFileText(uri, content, encoding = 'UTF-8') {
   const b = getBridge();
   if (!b) throw new Error('AndroidSaf bridge unavailable');
-  const encoder = new TextEncoder();
-  const bytes = encoder.encode(content ?? '');
+  const bytes = encodeTextBytes(content ?? '', encoding);
   const data = parseJson(b.writeFile(uri, bytesToBase64(bytes)));
   if (!data || data.ok === false) {
     throwIfError(data);

@@ -8,7 +8,6 @@ import {
   writeFileContent,
   checkFileExists,
   getFileInfo,
-  getDirectoryContents,
   renameFile,
   startFileWatching,
   stopFileWatching,
@@ -35,7 +34,7 @@ import useNotificationStore from '@store/useNotificationStore';
 
 import { getBuffer, flushEditorBuffer } from '@utils/editorBuffer';
 import { debounceByKey } from '@utils/debounce';
-import { sortDirectoryContents } from '@utils/directoryContents';
+import { loadWorkspaceFiles } from '@/services/workspaceFiles';
 import { isAndroidRuntime } from '@utils/platform';
 import { rememberDiskBaseline } from '@/services/localFileGuard';
 import { saveExistingFile } from '@/services/localFileOperations';
@@ -166,8 +165,6 @@ export function useFileManager() {
     updateTabPath,
   } = useEditorStore.getState();
   const {
-    setCurrentDir,
-    setFiles,
     addRecentFile,
     replaceRecentFilePath,
     replaceBookmarkPath,
@@ -208,7 +205,8 @@ export function useFileManager() {
    * @returns {void}
    */
   const createNewFile = useCallback(() => {
-    const currentDir = useFileStore.getState().currentDir;
+    const { currentDir, explorerMode, projectRootCollapsed } = useFileStore.getState();
+    if (explorerMode === 'project' && projectRootCollapsed) return;
     if (currentDir) {
       window.dispatchEvent(new CustomEvent('explorer:newFileRequest'));
       return;
@@ -229,9 +227,7 @@ export function useFileManager() {
       const { currentDir } = useFileStore.getState();
       if (!currentDir) {
         try {
-          const contents = await getDirectoryContents(dir);
-          useFileStore.getState().setFiles(contents);
-          useFileStore.getState().setCurrentDir(dir);
+          await loadWorkspaceFiles(dir, { navigate: true });
         } catch (_) {
           // 这里只做尽力初始化。Rust 命令已保证目录存在；若仍失败，用户可以
           // 稍后通过资源管理器工具栏手动重试。
@@ -303,13 +299,11 @@ export function useFileManager() {
       }
     }
     try {
-      const contents = await getDirectoryContents(dirPath);
-      setFiles(sortDirectoryContents(contents, useFileStore.getState()));
-      setCurrentDir(dirPath);
+      await loadWorkspaceFiles(dirPath, { navigate: true });
     } catch (err) {
       notify('error', t('notification.error'), String(err));
     }
-  }, [notify, setCurrentDir, setFiles, t]);
+  }, [notify, t]);
 
   /**
    * 仅刷新目录内容，不推进目录导航历史。
@@ -335,12 +329,11 @@ export function useFileManager() {
       }
     }
     try {
-      const contents = await getDirectoryContents(dirPath);
-      setFiles(sortDirectoryContents(contents, useFileStore.getState()));
+      await loadWorkspaceFiles(dirPath);
     } catch (err) {
       notify('error', t('notification.error'), String(err));
     }
-  }, [notify, setFiles, t]);
+  }, [notify, t]);
 
   // 供 TabBar 的 “+” 和资源管理器工具栏的 “+” 复用：
   // 若当前已打开目录，则触发资源管理器内联新建文件；
@@ -351,7 +344,8 @@ export function useFileManager() {
    * @returns {Promise<void>}
    */
   const createFileWithDialog = useCallback(async () => {
-    const currentDir = useFileStore.getState().currentDir;
+    const { currentDir, explorerMode, projectRootCollapsed } = useFileStore.getState();
+    if (explorerMode === 'project' && projectRootCollapsed) return;
     if (currentDir) {
       window.dispatchEvent(new CustomEvent('explorer:newFileRequest'));
       return;
@@ -589,12 +583,12 @@ export function useFileManager() {
         if (!isAndroid) startFileWatching(filePath).catch(() => {});
         broadcastToPlugins({ type: 'event', name: 'didOpen', payload: { path: filePath, name: fileName } });
       } else {
-        notify('error', t('notification.error'), result.message);
+        notify(result.blockedReason ? 'warning' : 'error', t('notification.error'), result.message);
       }
     } catch (err) {
       notify('error', t('notification.error'), String(err));
     }
-  }, [isAndroid]);
+  }, [addRecentFile, isAndroid, notify, openTab, t]);
 
   /**
    * 在当前 Explorer 目录下创建新文件，并在成功后立即打开。
@@ -708,7 +702,7 @@ export function useFileManager() {
           for (const handle of handles) {
             const file = await handle.getFile();
             const webPath = `web://${file.name}`;
-            registerWebFile(webPath, handle, await file.text());
+            registerWebFile(webPath, handle);
             await openFileFromPath(webPath, file.name);
           }
         } catch (err) {

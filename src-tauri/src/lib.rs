@@ -15,6 +15,7 @@ use std::process::Command;
 use std::sync::{Arc, Mutex};
 use std::time::{SystemTime, UNIX_EPOCH};
 use tauri::{AppHandle, Emitter, Manager};
+mod directory_index;
 mod extensions;
 mod hotkeys;
 mod language_plugins;
@@ -26,6 +27,7 @@ mod script_runner;
 mod search;
 mod startup;
 mod startup_gate;
+mod text_file;
 
 /// 返回给前端的轻量级文件系统条目元数据，
 /// 用于资源管理器界面展示文件和目录。
@@ -164,20 +166,6 @@ static DIAGNOSTIC_LOG_LOCK: Lazy<Mutex<()>> = Lazy::new(|| Mutex::new(()));
 const DIAGNOSTIC_LOG_LIMIT: u64 = 2 * 1024 * 1024;
 const DIAGNOSTIC_LOG_FILES: usize = 5;
 
-/// 检测读取文件时应使用的文本编码。
-///
-/// 当前实现只区分是否兼容 UTF-8，其余情况统一回退到 UTF-8，
-/// 以便桥接层稳定地向前端返回解码结果。
-fn detect_file_encoding(bytes: &[u8]) -> &'static Encoding {
-    if bytes.starts_with(&[0xEF, 0xBB, 0xBF]) {
-        return UTF_8;
-    }
-    if std::str::from_utf8(bytes).is_ok() {
-        return UTF_8;
-    }
-    UTF_8
-}
-
 /// 检测解码后文本内容的主要换行风格。
 ///
 /// 结果会归一化为 `CRLF`、`CR` 或 `LF`，
@@ -287,34 +275,32 @@ fn atomic_write(target: &Path, bytes: &[u8]) -> Result<(), String> {
 
 /// 读取文本文件，并返回解码后的内容与基础编辑器元数据。
 #[tauri::command]
-async fn read_file_content(path: String) -> Result<FileOperationResult, String> {
-    match fs::read(&path) {
-        Ok(bytes) => {
-            let encoding = detect_file_encoding(&bytes);
-            let (content, _, _) = encoding.decode(&bytes);
-            let content_str = content.to_string();
-            let line_ending = detect_line_ending(&content_str);
+async fn read_file_content(path: String) -> Result<FileOperationResult, text_file::TextFileError> {
+    let text = text_file::read(Path::new(&path))?;
+    let line_ending = detect_line_ending(&text.content);
+    Ok(FileOperationResult {
+        success: true,
+        message: "File read successfully".to_string(),
+        content: Some(text.content),
+        file_path: Some(path),
+        file_name: None,
+        encoding: Some(text.encoding.to_string()),
+        line_ending: Some(line_ending),
+    })
+}
 
-            Ok(FileOperationResult {
-                success: true,
-                message: "File read successfully".to_string(),
-                content: Some(content_str),
-                file_path: Some(path),
-                file_name: None,
-                encoding: Some(encoding.name().to_string()),
-                line_ending: Some(line_ending),
-            })
-        }
-        Err(e) => Ok(FileOperationResult {
-            success: false,
-            message: format!("Failed to read file: {}", e),
-            content: None,
-            file_path: None,
-            file_name: None,
-            encoding: None,
-            line_ending: None,
-        }),
-    }
+/// 读取文件开头的若干字节，用于二进制嗅探，避免把整文件读进内存。
+#[tauri::command]
+async fn read_file_head(path: String, limit: u32) -> Result<Vec<u8>, String> {
+    use std::io::Read;
+    const MAX_HEAD: u32 = 64 * 1024;
+    let take = limit.min(MAX_HEAD);
+    let file = fs::File::open(&path).map_err(|e| format!("Failed to open file: {e}"))?;
+    let mut buffer = Vec::with_capacity(take as usize);
+    file.take(take as u64)
+        .read_to_end(&mut buffer)
+        .map_err(|e| format!("Failed to read file head: {e}"))?;
+    Ok(buffer)
 }
 
 /// 根据路径扩展名推断二进制文件预览所需的 MIME 类型。
@@ -394,7 +380,11 @@ async fn save_file(
 
     let target_encoding = encoding.as_deref().unwrap_or("UTF-8");
     let encoding_obj = Encoding::for_label(target_encoding.as_bytes()).unwrap_or(UTF_8);
-    let (encoded_bytes, _, _) = encoding_obj.encode(&content);
+    let encoded_bytes = match target_encoding.to_ascii_uppercase().as_str() {
+        "UTF-16LE" => text_file::encode_utf16(&content, true),
+        "UTF-16BE" => text_file::encode_utf16(&content, false),
+        _ => encoding_obj.encode(&content).0.into_owned(),
+    };
 
     match atomic_write(path, &encoded_bytes) {
         Ok(_) => {
@@ -476,9 +466,24 @@ fn capture_history(
     restored_from: Option<u64>,
 ) -> Result<bool, String> {
     let dir = history_directory(app, file_path)?;
+    capture_file_history_in(Path::new(file_path), &dir, content, force, restored_from)
+}
+
+fn capture_file_history_in(
+    file_path: &Path,
+    dir: &Path,
+    content: &str,
+    force: bool,
+    restored_from: Option<u64>,
+) -> Result<bool, String> {
+    // Every capture entry point (including plugins/restore/close) shares the
+    // editor's bounded strict read. Rejected files never create history dirs.
+    if content.len() as u64 > text_file::MAX_TEXT_BYTES || text_file::read(file_path).is_err() {
+        return Ok(false);
+    }
     match restored_from {
-        Some(source) => capture_history_with_source(&dir, content, force, Some(source)),
-        None => capture_history_in(&dir, content, force),
+        Some(source) => capture_history_with_source(dir, content, force, Some(source)),
+        None => capture_history_in(dir, content, force),
     }
 }
 
@@ -1172,9 +1177,7 @@ async fn delete_file(path: String) -> Result<FileOperationResult, String> {
 #[tauri::command]
 async fn start_file_watching(app_handle: AppHandle, file_path: String) -> Result<bool, String> {
     let path = Path::new(&file_path);
-    if !path.exists() {
-        return Err("File does not exist".to_string());
-    }
+    text_file::check_head(path).map_err(|error| error.message)?;
     let app_handle_clone = app_handle.clone();
     let file_path_clone = file_path.clone();
 
@@ -1434,6 +1437,7 @@ fn focus_main_window(app: &AppHandle) {
     if startup::is_starting(app) {
         return;
     }
+    #[cfg(not(target_os = "android"))]
     if let Some(window) = app.get_webview_window("main") {
         let _ = window.show();
         let _ = window.unminimize();
@@ -1464,7 +1468,8 @@ async fn show_main_window(app: AppHandle) -> Result<(), String> {
                     .show()
                     .map_err(|e| format!("Failed to show window: {}", e))?;
                 window.unminimize().map_err(|error| error.to_string())?;
-                window.set_focus().map_err(|error| error.to_string())?;
+                #[cfg(not(target_os = "android"))]
+        window.set_focus().map_err(|error| error.to_string())?;
                 Ok(())
             }
             None => Err("Main window not found".to_string()),
@@ -1612,11 +1617,6 @@ fn migrate_legacy_app_data(app: &AppHandle) {
     std::thread::spawn(move || migrate_data_directory(&legacy, &current, "Documents"));
 }
 
-#[cfg_attr(mobile, tauri::mobile_entry_point)]
-/// 桌面端 `main()` 与移动端入口共用的 Tauri 启动逻辑。
-///
-/// 这里统一挂载插件并注册所有可由前端 `invoke` 调用的桥接命令，
-/// 让启动配置集中维护在同一个位置。
 /// 与 bundle identifier 对应的 WebView 用户数据目录名（Tauri 在 Windows/Linux 上
 /// 用 identifier 推导 `<LocalData>/<identifier>`）。
 const CURRENT_APP_DATA_DIR_NAME: &str = "com.mokidown.app";
@@ -1671,6 +1671,11 @@ fn migrate_legacy_webview_profile() {
     }
 }
 
+#[cfg_attr(mobile, tauri::mobile_entry_point)]
+/// 桌面端 `main()` 与移动端入口共用的 Tauri 启动逻辑。
+///
+/// 这里统一挂载插件并注册所有可由前端 `invoke` 调用的桥接命令，
+/// 让启动配置集中维护在同一个位置。
 pub fn run() {
     // 必须在创建任何窗口之前执行，见 migrate_legacy_webview_profile 的说明。
     migrate_legacy_webview_profile();
@@ -1713,6 +1718,7 @@ pub fn run() {
         // 完整流程，再放一遍开屏是重复的。这里直接把 splash 窗口关掉，
         // main_window_ready 会走 no_splash 分支立即完成交接；主窗口随后由前端
         // 播一段电视开机效果（见 CrtBoot）。
+        #[cfg(not(target_os = "android"))]
         if startup::is_after_update_launch() {
             if let Some(splash) = app.get_webview_window("splash") {
                 let _ = splash.close();
@@ -1751,6 +1757,7 @@ pub fn run() {
         // 注册通过 `invoke` 暴露给前端的 Rust <-> WebView 桥接接口。
         .invoke_handler(tauri::generate_handler![
             read_file_content,
+            read_file_head,
             read_binary_file,
             write_file_content,
             save_file,
@@ -1767,6 +1774,10 @@ pub fn run() {
             check_file_exists,
             get_file_info,
             get_directory_contents,
+            directory_index::open_directory_index,
+            directory_index::read_directory_page,
+            directory_index::locate_directory_entry,
+            directory_index::close_directory_index,
             rename_file,
             delete_file,
             start_file_watching,
@@ -1831,6 +1842,60 @@ pub fn run() {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn blocked_files_never_create_or_update_history_even_for_forced_captures() {
+        let root = tempfile::tempdir().unwrap();
+        let source = root.path().join("file.md");
+        let history = root.path().join("history");
+        fs::write(&source, b"binary\0payload").unwrap();
+        assert!(
+            !capture_file_history_in(&source, &history, "old editor text", true, None).unwrap()
+        );
+        assert!(!history.exists());
+        fs::write(&source, "valid text").unwrap();
+        assert!(capture_file_history_in(&source, &history, "valid text", true, None).unwrap());
+        let entries = list_history_timestamps(&history).unwrap();
+        fs::write(&source, b"binary\0payload").unwrap();
+        assert!(!capture_file_history_in(
+            &source,
+            &history,
+            "unsaved edits",
+            true,
+            Some(entries[0])
+        )
+        .unwrap());
+        assert_eq!(list_history_timestamps(&history).unwrap(), entries);
+        assert_eq!(
+            fs::read_to_string(history.join(entries[0].to_string())).unwrap(),
+            "valid text"
+        );
+    }
+
+    #[test]
+    fn editor_commands_preserve_utf16_and_reject_binary_reads() {
+        let root = tempfile::tempdir().unwrap();
+        let path = root.path().join("text.txt").to_string_lossy().to_string();
+        for encoding in ["UTF-16LE", "UTF-16BE"] {
+            let saved = tauri::async_runtime::block_on(save_file(
+                path.clone(),
+                "中文 😀\r\n".into(),
+                Some(encoding.into()),
+            ))
+            .unwrap();
+            assert!(saved.success);
+            let read = tauri::async_runtime::block_on(read_file_content(path.clone())).unwrap();
+            assert_eq!(read.content.as_deref(), Some("中文 😀\r\n"));
+            assert_eq!(read.encoding.as_deref(), Some(encoding));
+        }
+        fs::write(&path, b"\xef\xbb\xbftext\0binary").unwrap();
+        assert_eq!(
+            tauri::async_runtime::block_on(read_file_content(path))
+                .unwrap_err()
+                .kind,
+            "binary"
+        );
+    }
 
     #[test]
     fn history_open_forces_a_version_even_when_content_is_unchanged() {
