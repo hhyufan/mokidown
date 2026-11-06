@@ -24,10 +24,11 @@ import { isSafUri, safDisplayName } from '@utils/tauriApi';
 import FileNameField, { splitFileName, DEFAULT_FILE_EXTENSION } from './FileNameField';
 import VirtualFileList from './VirtualFileList';
 import { sortDirectoryContents } from '@utils/directoryContents';
-import { getFileIconUrl } from '@utils/fileIcons';
-import { getFolderIconUrl } from '@utils/folderIcons';
-import folderDefaultUrl from '../../../../assets/file-icons/folder-default.svg?url';
-import fileDefaultUrl from '../../../../assets/file-icons/file-default.svg?url';
+import ExplorerEntryIcon from './ExplorerEntryIcon';
+import ExplorerNavigation from './ExplorerNavigation';
+import useExplorerSearch from '@hooks/useExplorerSearch';
+import { locateDirectoryEntry } from '@utils/tauriApi';
+import ExplorerMatchName from './ExplorerMatchName';
 import { ensureDirectoryRange, getIndexedFile } from '@/services/workspaceFiles';
 import './file-tree.scss';
 
@@ -63,32 +64,6 @@ function buildBreadcrumbPath(currentDir, index) {
 }
 
 /**
- * 计算当前目录的父级目录路径。
- *
- * @param {string} currentDir 当前目录绝对路径。
- * @returns {string} 父级目录路径；若已到根目录则返回空字符串。
- */
-function getParentDir(currentDir) {
-  if (!currentDir) return '';
-  const normalized = currentDir.replace(/[\\/]+$/, '');
-  const parts = normalized.split(/[\\/]/).filter(Boolean);
-  if (parts.length <= 1) return '';
-
-  const isWindowsDrive = /^[A-Z]:$/i.test(parts[0]);
-  if (isWindowsDrive) {
-    if (parts.length === 2) return `${parts[0]}\\`;
-    return `${parts[0]}\\${parts.slice(1, -1).join('\\')}`;
-  }
-  // Keep browser-demo paths in their web:// form; the root itself has no parent.
-  if (parts[0] === 'web:') {
-    if (parts.length <= 2) return 'web:';
-    return `web://${parts.slice(1, -1).join('/')}`;
-  }
-  const next = `/${parts.slice(0, -1).join('/')}`;
-  return next || '/';
-}
-
-/**
  * 资源管理器文件树。
  *
  * 负责目录导航、面包屑滚动、文件排序、新建文件入口，以及目录项点击与删除等
@@ -102,17 +77,13 @@ function FileTree() {
   const directoryError = useFileStore((s) => s.directoryError);
   const fileBadges = usePluginContributions((s) => s.fileBadges);
   const currentDir = useFileStore((s) => s.currentDir);
-  const historyIndex = useFileStore((s) => s.historyIndex);
-  const dirHistory = useFileStore((s) => s.dirHistory);
   const sortBy = useFileStore((s) => s.sortBy);
   const sortOrder = useFileStore((s) => s.sortOrder);
   const activeTabId = useEditorStore((s) => s.activeTabId);
 
   const {
     loadDirectory,
-    loadFilesOnly,
     openFileFromPath,
-    openInExplorer,
     createFileInCurrentDir,
     renameEntry,
   } = useFileManager();
@@ -226,55 +197,7 @@ function FileTree() {
     });
   }, [currentDir, updateBcScrollbar]);
 
-  // 目录历史导航状态与能力判断。
   const currentDirIsSaf = isSafUri(currentDir);
-  const canGoBack = historyIndex > 0;
-  const canGoForward = historyIndex < dirHistory.length - 1;
-
-  /**
-   * 在目录历史中后退一级，并仅刷新目标目录的文件列表。
-   *
-   * @returns {Promise<void>}
-   */
-  const handleGoBack = useCallback(async () => {
-    if (!canGoBack) return;
-    const targetDir = dirHistory[historyIndex - 1];
-    useFileStore.getState().goBack();
-    await loadFilesOnly(targetDir);
-  }, [canGoBack, dirHistory, historyIndex, loadFilesOnly]);
-
-  /**
-   * 在目录历史中前进一步，并仅刷新目标目录的文件列表。
-   *
-   * @returns {Promise<void>}
-   */
-  const handleGoForward = useCallback(async () => {
-    if (!canGoForward) return;
-    const targetDir = dirHistory[historyIndex + 1];
-    useFileStore.getState().goForward();
-    await loadFilesOnly(targetDir);
-  }, [canGoForward, dirHistory, historyIndex, loadFilesOnly]);
-
-  /**
-   * 打开当前目录的父级目录。
-   *
-   * @returns {void}
-   */
-  const handleGoUp = useCallback(() => {
-    if (!currentDir) return;
-    if (currentDirIsSaf) return;
-    const parentDir = getParentDir(currentDir);
-    if (parentDir) loadDirectory(parentDir);
-  }, [currentDir, currentDirIsSaf, loadDirectory]);
-
-  /**
-   * 关闭当前已打开的目录，并清空资源管理器状态。
-   *
-   * @returns {void}
-   */
-  const handleCloseFolder = useCallback(() => {
-    useFileStore.getState().clearDirectory();
-  }, []);
 
   // 行内新建文件流程。
   /**
@@ -390,11 +313,50 @@ function FileTree() {
   const sortedFiles = useMemo(() => snapshotId ? [] : sortDirectoryContents(files, { sortBy, sortOrder }),
     [snapshotId, files, sortBy, sortOrder]);
 
+  const [scrollTarget, setScrollTarget] = useState(null);
+
+  // Keep the new-file footer visible when creation starts.
+  useEffect(() => {
+    if (isCreatingFile) setScrollTarget({ index: sortedFiles.length, align: 'end' });
+  }, [isCreatingFile, sortedFiles.length]);
+  const [searchPath, setSearchPath] = useState('');
+  const search = useExplorerSearch({ root: directoryLoading ? '' : currentDir, recursive: false, version: snapshotId || files,
+    onMatch: async (file, isCurrent) => {
+      const index = directoryIndex ? await locateDirectoryEntry(directoryIndex.id, file.path)
+        : sortedFiles.findIndex((entry) => entry.path === file.path);
+      if (index == null || index < 0 || !isCurrent()) return;
+      setSearchPath(file.path); setScrollTarget({ index });
+    },
+  });
+
   // 面包屑展示数据。
   const breadcrumbParts = currentDir
     ? (currentDirIsSaf ? [safDisplayName(currentDir)] : currentDir.split(/[\\/]/).filter(Boolean))
     : [];
   const shouldCollapse = breadcrumbParts.length > 3 && !breadcrumbExpanded;
+
+  // New-file input row: rendered as the virtual list footer so it follows the
+  // last file instead of floating at the bottom of the panel.
+  const creatingRow = isCreatingFile ? (
+    <div className="file-tree__item file-tree__item--creating">
+      <span className="file-tree__item-icon">
+        <FileTypeIcon
+          extension={creatingFileExt.replace(/^\./, '') || 'md'}
+          fileName={`${creatingFileName || 'untitled'}${creatingFileExt}`}
+        />
+      </span>
+      <FileNameField
+        stem={creatingFileName}
+        extension={creatingFileExt}
+        onStemChange={setCreatingFileName}
+        onExtensionChange={setCreatingFileExt}
+        onCommit={commitCreatingFile}
+        onCancel={cancelCreatingFile}
+        placeholder={t('sidebar.explorer.newFilePlaceholder')}
+        autoFocus
+      />
+    </div>
+  ) : null;
 
   // 未打开目录时显示空状态占位。
   if (!currentDir) {
@@ -403,80 +365,9 @@ function FileTree() {
     );
   }
 
-  const navBtn = (title, className, onClick, disabled, icon) => (
-    <Tooltip title={title} placement="bottom" mouseEnterDelay={0.3}>
-      <button
-        className={className}
-        onClick={onClick}
-        disabled={disabled}
-        type="button"
-      >
-        {icon}
-      </button>
-    </Tooltip>
-  );
-
   return (
     <div className="file-tree">
-      {/* 顶部导航栏：前进后退、刷新、系统资源管理器与关闭目录等入口。 */}
-      <div className="file-tree__nav">
-        {navBtn(
-          t('sidebar.explorer.back'),
-          cn('file-tree__nav-btn', !canGoBack && 'file-tree__nav-btn--disabled'),
-          handleGoBack,
-          !canGoBack,
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-            <line x1="19" y1="12" x2="5" y2="12" /><polyline points="12 19 5 12 12 5" />
-          </svg>,
-        )}
-        {navBtn(
-          t('sidebar.explorer.forward'),
-          cn('file-tree__nav-btn', !canGoForward && 'file-tree__nav-btn--disabled'),
-          handleGoForward,
-          !canGoForward,
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-            <line x1="5" y1="12" x2="19" y2="12" /><polyline points="12 5 19 12 12 19" />
-          </svg>,
-        )}
-        {navBtn(
-          t('sidebar.explorer.up'),
-          'file-tree__nav-btn',
-          handleGoUp,
-          currentDirIsSaf,
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-            <line x1="12" y1="19" x2="12" y2="5" /><polyline points="5 12 12 5 19 12" />
-          </svg>,
-        )}
-        <div className="file-tree__nav-sep" />
-        {navBtn(
-          t('sidebar.explorer.refresh'),
-          'file-tree__nav-btn',
-          () => loadDirectory(currentDir),
-          false,
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-            <polyline points="23 4 23 10 17 10" /><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10" />
-          </svg>,
-        )}
-        {navBtn(
-          t('sidebar.explorer.openInExplorer'),
-          'file-tree__nav-btn',
-          () => openInExplorer(currentDir),
-          false,
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-            <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z" />
-          </svg>,
-        )}
-        <div className="file-tree__nav-sep" />
-        {navBtn(
-          t('sidebar.explorer.closeFolder'),
-          'file-tree__nav-btn file-tree__nav-btn--close',
-          handleCloseFolder,
-          false,
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-            <line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" />
-          </svg>,
-        )}
-      </div>
+      <ExplorerNavigation search={search} />
 
       {/* 目录面包屑：支持折叠展示、横向滚动与快速跳转。 */}
       <div className="file-tree__breadcrumb">
@@ -577,45 +468,39 @@ function FileTree() {
       {directoryError && <div className="file-tree__status" role="alert">{directoryError}</div>}
       {/* Only visible rows exist in the DOM; native directories retain a bounded page cache. */}
       <VirtualFileList
+        footer={creatingRow}
+          scrollTarget={scrollTarget}
         key={`${currentDir}:${sortBy}:${sortOrder}`}
         count={directoryIndex?.total ?? sortedFiles.length}
         dataVersion={directoryIndex?.id}
-        loadingLabel={t('sidebar.explorer.loadingFiles')}
-        onRangeChange={directoryIndex ? ensureDirectoryRange : undefined}
+        currentFilePath={activeTabId}
+          onRangeChange={directoryIndex ? ensureDirectoryRange : undefined}
         pinnedIndex={renamingEntry?.index}
+        isRowReady={(index) => Boolean(renamingEntry?.index === index || (directoryIndex ? getIndexedFile(directoryIndex, index) : sortedFiles[index]))}
         renderRow={(index, style, { deferDetails }) => {
           const file = renamingEntry?.index === index ? renamingEntry.file
             : directoryIndex ? getIndexedFile(directoryIndex, index) : sortedFiles[index];
-          if (!file) return <div key={`pending-${index}`} className="file-tree__item file-tree__item--pending" style={style} aria-hidden="true" />;
-          const ext = file.name.split('.').pop() || '';
-          const isActive = activeTabId === file.path;
+          if (!file) return null;
+          const isCurrent = activeTabId === file.path;
+          const selectedPath = search.open && search.query.trim() && searchPath ? searchPath : activeTabId;
+          const isActive = !isCreatingFile && selectedPath === file.path;
 
           return (
             <div
               key={file.path}
-              style={style}
+              style={renamingPath === file.path ? { ...style, width: '100%' } : style}
               role="listitem"
+              data-path={file.path}
+              data-directory-path={currentDir}
+              aria-current={isCurrent ? 'true' : undefined}
               data-details={deferDetails ? 'deferred' : 'ready'}
               aria-setsize={directoryIndex?.total ?? sortedFiles.length}
               aria-posinset={index + 1}
-              className={cn('file-tree__item', isActive && 'file-tree__item--active')}
+              className={cn('file-tree__item', isActive && 'file-tree__item--active', isCurrent && 'file-tree__item--current')}
               onClick={() => handleFileClick(file)}
             >
               <span className="file-tree__item-icon">
-                {deferDetails ? (() => {
-                  // Fast scrolling: skip the stateful FileTypeIcon, but still resolve the
-                  // real icon through the pure URL lookups so rows do not all turn into
-                  // the same brown folder / grey document placeholder.
-                  const deferredIcon = file.is_dir
-                    ? getFolderIconUrl(file.name)
-                    : getFileIconUrl(file.name, ext);
-                  if (deferredIcon) {
-                    return <img className="file-tree__deferred-icon" src={deferredIcon} width={16} height={16} alt="" draggable={false} />;
-                  }
-                  return <img className="file-tree__deferred-icon" src={file.is_dir ? folderDefaultUrl : fileDefaultUrl} width={16} height={16} alt="" draggable={false} />;
-                })() : file.is_dir
-                  ? <FileTypeIcon fileName={file.name} isFolder />
-                  : <FileTypeIcon extension={ext} fileName={file.name} />}
+                <ExplorerEntryIcon file={file} defer={deferDetails} />
               </span>
               {renamingPath === file.path ? (
                 <FileNameField
@@ -634,7 +519,7 @@ function FileTree() {
                     // 双击名字进入重命名，与资源管理器一致；不用额外按钮占位。
                     onDoubleClick={(e) => { startRenaming(file, e, index); }}
                   >
-                    {file.name}
+                    <ExplorerMatchName name={file.name} search={search} />
                     {(() => {
                       if (deferDetails || file.is_dir) return null;
                       const extension = (file.name.split('.').pop() || '').toLowerCase();
@@ -673,28 +558,6 @@ function FileTree() {
         }}
       />
 
-        {/* 行内新建文件输入行，固定追加在列表底部。 */}
-        {isCreatingFile && (
-          <div className="file-tree__item file-tree__item--creating">
-            <span className="file-tree__item-icon">
-              <FileTypeIcon
-                extension={creatingFileExt.replace(/^\./, '') || 'md'}
-                fileName={`${creatingFileName || 'untitled'}${creatingFileExt}`}
-              />
-            </span>
-            {/* 与重命名共用同一个输入行：主名 + 紧跟的后缀下拉。 */}
-            <FileNameField
-              stem={creatingFileName}
-              extension={creatingFileExt}
-              onStemChange={setCreatingFileName}
-              onExtensionChange={setCreatingFileExt}
-              onCommit={commitCreatingFile}
-              onCancel={cancelCreatingFile}
-              placeholder={t('sidebar.explorer.newFilePlaceholder')}
-              autoFocus
-            />
-          </div>
-        )}
     </div>
   );
 

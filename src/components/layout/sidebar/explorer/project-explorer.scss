@@ -1,0 +1,80 @@
+.project-tree {
+  .file-tree__list { padding: 0; }
+}
+
+.project-tree__body {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+  position: relative;
+}
+.project-tree__canvas { display: flex; flex-direction: column; flex: 1; min-height: 0; min-width: 0; }
+.project-tree__overlay {
+  position: absolute; inset: 0; pointer-events: none; overflow: hidden;
+  > .project-tree__canvas { height: 100%; }
+}
+.project-tree__progress { position: absolute; bottom: 8px; right: 8px; padding: 4px 8px; color: var(--text-sec); background: var(--sidebar); border: 1px solid var(--border); border-radius: 4px; font-size: 11px; pointer-events: none; }
+
+.project-tree__row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding-right: 8px;
+  box-sizing: border-box;
+  color: var(--text);
+  font-size: 13px;
+  cursor: pointer;
+  user-select: none;
+  border-radius: 4px;
+
+  &:hover { background: var(--hover); }
+  &:focus-visible { outline: 1px solid var(--accent); outline-offset: -1px; }
+  &--root { font-weight: 600; }
+  &--active, &--active:hover { background: var(--accent-light); color: var(--accent); }
+}
+
+.project-tree__toggle,
+.project-tree__actions button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  flex-shrink: 0;
+  color: inherit;
+  border: 0;
+  border-radius: 4px;
+  background: none;
+  cursor: pointer;
+  &:hover { background: var(--hover); color: var(--accent); }
+  &:focus-visible { outline: 1px solid var(--accent); }
+}
+
+.project-tree__toggle {
+  width: 18px;
+  height: 24px;
+  svg { transition: transform 120ms ease; }
+  &--expanded svg { transform: rotate(90deg); }
+}
+.project-tree__toggle-space { width: 18px; flex-shrink: 0; }
+.project-tree__icon { width: 16px; height: 16px; display: inline-flex; flex-shrink: 0; }
+.project-tree__name { white-space: nowrap; flex: 1 0 auto; }
+.project-tree__actions { display: inline-flex; margin-left: auto; gap: 2px; button { width: 22px; height: 24px; } svg { width: 14px; height: 14px; } }
+.project-tree__status {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding-right: 8px;
+  color: var(--text);
+  font-size: 12px;
+  overflow: hidden;
+  span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  button { border: 0; background: none; color: var(--accent); cursor: pointer; flex-shrink: 0; }
+}
+@media (prefers-reduced-motion: reduce) { .project-tree__toggle svg { transition: none; } }
+
+/* Denied folders keep a red expand/collapse arrow after the node is collapsed. */
+.project-tree__toggle--error {
+  color: #e53935;
+}

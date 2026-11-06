@@ -66,19 +66,27 @@ export default function FileNameField({
   const fieldRef = useRef(null);
   const nameMeasureRef = useRef(null);
   const extMeasureRef = useRef(null);
+  const blurTimer = useRef(null);
   useLayoutEffect(() => {
     const field = fieldRef.current, name = nameMeasureRef.current, ext = extMeasureRef.current;
+    let scheduled = null;
     const measure = () => {
-      const extWidth = Math.min(field.clientWidth, ext.getBoundingClientRect().width + 12);
-      const left = Math.min(name.getBoundingClientRect().width + 1, Math.max(0, field.clientWidth - extWidth));
-      field.style.setProperty('--filename-extension-left', `${left}px`);
-      field.style.setProperty('--filename-extension-width', `${extWidth}px`);
-      field.style.setProperty('--filename-extension-space', `${field.clientWidth - left}px`);
+      scheduled = null;
+      const width = field.clientWidth;
+      if (!width) return;
+      const extWidth = Math.min(width, Math.ceil(ext.getBoundingClientRect().width) + 12);
+      const left = Math.min(Math.ceil(name.getBoundingClientRect().width) + 1, Math.max(0, width - extWidth));
+      const properties = { '--filename-extension-left': `${left}px`, '--filename-extension-width': `${extWidth}px`, '--filename-extension-space': `${width - left}px` };
+      for (const [key, value] of Object.entries(properties)) {
+        if (field.style.getPropertyValue(key) !== value) field.style.setProperty(key, value);
+      }
     };
     measure();
-    const observer = new ResizeObserver(measure);
+    // Never change observed layout from inside a ResizeObserver delivery. The
+    // input padding depends on its measured width, so writes must be coalesced.
+    const observer = new ResizeObserver(() => { if (scheduled == null) scheduled = requestAnimationFrame(measure); });
     observer.observe(field); observer.observe(name); observer.observe(ext);
-    return () => observer.disconnect();
+    return () => { observer.disconnect(); if (scheduled != null) cancelAnimationFrame(scheduled); };
   }, [stem, extension, placeholder]);
   const innerInputRef = useRef(null);
   const inputRef = externalRef || innerInputRef;
@@ -95,12 +103,13 @@ export default function FileNameField({
    */
   useEffect(() => {
     if (!autoFocus) return;
-    requestAnimationFrame(() => {
+    const frame = requestAnimationFrame(() => {
       const el = inputRef.current;
       if (!el) return;
-      el.focus();
+      el.focus({ preventScroll: true });
       el.select();
     });
+    return () => cancelAnimationFrame(frame);
   }, [autoFocus, inputRef]);
 
   /**
@@ -111,11 +120,13 @@ export default function FileNameField({
    * @returns {void}
    */
   const handleBlur = useCallback(() => {
-    window.setTimeout(() => {
-      if (dropdownOpenRef.current) return;
+    clearTimeout(blurTimer.current);
+    blurTimer.current = window.setTimeout(() => {
+      if (dropdownOpenRef.current || fieldRef.current?.contains(document.activeElement)) return;
       onCommit();
     }, 120);
   }, [onCommit]);
+  useEffect(() => () => clearTimeout(blurTimer.current), []);
 
   return (
     <div className="file-tree__name-field" ref={fieldRef}>
@@ -146,7 +157,7 @@ export default function FileNameField({
           options={FILE_EXTENSIONS.map((extension) => ({ value: extension, label: <span>{extension}</span> }))}
           onChange={(value) => onExtensionChange(value ?? '')}
           onDropdownVisibleChange={(open) => { dropdownOpenRef.current = open; }}
-          onBlur={() => { dropdownOpenRef.current = false; }}
+          onBlur={() => { dropdownOpenRef.current = false; handleBlur(); }}
           popupMatchSelectWidth={false}
           /*
            * 后缀框里光标已到最左时再按左键，退回文件名末尾。
@@ -159,7 +170,7 @@ export default function FileNameField({
             event.preventDefault();
             const nameInput = inputRef.current;
             if (!nameInput) return;
-            nameInput.focus();
+            nameInput.focus({ preventScroll: true });
             const end = nameInput.value.length;
             nameInput.setSelectionRange(end, end);
           }}
