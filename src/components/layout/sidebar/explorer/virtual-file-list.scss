@@ -1,0 +1,33 @@
+.file-tree__list {
+  outline: none;
+  &:focus-visible { box-shadow: inset 0 0 0 1px var(--accent); }
+}
+
+.file-tree__viewport {
+  position: sticky;
+  top: 0;
+  width: 100%;
+  overflow: hidden;
+}
+
+.file-tree__rows {
+  position: relative;
+  height: 100%;
+}
+
+.file-tree__virtual-row { display: contents; }
+.file-tree__current-indicator {
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 2px;
+  height: 14px;
+  border-radius: 1px;
+  background: var(--accent);
+  transform-origin: center;
+  opacity: 0;
+  pointer-events: none;
+  z-index: 1;
+}
+
+
