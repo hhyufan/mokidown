@@ -35,6 +35,10 @@ window.trial = {
   dirty: () => editorStore.getState().tabRenderList[0]?.modified,
   close: () => root.render(null),
   state: () => ({ doc: view().state.doc.toJSON(), selection: view().state.selection.toJSON(), parent: view().state.selection.$from.parent.type.name }),
+  dispatch(edit) {
+    const editor = view();
+    editor.dispatch(edit(editor.state));
+  },
   selectCode(edge = 'end') {
     const cm = CodeMirror.findFromDOM(document.querySelector('.cm-editor'));
     cm.dispatch({ selection: { anchor: edge === 'end' ? cm.state.doc.length : 0 } }); cm.focus();
