@@ -10,6 +10,7 @@ import { listen } from '@tauri-apps/api/event';
 import { getCurrentWindow } from '@tauri-apps/api/window';
 import { rememberDiskBaseline, withFileOperation } from '@/services/localFileGuard';
 import { contentSearchResults, fileSearchScore } from '@utils/searchMatching';
+import { decodeTextBytes, encodeTextBytes, MAX_TEXT_BYTES, TextFileError } from './textFilePolicy';
 import {
   isSafUri,
   listFolder as safListFolder,
@@ -139,11 +140,37 @@ function detectLineEnding(content) {
 /**
  * 按路径读取文本文件内容。
  */
+const blockedTextFiles = new Set();
+
+function textReadFailure(error, path) {
+  const kind = error?.kind || 'unreadable';
+  const key = kind === 'binary' ? 'notification.binaryFileMessage'
+    : kind === 'too-large' ? 'notification.tooLargeMessage'
+      : kind === 'invalid-encoding' ? 'notification.invalidEncodingMessage' : 'notification.unreadableFileMessage';
+  return { success: false, blockedReason: kind, message: i18n.t(key, { name: path.split(/[\\/]/).pop() }) };
+}
+
 export async function readFileContent(path) {
+  let result;
+  try { result = await readTextFile(path); }
+  catch (error) { result = textReadFailure(error, path); }
+  if (!result) result = textReadFailure(new TextFileError('unreadable'), path);
+  if (result.success) blockedTextFiles.delete(path);
+  else if (result.blockedReason) blockedTextFiles.add(path);
+  return result;
+}
+
+async function readTextFile(path) {
   if (webDemo && isWebPath(path)) {
     const record = webFiles.get(normalizeWebPath(path));
     if (!record) throw new Error('File is no longer available');
-    const content = record.content ?? (await (await record.handle.getFile()).text());
+    let text;
+    if (record.handle) {
+      const file = await record.handle.getFile();
+      if (file.size > MAX_TEXT_BYTES) throw new TextFileError('too-large');
+      text = decodeTextBytes(new Uint8Array(await file.slice(0, MAX_TEXT_BYTES + 1).arrayBuffer()));
+    } else text = decodeTextBytes(new TextEncoder().encode(record.content || ''));
+    const { content, encoding } = text;
     record.content = content;
     return {
       success: true,
@@ -151,7 +178,7 @@ export async function readFileContent(path) {
       content,
       file_path: path,
       file_name: path.split('/').pop(),
-      encoding: 'UTF-8',
+      encoding,
       line_ending: detectLineEnding(content),
       size: content.length,
     };
@@ -171,10 +198,7 @@ export async function readFileContent(path) {
         size,
       };
     } catch (e) {
-      return {
-        success: false,
-        message: i18n.t('error.readFailed', { detail: e?.message || e }),
-      };
+      return textReadFailure(e, path);
     }
   }
   return invoke('read_file_content', { path });
@@ -199,7 +223,7 @@ export function saveFile(filePath, content, encoding, { operationHeld = false } 
     const result = await writeEncodedFile(filePath, content, encoding);
     // Publish the exact written snapshot before releasing the watcher/save queue.
     // Do not pair it with metadata read later: another writer may already exist.
-    if (result?.success) rememberDiskBaseline(filePath, content);
+    if (result?.success) { rememberDiskBaseline(filePath, content); blockedTextFiles.delete(filePath); }
     return result;
   };
   return operationHeld ? write() : withFileOperation(filePath, write);
@@ -210,7 +234,7 @@ async function writeEncodedFile(filePath, content, encoding) {
     const record = webFiles.get(normalizeWebPath(filePath));
     if (record?.handle) {
       const writable = await record.handle.createWritable();
-      await writable.write(content);
+      await writable.write(encodeTextBytes(content, encoding));
       await writable.close();
       record.content = content;
     }
@@ -226,7 +250,7 @@ async function writeEncodedFile(filePath, content, encoding) {
   }
   if (isSafUri(filePath)) {
     try {
-      const result = await safWriteFileText(filePath, content);
+      const result = await safWriteFileText(filePath, content, encoding);
       return {
         success: true,
         message: 'File saved successfully',
@@ -261,6 +285,7 @@ export async function historyRead(filePath, timestamp) {
 /** 记录快照；打开/回滚传 force，回滚附带 restoredFrom，普通记录仍去重。 */
 export async function historyCapture(filePath, content, { force = false, restoredFrom } = {}) {
   if (webDemo && isWebPath(filePath)) return true;
+  if (blockedTextFiles.has(filePath)) return false;
   return invoke('history_capture', {
     filePath, content, force,
     ...(restoredFrom != null ? { restoredFrom } : {}),
@@ -316,13 +341,28 @@ export async function checkFileExists(path) {
 }
 
 /**
- * 读取文件或目录基础信息。
+ * 读取文件开头的若干字节，供二进制嗅探使用（不整文件读入）。
+ * @param {string} path 文件路径。
+ * @param {number} [limit] 最多读取的字节数。
+ * @returns {Promise<Uint8Array>} 头部字节；读取失败时抛出错误。
  */
+export async function readFileHead(path, limit = 8192) {
+  if (webDemo && isWebPath(path)) {
+    const record = webFiles.get(normalizeWebPath(path));
+    if (!record) throw new TextFileError('missing');
+    if (record.handle) return new Uint8Array(await (await record.handle.getFile()).slice(0, limit).arrayBuffer());
+    return new TextEncoder().encode(record.content || '').slice(0, limit);
+  }
+  const bytes = await invoke('read_file_head', { path, limit });
+  if (bytes == null) throw new TextFileError('unreadable');
+  return bytes instanceof Uint8Array ? bytes : Uint8Array.from(bytes);
+}
+
 export async function getFileInfo(path) {
   if (webDemo && isWebPath(path)) {
     const record = webFiles.get(normalizeWebPath(path));
     if (!record) throw new Error('File is no longer available');
-    const file = await record.handle.getFile();
+    const file = record.handle ? await record.handle.getFile() : { name: path.split('/').pop(), size: new TextEncoder().encode(record.content || '').length, lastModified: 0 };
     return {
       path,
       name: file.name,
@@ -349,6 +389,18 @@ export async function getDirectoryContents(dirPath) {
     return safListFolder(dirPath);
   }
   return invoke('get_directory_contents', { dirPath });
+}
+
+export function openDirectoryIndex(id, dirPath, sortBy, sortOrder, scope) {
+  return invoke('open_directory_index', { id, dirPath, sortBy, sortOrder, generation: Number(id.slice('directory-'.length)), ...(scope ? { scope } : {}) });
+}
+
+export function readDirectoryPage(id, offset, limit, scope) {
+  return invoke('read_directory_page', { id, offset, limit, ...(scope ? { scope } : {}) });
+}
+
+export function closeDirectoryIndex(id, scope) {
+  return invoke('close_directory_index', { id, generation: Number(id.slice('directory-'.length)), ...(scope ? { scope } : {}) });
 }
 
 /**
@@ -419,6 +471,10 @@ export async function stopFileWatching(filePath) {
  * 搜索本地目录或 SAF 树；文本搜索不限定扩展名。
  */
 const safSearchTasks = new Map();
+export async function locateDirectoryEntry(id, path, scope) {
+  return invoke('locate_directory_entry', { id, path, ...(scope ? { scope } : {}) });
+}
+
 export async function searchFiles(dirPath, query, searchContent = false, maxResults = 100, taskId, options = {}) {
   if (webDemo && isWebPath(dirPath)) {
     return { results: [], truncated: false, skippedFiles: 0 };
