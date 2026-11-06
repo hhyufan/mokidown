@@ -8,6 +8,7 @@ import { toggleStrikethroughCommand } from '@milkdown/kit/preset/gfm';
 import { insert } from '@milkdown/kit/utils';
 import { EditorView as CodeMirrorView } from '@codemirror/view';
 import { MENU_MOD } from '@utils/contextMenuShortcuts';
+import { readMenuClipboardText } from '@utils/menuClipboard';
 
 export function milkdownContextItems({ editor, target, x, y, t }) {
   const view = editor.action((ctx) => ctx.get(editorViewCtx));
@@ -25,7 +26,7 @@ export function milkdownContextItems({ editor, target, x, y, t }) {
   const selected = cm ? cm.state.sliceDoc(selection.main.from, selection.main.to)
     : selection.node?.type.name === 'html_block' ? selection.node.attrs.value
     : view.state.doc.textBetween(selection.from, selection.to, '\n\n');
-  const current = () => cm ? cm.dom.isConnected && cm.state.doc === doc : view.state.doc.eq(doc);
+  const current = () => cm ? cm.dom.isConnected && cm.state.doc === doc : !view.isDestroyed && view.state.doc === doc;
   const restore = () => {
     if (!current()) return false;
     if (cm) { cm.dispatch({ selection }); cm.focus(); }
@@ -52,7 +53,15 @@ export function milkdownContextItems({ editor, target, x, y, t }) {
     { key: 's1', separator: true },
     item('cut', async () => { await navigator.clipboard.writeText(selected); edit(''); }, !selected),
     item('copy', () => navigator.clipboard.writeText(selected), !selected),
-    item('paste', async () => edit(await navigator.clipboard.readText())),
+    item('paste', async () => {
+      const text = await readMenuClipboardText();
+      if (!text || !restore()) return;
+      const clipboardData = new DataTransfer();
+      clipboardData.setData('text/plain', text);
+      const event = new ClipboardEvent('paste', { clipboardData, bubbles: true, cancelable: true });
+      if (cm) cm.contentDOM.dispatchEvent(event);
+      else view.pasteText(text, event);
+    }),
     { key: 's2', separator: true },
     item('selectAll', () => {
       if (!restore()) return;

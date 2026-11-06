@@ -52,6 +52,26 @@ test('Milkdown menu formats the selected text, supports undo/redo and pastes thr
   await expect.poll(() => page.evaluate(() => window.trial.markdown())).not.toContain('beta');
 });
 
+test('Windows Milkdown menu pastes using the native clipboard command', async ({ page }) => {
+  await load(page, 'milkdown');
+  await page.evaluate(() => {
+    Object.defineProperty(navigator, 'platform', { configurable: true, value: 'Win32' });
+    Object.defineProperty(navigator, 'clipboard', { configurable: true, value: {
+      readText: () => { throw new Error('Browser clipboard must not be read'); },
+    } });
+    window.trial.commands = [];
+    window.__TAURI_INTERNALS__ = { invoke: async (command) => {
+      window.trial.commands.push(command);
+      return 'native text';
+    } };
+    window.trial.selectText('Alpha');
+  });
+  await page.locator('.milkdown-editor > p').first().click({ button: 'right' });
+  await action(page, 'Paste').click();
+  await expect(page.locator('.milkdown-editor > p').first()).toHaveText('native text beta');
+  expect(await page.evaluate(() => window.trial.commands)).toContain('read_clipboard_for_paste');
+});
+
 test('Milkdown code menus copy and cut code without applying prose formatting', async ({ page }) => {
   await load(page, 'milkdown');
   await expect(page.locator('.cm-content')).toBeVisible();
