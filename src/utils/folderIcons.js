@@ -11,6 +11,9 @@ import folderZhUrl from '../assets/file-icons/zh.svg?url';
 import folderUsersUrl from '../assets/file-icons/users.svg?url';
 import folderUserUrl from '../assets/file-icons/user.svg?url';
 
+const localOpenAssets = import.meta.glob('../assets/file-icons/*-open.svg', { eager: true, query: '?url', import: 'default' });
+const localOpenUrls = Object.fromEntries(Object.entries(localOpenAssets).map(([path, url]) => [path.split('/').pop().replace('-open.svg', ''), url]));
+
 // Only bundle folder assets. Keep SVGs as local files instead of inlining the
 // entire collection into JavaScript; Vite also resolves these URLs in web demos.
 const assets = import.meta.glob('/node_modules/material-icon-theme/icons/folder*.svg', {
@@ -100,7 +103,10 @@ export function getFolderIconUrl(folderName = '', isExpanded = false) {
   if (alias) return iconUrls[isExpanded ? `${alias}-open` : alias] || iconUrls[alias] || null;
 
   const local = LOCAL_FOLDER_ICONS[name];
-  if (local) return local;
+  if (local) {
+    const localNames = { csharp: 'folder-csharp', 'c-sharp': 'folder-csharp', cs: 'folder-csharp', dotnet: 'folder-csharp', mvn: 'folder-mvn', '.mvn': 'folder-mvn', maven: 'folder-mvn', english: 'en' };
+    return isExpanded ? localOpenUrls[localNames[name] || name] || local : local;
+  }
 
   return null;
 }
