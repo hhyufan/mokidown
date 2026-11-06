@@ -1,3 +1,5 @@
+@use '../../../assets/styles/resize-handle';
+
 /**
  * @file sidebar.scss
  * @description 定义应用侧边栏的整体布局、标签切换、工具栏、最近文件列表与移动端抽屉态样式。
@@ -10,7 +12,9 @@
   min-width: var(--sidebar-actual-width);
   flex-shrink: 0;
   background: var(--sidebar);
-  border-right: 1px solid var(--border);
+  // Reserve a dedicated resize track so every scrolling view (files, outline,
+  // knowledge trees, recent files) keeps its complete scrollbar hit area.
+  padding-right: resize-handle.$track-size;
   display: flex;
   flex-direction: column;
   transition: margin-left 0.25s ease, opacity 0.25s ease;
@@ -24,15 +28,12 @@
 }
 
 .sidebar__resizer {
+  @include resize-handle.surface;
   position: absolute;
   top: 0;
-  right: -3px;
+  right: 0;
   bottom: 0;
-  width: 7px;
-  cursor: col-resize;
-  touch-action: none;
-  z-index: 20;
-  &:hover, &:focus-visible { background: var(--accent); outline: none; }
+  width: resize-handle.$track-size;
 }
 @media (max-width: 768px) { .sidebar__resizer { display: none; } }
 
@@ -182,6 +183,15 @@
   flex-direction: column;
 }
 
+.explorer-mode {
+  display: flex; flex-direction: column; flex: 1; min-height: 0;
+  animation: explorer-mode-enter 180ms ease-out both;
+  transition: opacity 100ms ease, transform 100ms ease;
+  &--leaving { animation: none; opacity: 0; transform: translateX(-6px); pointer-events: none; }
+}
+@keyframes explorer-mode-enter { from { opacity: 0; transform: translateX(8px); } to { opacity: 1; transform: translateX(0); } }
+@media (prefers-reduced-motion: reduce) { .explorer-mode { animation: none; transition: none; } }
+
 .sidebar__toolbar {
   display: flex;
   align-items: center;
@@ -200,6 +210,27 @@
   font-weight: 600;
   color: var(--text);
   margin-right: auto;
+}
+
+.sidebar__explorer-heading {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+.sidebar__mode-toggle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  border: 0;
+  border-radius: 4px;
+  color: var(--text);
+  background: transparent;
+  cursor: pointer;
+  &:hover { color: var(--accent); background: var(--hover); }
+  &:focus-visible { outline: 1px solid var(--accent); }
 }
 
 .stb {
@@ -479,6 +510,8 @@
     transform: translateX(0);
     transition: transform 0.22s ease, opacity 0.22s ease;
     padding-top: env(safe-area-inset-top);
+    padding-right: 0;
+    border-right: 1px solid var(--border);
 
     &--hidden {
       margin-left: 0;
@@ -862,4 +895,9 @@
 
 .plugin-panel__refresh .anticon {
   font-size: 14px;
+}
+
+.stb:disabled {
+  opacity: 0.38;
+  cursor: default;
 }
