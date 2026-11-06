@@ -28,6 +28,8 @@ import MonacoSelectionHandles from './MonacoSelectionHandles';
 import { useResponsiveLayout } from '@hooks/useResponsiveLayout';
 import { getResolvedHotkeys } from '@hooks/useHotkeys';
 import { configureMonacoHotkeys, disposeMonacoHotkeys } from '@/services/monacoHotkeys';
+import { bindMonacoMarkdownPairs } from './monacoMarkdownPairs';
+import MarkdownCodeLanguageMenu from './MarkdownCodeLanguageMenu';
 import './monaco-editor.scss';
 
 function documentModelInfo(tab) {
@@ -101,6 +103,8 @@ const MonacoEditorComponent = forwardRef(function MonacoEditorComponent({ classN
   // `MobileSelectionBar` 在编辑器初始化完成后重新运行副作用；若只传 ref，
   // 由于 ref 对象本身稳定，工具栏监听可能永远挂在空实例上。
   const [editorInstance, setEditorInstance] = useState(null);
+  const [codeLanguageMenu, setCodeLanguageMenu] = useState(null);
+  const closeCodeLanguageMenu = useCallback(() => setCodeLanguageMenu(null), []);
   const { isAndroid, isMobileLayout, isTouchLike } = useResponsiveLayout();
   // 仅在真实移动端触摸布局或 Android 运行时启用移动端选区能力。像带触摸屏的
   // Windows 笔记本虽然也会上报触摸能力，但交互上仍更适合保留桌面端的
@@ -615,6 +619,11 @@ const MonacoEditorComponent = forwardRef(function MonacoEditorComponent({ classN
 
   useEffect(() => {
     if (!editorInstance) return;
+    return bindMonacoMarkdownPairs(monaco, editorInstance, setCodeLanguageMenu);
+  }, [editorInstance]);
+
+  useEffect(() => {
+    if (!editorInstance) return;
     let binding;
     const bind = () => {
       binding?.dispose();
@@ -744,6 +753,7 @@ const MonacoEditorComponent = forwardRef(function MonacoEditorComponent({ classN
       )}
       <MobileSelectionBar editor={editorInstance} enabled={useSelectionBar} containerRef={containerRef} />
       <MonacoSelectionHandles editor={editorInstance} enabled={useSelectionBar} />
+      <MarkdownCodeLanguageMenu request={codeLanguageMenu} onClose={closeCodeLanguageMenu} />
     </>
   );
 });

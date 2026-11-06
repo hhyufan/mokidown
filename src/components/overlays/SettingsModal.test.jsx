@@ -12,6 +12,7 @@ import {
   validateBackgroundImage,
 } from '@utils/backgroundImage';
 import i18n from '@/i18n';
+import { normalizeMarkdownPairs } from '@utils/markdownPairs';
 
 globalThis.React = React;
 const { default: SettingsModal } = await import('./SettingsModal');
@@ -95,6 +96,35 @@ it('adjusts both font sizes with compact controls without deprecated InputNumber
   expect(errors.mock.calls.flat().join(' ')).not.toMatch(
     /addonAfter|addonBefore|findDOMNode|Maximum update depth/,
   );
+});
+
+it('shows named Markdown syntax options and changes each smart pair independently', async () => {
+  const { markdownSmartPairs, markdownSmartPairsEnabled } = useConfigStore.getState();
+  const pairs = normalizeMarkdownPairs();
+  useConfigStore.setState({ markdownSmartPairs: pairs, markdownSmartPairsEnabled: true });
+  try {
+    await act(async () => render(<SettingsModal open onClose={vi.fn()} />));
+    fireEvent.click(screen.getByText('编辑器'));
+    expect(screen.getByRole('list', { name: 'Markdown 智能配对' })).toBeInTheDocument();
+    const backtick = screen.getByRole('checkbox', { name: '行内代码与代码块' });
+    const parentheses = screen.getByRole('checkbox', { name: '圆括号' });
+    const master = screen.getByRole('switch', { name: 'Markdown 智能配对' });
+    expect(backtick).toBeChecked();
+    expect(backtick).toHaveAccessibleDescription(/按 Enter 或确认语言/);
+    fireEvent.click(backtick);
+    expect(backtick).not.toBeChecked();
+    expect(parentheses).toBeChecked();
+    expect(useConfigStore.getState().markdownSmartPairs).toEqual(pairs.filter((pair) => pair !== '`'));
+    fireEvent.click(master);
+    expect(master).not.toBeChecked();
+    expect(parentheses).toBeDisabled();
+    expect(parentheses).toBeChecked();
+    fireEvent.click(master);
+    expect(parentheses).toBeEnabled();
+    expect(backtick).not.toBeChecked();
+  } finally {
+    act(() => useConfigStore.setState({ markdownSmartPairs, markdownSmartPairsEnabled }));
+  }
 });
 
 it('imports a native image, persists its reference, previews theme-specific opacity, and removes the stored asset', async () => {
