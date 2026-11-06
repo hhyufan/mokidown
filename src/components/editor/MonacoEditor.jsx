@@ -7,6 +7,8 @@ import i18n from '@/i18n';
  */
 import { useEffect, useLayoutEffect, useRef, useImperativeHandle, forwardRef, useState, useCallback } from 'react';
 import * as monaco from 'monaco-editor';
+import { StandaloneServices } from 'monaco-editor/esm/vs/editor/standalone/browser/standaloneServices.js';
+import { IUndoRedoService } from 'monaco-editor/esm/vs/platform/undoRedo/common/undoRedo.js';
 import '@/monaco-worker';
 import useEditorStore from '@store/useEditorStore';
 import useConfigStore from '@store/useConfigStore';
@@ -42,6 +44,15 @@ function documentModelInfo(tab) {
       ? monaco.Uri.file(tab.path)
       : monaco.Uri.parse(`inmemory://mokidown/${encodeURIComponent(tab.id)}/${encodeURIComponent(tab.name)}`),
   };
+}
+
+function disposeDocumentModel(model) {
+  if (model.uri.scheme === 'inmemory') {
+    // Monaco 0.52 can leave redo entries pointing to the old model when it
+    // discards an in-memory model with entries on both sides of its history.
+    StandaloneServices.get(IUndoRedoService).removeElements(model.uri);
+  }
+  model.dispose();
 }
 
 function horizontalScrollbarOptions(wrapped) {
@@ -505,7 +516,7 @@ const MonacoEditorComponent = forwardRef(function MonacoEditorComponent({ classN
       const openIds = new Set(state.tabs.map((item) => item.id));
       for (const [id, entry] of modelsRef.current) {
         if (!openIds.has(id) && entry.model !== editor.getModel()) {
-          entry.model.dispose(); modelsRef.current.delete(id);
+          disposeDocumentModel(entry.model); modelsRef.current.delete(id);
         }
       }
     });
@@ -524,7 +535,7 @@ const MonacoEditorComponent = forwardRef(function MonacoEditorComponent({ classN
       stopSessionView();
       linkOpener.dispose();
       editor.dispose();
-      for (const entry of models.values()) entry.model.dispose();
+      for (const entry of models.values()) disposeDocumentModel(entry.model);
       models.clear();
       editorRef.current = null;
       setEditorInstance(null);
@@ -570,10 +581,10 @@ const MonacoEditorComponent = forwardRef(function MonacoEditorComponent({ classN
       suppressModelChangeRef.current = false;
       setContextMenu((menu) => menu.visible ? { ...menu, visible: false } : menu);
     }
-    replacedModel?.dispose();
+    if (replacedModel) disposeDocumentModel(replacedModel);
     const openIds = new Set(useEditorStore.getState().tabs.map((item) => item.id));
     for (const [id, cached] of modelsRef.current) {
-      if (!openIds.has(id)) { cached.model.dispose(); modelsRef.current.delete(id); }
+      if (!openIds.has(id)) { disposeDocumentModel(cached.model); modelsRef.current.delete(id); }
     }
 
     if (editor.getValue() !== newValue) {
