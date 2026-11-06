@@ -1,6 +1,6 @@
 
 import { useState, useEffect } from 'react';
-import { Modal, Menu, Switch, Select, Input, InputNumber, Button, Space, Tooltip } from 'antd';
+import { Modal, Menu, Switch, Select, Input, InputNumber, Button, Checkbox, Space, Tooltip } from 'antd';
 import { useResponsiveLayout } from '@hooks/useResponsiveLayout';
 import {
   SettingOutlined,
@@ -28,6 +28,7 @@ import { readTextFile, writeTextFile } from '@tauri-apps/plugin-fs';
 import { getVersion } from '@tauri-apps/api/app';
 import { openExternal } from '@utils/tauriApi';
 import { useTranslation } from 'react-i18next';
+import { markdownPairOptions, normalizeMarkdownPairs } from '@utils/markdownPairs';
 import { canCheckUpdates } from '@utils/appUpdater';
 import { isWebDemo } from '@utils/webDemo';
 import useUpdateStore from '@store/useUpdateStore';
@@ -395,6 +396,12 @@ function SettingsModal({ open: openProp, onClose }) {
                     onChange={(v) => handleChange('autoSave', v)}
                   />
                 </SettingRow>
+                <MarkdownPairSettings
+                  enabled={config.markdownSmartPairsEnabled}
+                  value={config.markdownSmartPairs}
+                  onToggle={(value) => handleChange('markdownSmartPairsEnabled', value)}
+                  onChange={(value) => handleChange('markdownSmartPairs', value)}
+                />
               </div>
             )}
 
@@ -487,6 +494,39 @@ function SettingGroup({ label }) {
     <div className="settings-group">
       <span className="settings-group__label">{label}</span>
     </div>
+  );
+}
+
+function MarkdownPairSettings({ enabled, value, onToggle, onChange }) {
+  const { t } = useTranslation();
+  const selected = normalizeMarkdownPairs(value);
+  const label = t('settings.editor.markdownSmartPairs');
+  return (
+    <>
+      <SettingRow label={label} desc={t('settings.editor.markdownSmartPairsDesc')}>
+        <Switch aria-label={label} checked={enabled} onChange={onToggle} />
+      </SettingRow>
+      <ul className="settings-pair-list" aria-label={label}>
+        {markdownPairOptions.map(({ value: symbol, name, label: characters }) => {
+          const title = t(`settings.editor.pair.${name}`);
+          const description = `markdown-pair-${name}`;
+          return (
+            <li key={symbol}>
+              <Checkbox
+                aria-label={title}
+                aria-describedby={description}
+                checked={selected.includes(symbol)}
+                disabled={!enabled}
+                onChange={({ target }) => onChange(target.checked ? [...selected, symbol] : selected.filter((item) => item !== symbol))}
+              >
+                <span className="settings-pair-list__title">{title}<code aria-hidden="true">{characters}</code></span>
+                <span className="setting-row__desc" id={description}>{t(`settings.editor.pair.${name}Desc`)}</span>
+              </Checkbox>
+            </li>
+          );
+        })}
+      </ul>
+    </>
   );
 }
 

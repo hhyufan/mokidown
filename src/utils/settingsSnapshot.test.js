@@ -2,6 +2,7 @@ import { afterAll, beforeEach, describe, expect, it } from 'vitest';
 import useConfigStore from '@store/useConfigStore';
 import useEditorStore from '@store/useEditorStore';
 import useThemeStore from '@store/useThemeStore';
+import { normalizeMarkdownPairs } from './markdownPairs';
 import { applySettingsSnapshot, getLocalSettingsSnapshot } from './settingsSnapshot';
 
 const DEVICE_LOCAL_STATE = {
@@ -17,6 +18,8 @@ function resetSettingsStores() {
     lineHeight: 24,
     previewLineHeight: 24,
     previewZoomSync: true,
+    markdownSmartPairsEnabled: true,
+    markdownSmartPairs: normalizeMarkdownPairs(),
     tabSize: 2,
     wordWrap: true,
     lineNumbers: true,
@@ -118,5 +121,14 @@ describe('device-local settings isolation', () => {
       fontSize: 18,
       ...DEVICE_LOCAL_STATE,
     });
+  });
+
+  it('round-trips the master switch and preserves individual Markdown pairs', () => {
+    applySettingsSnapshot({ markdownSmartPairsEnabled: false, markdownSmartPairs: ['(', '`'] });
+    expect(getLocalSettingsSnapshot()).toMatchObject({ markdownSmartPairsEnabled: false, markdownSmartPairs: ['(', '`'] });
+    applySettingsSnapshot({ markdownSmartPairsEnabled: true });
+    expect(getLocalSettingsSnapshot()).toMatchObject({ markdownSmartPairsEnabled: true, markdownSmartPairs: ['(', '`'] });
+    applySettingsSnapshot({ markdownSmartPairs: false });
+    expect(getLocalSettingsSnapshot()).toMatchObject({ markdownSmartPairsEnabled: false, markdownSmartPairs: normalizeMarkdownPairs() });
   });
 });

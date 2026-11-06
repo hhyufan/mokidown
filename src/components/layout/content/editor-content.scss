@@ -1,3 +1,5 @@
+@use '../../../assets/styles/resize-handle';
+
 /**
  * @file editor-content.scss
  * @description 定义编辑区主内容容器、空状态、编辑器与预览分栏，以及拖拽分隔条的响应式布局。
@@ -141,21 +143,8 @@
 }
 
 .editor-content__split-divider {
-  width: 5px;
-  flex-shrink: 0;
-  cursor: col-resize;
-  background: var(--border);
-  position: relative;
-  transition: background 0.15s;
-  z-index: 10;
-  // 禁用浏览器在分隔条上的默认滚动/缩放手势，
-  // 确保触屏设备上的指针事件能传递给拖拽处理逻辑。
-  touch-action: none;
-
-  &:hover,
-  &:active {
-    background: var(--accent);
-  }
+  @include resize-handle.surface;
+  width: resize-handle.$track-size;
 
   &::after {
     content: '';
@@ -163,7 +152,7 @@
     top: 50%;
     left: 50%;
     transform: translate(-50%, -50%);
-    width: 3px;
+    width: 1px;
     height: 24px;
     border-radius: 2px;
     background: var(--text-dim);
@@ -215,6 +204,7 @@
     width: 100%;
     height: 14px;
     cursor: row-resize;
+    background-size: 100% 1px;
     // 在手机上提供更大的触控目标：14px 是可见条本体，
     // 但 ::after 抓手会给用户一个适合拇指操作的锚点区域。
     touch-action: none;

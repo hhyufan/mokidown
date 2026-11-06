@@ -306,6 +306,7 @@ function EditorContent() {
     e.stopPropagation();
 
     const dividerEl = e.currentTarget;
+    dividerEl.dataset.resizing = 'true';
     const vertical = isMobileLayout; // column layout when true → drag vertically
     isDragging.current = true;
     let finalRatio = useEditorStore.getState().splitRatio;
@@ -332,6 +333,7 @@ function EditorContent() {
     const stop = (endEvt) => {
       if (endEvt && endEvt.pointerId !== e.pointerId) return;
       isDragging.current = false;
+      delete dividerEl.dataset.resizing;
       useEditorStore.getState().setSplitRatio(finalRatio);
       document.body.style.cursor = '';
       document.body.style.userSelect = '';
@@ -583,6 +585,22 @@ function EditorContent() {
             <Tooltip title={t('editor.splitDivider')} placement="top" mouseEnterDelay={0.5}>
               <div
                 className="editor-content__split-divider"
+                role="separator"
+                tabIndex={0}
+                aria-label={t('editor.splitDivider')}
+                aria-orientation={isMobileLayout ? 'horizontal' : 'vertical'}
+                aria-valuemin={15}
+                aria-valuemax={85}
+                aria-valuenow={Math.round(splitRatio * 100)}
+                onKeyDown={(event) => {
+                  const decrease = isMobileLayout ? 'ArrowUp' : 'ArrowLeft';
+                  const increase = isMobileLayout ? 'ArrowDown' : 'ArrowRight';
+                  if (![decrease, increase, 'Home', 'End'].includes(event.key)) return;
+                  event.preventDefault();
+                  const value = Math.max(0.15, Math.min(0.85, event.key === 'Home' ? 0.15 : event.key === 'End' ? 0.85 : splitRatio + (event.key === decrease ? -0.02 : 0.02)));
+                  setSplitRatio(value);
+                  useEditorStore.getState().setSplitRatio(value);
+                }}
                 onPointerDown={handleDividerPointerDown}
               />
             </Tooltip>

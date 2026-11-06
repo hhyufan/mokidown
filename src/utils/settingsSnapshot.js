@@ -2,6 +2,7 @@
 import useConfigStore from '@store/useConfigStore';
 import useThemeStore from '@store/useThemeStore';
 import useEditorStore from '@store/useEditorStore';
+import { normalizeMarkdownPairSettings } from '@utils/markdownPairs';
 
 import i18n from '../i18n';
 
@@ -31,6 +32,7 @@ export function getLocalSettingsSnapshot({ includeDeviceLocal = false } = {}) {
     lineHeight: config.lineHeight,
     previewLineHeight: config.previewLineHeight,
     previewZoomSync: config.previewZoomSync,
+    ...normalizeMarkdownPairSettings(config),
     tabSize: config.tabSize,
     wordWrap: config.wordWrap,
     lineNumbers: config.lineNumbers,
@@ -69,6 +71,7 @@ export function applySettingsSnapshot(snapshot = {}, { includeDeviceLocal = true
     lineHeight,
     previewLineHeight: snapshot.previewLineHeight ?? lineHeight,
     previewZoomSync: snapshot.previewZoomSync ?? true,
+    ...normalizeMarkdownPairSettings(snapshot, useConfigStore.getState()),
     tabSize: snapshot.tabSize ?? 2,
     wordWrap: snapshot.wordWrap ?? true,
     lineNumbers: snapshot.lineNumbers ?? true,
