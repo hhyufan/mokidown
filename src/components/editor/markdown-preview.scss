@@ -406,6 +406,22 @@
         white-space: pre-wrap;
         &::before { content: attr(data-moki-marker); }
       }
+      &.moki-markdown-virtual-caret { caret-color: transparent; }
+      .moki-markdown-marker--with-caret {
+        &::before { content: attr(data-marker-before); }
+        &::after { content: attr(data-marker-after); }
+        > i {
+          position: relative;
+          &::after {
+            position: absolute;
+            inset-inline-start: 0;
+            top: 0;
+            height: 1em;
+            border-inline-start: 1px solid var(--text);
+            content: '';
+          }
+        }
+      }
       .moki-markdown-heading-marker {
         font: inherit;
         margin-inline-end: var(--md-heading-marker-gap);
@@ -632,6 +648,35 @@
   .md-preview__html-block + :is(h1,h2,h3,h4,h5,h6) { margin-top: 0.75em; }
   .ProseMirror-gapcursor::after { border-top-color: var(--text); }
 
+  .md-preview__math-source,
+  .md-preview__raw-source {
+    font-family: var(--font-editor);
+    color: var(--accent);
+    background: var(--hover);
+    border-radius: 4px;
+  }
+
+  .md-preview__math-source--inline,
+  .md-preview__raw-source--inline {
+    padding: 2px 6px;
+  }
+
+  .md-preview__math-source--block,
+  .md-preview__raw-source--block {
+    display: block;
+    margin: 1em 0;
+    padding: 12px 14px;
+    white-space: pre-wrap;
+  }
+
+  .md-preview__math-source--block {
+    background: var(--md-code-bg);
+    color: var(--text);
+    border: 1px solid var(--border-light);
+  }
+
+  .md-preview__math--block[data-value=''] { min-height: 1.5em; }
+
   .milkdown-code-block {
     position: relative;
     margin: 1em 0;
@@ -708,27 +753,6 @@
     .md-preview__html {
       cursor: default;
       user-select: none;
-    }
-
-    .md-preview__math-source,
-    .md-preview__raw-source {
-      font-family: var(--font-editor);
-      color: var(--accent);
-      background: var(--hover);
-      border-radius: 4px;
-    }
-
-    .md-preview__math-source--inline,
-    .md-preview__raw-source--inline {
-      padding: 2px 6px;
-    }
-
-    .md-preview__math-source--block,
-    .md-preview__raw-source--block {
-      display: block;
-      margin: 1em 0;
-      padding: 12px 14px;
-      white-space: pre-wrap;
     }
 
     .md-preview__html {
