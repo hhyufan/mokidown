@@ -11,8 +11,9 @@ import { activeMarkdownPairs, emptyAsteriskPair, isEmptyBacktickPair, markdownAs
 import { CODE_FENCE_LANGUAGE_EVENT, completedFenceLanguage, readMarkdownFence } from '@utils/markdownCodeFence';
 
 const sourceTypeName = 'moki_inline_syntax_source';
-const asteriskClosingKey = new PluginKey('moki-asterisk-closing');
+const liveSyntaxKey = new PluginKey('moki-live-syntax');
 const inlineLinkPattern = /(?<!\\)!?\[([^\n[\]]*)\]\((?:[^()\n]|\([^()\n]*\))*\)$/;
+const graphemes = Intl.Segmenter && new Intl.Segmenter(undefined, { granularity: 'grapheme' });
 
 // Preserve unfinished delimiters verbatim through the Markdown serializer.
 export const milkdownInlineSyntaxSource = $nodeSchema(sourceTypeName, () => ({
@@ -69,6 +70,70 @@ function activeMarkRanges($caret, side = 1) {
     const delimiters = markDelimiters(mark, text);
     return delimiters ? [{ from, to, order, delimiters, mark }] : [];
   });
+}
+
+function delimiterBoundary($pos) {
+  if (!$pos.parent.isTextblock || $pos.parent.type.spec.code || $pos.textOffset) return null;
+  const closing = activeMarkRanges($pos, -1).filter(({ to }) => to === $pos.pos)
+    .sort((a, b) => b.from - a.from || b.order - a.order);
+  const opening = activeMarkRanges($pos).filter(({ from }) => from === $pos.pos)
+    .sort((a, b) => b.to - a.to || a.order - b.order);
+  const heading = $pos.parent.type.name === 'heading' && $pos.parentOffset === 0;
+  const parts = closing.map(({ mark, delimiters }) => ({ mark, text: delimiters[1], opens: false }));
+  const closingLength = parts.reduce((length, { text }) => length + text.length, 0);
+  if (heading) parts.push({ text: '#'.repeat($pos.parent.attrs.level) });
+  parts.push(...opening.map(({ mark, delimiters }) => ({ mark, text: delimiters[0], opens: true })));
+  if (!parts.length) return null;
+  const text = parts.map((part) => part.text).join('');
+  return { text, parts, heading, defaultOffset: closingLength ? (opening.length ? closingLength : 0) : text.length };
+}
+
+// A mark delimiter has no ProseMirror document positions of its own. Keep
+// its caret offset in plugin state and leave the document untouched.
+function moveAcrossDelimiters(view, direction) {
+  const { state } = view;
+  const { $from } = state.selection;
+  if (!$from.parent.isTextblock || $from.parent.type.spec.code) return false;
+  const caret = liveSyntaxKey.getState(state).caret;
+  const boundary = delimiterBoundary($from);
+  const moveTo = ($pos, next, offset) => {
+    const tr = state.tr.setSelection(TextSelection.create(state.doc, $pos.pos));
+    if (next) {
+      let marks = $pos.nodeBefore?.marks || [];
+      let end = 0;
+      for (const { mark, text, opens } of next.parts) {
+        end += text.length;
+        if (!mark || offset < end) continue;
+        marks = opens ? mark.addToSet(marks) : mark.removeFromSet(marks);
+      }
+      tr.setStoredMarks(marks).setMeta(liveSyntaxKey, { caret: { offset } });
+    }
+    view.dispatch(tr.scrollIntoView());
+    return true;
+  };
+  if (boundary) {
+    const offset = (caret?.offset ?? boundary.defaultOffset) + direction;
+    if (offset >= 0 && offset <= boundary.text.length) return moveTo($from, boundary, offset);
+  }
+
+  const adjacent = direction < 0 ? $from.nodeBefore : $from.nodeAfter;
+  if (adjacent?.isText) {
+    const { text } = adjacent;
+    const character = graphemes?.segment(text).containing(direction < 0 ? text.length - 1 : 0).segment
+      ?? Array.from(text).at(direction < 0 ? -1 : 0);
+    const size = character.length;
+    const $next = state.doc.resolve($from.pos + direction * size);
+    const next = delimiterBoundary($next);
+    if (next || boundary || adjacent.marks.length) return moveTo($next, next, direction < 0 ? next?.text.length : 0);
+  } else if (!adjacent) {
+    const edge = direction < 0 ? $from.before() : $from.after();
+    const selection = TextSelection.findFrom(state.doc.resolve(edge), direction);
+    if (selection instanceof TextSelection) {
+      const next = delimiterBoundary(selection.$from);
+      if (next || caret) return moveTo(selection.$from, next, direction < 0 ? next?.text.length : 0);
+    }
+  }
+  return false;
 }
 
 const serializeInline = (serialize, schema, content) => serialize(
@@ -142,14 +207,20 @@ function deleteDelimiter(ctx, view, event) {
   return true;
 }
 
-function markerWidget(position, text, side, heading = false) {
+function markerWidget(position, text, side, heading = false, offset) {
   return Decoration.widget(position, (view) => {
     const marker = view.dom.ownerDocument.createElement('span');
     marker.className = `moki-markdown-marker${heading ? ' moki-markdown-heading-marker' : ''}`;
     marker.setAttribute('aria-hidden', 'true');
     marker.dataset.mokiMarker = text;
+    if (offset !== undefined) {
+      marker.classList.add('moki-markdown-marker--with-caret');
+      marker.dataset.markerBefore = text.slice(0, offset);
+      marker.dataset.markerAfter = text.slice(offset);
+      marker.append(view.dom.ownerDocument.createElement('i'));
+    }
     return marker;
-  }, { side, marks: [], key: `markdown-marker:${side}:${text}` });
+  }, { side, marks: [], key: `markdown-marker:${side}:${text}:${offset ?? ''}` });
 }
 
 function pendingMarkers($caret) {
@@ -251,7 +322,7 @@ function typeAsterisk(view, $pos, value, text) {
     const ending = marks.find((mark) => asteriskWidth(mark) && !mark.isInSet(after) && mark.isInSet($pos.nodeBefore?.marks || []));
     if (ending) {
       const tr = state.tr;
-      if (asteriskWidth(ending) === 2 && !asteriskClosingKey.getState(state)) tr.setMeta(asteriskClosingKey, true);
+      if (asteriskWidth(ending) === 2 && !liveSyntaxKey.getState(state).closing) tr.setMeta(liveSyntaxKey, { closing: true });
       else tr.setStoredMarks(ending.removeFromSet(marks));
       view.dispatch(tr);
       return true;
@@ -315,9 +386,9 @@ function handleSmartTextInput(view, from, to, text) {
   }
   if (markdownPairEnabled(preference, '*') && typeAsterisk(view, $pos, value, text)) return true;
   // Explicitly exiting an inline mark takes precedence over DOM mark inheritance.
-  if (text && state.storedMarks && $pos.nodeBefore?.marks.some((mark) => !mark.isInSet(state.storedMarks)
-    && !mark.isInSet($pos.nodeAfter?.marks || []) && ((mark.type.spec.code && markdownPairEnabled(preference, '`'))
-      || (asteriskWidth(mark) && markdownPairEnabled(preference, '*'))))) {
+  if (text && state.storedMarks && (liveSyntaxKey.getState(state).caret || $pos.nodeBefore?.marks.some((mark) => !mark.isInSet(state.storedMarks)
+    && !mark.isInSet($pos.nodeAfter?.marks || []) && (mark.type.spec.code
+      || (asteriskWidth(mark) && markdownPairEnabled(preference, '*')))))) {
     view.dispatch(state.tr.insertText(text, from, to).scrollIntoView());
     return true;
   }
@@ -333,10 +404,14 @@ function handleSmartTextInput(view, from, to, text) {
 }
 
 export const milkdownLiveSyntax = $prose((ctx) => new Plugin({
-  key: asteriskClosingKey,
+  key: liveSyntaxKey,
   state: {
-    init: () => false,
-    apply: (tr, closing) => tr.getMeta(asteriskClosingKey) || (closing && !tr.docChanged && !tr.selectionSet && !tr.storedMarksSet),
+    init: () => ({ closing: false, caret: null }),
+    apply(tr, previous) {
+      const update = tr.getMeta(liveSyntaxKey);
+      if (!update && !tr.docChanged && !tr.selectionSet && !tr.storedMarksSet) return previous;
+      return { closing: update?.closing || false, caret: update?.caret || null };
+    },
   },
   view() {
     let previous = '';
@@ -391,6 +466,7 @@ export const milkdownLiveSyntax = $prose((ctx) => new Plugin({
     return tr.setSelection(TextSelection.create(tr.doc, from + offset));
   },
   props: {
+    attributes: (state) => liveSyntaxKey.getState(state).caret ? { class: 'moki-markdown-virtual-caret' } : {},
     handleTextInput: handleSmartTextInput,
     handleDOMEvents: {
       keydown(view, event) {
@@ -398,6 +474,11 @@ export const milkdownLiveSyntax = $prose((ctx) => new Plugin({
           && !event.ctrlKey && !event.metaKey && !event.altKey && !event.target.closest?.('.cm-editor, input, textarea, button')
           && view.state.selection.empty) {
           const { from, to } = view.state.selection;
+          if (!event.shiftKey && (event.key === 'ArrowLeft' || event.key === 'ArrowRight')
+            && moveAcrossDelimiters(view, event.key === 'ArrowLeft' ? -1 : 1)) {
+            event.preventDefault();
+            return true;
+          }
           const enter = event.key === 'Enter' && !event.shiftKey;
           const pending = (enter || event.key === ' ') && pendingCodeFence(view);
           const pairedKey = event.key === '`' || event.key === '*' || bracketKeys.has(event.key) || (event.key === ' ' && pending);
@@ -409,7 +490,10 @@ export const milkdownLiveSyntax = $prose((ctx) => new Plugin({
         }
         return deleteDelimiter(ctx, view, event);
       },
-      mousedown(_view, event) {
+      mousedown(view, event) {
+        if (event.button === 0 && liveSyntaxKey.getState(view.state).caret) {
+          view.dispatch(view.state.tr.setSelection(view.state.selection));
+        }
         if (event.button !== 2 || !event.target.closest?.('a[href]')) return false;
         // Focusing here would insert markers and move the link before the
         // media context menu receives the browser's contextmenu event.
@@ -426,18 +510,27 @@ export const milkdownLiveSyntax = $prose((ctx) => new Plugin({
         class: 'moki-markdown-math-source', 'data-moki-math-source': `$${next.attrs.value}$`,
       });
       if (!selection.empty) return formula ? DecorationSet.create(doc, [formula]) : null;
+      const caret = liveSyntaxKey.getState(state).caret;
       const decorations = pendingMarkers($from);
       const opening = new Map(), closing = new Map();
-      const ranges = activeMarkRanges($from).sort((a, b) => a.from - b.from || b.to - a.to || a.order - b.order);
+      const ranges = activeMarkRanges($from);
+      if (caret) ranges.push(...activeMarkRanges($from, -1).filter((range) => range.to === $from.pos));
+      ranges.sort((a, b) => a.from - b.from || b.to - a.to || a.order - b.order);
       for (const { from, to, delimiters: [open, close] } of ranges) {
         opening.set(from, (opening.get(from) || '') + open);
         closing.set(to, close + (closing.get(to) || ''));
       }
       if ($from.parent.type.name === 'heading' && $from.parentOffset === 0) {
-        decorations.push(markerWidget($from.pos, '#'.repeat($from.parent.attrs.level), -2, true));
+        if (!caret) decorations.push(markerWidget($from.pos, '#'.repeat($from.parent.attrs.level), -2, true));
         decorations.push(Decoration.node($from.before(), $from.after(), { class: 'moki-markdown-heading-source' }));
       }
       if (formula) decorations.push(formula);
+      if (caret) {
+        const boundary = delimiterBoundary($from);
+        opening.delete($from.pos);
+        closing.delete($from.pos);
+        if (boundary) decorations.push(markerWidget($from.pos, boundary.text, -1, boundary.heading, caret.offset));
+      }
       for (const [pos, text] of opening) decorations.push(markerWidget(pos, text, -1));
       for (const [pos, text] of closing) decorations.push(markerWidget(pos, text, 1));
       return decorations.length ? DecorationSet.create(doc, decorations) : null;
