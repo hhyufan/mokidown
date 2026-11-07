@@ -119,7 +119,7 @@ import EditorContextMenu from './EditorContextMenu';
 import { milkdownContextItems } from './milkdownContextMenu';
 import useEditorStore from '@store/useEditorStore';
 import useConfigStore from '@store/useConfigStore';
-import useToastStore from '@store/useToastStore';
+import useNotificationStore from '@store/useNotificationStore';
 import { useEditorBufferContent } from '@hooks/useEditorBufferContent';
 import { useDocumentScrollState } from '@hooks/useDocumentScrollState';
 import { getDocumentViewState, registerDocumentViewState, requestDocumentViewStateSave } from '@utils/documentViewState';
@@ -1307,7 +1307,7 @@ function renderMilkdownMath(root) {
  */
 function enhanceCodeBlocks(container, { readOnly, mermaidRoots }) {
   if (!container || !readOnly) return;
-  const toast = useToastStore.getState().toast;
+  const notify = useNotificationStore.getState().notify;
   const isDark = document.documentElement.dataset.theme === 'dark';
   const seenMermaid = new Set();
 
@@ -1358,9 +1358,9 @@ function enhanceCodeBlocks(container, { readOnly, mermaidRoots }) {
     tag.dataset.mokiTooltip = i18n.t('editor.copyCode');
     tag.addEventListener('click', () => {
       navigator.clipboard.writeText(code.textContent || '').then(() => {
-        toast(i18n.t('preview.copiedToClipboard'));
+        notify('success', i18n.t('preview.copiedToClipboard'), '', 2500);
       }).catch(() => {
-        toast(i18n.t('preview.copyFailed'));
+        notify('error', i18n.t('preview.copyFailed'), '', 2500);
       });
     });
     pre.appendChild(tag);
@@ -1546,7 +1546,7 @@ function MilkdownInner({
           noResultText: 'No result',
           copyText: '',
           copyIcon: copyIconSvg,
-          onCopy: () => useToastStore.getState().toast(i18n.t('preview.copiedToClipboard')),
+          onCopy: () => useNotificationStore.getState().notify('success', i18n.t('preview.copiedToClipboard'), '', 2500),
           renderLanguage: (language) => getLangDisplay(language),
           renderPreview: (language, source, applyPreview) => {
             if (!/^(tree|mgtree)$/i.test(language || '')) return renderCodeBlockPreview(language, source, applyPreview);

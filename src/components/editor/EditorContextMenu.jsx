@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useLayoutEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { useTranslation } from 'react-i18next';
-import useToastStore from '@store/useToastStore';
+import useNotificationStore from '@store/useNotificationStore';
 import { matchesMenuShortcut } from '@utils/contextMenuShortcuts';
 import './monaco-context-menu.scss';
 
@@ -11,7 +11,7 @@ export default function EditorContextMenu({ menu, onClose }) {
   const activate = useCallback(async (item) => {
     onClose();
     try { await item.run(); }
-    catch { useToastStore.getState().toast(t('editor.menu.actionFailed')); }
+    catch { useNotificationStore.getState().notify('error', t('editor.menu.actionFailed'), '', 2500); }
   }, [onClose, t]);
   useLayoutEffect(() => {
     if (!menu || !ref.current) return;

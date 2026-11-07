@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef } from 'react';
 import i18n from '@/i18n';
 import useEditorStore from '@store/useEditorStore';
-import useToastStore from '@store/useToastStore';
+import useNotificationStore from '@store/useNotificationStore';
 
 // Both Markdown renderers use the same feedback and timing. Scroll after the
 // editor's own layout/restoration frames, then keep the target visible long
@@ -21,7 +21,7 @@ export function useCodeBlockNavigation(documentId, resolveTarget, ready = true, 
   const jump = useCallback((language, index) => {
     const target = resolveTarget(language, index);
     if (!target) {
-      useToastStore.getState().toast(i18n.t('knowledgeTree.missingCode', { language, index }));
+      useNotificationStore.getState().notify('info', i18n.t('knowledgeTree.missingCode', { language, index }), '', 2500);
       return;
     }
     clear();

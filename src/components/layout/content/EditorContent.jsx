@@ -13,7 +13,6 @@ import useHistoryStore from '@store/useHistoryStore';
 import MonacoEditor from '@components/editor/LazyMonacoEditor';
 import FloatingToolbar from '@components/editor/FloatingToolbar';
 import FloatingRunButton from '@components/editor/FloatingRunButton';
-import ToastContainer from '@components/ui/Toast';
 import { useFileManager } from '@hooks/useFileManager';
 import { useResponsiveLayout } from '@hooks/useResponsiveLayout';
 import { lazyWithRetry } from '@utils/lazyWithRetry';
@@ -541,7 +540,6 @@ function EditorContent() {
 
   return (
     <main className={`editor-content ${isMobileLayout ? 'editor-content--mobile' : ''}`}>
-      <ToastContainer />
       <div
         className={`editor-content__workspace ${viewMode === 'split' && isMobileLayout ? 'editor-content__workspace--mobile-split' : ''}`}
         ref={containerRef}

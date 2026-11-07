@@ -257,7 +257,6 @@ body.moki-has-background {
   .monaco-context-menu,
   .task-panel,
   .notif,
-  .toast,
   .md-preview--milkdown .milkdown-media-tools,
   .milkdown-media-preview-editor,
   .ant-dropdown .ant-dropdown-menu,
@@ -297,7 +296,6 @@ body.moki-has-background {
   // 只加图层不同步后两项，壁纸那层就会去用属于白雾那一层的位置与尺寸，整块铺歪。
   // 因此这里三处都写全，依序是：白雾、mixin 原本的 wash、壁纸。
   .notif,
-  .toast,
   .editor-content__run {
     @include background-popup.image-surface;
 
@@ -363,7 +361,6 @@ html body.moki-has-background {
 // 只重声明 background-image（层数不变，尺寸与落点沿用上面那条），并把权重抬高一档。
 html[data-theme='dark'] body.moki-has-background {
   .notif,
-  .toast,
   .editor-content__run {
     background-image:
       linear-gradient(color-mix(in srgb, #000 42%, transparent), color-mix(in srgb, #000 42%, transparent)),
