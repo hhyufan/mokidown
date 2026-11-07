@@ -190,7 +190,10 @@ const codeMirrorTheme = CodeMirrorView.theme({
   },
   '.cm-content': {
     padding: '16px',
-    caretColor: 'var(--accent)',
+    caretColor: 'var(--code-caret)',
+  },
+  '.cm-cursor, .cm-dropCursor': {
+    borderLeftColor: 'var(--code-caret)',
   },
   '.cm-line': {
     padding: '0',
