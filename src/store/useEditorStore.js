@@ -71,14 +71,19 @@ const useEditorStore = create(
       uiStateUpdatedAt: 0,
       cursorPosition: { lineNumber: 1, column: 1 },
       characterCount: 0,
-      // Runtime-only external disk conflict. It is deliberately excluded from
-      // persistence because the disk must be inspected again after restart.
-      externalFileConflict: null,
+      // Runtime-only. Each tab can have its own unresolved disk change.
+      externalFileConflicts: new Map(),
 
-      setExternalFileConflict: (conflict) => set({
-        externalFileConflict: conflict || null,
-      }),
-      clearExternalFileConflict: () => set({ externalFileConflict: null }),
+      setExternalFileConflict: (conflict) => set((state) => ({
+        externalFileConflicts: new Map(state.externalFileConflicts).set(conflict.path, conflict),
+      })),
+      clearExternalFileConflict: (path, expected) => {
+        const current = get().externalFileConflicts;
+        if (!current.has(path) || (expected && current.get(path) !== expected)) return;
+        const remaining = new Map(current);
+        remaining.delete(path);
+        set({ externalFileConflicts: remaining });
+      },
 
       /**
        * 打开本地文件。
@@ -228,6 +233,8 @@ const useEditorStore = create(
       updateTabPath: (tabId, path, name) => {
         renameDocumentViewState(tabId, path);
         renameBuffer(tabId, path);
+        const oldPath = get().tabs.find((tab) => tab.id === tabId)?.path;
+        get().clearExternalFileConflict(oldPath);
         set((state) => ({
           tabs: state.tabs.map((t) =>
             t.id === tabId
@@ -271,6 +278,7 @@ const useEditorStore = create(
           historyCapture(closing.path, getBuffer(tabId, closing.content || '')).catch(() => {});
         }
         clearBuffer(tabId);
+        get().clearExternalFileConflict(closing?.path);
         const { tabs, activeTabId } = get();
         const filtered = tabs.filter((t) => t.id !== tabId);
         let nextActive = activeTabId;

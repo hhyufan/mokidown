@@ -34,13 +34,12 @@ async function inspectFile(path, isCurrent = () => true) {
 }
 
 function clearConflict(path) {
-  const state = useEditorStore.getState();
-  if (state.externalFileConflict?.path === path) state.clearExternalFileConflict();
+  useEditorStore.getState().clearExternalFileConflict(path);
 }
 
 function reportConflict(path, version) {
   const { state, tab, disk, diskContent } = version;
-  const conflict = state.externalFileConflict;
+  const conflict = state.externalFileConflicts.get(path);
   const kind = version.outcome === 'blocked' ? 'blocked' : disk?.success ? 'modified' : 'removed';
   if (conflict?.path === path && conflict.kind === kind && conflict.diskContent === disk?.content && conflict.blockedReason === disk?.blockedReason) return;
   state.setExternalFileConflict({
@@ -92,8 +91,8 @@ export function saveExistingFile(path, _content, encoding, _tabId) {
 export function restoreExternalDisk(conflict) {
   const { path, tabId } = conflict;
   const isCurrent = () => {
-    const current = useEditorStore.getState().externalFileConflict;
-    return current?.path === path && current.tabId === tabId;
+    const current = useEditorStore.getState().externalFileConflicts.get(path);
+    return current === conflict;
   };
   return withFileOperation(path, async () => {
     if (!isCurrent() || inputComposing) return false;
