@@ -412,13 +412,17 @@
         &::after { content: attr(data-marker-after); }
         > i {
           position: relative;
+          font-family: var(--font-app);
+          font-style: normal;
           &::after {
             position: absolute;
             inset-inline-start: 0;
-            top: 0;
-            height: 1em;
+            inset-block-start: var(--moki-caret-top, 0px);
+            block-size: var(--moki-caret-height, 100%);
             border-inline-start: 1px solid var(--text);
+            animation: ProseMirror-cursor-blink 1.1s steps(2, start) infinite;
             content: '';
+            @media (prefers-reduced-motion: reduce) { animation: none; }
           }
         }
       }
@@ -961,7 +965,10 @@
   margin: 1em 0;
   overflow: visible;
   max-width: 100%;
+  --moki-table-row-gutter: 14px;
+  --moki-table-insert-size: 18px;
   .moki-table__scroll { overflow-x: auto; border-radius: var(--radius-sm); }
+  &:has(> .moki-table__tools:not([hidden])) > .moki-table__scroll { margin-inline-end: var(--moki-table-row-gutter); }
   .moki-table__tools {
     position: absolute;
     inset: 0;
@@ -995,10 +1002,13 @@
     display: grid; place-items: center;
     svg { width: 16px; height: 16px; }
   }
-  .moki-table__insert { width: 18px; height: 18px; border-radius: 50%; font: 16px/16px var(--font-app); z-index: 2; }
+  .moki-table__insert { width: var(--moki-table-insert-size); height: var(--moki-table-insert-size); border-radius: 50%; font: 16px/16px var(--font-app); z-index: 2; }
   .moki-table__insert[hidden] { display: none; }
-  .moki-table__insert--row { right: -10px; }
-  .moki-table__insert--column { top: -17px; }
+  .moki-table__insert--row {
+    inset-inline-end: calc(var(--moki-table-row-gutter) - var(--moki-table-insert-size) / 2);
+    transform: translateY(-50%);
+  }
+  .moki-table__insert--column { top: 0; transform: translate(-50%, -50%); }
   // 面板从按钮正下方展开（按钮在 6px 处、26px 高）。
   .moki-table__picker { position: absolute; top: 36px; left: 6px; pointer-events: auto; z-index: 20; }
   .moki-table__picker .ft__table-panel {

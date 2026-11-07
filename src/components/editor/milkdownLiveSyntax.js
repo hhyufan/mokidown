@@ -220,7 +220,30 @@ function markerWidget(position, text, side, heading = false, offset) {
       marker.append(view.dom.ownerDocument.createElement('i'));
     }
     return marker;
-  }, { side, marks: [], key: `markdown-marker:${side}:${text}:${offset ?? ''}` });
+  }, { side, marks: [], ignoreForCoords: true, key: `markdown-marker:${side}:${text}:${offset ?? ''}` });
+}
+
+function alignVirtualCaret(view) {
+  if (!liveSyntaxKey.getState(view.state).caret) return;
+  const cursor = view.dom.querySelector('.moki-markdown-marker--with-caret i');
+  if (!cursor) return;
+  const anchor = cursor.getBoundingClientRect();
+  if (!anchor.height) return;
+  const { $from } = view.state.selection;
+  const middle = (anchor.top + anchor.bottom) / 2;
+  for (const side of [1, -1]) {
+    const text = side > 0 ? $from.nodeAfter : $from.nodeBefore;
+    if (!text?.isText) continue;
+    // Read the adjacent real text box, not the widget that shares its position.
+    const step = text.nodeSize > 1 ? side : 0;
+    const { top, bottom } = view.coordsAtPos($from.pos + step, step ? -side : side);
+    if (top >= bottom || middle < top || middle > bottom) continue;
+    cursor.style.setProperty('--moki-caret-top', `${top - anchor.top}px`);
+    cursor.style.setProperty('--moki-caret-height', `${bottom - top}px`);
+    return;
+  }
+  cursor.style.removeProperty('--moki-caret-top');
+  cursor.style.removeProperty('--moki-caret-height');
 }
 
 function pendingMarkers($caret) {
@@ -413,10 +436,13 @@ export const milkdownLiveSyntax = $prose((ctx) => new Plugin({
       return { closing: update?.closing || false, caret: update?.caret || null };
     },
   },
-  view() {
+  view(editorView) {
     let previous = '';
+    const resize = typeof ResizeObserver === 'function' ? new ResizeObserver(() => alignVirtualCaret(editorView)) : null;
+    resize?.observe(editorView.dom);
     return {
       update(view) {
+        alignVirtualCaret(view);
         const pending = pendingCodeFence(view);
         const key = pending && `${pending.$from.pos}:${pending.$from.parent.textContent}`;
         if (key === previous) return;
@@ -442,6 +468,7 @@ export const milkdownLiveSyntax = $prose((ctx) => new Plugin({
         }
         view.dom.dispatchEvent(new CustomEvent(CODE_FENCE_LANGUAGE_EVENT, { bubbles: true, detail }));
       },
+      destroy() { resize?.disconnect(); },
     };
   },
   appendTransaction(transactions, _oldState, state) {
