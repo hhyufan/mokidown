@@ -18,11 +18,13 @@ async function loadApplication(page) {
 test('tab switching reuses Monaco and document models while preserving edits, undo and view state', async ({ page }) => {
   test.setTimeout(60000);
   await loadApplication(page);
+  await expect(page.locator('.tabbar__new-tab')).toHaveCount(0);
   await page.evaluate(() => {
     const { store } = window.editorTrial;
     store.getState().openFile({ path: '/a.md', name: 'a.md', content: 'alpha\n' + 'line\n'.repeat(100) });
   });
   await expect(page.locator('.monaco-editor .view-lines')).toContainText('alpha');
+  await expect(page.locator('.tabbar__new-tab')).toBeVisible();
   await page.evaluate(() => {
     const trial = window.editorTrial;
     trial.editor = trial.monaco.editor.getEditors()[0];
@@ -63,6 +65,7 @@ test('tab switching reuses Monaco and document models while preserving edits, un
     t.editorListener.dispose(); t.modelListener.dispose(); t.store.getState().closeTab('/a.md');
   });
   await expect(page.locator('.editor-content__welcome')).toBeVisible();
+  await expect(page.locator('.tabbar__new-tab')).toHaveCount(0);
   expect(await page.evaluate(() => window.editorTrial.monaco.editor.getModels().length)).toBe(0);
 });
 
