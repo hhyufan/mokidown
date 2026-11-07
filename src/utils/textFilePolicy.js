@@ -13,7 +13,7 @@ export class TextFileError extends Error {
 
 const utf8Bom = [0xef, 0xbb, 0xbf];
 
-export function decodeTextBytes(bytes, { partial = false, allowLegacy = false } = {}) {
+export function decodeTextBytes(bytes, { partial = false } = {}) {
   if (bytes == null) throw new TextFileError('unreadable');
   const data = bytes instanceof Uint8Array ? bytes : Uint8Array.from(bytes);
   if (data.byteLength > MAX_TEXT_BYTES) throw new TextFileError('too-large');
@@ -22,7 +22,7 @@ export function decodeTextBytes(bytes, { partial = false, allowLegacy = false } 
     throw new TextFileError('invalid-encoding');
   }
   const hasUtf8Bom = utf8Bom.every((byte, index) => data[index] === byte);
-  let encoding = data[0] === 0xff && data[1] === 0xfe ? 'UTF-16LE'
+  const encoding = data[0] === 0xff && data[1] === 0xfe ? 'UTF-16LE'
     : data[0] === 0xfe && data[1] === 0xff ? 'UTF-16BE' : 'UTF-8';
   if (encoding === 'UTF-8' && data.includes(0)) throw new TextFileError('binary');
   let content;
@@ -30,16 +30,7 @@ export function decodeTextBytes(bytes, { partial = false, allowLegacy = false } 
     // A sampled head may end inside a character; a complete read must not.
     content = new TextDecoder(encoding, { fatal: true }).decode(data, { stream: partial });
   } catch {
-    if (encoding !== 'UTF-8' || hasUtf8Bom || !allowLegacy) throw new TextFileError('invalid-encoding');
-    try {
-      content = new TextDecoder('gb18030', { fatal: true }).decode(data, { stream: partial });
-    } catch {
-      throw new TextFileError('invalid-encoding');
-    }
-    if (!/[\u3400-\u9fff\u{20000}-\u{323af}][\s\S]*[\u3400-\u9fff\u{20000}-\u{323af}]/u.test(content)) {
-      throw new TextFileError('invalid-encoding');
-    }
-    encoding = 'GB18030';
+    throw new TextFileError('invalid-encoding');
   }
   let controls = 0, length = 0;
   for (const character of content) {

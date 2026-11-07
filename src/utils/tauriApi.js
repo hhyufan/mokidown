@@ -358,6 +358,10 @@ export async function readFileHead(path, limit = 8192) {
   return bytes instanceof Uint8Array ? bytes : Uint8Array.from(bytes);
 }
 
+export function checkFileTextHead(path) {
+  return invoke('check_file_text_head', { path });
+}
+
 export async function getFileInfo(path) {
   if (webDemo && isWebPath(path)) {
     const record = webFiles.get(normalizeWebPath(path));

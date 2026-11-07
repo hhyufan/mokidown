@@ -1,11 +1,12 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { classifyFile, clearClassificationCache, sniffTextHead } from './fileClassification';
-import { getFileInfo, readFileHead } from '@utils/tauriApi';
+import { checkFileTextHead, getFileInfo, readFileHead } from '@utils/tauriApi';
 
 const state = vi.hoisted(() => ({ bytes: null, info: { is_file: true, size: 10, modified: 1 } }));
 
 vi.mock('@utils/tauriApi', () => ({
   getFileInfo: vi.fn(async () => state.info),
+  checkFileTextHead: vi.fn(async () => {}),
   readFileHead: vi.fn(async () => state.bytes),
 }));
 
@@ -35,12 +36,18 @@ describe('file classification', () => {
     expect((await classifyFile('/tmp/Dockerfile')).kind).toBe('text');
   });
 
-  it('recognizes a GB18030 Chinese text sample before native decoding', async () => {
-    state.bytes = Uint8Array.from([0x41, 0x41, 0x41, 0xb2, 0xe2, 0xca, 0xd4, 0x32, 0x0d, 0x0a, 0xd6, 0xd0, 0xce]);
-    state.info.size = state.bytes.length + 1;
-    expect((await classifyFile('C:/workspace/sample.txt')).kind).toBe('text');
-    expect((await classifyFile('web://workspace/sample.txt')).kind).toBe('invalid-encoding');
-    expect(sniffTextHead(state.bytes, { partial: false, allowLegacy: true })).toBe('invalid-encoding');
+  it('delegates native classification to the system decoder and keeps web reads strict', async () => {
+    window.__TAURI_INTERNALS__ = {};
+    try {
+      state.bytes = Uint8Array.from([0x63, 0x61, 0x66, 0xe9]);
+      state.info.size = state.bytes.length;
+      expect((await classifyFile('C:/workspace/sample.txt')).kind).toBe('text');
+      expect(checkFileTextHead).toHaveBeenCalledWith('C:/workspace/sample.txt');
+      expect(readFileHead).not.toHaveBeenCalled();
+      expect((await classifyFile('web://workspace/sample.txt')).kind).toBe('invalid-encoding');
+    } finally {
+      delete window.__TAURI_INTERNALS__;
+    }
   });
 
   it('short-circuits empty and oversized files without reading', async () => {
