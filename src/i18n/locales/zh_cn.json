@@ -39,6 +39,8 @@
   "sidebar.explorer.expandBreadcrumb": "展开路径",
   "sidebar.explorer.collapseBreadcrumb": "折叠路径",
   "sidebar.explorer.deleteFile": "删除文件",
+  "sidebar.explorer.deleteFolder": "删除文件夹",
+  "sidebar.explorer.deleteFolderConfirm": "确定删除“{{name}}”及其中的所有内容吗？Windows 本地文件夹会先尝试移到回收站。",
   "sidebar.explorer.deleteTitle": "确认删除",
   "sidebar.explorer.cancelDelete": "取消",
   "sidebar.explorer.confirmDelete": "删除",
