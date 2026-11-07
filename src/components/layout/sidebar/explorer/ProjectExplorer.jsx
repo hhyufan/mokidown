@@ -4,6 +4,8 @@ import { useTranslation } from 'react-i18next';
 import useFileStore from '@store/useFileStore';
 import useEditorStore from '@store/useEditorStore';
 import { useFileManager } from '@hooks/useFileManager';
+import EditorContextMenu from '@components/editor/EditorContextMenu';
+import usePathContextMenu from '@hooks/usePathContextMenu';
 import useExplorerDeletion from '@hooks/useExplorerDeletion';
 import DeleteFileModal from '@components/overlays/DeleteFileModal';
 import ExplorerDeleteButton from './ExplorerDeleteButton';
@@ -39,6 +41,7 @@ export default function ProjectExplorer() {
   const [extension, setExtension] = useState(DEFAULT_FILE_EXTENSION);
   const [createError, setCreateError] = useState('');
   const [selected, setSelected] = useState(null);
+  const pathMenu = usePathContextMenu(currentDir);
   const deletion = useExplorerDeletion(async ({ parent }) => {
     if (useFileStore.getState().currentDir !== currentDir) return;
     setSelected(null);
@@ -273,6 +276,7 @@ export default function ProjectExplorer() {
 
   return <div className="file-tree project-tree" ref={surface}>
     <DeleteFileModal {...deletion.dialog} />
+    <EditorContextMenu menu={pathMenu.menu} onClose={pathMenu.closeMenu} />
     <ExplorerNavigation search={search} project busy={!ready}
       onParent={(parent) => { search.setQuery(''); model?.cancelExpansion(); parentNavigation.current = { parent, child: currentDir }; void loadDirectory(parent); }}
       canOpenSelected={Boolean(ready && selected?.is_dir && selected.path !== currentDir)}
@@ -342,6 +346,7 @@ export default function ProjectExplorer() {
           className={`project-tree__row${row.depth === 0 ? ' project-tree__row--root' : ''}${isSelected ? ' project-tree__row--active' : ''}${isCurrent ? ' project-tree__row--current' : ''}`}
           style={{ ...style, paddingLeft: indent }}
           onClick={(event) => { if (event.detail < 2) activate(row); }}
+          onContextMenu={(event) => pathMenu.onPathMenu(event, file.path)}
           onKeyDown={(event) => {
             if (event.target !== event.currentTarget) return;
             if (['Enter', ' '].includes(event.key)) { event.preventDefault(); activate(row); }
