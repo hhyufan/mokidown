@@ -49,6 +49,29 @@ test('Down at the last table cell continues outside the table', async ({ page })
   await expect(page.locator('td').last()).toHaveText('two');
 });
 
+test('the table insertion buttons straddle the table edges without clipping', async ({ page }) => {
+  await page.setViewportSize({ width: 420, height: 720 });
+  await open(page, table);
+  const wrapper = page.locator('.moki-table');
+  await wrapper.locator('tbody td').last().hover();
+  const addRow = wrapper.locator('.moki-table__insert--row');
+  await expect(addRow).toBeVisible();
+  const box = await addRow.boundingBox();
+  const scroll = await wrapper.locator('.moki-table__scroll').boundingBox();
+  const editor = await page.locator('.milkdown-editor').boundingBox();
+  expect(box.x + box.width / 2).toBeCloseTo(scroll.x + scroll.width, 0);
+  expect(box.x + box.width).toBeLessThanOrEqual(editor.x + editor.width);
+  const addColumn = wrapper.locator('.moki-table__insert--column');
+  const column = await addColumn.boundingBox();
+  expect(column.x + column.width / 2).toBeCloseTo(scroll.x + scroll.width, 0);
+  expect(column.y + column.height / 2).toBeCloseTo(scroll.y, 0);
+  await addColumn.click();
+  await expect(wrapper.locator('th')).toHaveCount(3);
+  await wrapper.locator('tbody td').last().hover();
+  await addRow.click();
+  await expect(wrapper.locator('tr')).toHaveCount(3);
+});
+
 test('Ctrl+Shift+Enter inserts before a table and preserves its cells', async ({ page }) => {
   await open(page, table);
   await page.evaluate(() => window.trial.selectCell());
