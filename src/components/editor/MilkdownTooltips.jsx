@@ -128,7 +128,7 @@ export default function MilkdownTooltips({ rootRef, readOnly, nativeOnly = false
   }, [tip, id]);
   if (!tip) return null;
   return createPortal(
-    <Tooltip id={id} open title={tip.title} placement="top" trigger={[]} destroyOnHidden styles={{ root: { pointerEvents: 'none' } }}>
+    <Tooltip id={id} open title={tip.title} placement="top" autoAdjustOverflow trigger={[]} destroyOnHidden styles={{ root: { pointerEvents: 'none' } }}>
       <span
         aria-hidden="true"
         style={{ position: 'fixed', ...tip.rect, pointerEvents: 'none', zIndex: -1 }}

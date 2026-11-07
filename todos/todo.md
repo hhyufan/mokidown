@@ -58,7 +58,7 @@
 
 * [x] opt(explorer): 项目搜索上一处/下一处的方向键切换。
 
-* [ ] opt(ui): Tooltip 顶层挂载与视口边缘翻转，避免被窗口截断。
+* [x] opt(ui): Tooltip 顶层挂载与视口边缘翻转，避免被窗口截断。
 
 * [ ] opt(ui): 所有 message 统一为同一右上角组件。
 
