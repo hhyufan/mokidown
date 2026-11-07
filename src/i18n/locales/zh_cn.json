@@ -29,6 +29,8 @@
   "sidebar.explorer.forward": "前进",
   "sidebar.explorer.up": "上一级",
   "sidebar.explorer.refresh": "刷新",
+  "editor.menu.path": "路径操作",
+  "editor.menu.copyPath": "复制路径",
   "sidebar.explorer.openInExplorer": "在资源管理器中打开",
   "sidebar.explorer.openFolder": "打开文件夹",
   "sidebar.explorer.closeFolder": "关闭文件夹",

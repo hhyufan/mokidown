@@ -29,6 +29,8 @@
   "sidebar.explorer.forward": "Forward",
   "sidebar.explorer.up": "Up",
   "sidebar.explorer.refresh": "Refresh",
+  "editor.menu.path": "Path actions",
+  "editor.menu.copyPath": "Copy Path",
   "sidebar.explorer.openInExplorer": "Open in Explorer",
   "sidebar.explorer.openFolder": "Open Folder",
   "sidebar.explorer.closeFolder": "Close folder",

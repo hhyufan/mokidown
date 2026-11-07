@@ -12,6 +12,8 @@ import useFileStore from '@store/useFileStore';
 import useEditorStore from '@store/useEditorStore';
 import { useFileManager } from '@hooks/useFileManager';
 import { useHorizontalDragScroll } from '@hooks/useHorizontalDragScroll';
+import EditorContextMenu from '@components/editor/EditorContextMenu';
+import usePathContextMenu from '@hooks/usePathContextMenu';
 import useExplorerDeletion from '@hooks/useExplorerDeletion';
 import ExplorerDeleteButton from './ExplorerDeleteButton';
 
@@ -98,6 +100,7 @@ function FileTree() {
   const [renamingStem, setRenamingStem] = useState('');
   const [renamingExt, setRenamingExt] = useState('');
   const [breadcrumbExpanded, setBreadcrumbExpanded] = useState(false);
+  const pathMenu = usePathContextMenu(currentDir);
   const deletion = useExplorerDeletion(() => {
     if (useFileStore.getState().currentDir === currentDir) return loadDirectory(currentDir);
   });
@@ -356,6 +359,7 @@ function FileTree() {
                   <span
                     className="file-tree__breadcrumb-part"
                     onClick={() => loadDirectory(buildBreadcrumbPath(currentDir, 0))}
+                    onContextMenu={(event) => pathMenu.onPathMenu(event, buildBreadcrumbPath(currentDir, 0))}
                   >
                     {breadcrumbParts[0]}
                   </span>
@@ -376,6 +380,7 @@ function FileTree() {
                   <span
                     className="file-tree__breadcrumb-part"
                     onClick={() => loadDirectory(currentDir)}
+                    onContextMenu={(event) => pathMenu.onPathMenu(event, currentDir)}
                   >
                     {breadcrumbParts[breadcrumbParts.length - 1]}
                   </span>
@@ -391,6 +396,7 @@ function FileTree() {
                   <span
                     className="file-tree__breadcrumb-part"
                     onClick={() => loadDirectory(currentDirIsSaf ? currentDir : buildBreadcrumbPath(currentDir, i))}
+                    onContextMenu={(event) => pathMenu.onPathMenu(event, currentDirIsSaf ? currentDir : buildBreadcrumbPath(currentDir, i))}
                   >
                     {part}
                   </span>
@@ -426,6 +432,7 @@ function FileTree() {
       </div>
 
       <DeleteFileModal {...deletion.dialog} />
+      <EditorContextMenu menu={pathMenu.menu} onClose={pathMenu.closeMenu} />
       {directoryLoading && <div className="file-tree__status" role="status">{t('sidebar.explorer.loadingDirectory')}</div>}
       {directoryError && <div className="file-tree__status" role="alert">{directoryError}</div>}
       {/* Only visible rows exist in the DOM; native directories retain a bounded page cache. */}
@@ -461,6 +468,7 @@ function FileTree() {
               aria-posinset={index + 1}
               className={cn('file-tree__item', isActive && 'file-tree__item--active', isCurrent && 'file-tree__item--current')}
               onClick={() => handleFileClick(file)}
+              onContextMenu={(event) => { if (renamingPath !== file.path) pathMenu.onPathMenu(event, file.path); }}
               onKeyDown={(event) => {
                 if (event.target !== event.currentTarget || renamingPath === file.path) return;
                 if (event.key === 'Delete') { event.preventDefault(); deletion.request(file, event); }
