@@ -29,7 +29,7 @@ export default function DeleteFileModal({ file, loading = false, onConfirm, onCa
           <span>{file.name}</span>
         </Tooltip>
       </div>
-      <p>{t('sidebar.explorer.deleteFileConfirm', { name: file.name })}</p>
+      <p>{t(file.is_dir ? 'sidebar.explorer.deleteFolderConfirm' : 'sidebar.explorer.deleteFileConfirm', { name: file.name })}</p>
     </div>}
   </AppDialog>;
 }

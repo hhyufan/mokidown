@@ -410,6 +410,9 @@
 }
 
 .file-tree__item-del {
+  padding: 0;
+  border: 0;
+  background: none;
   width: 20px;
   height: 20px;
   display: flex;
@@ -421,6 +424,9 @@
   cursor: pointer;
   transition: all 0.12s;
   flex-shrink: 0;
+
+  &:focus-visible,
+  .project-tree__row:hover & { opacity: 1; }
 
   svg {
     width: 12px;
