@@ -166,7 +166,6 @@ export default defineConfig(async ({ mode }) => ({
           // create an editor whose tokenizers and keybinding service are
           // registered on a different module registry.
           if (pkgName === 'monaco-editor') return 'monaco-vendor';
-          if (pkgName === '@antv/g2') return 'antv-vendor';
           if (pkgName === 'axios') return 'axios-vendor';
           if (pkgName === 'react-markdown'
             || pkgName.startsWith('@milkdown/')

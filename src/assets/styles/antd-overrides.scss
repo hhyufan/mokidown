@@ -632,30 +632,3 @@ body.moki-has-background {
   border-radius: var(--radius);
   color: var(--text);
 }
-
-// ── 表格（用于 StatsPanel 内部） ───────────────────────────────────────────
-.ant-table-wrapper .ant-table {
-  background: transparent;
-  color: var(--text);
-  font-size: 12px;
-  font-family: var(--font-app);
-
-  .ant-table-thead > tr > th {
-    background: var(--hover);
-    color: var(--text-sec);
-    font-weight: 500;
-    border-bottom-color: var(--border-light);
-  }
-
-  .ant-table-tbody > tr {
-    background: transparent;
-
-    > td {
-      border-bottom-color: var(--border-light);
-    }
-
-    &:hover > td {
-      background: var(--hover) !important;
-    }
-  }
-}
