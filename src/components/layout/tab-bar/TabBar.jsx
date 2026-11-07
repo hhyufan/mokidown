@@ -258,14 +258,14 @@ function TabBar({ onRequestCloseTab }) {
             </div>
           );
         })}
-        <Tooltip title={t('tabbar.newTab')} placement="bottom" mouseEnterDelay={0.3}>
+        {tabs.length > 0 && <Tooltip title={t('tabbar.newTab')} placement="bottom" mouseEnterDelay={0.3}>
           <button className="tabbar__new-tab" aria-label={t('tabbar.newTab')} onClick={createNewTab} type="button">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
               <line x1="12" y1="5" x2="12" y2="19" />
               <line x1="5" y1="12" x2="19" y2="12" />
             </svg>
           </button>
-        </Tooltip>
+        </Tooltip>}
       </div>
 
       <div className="tabbar__actions">
