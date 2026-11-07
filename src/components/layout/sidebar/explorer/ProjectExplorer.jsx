@@ -348,7 +348,7 @@ export default function ProjectExplorer() {
           onClick={(event) => { if (event.detail < 2) activate(row); }}
           onContextMenu={(event) => pathMenu.onPathMenu(event, file.path)}
           onKeyDown={(event) => {
-            if (event.target !== event.currentTarget) return;
+            if (event.target !== event.currentTarget || event.altKey || event.ctrlKey || event.metaKey || event.isComposing) return;
             if (['Enter', ' '].includes(event.key)) { event.preventDefault(); activate(row); }
             if (event.key === 'Delete' && row.parent) { event.preventDefault(); requestDeletion(event); }
             if (event.key === 'ArrowRight' && file.is_dir && !expanded) { event.preventDefault(); activate(row); }
