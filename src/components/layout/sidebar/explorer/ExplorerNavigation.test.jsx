@@ -45,6 +45,15 @@ it('keeps the filename drawer mounted and makes it inert while collapsed', () =>
   expect(search.move).toHaveBeenCalledWith(-1);
 });
 
+it('moves between filename matches with unmodified arrow keys', () => {
+  render(<ExplorerNavigation search={{ ...search, open: true, results: [{}] }} project />);
+  const input = screen.getByRole('textbox', { name: 'sidebar.project.search' });
+  fireEvent.keyDown(input, { key: 'ArrowDown' });
+  fireEvent.keyDown(input, { key: 'ArrowUp' });
+  fireEvent.keyDown(input, { key: 'ArrowDown', altKey: true });
+  expect(search.move.mock.calls).toEqual([[1], [-1]]);
+});
+
 it('places Open selected immediately after Up in project mode and guards unavailable selections', () => {
   const open = vi.fn();
   const { rerender } = render(<ExplorerNavigation search={search} project onOpenSelected={open} canOpenSelected={false} />);
