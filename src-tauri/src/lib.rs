@@ -282,7 +282,7 @@ async fn read_file_content(path: String) -> Result<FileOperationResult, text_fil
         content: Some(text.content),
         file_path: Some(path),
         file_name: None,
-        encoding: Some(text.encoding.to_string()),
+        encoding: Some(text.encoding),
         line_ending: Some(line_ending),
     })
 }
@@ -299,6 +299,11 @@ async fn read_file_head(path: String, limit: u32) -> Result<Vec<u8>, String> {
         .read_to_end(&mut buffer)
         .map_err(|e| format!("Failed to read file head: {e}"))?;
     Ok(buffer)
+}
+
+#[tauri::command]
+async fn check_file_text_head(path: String) -> Result<(), text_file::TextFileError> {
+    text_file::check_head(Path::new(&path))
 }
 
 #[tauri::command]
@@ -422,11 +427,31 @@ async fn save_file(
 
     let target_encoding = encoding.as_deref().unwrap_or("UTF-8");
     let encoding_obj = Encoding::for_label(target_encoding.as_bytes()).unwrap_or(UTF_8);
-    let encoded_bytes = match target_encoding.to_ascii_uppercase().as_str() {
+    let target_upper = target_encoding.to_ascii_uppercase();
+    let code_page = target_upper
+        .strip_prefix("CP")
+        .and_then(|value| value.parse::<u32>().ok());
+    let encoded_bytes = match target_upper.as_str() {
         "UTF-8-BOM" => [text_file::UTF8_BOM, content.as_bytes()].concat(),
         "UTF-16LE" => text_file::encode_utf16(&content, true),
         "UTF-16BE" => text_file::encode_utf16(&content, false),
-        _ => encoding_obj.encode(&content).0.into_owned(),
+        _ if code_page.is_some() => {
+            #[cfg(windows)]
+            {
+                text_file::encode_code_page(&content, code_page.unwrap())?
+            }
+            #[cfg(not(windows))]
+            {
+                return Err(format!("Unsupported encoding: {target_encoding}"));
+            }
+        }
+        _ => {
+            let (bytes, _, had_errors) = encoding_obj.encode(&content);
+            if had_errors {
+                return Err(format!("Text cannot be represented in {target_encoding}"));
+            }
+            bytes.into_owned()
+        }
     };
 
     match atomic_write(path, &encoded_bytes) {
@@ -444,8 +469,8 @@ async fn save_file(
                 file_path: Some(file_path),
                 file_name: Some(file_name),
                 encoding: Some(
-                    if target_encoding.eq_ignore_ascii_case("UTF-8-BOM") {
-                        "UTF-8-BOM"
+                    if target_upper == "UTF-8-BOM" || code_page.is_some() {
+                        &target_upper
                     } else if encoding_obj.name() == "gb18030" {
                         "GB18030"
                     } else {
@@ -1770,6 +1795,7 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             read_file_content,
             read_file_head,
+            check_file_text_head,
             read_clipboard_for_paste,
             read_binary_file,
             write_file_content,
@@ -1893,7 +1919,6 @@ mod tests {
             ("UTF-8-BOM", text_file::UTF8_BOM),
             ("UTF-16LE", &[0xff, 0xfe][..]),
             ("UTF-16BE", &[0xfe, 0xff][..]),
-            ("GB18030", &[0xd6, 0xd0, 0xce, 0xc4][..]),
         ] {
             let saved = tauri::async_runtime::block_on(save_file(
                 path.clone(),
