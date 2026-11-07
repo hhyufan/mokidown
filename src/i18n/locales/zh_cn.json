@@ -648,6 +648,7 @@
   "editor.showCode": "编辑代码",
   "editor.showPreview": "预览代码",
   "editor.editHtmlHint": "双击编辑 HTML · Ctrl / ⌘ + Enter 完成",
+  "editor.mathSourceLabel": "公式",
   "editor.editMathHint": "选中公式后按 Backspace 编辑源码",
   "settings.snapshot.settingsJson": "设置 JSON",
   "settings.snapshot.settingsJsonDesc": "导出当前设置，或从 JSON 文件导入设置。",

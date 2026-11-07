@@ -354,6 +354,7 @@ const mathSourceBlockSchema = $nodeSchema(mathSourceBlockType, () => ({
     'div',
     {
       'data-type': mathSourceBlockType,
+      'data-math-label': i18n.t('editor.mathSourceLabel'),
       class: 'md-preview__math-source md-preview__math-source--block',
     },
     0,
