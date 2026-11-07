@@ -8,14 +8,15 @@ import usePluginContributions from '@store/usePluginContributions';
 import { sendToPlugin } from '@utils/pluginBus';
 import { useFileManager } from '@hooks/useFileManager';
 import useTasks from '@hooks/useTasks';
-import { getDirectoryContents, isSafUri, safDisplayName, showInExplorer } from '@utils/tauriApi';
+import { getDirectoryContents, isSafUri, safDisplayName } from '@utils/tauriApi';
 import { isWebDemo, notifyWebDemo } from '@utils/webDemo';
 import { splitPath, buildFullPath } from '@utils/pathUtils';
 
 import FileTypeIcon from '@components/ui/FileTypeIcon';
 import TaskStatusIndicator from '@components/ui/TaskStatusIndicator';
 import PluginStatusPill from './PluginStatusPill';
-import { isAndroidRuntime } from '@utils/platform';
+import usePathContextMenu from '@hooks/usePathContextMenu';
+import EditorContextMenu from '@components/editor/EditorContextMenu';
 import './footer.scss';
 
 const PREVIEW_EXT = /^(md|markdown|mdx|mgtree)$/i;
@@ -78,6 +79,7 @@ function Footer() {
     () => tabs.find((item) => item.id === activeTabId) || null,
     [tabs, activeTabId],
   );
+  const pathContext = usePathContextMenu(activeTab?.path);
 
   const showModeToggle = activeTab && PREVIEW_EXT.test(activeTab.ext) && viewMode !== 'split';
 
@@ -86,7 +88,6 @@ function Footer() {
   const [openDropdown, setOpenDropdown] = useState(null);
   const bcScrollRef = useRef(null);
   const bcThumbRef = useRef(null);
-  const isAndroid = isAndroidRuntime();
 
   // 底部路径面包屑的横向滚动与自定义滚动条同步。
   const updateBcScrollbar = useCallback(() => {
@@ -171,17 +172,6 @@ function Footer() {
       setOpenDropdown(null);
     }
   }, [pathSegments, openDropdown, activeTab?.path, t]);
-
-  const handleContextMenu = useCallback(async (e, index) => {
-    e.preventDefault();
-    if (isAndroid) return;
-    const dirPath = buildFullPath(pathSegments, index);
-    if (dirPath) {
-      try {
-        await showInExplorer(dirPath);
-      } catch (_) { /* silent */ }
-    }
-  }, [isAndroid, pathSegments]);
 
   const handleFileItemClick = useCallback(async (item) => {
     setOpenDropdown(null);
@@ -282,7 +272,11 @@ function Footer() {
                           <span
                             className="footer__breadcrumb-segment"
                             onClick={() => handleSegmentClick(index)}
-                            onContextMenu={(e) => handleContextMenu(e, index)}
+                            onContextMenu={(event) => {
+                              setOpenDropdown(null);
+                              const path = index === pathSegments.length - 1 ? activeTab?.path : buildFullPath(pathSegments, index);
+                              pathContext.onPathMenu(event, path);
+                            }}
                           >
                             {/^[A-Z]:\\$/i.test(segment) ? segment.substring(0, 2) : segment}
                           </span>
@@ -307,6 +301,7 @@ function Footer() {
           <span>{t('footer.ready')}</span>
         )}
       </div>
+      <EditorContextMenu menu={pathContext.menu} onClose={pathContext.closeMenu} />
 
       <div className="footer__right">
         {activeTask && (
