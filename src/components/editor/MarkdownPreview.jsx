@@ -65,7 +65,7 @@ import i18n from '@/i18n';
 import { useFileManager } from '@hooks/useFileManager';
 import useEditorStore from '@store/useEditorStore';
 import useConfigStore from '@store/useConfigStore';
-import useToastStore from '@store/useToastStore';
+import useNotificationStore from '@store/useNotificationStore';
 import { useEditorContextMenu } from '@hooks/useEditorContextMenu';
 import EditorContextMenu from './EditorContextMenu';
 import { MENU_MOD } from '@utils/contextMenuShortcuts';
@@ -344,7 +344,7 @@ const MarkdownPreview = forwardRef(function MarkdownPreview({ className }, ref) 
   const addLangTags = useCallback((container) => {
     if (!container) return;
 
-    const toast = useToastStore.getState().toast;
+    const notify = useNotificationStore.getState().notify;
     container.querySelectorAll('pre').forEach((pre) => {
       if (pre.querySelector(':scope > .lang-tag')) return;
       const code = pre.querySelector('code[class*="language-"]');
@@ -361,9 +361,9 @@ const MarkdownPreview = forwardRef(function MarkdownPreview({ className }, ref) 
       tag.setAttribute('aria-label', i18n.t('editor.copyCode'));
       tag.addEventListener('click', () => {
         navigator.clipboard.writeText(code.textContent || '').then(() => {
-          toast(i18n.t('preview.copiedToClipboard'));
+          notify('success', i18n.t('preview.copiedToClipboard'), '', 2500);
         }).catch(() => {
-          toast(i18n.t('preview.copyFailed'));
+          notify('error', i18n.t('preview.copyFailed'), '', 2500);
         });
       });
 

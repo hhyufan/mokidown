@@ -193,7 +193,6 @@ export default function ThemedConfigProvider({ children }) {
       }}
     >
       <AntApp
-        message={{ maxCount: 5 }}
         notification={{ placement: 'topRight', stack: { threshold: 3 } }}
       >
         {children}

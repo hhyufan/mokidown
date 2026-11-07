@@ -60,7 +60,7 @@
 
 * [x] opt(ui): Tooltip 顶层挂载与视口边缘翻转，避免被窗口截断。
 
-* [ ] opt(ui): 所有 message 统一为同一右上角组件。
+* [x] opt(ui): 所有 message 统一为同一右上角组件。
 
 * [ ] opt(editor): 所见即所得代码块编辑光标改为 Monaco 同款蓝色。
 
