@@ -1,6 +1,7 @@
 import AppDialog from './AppDialog';
 import { useEffect, useMemo, useState } from 'react';
-import { Button, Input, Select, Switch, Tooltip, message } from 'antd';
+import { Button, Input, Select, Switch, Tooltip } from 'antd';
+import useNotificationStore from '@store/useNotificationStore';
 import { ArrowLeftOutlined, CheckOutlined, CloudDownloadOutlined, PlusOutlined, ReloadOutlined,
   SearchOutlined, StopOutlined, DeleteOutlined, GlobalOutlined, LinkOutlined } from '@ant-design/icons';
 import { useTranslation } from 'react-i18next';
@@ -223,7 +224,7 @@ export default function LanguageServices() {
           <Button icon={<CloudDownloadOutlined />} aria-label={t('extensions.checkUpdates')} disabled={!desktop}
             onClick={async () => {
               const updates = await extState.checkUpdates();
-              if (!updates.length) message.success(t('extensions.upToDate'));
+              if (!updates.length) useNotificationStore.getState().notify('success', t('extensions.upToDate'));
             }} />
         </Tooltip>
         <Tooltip title={t('languageServices.accelerator')} placement="top" mouseEnterDelay={0.3}>
