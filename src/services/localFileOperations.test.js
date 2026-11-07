@@ -4,7 +4,7 @@ import useEditorStore from '@store/useEditorStore';
 import { clearBuffer, getBuffer, setBuffer, registerEditorBufferFlusher } from '@utils/editorBuffer';
 import { saveFile } from '@utils/tauriApi';
 import { clearDiskBaselines, getDiskBaseline, rememberDiskBaseline } from './localFileGuard';
-import { createFileChangeObserver, reconcileFileChange, saveExistingFile, setLocalFileComposing } from './localFileOperations';
+import { createFileChangeObserver, reconcileFileChange, restoreExternalDisk, saveExistingFile, setLocalFileComposing } from './localFileOperations';
 
 vi.mock('@tauri-apps/api/core', () => ({ invoke: vi.fn() }));
 
@@ -191,6 +191,30 @@ describe('local file save/watch coordination', () => {
     useEditorStore.getState().setExternalFileConflict({ path, diskContent: 'previous' });
     expect(await reconcileFileChange(path)).toBe('external-only');
     expect(getBuffer(path)).toBe('external');
+    expect(useEditorStore.getState().externalFileConflict).toBeNull();
+  });
+
+  it('checks unpublished editor changes before choosing whether to reload', async () => {
+    const stop = registerEditorBufferFlusher(() => path, () => setBuffer(path, 'unpublished edit'));
+    try {
+      diskContent = 'external';
+      expect(await reconcileFileChange(path)).toBe('conflict');
+      expect(getBuffer(path)).toBe('unpublished edit');
+    } finally {
+      stop();
+    }
+  });
+
+  it('restores the latest readable disk version instead of the reviewed snapshot', async () => {
+    diskContent = 'first external version';
+    setBuffer(path, 'unsaved edits');
+    expect(await reconcileFileChange(path)).toBe('conflict');
+    const { externalFileConflict } = useEditorStore.getState();
+    diskContent = 'latest external version';
+    expect(await restoreExternalDisk(externalFileConflict)).toBe(true);
+    expect(getBuffer(path)).toBe(diskContent);
+    expect(getDiskBaseline(path).content).toBe(diskContent);
+    expect(useEditorStore.getState().tabs[0]).toMatchObject({ content: diskContent, modified: false });
     expect(useEditorStore.getState().externalFileConflict).toBeNull();
   });
 

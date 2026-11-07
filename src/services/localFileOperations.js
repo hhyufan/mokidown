@@ -10,7 +10,7 @@ export function setLocalFileComposing(composing) {
 
 // Call only while holding the path's operation queue. Read editor state AFTER IO;
 // neither a captured Zustand state nor a watcher event is a disk snapshot.
-async function inspectFile(path, isCurrent = () => true, flushEditor = false) {
+async function inspectFile(path, isCurrent = () => true) {
   for (let attempt = 0; attempt < 3; attempt += 1) {
     if (!useEditorStore.getState().tabs.some((tab) => tab.path === path)) return null;
     const baseline = getDiskBaseline(path);
@@ -20,7 +20,7 @@ async function inspectFile(path, isCurrent = () => true, flushEditor = false) {
     const state = useEditorStore.getState();
     const tab = state.tabs.find((item) => item.path === path);
     if (!tab) return null;
-    if (flushEditor) flushEditorBuffer(tab.id);
+    flushEditorBuffer(tab.id);
     const editorContent = getBuffer(tab.id, tab.content || '');
     const diskContent = disk?.content || '';
     return {
@@ -65,7 +65,7 @@ function reloadExternal(path, version) {
 export function saveExistingFile(path, _content, encoding, _tabId) {
   return withFileOperation(path, async () => {
     if (inputComposing) return { success: false, superseded: true };
-    const version = await inspectFile(path, () => !inputComposing, true);
+    const version = await inspectFile(path, () => !inputComposing);
     if (!version) return { success: false, superseded: true };
     const { state, tab, outcome, editorContent, diskContent } = version;
     if (outcome === 'conflict' || outcome === 'unavailable' || outcome === 'blocked') {
@@ -85,6 +85,26 @@ export function saveExistingFile(path, _content, encoding, _tabId) {
       clearConflict(path);
     }
     return { ...result, savedContent: editorContent };
+  });
+}
+
+/** Resolve the reviewed conflict against the current file under the same lock as saves. */
+export function restoreExternalDisk(conflict) {
+  const { path, tabId } = conflict;
+  const isCurrent = () => {
+    const current = useEditorStore.getState().externalFileConflict;
+    return current?.path === path && current.tabId === tabId;
+  };
+  return withFileOperation(path, async () => {
+    if (!isCurrent() || inputComposing) return false;
+    const version = await inspectFile(path, () => isCurrent() && !inputComposing);
+    if (!version || version.tab.id !== tabId) return false;
+    if (!version.disk?.success) {
+      reportConflict(path, version);
+      return false;
+    }
+    reloadExternal(path, version);
+    return true;
   });
 }
 
