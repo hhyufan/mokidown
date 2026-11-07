@@ -467,8 +467,14 @@
   outline-offset: -1px;
 }
 
+/* Leave room for alignment and wrapping even in narrow desktop windows. */
+.ant-tooltip {
+  max-width: min(250px, calc(100vw - 16px));
+}
+
 .ant-tooltip .ant-tooltip-inner {
   font-size: 11px;
+  overflow-wrap: anywhere;
   padding: 4px 8px;
   min-height: unset;
   border-radius: var(--radius-sm);

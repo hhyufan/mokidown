@@ -97,6 +97,8 @@ function buildTokens(hasBackground = false) {
  * @param {{ children: import('react').ReactNode }} props 组件属性
  * @returns {JSX.Element} 包裹全局 antd 配置的提供者组件
  */
+const getViewportPopupContainer = () => document.body;
+
 export default function ThemedConfigProvider({ children }) {
   const theme = useThemeStore((s) => s.theme);
   const language = useConfigStore((s) => s.language);
@@ -145,6 +147,7 @@ export default function ThemedConfigProvider({ children }) {
   return (
     <ConfigProvider
       locale={locale}
+      getPopupContainer={getViewportPopupContainer}
       theme={{
         algorithm,
         token: tokens,
