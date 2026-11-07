@@ -17,6 +17,7 @@ import {
 } from 'react';
 import { createRoot } from 'react-dom/client';
 import { createPortal } from 'react-dom';
+import { useShallow } from 'zustand/react/shallow';
 import MarkdownTreeBlock from './MarkdownTreeBlock';
 import { useCodeBlockNavigation } from '@hooks/useCodeBlockNavigation';
 import { normalizeCodeLanguage } from '@utils/knowledgeTree';
@@ -46,6 +47,7 @@ import {
   tableRowSchema,
   tableSchema,
   toggleStrikethroughCommand,
+  wrapInTaskListInputRule,
 } from '@milkdown/kit/preset/gfm';
 import { history } from '@milkdown/kit/plugin/history';
 import { clipboard } from '@milkdown/kit/plugin/clipboard';
@@ -121,7 +123,7 @@ import useToastStore from '@store/useToastStore';
 import { useEditorBufferContent } from '@hooks/useEditorBufferContent';
 import { useDocumentScrollState } from '@hooks/useDocumentScrollState';
 import { getDocumentViewState, registerDocumentViewState, requestDocumentViewStateSave } from '@utils/documentViewState';
-import { setBuffer, registerEditorBufferFlusher } from '@utils/editorBuffer';
+import { getBuffer, setBuffer, registerEditorBufferFlusher } from '@utils/editorBuffer';
 import { isImeComposing } from '@utils/keyboard';
 import { hydrateMarkdownImages, parseMarkdownLineHint, resolveMarkdownLinkPath } from '@utils/markdownAssets';
 import { observeMarkdownEnhancements } from '@utils/observeMarkdownEnhancements';
@@ -776,6 +778,29 @@ const mathValueEditPlugin = $prose((ctx) => {
   });
 });
 
+const taskListMarker = /^(?:([-+*])[ \u00a0]+)?\[([ xX\u00a0])\][ \u00a0]$/;
+
+function convertTaskListMarker(state, match, start, end) {
+  const $start = state.doc.resolve(start);
+  if (!$start.depth || $start.parent.type !== state.schema.nodes.paragraph || $start.parentOffset) return null;
+  const { list_item: itemType, bullet_list: listType } = state.schema.nodes;
+  const parent = $start.node(-1);
+  const index = $start.index(-1);
+  const checked = match[2].toLowerCase() === 'x';
+  if (!match[1]) {
+    if (parent.type !== itemType || index !== 0 || parent.attrs.checked != null) return null;
+    return state.tr.delete(start, end).setNodeMarkup($start.before(-1), undefined, { ...parent.attrs, checked });
+  }
+  if (!parent.canReplaceWith(index, index + 1, listType)) return null;
+  const pos = $start.before();
+  const tr = state.tr.delete(start, end);
+  const paragraph = tr.doc.nodeAt(pos);
+  tr.replaceWith(pos, pos + paragraph.nodeSize, listType.create(null, itemType.create({ checked }, paragraph)));
+  return tr.setSelection(TextSelection.create(tr.doc, pos + 3));
+}
+
+const taskListInputRule = $inputRule(() => new InputRule(taskListMarker, convertTaskListMarker));
+
 /**
  * 任务列表复选框交互插件。
  *
@@ -825,6 +850,18 @@ const taskListCheckboxPlugin = $prose((ctx) => {
   return new Plugin({
     props: {
       handleDOMEvents: {
+        keydown(view, event) {
+          const { $from, empty } = view.state.selection;
+          if (!view.editable || !empty || event.key !== 'Enter' || event.shiftKey || event.ctrlKey || event.metaKey
+            || event.altKey || view.composing || isImeComposing(event) || event.target.closest?.('.cm-editor, input, textarea')
+            || $from.parentOffset !== $from.parent.content.size) return false;
+          const match = taskListMarker.exec(`${$from.parent.textContent} `);
+          const tr = match && convertTaskListMarker(view.state, match, $from.start(), $from.pos);
+          if (!tr) return false;
+          event.preventDefault();
+          view.dispatch(tr.scrollIntoView());
+          return true;
+        },
         mousedown(view, event) {
           if (!view.editable) return false;
           const task = getTaskItem(view, event.target);
@@ -1395,6 +1432,7 @@ function MilkdownInner({
   activeTabId,
   className,
   content,
+  contentRevision,
   fontSize,
   lineHeight,
   onAutoSave,
@@ -1476,13 +1514,15 @@ function MilkdownInner({
 
   const publishEditorContent = useCallback((ctx) => {
     if (!ctx.isInjected(editorViewCtx)) return;
+    const tab = useEditorStore.getState().tabs.find((item) => item.id === activeTabId);
+    if (!tab || (tab.contentRevision ?? 0) !== contentRevision || currentTabIdRef.current !== activeTabId) return;
     const state = ctx.get(editorViewCtx).state;
     const markdown = ctx.get(serializerCtx)(persistentMilkdownDocument(state));
     if (markdown === publishedMarkdownRef.current) return;
     publishedMarkdownRef.current = markdown;
     scheduleEditorSideEffects(markdown);
     setRenderTick((value) => value + 1);
-  }, [scheduleEditorSideEffects]);
+  }, [activeTabId, contentRevision, scheduleEditorSideEffects]);
 
   const editorInfo = useEditor((root) => {
     const editor = Editor.make()
@@ -1542,11 +1582,12 @@ function MilkdownInner({
       .use(markdownHtmlPlugin)
       .use(milkdownTableKeys)
       .use(commonmark.filter((plugin) => plugin !== createCodeBlockInputRule))
-      .use(gfm.filter((plugin) => plugin !== insertTableInputRule))
+      .use(gfm.filter((plugin) => plugin !== insertTableInputRule && plugin !== wrapInTaskListInputRule))
       .use(milkdownTableView)
       .use(htmlBlockSchema)
       .use(htmlBlockView)
       .use(taskListCheckboxPlugin)
+      .use(taskListInputRule)
       .use(mathPlugins)
       .use(history)
       .use(milkdownMediaEditor)
@@ -1578,7 +1619,8 @@ function MilkdownInner({
 
   useEffect(() => {
     if (editorInfo.loading || readOnly) return undefined;
-    return registerEditorBufferFlusher(() => activeTabId, () => editorRef.current?.action(publishEditorContent));
+    const editor = editorRef.current;
+    return registerEditorBufferFlusher(() => activeTabId, () => editor?.action(publishEditorContent));
   }, [activeTabId, editorInfo.loading, readOnly, publishEditorContent]);
 
   useDocumentScrollState(wrapperRef, activeTabId, 'milkdownScroll', !editorInfo.loading);
@@ -2019,18 +2061,23 @@ const MilkdownMarkdownEditor = forwardRef(function MilkdownMarkdownEditor({
   onAutoSave,
   readOnly = false,
 }, ref) {
-  const activeTabId = useEditorStore((s) => s.activeTabId);
+  const documentVersion = useEditorStore(useShallow((s) => ({
+    id: s.activeTabId,
+    revision: s.tabs.find((tab) => tab.id === s.activeTabId)?.contentRevision ?? 0,
+  })));
+  const { id: activeTabId, revision: contentRevision } = documentVersion;
   const editorFontSize = useConfigStore((s) => s.fontSize);
   const editorLineHeight = useConfigStore((s) => s.lineHeight);
   const previewFontSize = useConfigStore((s) => s.previewFontSize);
   const previewLineHeight = useConfigStore((s) => s.previewLineHeight);
   const previewZoomSync = useConfigStore((s) => s.previewZoomSync);
+  // External replacements reset the editor. Ordinary typing and saves keep its undo history.
   const fallback = useMemo(() => {
-    const tab = useEditorStore.getState().tabs.find((t) => t.id === activeTabId);
-    return tab?.content || '';
-  }, [activeTabId]);
-  const bufferedContent = useEditorBufferContent(activeTabId, fallback, readOnly ? 240 : 10_000_000);
-  const content = bufferedContent;
+    const tab = useEditorStore.getState().tabs.find((t) => t.id === documentVersion.id);
+    return getBuffer(documentVersion.id, tab?.content || '');
+  }, [documentVersion]);
+  const bufferedContent = useEditorBufferContent(readOnly ? activeTabId : null, fallback, 240);
+  const content = readOnly ? bufferedContent : fallback;
   const fontSize = previewZoomSync ? editorFontSize : (previewFontSize || editorFontSize);
   const lineHeight = previewZoomSync ? editorLineHeight : (previewLineHeight || editorLineHeight);
 
@@ -2043,6 +2090,7 @@ const MilkdownMarkdownEditor = forwardRef(function MilkdownMarkdownEditor({
           activeTabId={activeTabId}
           className={className}
           content={content}
+          contentRevision={contentRevision}
           fontSize={fontSize}
           lineHeight={lineHeight}
           onAutoSave={onAutoSave}
