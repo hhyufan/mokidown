@@ -80,7 +80,7 @@
 
 * [ ] style(editor): HTML 编辑器内嵌编辑框「完成」改为绿色线性 ✓。
 
-* [ ] style(icon): 重画自定义文件夹的展开态 SVG。
+* [x] style(icon): 重画自定义文件夹的展开态 SVG。
 
 **chore**
 

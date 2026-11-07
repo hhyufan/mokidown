@@ -5,7 +5,7 @@ for (const name of names) {
   const source = new URL(`../src/assets/file-icons/${name}.svg`, import.meta.url);
   const svg = readFileSync(source, 'utf8');
   const open = svg.replace(/<path id="folder" fill="([^"]+)" d="[^"]+"\s*\/>/, (_, color) =>
-    `<path id="folder-back" fill="${color}" opacity=".65" d="M1 12V4a1 1 0 0 1 1-1h3.64a1 1 0 0 1 .64.23L7.56 4H14a1 1 0 0 1 1 1v7Z"/><path id="folder" fill="${color}" d="M2.5 6h12a.75.75 0 0 1 .73.94l-1.3 5.3A1 1 0 0 1 12.96 13H2.05a1 1 0 0 1-.98-1.2l.7-5.15A.75.75 0 0 1 2.5 6Z"/>`);
+    `<path id="folder-back" fill="${color}" opacity=".7" d="M1 12V4a1 1 0 0 1 1-1h3.65c.23 0 .46.08.64.23L7.5 4h5.75a1 1 0 0 1 1 1v1H4.9a1 1 0 0 0-.94.66L2.1 12Z"/><path id="folder" fill="${color}" d="M1 12.3a1 1 0 0 0 1 1.2h10.1a1 1 0 0 0 .92-.61l2.4-5.63a.7.7 0 0 0-.64-.98H5.15a1 1 0 0 0-.93.64L2 12.3Z"/>`);
   if (open === svg) throw new Error(`Missing folder base: ${name}`);
   writeFileSync(new URL(`../src/assets/file-icons/${name}-open.svg`, import.meta.url), open);
 }
