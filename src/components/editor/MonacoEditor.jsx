@@ -190,7 +190,7 @@ const MonacoEditorComponent = forwardRef(function MonacoEditorComponent({ classN
     const initial = tab ? documentModelInfo(tab) : null;
     const initialModel = initial ? monaco.editor.createModel(initial.value, initial.language, initial.uri) : null;
     const initialView = tab ? getDocumentViewState(tab.id, 'monaco') : null;
-    if (tab) modelsRef.current.set(tab.id, { model: initialModel, viewState: initialView });
+    if (tab) modelsRef.current.set(tab.id, { model: initialModel, viewState: initialView, contentRevision: tab.contentRevision ?? 0 });
     currentTabIdRef.current = tab?.id || null;
 
     const editor = monaco.editor.create(containerRef.current, {
@@ -340,6 +340,8 @@ const MonacoEditorComponent = forwardRef(function MonacoEditorComponent({ classN
     const stopBufferFlusher = registerEditorBufferFlusher(() => currentTabIdRef.current, () => {
       if (isComposing) return;
       const tabId = currentTabIdRef.current;
+      const tab = useEditorStore.getState().tabs.find((item) => item.id === tabId);
+      if (!tab || modelsRef.current.get(tabId)?.contentRevision !== (tab.contentRevision ?? 0)) return;
       const value = editor.getValue();
       if (tabId && value !== getBuffer(tabId)) {
         setBuffer(tabId, value);
@@ -594,6 +596,7 @@ const MonacoEditorComponent = forwardRef(function MonacoEditorComponent({ classN
       suppressModelChangeRef.current = false;
       if (pos) editor.setPosition(pos);
     }
+    entry.contentRevision = tab.contentRevision ?? 0;
 
     const model = editor.getModel();
     if (model) {
