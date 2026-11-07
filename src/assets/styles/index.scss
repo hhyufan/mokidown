@@ -68,6 +68,7 @@
   --text-sec: #6d6d6f;
   --text-dim: #c4c4c6;
   --accent: #4091ff;
+  --code-caret: #526fff;
   --accent-light: #e8f0ff;
   --accent-bg: rgba(64, 145, 255, 0.08);
   /* 与 Monaco 的 One Light 主题一致（editor.selectionBackground）。 */
@@ -98,6 +99,7 @@ html[data-theme='dark'] {
   --text-sec: rgb(152, 152, 157);
   --text-dim: rgb(99, 99, 102);
   --accent: #5a9fff;
+  --code-caret: #528bff;
   --accent-light: rgba(90, 159, 255, 0.15);
   --accent-bg: rgba(90, 159, 255, 0.08);
   /* 与 Monaco 的 One Dark Pro 主题一致（editor.selectionBackground，含 60/255 透明度）。 */

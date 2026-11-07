@@ -62,7 +62,7 @@
 
 * [x] opt(ui): 所有 message 统一为同一右上角组件。
 
-* [ ] opt(editor): 所见即所得代码块编辑光标改为 Monaco 同款蓝色。
+* [x] opt(editor): 所见即所得代码块编辑光标改为 Monaco 同款蓝色。
 
 * [ ] opt(editor): 图像预览弹层限制在编辑区域内。
 
