@@ -4,6 +4,9 @@ import { useTranslation } from 'react-i18next';
 import useFileStore from '@store/useFileStore';
 import useEditorStore from '@store/useEditorStore';
 import { useFileManager } from '@hooks/useFileManager';
+import useExplorerDeletion from '@hooks/useExplorerDeletion';
+import DeleteFileModal from '@components/overlays/DeleteFileModal';
+import ExplorerDeleteButton from './ExplorerDeleteButton';
 import { isSafUri, safDisplayName } from '@utils/tauriApi';
 import { sortDirectoryContents } from '@utils/directoryContents';
 import { ProjectTreeModel } from '@utils/projectTreeModel';
@@ -36,6 +39,13 @@ export default function ProjectExplorer() {
   const [extension, setExtension] = useState(DEFAULT_FILE_EXTENSION);
   const [createError, setCreateError] = useState('');
   const [selected, setSelected] = useState(null);
+  const deletion = useExplorerDeletion(async ({ parent }) => {
+    if (useFileStore.getState().currentDir !== currentDir) return;
+    setSelected(null);
+    setCreationFolder(null);
+    if (parent.path === currentDir) await loadFilesOnly(currentDir);
+    else if (model && !model.disposed) await model.refreshDirectory(parent);
+  });
   // Tree selection follows browsing/searching. The editor's current document
   // is a separate state; switching editor tabs restores selection to that file.
   useEffect(() => { setSelected(null); }, [activeTabId]);
@@ -262,6 +272,7 @@ export default function ProjectExplorer() {
   if (!currentDir) return <MokiStatusEmpty title={t('empty.files.title')} hint={t('empty.files.hint')} />;
 
   return <div className="file-tree project-tree" ref={surface}>
+    <DeleteFileModal {...deletion.dialog} />
     <ExplorerNavigation search={search} project busy={!ready}
       onParent={(parent) => { search.setQuery(''); model?.cancelExpansion(); parentNavigation.current = { parent, child: currentDir }; void loadDirectory(parent); }}
       canOpenSelected={Boolean(ready && selected?.is_dir && selected.path !== currentDir)}
@@ -299,6 +310,11 @@ export default function ProjectExplorer() {
         </div>;
         if (!row.file) return null;
         const { file, node } = row;
+        const requestDeletion = (event) => {
+          if (!row.parent) return;
+          const parent = withAncestors({ file: row.parent.file, parent: row.parent.parent });
+          deletion.request({ ...file, parent }, event);
+        };
         const expanded = Boolean(node?.expanded);
         const isSelected = !creating && selectedPath === file.path;
         const isCurrent = !creating && activeTabId === file.path;
@@ -329,6 +345,7 @@ export default function ProjectExplorer() {
           onKeyDown={(event) => {
             if (event.target !== event.currentTarget) return;
             if (['Enter', ' '].includes(event.key)) { event.preventDefault(); activate(row); }
+            if (event.key === 'Delete' && row.parent) { event.preventDefault(); requestDeletion(event); }
             if (event.key === 'ArrowRight' && file.is_dir && !expanded) { event.preventDefault(); activate(row); }
             if (event.key === 'ArrowLeft' && file.is_dir && expanded) { event.preventDefault(); activate(row); }
           }}
@@ -342,6 +359,7 @@ export default function ProjectExplorer() {
             : <span className="project-tree__toggle-space" />}
           <span className="project-tree__icon"><ExplorerEntryIcon file={file} expanded={expanded && !empty} defer={deferDetails} /></span>
           {deferDetails ? name : <Tooltip title={file.path} placement="right" mouseEnterDelay={0.6}>{name}</Tooltip>}
+          {row.parent && <ExplorerDeleteButton file={file} defer={deferDetails} onClick={requestDeletion} />}
         </div>;
       }}
     />}

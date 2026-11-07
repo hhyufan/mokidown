@@ -39,6 +39,8 @@
   "sidebar.explorer.expandBreadcrumb": "Expand path",
   "sidebar.explorer.collapseBreadcrumb": "Collapse path",
   "sidebar.explorer.deleteFile": "Delete file",
+  "sidebar.explorer.deleteFolder": "Delete folder",
+  "sidebar.explorer.deleteFolderConfirm": "Delete “{{name}}” and everything inside it? Local folders on Windows are moved to the recycle bin when possible.",
   "sidebar.explorer.deleteTitle": "Confirm deletion",
   "sidebar.explorer.cancelDelete": "Cancel",
   "sidebar.explorer.confirmDelete": "Delete",

@@ -12,8 +12,8 @@ import useFileStore from '@store/useFileStore';
 import useEditorStore from '@store/useEditorStore';
 import { useFileManager } from '@hooks/useFileManager';
 import { useHorizontalDragScroll } from '@hooks/useHorizontalDragScroll';
-import { deleteFile as deleteFileApi } from '@utils/tauriApi';
-import useNotificationStore from '@store/useNotificationStore';
+import useExplorerDeletion from '@hooks/useExplorerDeletion';
+import ExplorerDeleteButton from './ExplorerDeleteButton';
 
 import { cn } from '@utils/classNames';
 import MokiStatusEmpty from '@components/moki/MokiStatusEmpty';
@@ -98,49 +98,11 @@ function FileTree() {
   const [renamingStem, setRenamingStem] = useState('');
   const [renamingExt, setRenamingExt] = useState('');
   const [breadcrumbExpanded, setBreadcrumbExpanded] = useState(false);
-  const [deleteTarget, setDeleteTarget] = useState(null);
-  const [deleting, setDeleting] = useState(false);
-  const deletingRef = useRef(false);
+  const deletion = useExplorerDeletion(() => {
+    if (useFileStore.getState().currentDir === currentDir) return loadDirectory(currentDir);
+  });
   const bcScrollRef = useRef(null);
   const bcThumbRef = useRef(null);
-
-  const handleDeleteFile = useCallback((file, event) => {
-    event?.stopPropagation?.();
-    setDeleteTarget(file);
-  }, []);
-
-  const confirmDeletion = useCallback(async () => {
-    const file = deleteTarget;
-    if (!file || deletingRef.current) return;
-    deletingRef.current = true;
-    setDeleting(true);
-
-    let localDeleted = false;
-
-    try {
-
-      const deleteResult = await deleteFileApi(file.path);
-      if (deleteResult?.success === false) {
-        throw new Error(deleteResult.error || `Failed to delete ${file.path}`);
-      }
-      localDeleted = true;
-
-      if (useFileStore.getState().isBookmarked(file.path)) {
-        useFileStore.getState().toggleBookmark(file.path);
-      }
-      useFileStore.getState().removeRecentFile(file.path);
-    } catch (err) {
-
-      useNotificationStore.getState().notify('error', t('notification.error'), String(err));
-    } finally {
-      if (localDeleted) {
-        setDeleteTarget(null);
-        await loadDirectory(currentDir).catch(() => {});
-      }
-      deletingRef.current = false;
-      setDeleting(false);
-    }
-  }, [deleteTarget, currentDir, loadDirectory, t]);
 
   // 面包屑横向滚动与自定义滚动条联动。
   /**
@@ -463,7 +425,7 @@ function FileTree() {
         )}
       </div>
 
-      <DeleteFileModal file={deleteTarget} loading={deleting} onConfirm={confirmDeletion} onCancel={() => { if (!deletingRef.current) setDeleteTarget(null); }} />
+      <DeleteFileModal {...deletion.dialog} />
       {directoryLoading && <div className="file-tree__status" role="status">{t('sidebar.explorer.loadingDirectory')}</div>}
       {directoryError && <div className="file-tree__status" role="alert">{directoryError}</div>}
       {/* Only visible rows exist in the DOM; native directories retain a bounded page cache. */}
@@ -490,6 +452,7 @@ function FileTree() {
               key={file.path}
               style={renamingPath === file.path ? { ...style, width: '100%' } : style}
               role="listitem"
+              tabIndex={0}
               data-path={file.path}
               data-directory-path={currentDir}
               aria-current={isCurrent ? 'true' : undefined}
@@ -498,6 +461,11 @@ function FileTree() {
               aria-posinset={index + 1}
               className={cn('file-tree__item', isActive && 'file-tree__item--active', isCurrent && 'file-tree__item--current')}
               onClick={() => handleFileClick(file)}
+              onKeyDown={(event) => {
+                if (event.target !== event.currentTarget || renamingPath === file.path) return;
+                if (event.key === 'Delete') { event.preventDefault(); deletion.request(file, event); }
+                if (event.key === 'Enter') { event.preventDefault(); handleFileClick(file); }
+              }}
             >
               <span className="file-tree__item-icon">
                 <ExplorerEntryIcon file={file} defer={deferDetails} />
@@ -540,19 +508,7 @@ function FileTree() {
                 </FileRowTooltip>
               )}
 
-              {!file.is_dir && renamingPath !== file.path && (
-                <FileRowTooltip defer={deferDetails} title={t('sidebar.explorer.deleteFile')} placement="top" mouseEnterDelay={0.3}>
-                <span
-                  className="file-tree__item-del"
-                  onClick={(e) => { handleDeleteFile(file, e); }}
-                >
-                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                    <polyline points="3 6 5 6 21 6" />
-                    <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
-                  </svg>
-                </span>
-                </FileRowTooltip>
-              )}
+              {renamingPath !== file.path && <ExplorerDeleteButton file={file} defer={deferDetails} onClick={(event) => deletion.request(file, event)} />}
             </div>
           );
         }}
