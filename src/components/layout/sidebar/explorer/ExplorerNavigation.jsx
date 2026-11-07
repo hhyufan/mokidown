@@ -40,18 +40,36 @@ export default function ExplorerNavigation({ search, project = false, busy = fal
   };
   const parent = parentDirectory(currentDir);
   const input = useRef(null);
+  const navigation = useRef(null);
+  useEffect(() => {
+    const toolbar = navigation.current;
+    const explorer = toolbar?.closest('.file-tree');
+    if (!explorer) return;
+    const handleShortcut = (event) => {
+      if (event.defaultPrevented || event.isComposing || !event.altKey ||
+          event.ctrlKey || event.metaKey || event.shiftKey ||
+          !['ArrowLeft', 'ArrowRight', 'ArrowUp'].includes(event.key) ||
+          event.target.closest('input, textarea, select, [contenteditable="true"]')) return;
+      const button = toolbar.querySelector(`button[aria-keyshortcuts="Alt+${event.key}"]:enabled`);
+      if (!button) return;
+      event.preventDefault();
+      button.click();
+    };
+    explorer.addEventListener('keydown', handleShortcut);
+    return () => explorer.removeEventListener('keydown', handleShortcut);
+  }, []);
   useEffect(() => { if (search.open) input.current?.focus(); }, [search.open]);
   const button = (label, icon, onClick, disabled = false, extra = {}) => <Tooltip title={label} placement="bottom" mouseEnterDelay={0.3}>
-    <button type="button" className={`file-tree__nav-btn${extra.className || ''}`} aria-label={label} disabled={disabled} onClick={onClick} aria-pressed={extra.pressed} aria-expanded={extra.expanded}>{icon}</button>
+    <button type="button" className={`file-tree__nav-btn${extra.className || ''}`} aria-label={label} disabled={disabled} onClick={onClick} aria-pressed={extra.pressed} aria-expanded={extra.expanded} aria-keyshortcuts={extra.shortcut}>{icon}</button>
   </Tooltip>;
   return <>
-    <div className={`file-tree__nav${project ? ' file-tree__nav--project' : ''}`}>
+    <div ref={navigation} className={`file-tree__nav${project ? ' file-tree__nav--project' : ''}`}>
       {!project && <>
-        {button(t('sidebar.explorer.back'), <ExplorerIcon name="back" />, () => navigateHistory(-1), historyIndex <= 0)}
-        {button(t('sidebar.explorer.forward'), <ExplorerIcon name="forward" />, () => navigateHistory(1), historyIndex >= history.length - 1)}
+        {button(t('sidebar.explorer.back'), <ExplorerIcon name="back" />, () => navigateHistory(-1), historyIndex <= 0, { shortcut: 'Alt+ArrowLeft' })}
+        {button(t('sidebar.explorer.forward'), <ExplorerIcon name="forward" />, () => navigateHistory(1), historyIndex >= history.length - 1, { shortcut: 'Alt+ArrowRight' })}
       </>}
-      {button(t('sidebar.explorer.up'), <ExplorerIcon name="up" />, () => onParent ? onParent(parent) : loadDirectory(parent), !parent || busy)}
-      {project && button(t('sidebar.project.openSelected'), <ExplorerIcon name="next" />, onOpenSelected, !canOpenSelected)}
+      {button(t('sidebar.explorer.up'), <ExplorerIcon name="up" />, () => onParent ? onParent(parent) : loadDirectory(parent), !parent || busy, { shortcut: 'Alt+ArrowUp' })}
+      {project && button(t('sidebar.project.openSelected'), <ExplorerIcon name="next" />, onOpenSelected, !canOpenSelected, { shortcut: 'Alt+ArrowRight' })}
       {project && button(t('sidebar.project.search'), <ExplorerIcon name="search" />, search.toggle, false, { pressed: search.open, expanded: search.open })}
       <div className="file-tree__nav-sep" />
       {button(t('sidebar.explorer.refresh'), <ExplorerIcon name="refresh" />, () => loadDirectory(currentDir))}
