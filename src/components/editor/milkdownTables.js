@@ -245,9 +245,8 @@ export const milkdownTableView = $view(tableSchema.node, () => (initialNode, vie
     const box = dom.getBoundingClientRect(), rect = cell.getBoundingClientRect();
     addRow.hidden = node.childCount >= MAX_TABLE_ROWS;
     addCol.hidden = node.firstChild.childCount >= MAX_TABLE_COLUMNS;
-    addRow.style.top = `${rect.bottom - box.top - 9}px`;
-    addCol.style.left = `${Math.min(rect.right - box.left - 9, box.width - 20)}px`;
-    addCol.style.top = `${scroll.getBoundingClientRect().top - box.top - 17}px`;
+    addRow.style.top = `${rect.bottom - box.top}px`;
+    addCol.style.left = `${Math.min(rect.right, scroll.getBoundingClientRect().right) - box.left}px`;
   });
   // Keep controls usable while the resize picker is open or receiving keyboard input.
   let hideTimer = null;
