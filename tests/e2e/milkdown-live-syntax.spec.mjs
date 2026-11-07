@@ -73,6 +73,52 @@ test('horizontal arrows enter each visible marker character before crossing a li
   expect(await page.evaluate(() => window.trial.dirty())).toBe(false);
 });
 
+for (const [content, keys] of [
+  ['##### 1. LINQ 概述', ['ArrowLeft']],
+  ['**注意**：查询', ['ArrowRight', 'ArrowRight', 'ArrowRight']],
+]) {
+  test(`the blinking marker caret aligns with the adjacent text in ${content}`, async ({ page }) => {
+    const editor = await openEditor(page, content);
+    await page.evaluate(() => window.trial.selectTextblock(0));
+    for (const key of keys) await page.keyboard.press(key);
+    const caret = await editor.locator('.moki-markdown-marker--with-caret i').evaluate((element) => {
+      const style = getComputedStyle(element, '::after');
+      const text = element.closest('p, h5').lastChild;
+      const range = document.createRange();
+      range.setStart(text, 0);
+      range.setEnd(text, 1);
+      const bounds = range.getBoundingClientRect();
+      const top = element.getBoundingClientRect().top + parseFloat(style.top);
+      return { top, bottom: top + parseFloat(style.height), textTop: bounds.top, textBottom: bounds.bottom, animation: style.animationName };
+    });
+    expect(Math.abs(caret.top - caret.textTop)).toBeLessThan(1);
+    expect(Math.abs(caret.bottom - caret.textBottom)).toBeLessThan(1);
+    expect(caret.animation).toBe('ProseMirror-cursor-blink');
+  });
+}
+
+test('typing Markdown task markers converts bullet items into unchecked and checked tasks', async ({ page }) => {
+  const editor = await openEditor(page);
+  await page.evaluate(() => window.trial.selectTextblock(0));
+  await page.keyboard.type('- [ ] first');
+  await expect(editor.locator('li[data-item-type="task"]')).toHaveAttribute('data-checked', 'false');
+  await page.keyboard.press('Enter');
+  await page.keyboard.press('Enter');
+  await page.keyboard.type('- [X]');
+  await page.keyboard.press('Enter');
+  await page.keyboard.type('second');
+  await expect(editor.locator('li[data-item-type="task"]').last()).toHaveAttribute('data-checked', 'true');
+  const markdown = await page.evaluate(() => window.trial.markdown());
+  expect(markdown).toContain('[ ] first');
+  expect(markdown).toContain('[x] second');
+  await page.keyboard.press('Enter');
+  await page.keyboard.press('Enter');
+  await page.keyboard.insertText('- [ ] ');
+  await page.keyboard.type('third');
+  await expect(editor.locator('li[data-item-type="task"]').last()).toHaveAttribute('data-checked', 'false');
+  expect(await page.evaluate(() => window.trial.markdown())).toContain('[ ] third');
+});
+
 test('moving left from prose lands after the closing code fence and inserts outside it', async ({ page }) => {
   const editor = await openEditor(page, '`321`1');
   await page.evaluate(() => window.trial.selectTextblock(0, 'end'));
