@@ -325,6 +325,7 @@ const useEditorStore = create(
               ? {
                   ...t,
                   ...patch,
+                  contentRevision: (t.contentRevision ?? 0) + 1,
                   modified: false,
                 }
               : t
@@ -353,6 +354,7 @@ const useEditorStore = create(
               ? {
                   ...t,
                   ...patch,
+                  contentRevision: (t.contentRevision ?? 0) + 1,
                   modified: false,
                 }
               : t

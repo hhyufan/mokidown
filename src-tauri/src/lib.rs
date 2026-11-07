@@ -148,7 +148,6 @@ struct RecoveredSnapshot {
 /// 用于持有 `notify` watcher 句柄并记录每个文件最近一次观察到的修改时间。
 struct FileWatcherState {
     watchers: HashMap<String, Box<dyn Watcher + Send>>,
-    watched_files: HashMap<String, u64>,
 }
 
 /// 各个 Tauri 命令之间共享的全局监听状态。
@@ -158,7 +157,6 @@ struct FileWatcherState {
 static FILE_WATCHER_STATE: Lazy<Arc<Mutex<FileWatcherState>>> = Lazy::new(|| {
     Arc::new(Mutex::new(FileWatcherState {
         watchers: HashMap::new(),
-        watched_files: HashMap::new(),
     }))
 });
 
@@ -1232,104 +1230,65 @@ async fn delete_file(path: String) -> Result<FileOperationResult, String> {
 async fn start_file_watching(app_handle: AppHandle, file_path: String) -> Result<bool, String> {
     let path = Path::new(&file_path);
     text_file::check_head(path).map_err(|error| error.message)?;
+    let parent = path
+        .parent()
+        .filter(|path| !path.as_os_str().is_empty())
+        .unwrap_or(Path::new("."));
+    let parent = fs::canonicalize(parent).map_err(|error| error.to_string())?;
+    let watched_path = parent.join(path.file_name().ok_or("Cannot get file name")?);
     let app_handle_clone = app_handle.clone();
     let file_path_clone = file_path.clone();
 
-    let initial_modified = match fs::metadata(&file_path) {
-        Ok(metadata) => metadata
-            .modified()
-            .map(|time| {
-                time.duration_since(UNIX_EPOCH)
-                    .unwrap_or_default()
-                    .as_millis() as u64
-            })
-            .unwrap_or(0),
-        Err(_) => 0,
-    };
-
     let mut watcher = match notify::recommended_watcher(move |res: Result<Event, notify::Error>| {
         if let Ok(event) = res {
+            let rescan = event.need_rescan();
             let event_kind = match event.kind {
                 EventKind::Modify(notify::event::ModifyKind::Name(_)) => "renamed",
-                EventKind::Modify(_) | EventKind::Create(_) => "modified",
+                EventKind::Modify(_) | EventKind::Create(_) | EventKind::Any | EventKind::Other => {
+                    "modified"
+                }
                 EventKind::Remove(_) => "removed",
+                _ if rescan => "modified",
                 _ => return,
             };
-            for path in event.paths {
-                if path.to_string_lossy() == file_path_clone {
-                    let metadata = fs::metadata(&path).ok();
-                    let modified_at = metadata
-                        .as_ref()
-                        .and_then(|value| value.modified().ok())
-                        .and_then(|value| value.duration_since(UNIX_EPOCH).ok())
-                        .map(|value| value.as_millis() as u64)
-                        .unwrap_or_else(|| {
-                            SystemTime::now()
-                                .duration_since(UNIX_EPOCH)
-                                .unwrap_or_default()
-                                .as_millis() as u64
-                        });
-
-                    // 对比最近一次观察到的修改时间，避免重复的
-                    // notify 事件继续扩散成多次 UI 更新。
-                    let should_emit = {
-                        let mut state = FILE_WATCHER_STATE.lock().unwrap();
-                        if let Some(last_modified) = state.watched_files.get_mut(&file_path_clone) {
-                            if let Some(metadata) = metadata.as_ref() {
-                                if let Ok(modified_time) = metadata.modified() {
-                                    let current_modified = modified_time
-                                        .duration_since(UNIX_EPOCH)
-                                        .unwrap_or_default()
-                                        .as_millis()
-                                        as u64;
-                                    if current_modified != *last_modified {
-                                        *last_modified = current_modified;
-                                        true
-                                    } else {
-                                        false
-                                    }
-                                } else {
-                                    true
-                                }
-                            } else {
-                                true
-                            }
-                        } else {
-                            true
-                        }
-                    };
-
-                    if should_emit {
-                        let change_event = FileChangeEvent {
-                            path: path.to_string_lossy().to_string(),
-                            kind: event_kind.to_string(),
-                            modified_at,
-                            size: metadata.as_ref().map(|value| value.len()).unwrap_or(0),
-                        };
-                        let _ = app_handle_clone.emit("file-changed", &change_event);
-                    }
-                }
+            let matches_path = event.paths.iter().any(|path| {
+                path == &watched_path
+                    || (cfg!(windows)
+                        && path
+                            .to_string_lossy()
+                            .eq_ignore_ascii_case(&watched_path.to_string_lossy()))
+            });
+            if !rescan && !matches_path {
+                return;
             }
+            // A replacement can preserve the timestamp. The frontend coalesces events
+            // and compares the contents before deciding whether to reload or show a conflict.
+            let metadata = fs::metadata(&watched_path).ok();
+            let modified_at = metadata
+                .as_ref()
+                .and_then(|value| value.modified().ok())
+                .and_then(|value| value.duration_since(UNIX_EPOCH).ok())
+                .map_or(0, |value| value.as_millis() as u64);
+            let change_event = FileChangeEvent {
+                path: file_path_clone.clone(),
+                kind: event_kind.to_string(),
+                modified_at,
+                size: metadata.as_ref().map_or(0, |value| value.len()),
+            };
+            let _ = app_handle_clone.emit("file-changed", &change_event);
         }
     }) {
         Ok(watcher) => watcher,
         Err(e) => return Err(format!("Failed to create file watcher: {}", e)),
     };
 
-    if let Some(parent_dir) = path.parent() {
-        if let Err(e) = watcher.watch(parent_dir, RecursiveMode::NonRecursive) {
-            return Err(format!("Failed to start watching: {}", e));
-        }
-    } else {
-        return Err("Cannot get parent directory".to_string());
+    if let Err(e) = watcher.watch(&parent, RecursiveMode::NonRecursive) {
+        return Err(format!("Failed to start watching: {}", e));
     }
 
     {
         let mut state = FILE_WATCHER_STATE.lock().unwrap();
         state.watchers.insert(file_path.clone(), Box::new(watcher));
-        state
-            .watched_files
-            .insert(file_path.clone(), initial_modified);
     }
 
     Ok(true)
@@ -1340,7 +1299,6 @@ async fn start_file_watching(app_handle: AppHandle, file_path: String) -> Result
 async fn stop_file_watching(file_path: String) -> Result<bool, String> {
     let mut state = FILE_WATCHER_STATE.lock().unwrap();
     if state.watchers.remove(&file_path).is_some() {
-        state.watched_files.remove(&file_path);
         Ok(true)
     } else {
         Ok(false)

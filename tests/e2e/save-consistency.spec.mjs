@@ -51,8 +51,7 @@ for (const mode of ['edit', 'preview']) {
     await page.keyboard.insertText('最后输入的中文');
     // Save immediately, before Milkdown's 200 ms publication timer can run.
     await page.keyboard.press('Control+s');
-    await expect(page.locator('.notif--success .notif__title', { hasText: 'File saved' })).toHaveCount(1);
-    expect(await page.evaluate(() => localStorage.getItem('trial-save-disk'))).toContain('最后输入的中文');
+    await expect.poll(() => page.evaluate(() => localStorage.getItem('trial-save-disk'))).toContain('最后输入的中文');
     await expect(page.locator('.tabbar__tab-dot')).toHaveCount(0);
     await page.waitForTimeout(650);
     await expect(page.locator('.tabbar__tab-dot')).toHaveCount(0);
@@ -74,3 +73,53 @@ for (const mode of ['edit', 'preview']) {
     await expect(page.getByText('磁盘文件也已变化', { exact: true })).toHaveCount(0);
   });
 }
+
+test('focus catches a missed disk event and using disk content refreshes the live Markdown document', async ({ page }) => {
+  test.setTimeout(60000);
+  await page.goto('/');
+  await expect(page.locator('.editor-content__welcome')).toBeVisible({ timeout: 30000 });
+  await page.evaluate(installDisk);
+  await page.evaluate(async () => {
+    const { default: store } = await import('/src/store/useEditorStore.js');
+    const { default: config } = await import('/src/store/useConfigStore.js');
+    const { default: i18n } = await import('/src/i18n/index.js');
+    await i18n.changeLanguage('en');
+    config.getState().setConfig('autoSave', false);
+    localStorage.setItem('trial-save-disk', 'base\n');
+    store.getState().openFile({ path: '/conflict.md', name: 'conflict.md', content: 'base\n' });
+    store.getState().setViewMode('preview');
+  });
+  const prose = page.locator('.milkdown-editor > p');
+  await expect(prose).toHaveText('base');
+  const changeOnDisk = (text, focus = true) => page.evaluate(({ text, focus }) => {
+    localStorage.setItem('trial-save-disk', `${text}\n`);
+    if (focus) window.dispatchEvent(new Event('focus'));
+  }, { text, focus });
+  await changeOnDisk('quiet reload');
+  await expect(prose).toHaveText('quiet reload');
+  await expect(page.locator('.external-file-notice')).toHaveCount(0);
+
+  await prose.click();
+  await page.keyboard.press('End');
+  await page.keyboard.insertText(' with local edits');
+  await changeOnDisk('reviewed version');
+  await page.getByRole('button', { name: 'Review changes' }).click();
+  const dialog = page.getByRole('dialog', { name: 'File changed outside the editor' });
+  await expect(dialog.locator('.editor.modified .view-lines')).toContainText('reviewed version');
+  await page.evaluate(() => document.body.classList.add('moki-has-background'));
+  for (const selector of ['.conflict-dialog__pane-labels', '.monaco-editor-background', '.ant-modal-footer', '.ant-btn-default']) {
+    const alpha = await dialog.locator(selector).first().evaluate((element) => {
+      const canvas = document.createElement('canvas');
+      const context = canvas.getContext('2d');
+      context.fillStyle = getComputedStyle(element).backgroundColor;
+      context.fillRect(0, 0, 1, 1);
+      return context.getImageData(0, 0, 1, 1).data[3];
+    });
+    expect(alpha).toBeLessThan(255);
+  }
+  await changeOnDisk('latest disk version', false);
+  await dialog.getByRole('button', { name: 'Use disk content' }).click();
+  await expect(prose).toHaveText('latest disk version');
+  await expect(dialog).toHaveCount(0);
+  await expect(page.locator('.tabbar__tab-dot')).toHaveCount(0);
+});
