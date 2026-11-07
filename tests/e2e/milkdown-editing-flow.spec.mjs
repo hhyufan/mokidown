@@ -250,7 +250,7 @@ test('a formula block can be selected and exited without changing its expression
   expect(await page.evaluate(() => window.trial.markdown())).toContain('x^2+y^2');
 });
 
-test('typing double dollars and a space opens a formula editor that shows only its body', async ({ page }) => {
+test('typing double dollars and a space opens a labelled formula editor without displaying the delimiters', async ({ page }) => {
   const errors = [];
   page.on('pageerror', (error) => errors.push(error.message));
   await open(page, '');
@@ -259,6 +259,7 @@ test('typing double dollars and a space opens a formula editor that shows only i
   const source = page.locator('.md-preview__math-source--block');
   await expect(source).toBeVisible();
   await expect(source).toHaveText('');
+  await expect(source).toHaveAttribute('data-math-label', /公式|Formula/);
   await page.keyboard.type('x^2+1');
   await page.keyboard.press('Enter');
   await page.keyboard.type('+2');

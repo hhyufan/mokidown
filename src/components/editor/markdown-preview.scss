@@ -674,9 +674,22 @@
   }
 
   .md-preview__math-source--block {
+    position: relative;
+    padding-block-start: 2.2em;
     background: var(--md-code-bg);
     color: var(--text);
     border: 1px solid var(--border-light);
+
+    &::before {
+      content: attr(data-math-label);
+      position: absolute;
+      inset-block-start: 6px;
+      inset-inline-start: 14px;
+      color: var(--text-dim);
+      font: 600 11px/1.5 var(--font-app);
+      pointer-events: none;
+      user-select: none;
+    }
   }
 
   .md-preview__math--block[data-value=''] { min-height: 1.5em; }

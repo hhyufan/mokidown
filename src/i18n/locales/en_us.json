@@ -648,6 +648,7 @@
   "editor.showCode": "Edit code",
   "editor.showPreview": "Preview code",
   "editor.editHtmlHint": "Double-click to edit HTML · Ctrl / ⌘ + Enter to finish",
+  "editor.mathSourceLabel": "Formula",
   "editor.editMathHint": "Select the formula and press Backspace to edit its source",
   "settings.snapshot.settingsJson": "Settings JSON",
   "settings.snapshot.settingsJsonDesc": "Export current settings or import them from a JSON file.",
