@@ -10,7 +10,7 @@ import { listen } from '@tauri-apps/api/event';
 import { appWindow, getCliArgs, onFileChanged, onOpenPaths, historyCapture } from '@utils/tauriApi';
 import { isImeComposing } from '@utils/keyboard';
 import { rememberDiskBaseline } from '@/services/localFileGuard';
-import { createFileChangeObserver, setLocalFileComposing } from '@/services/localFileOperations';
+import { createFileChangeObserver, restoreExternalDisk, setLocalFileComposing } from '@/services/localFileOperations';
 import useThemeStore from '@store/useThemeStore';
 import useEditorStore from '@store/useEditorStore';
 import { getBuffer } from '@utils/editorBuffer';
@@ -217,12 +217,23 @@ function App() {
     document.addEventListener('compositionstart', compositionStart, true);
     document.addEventListener('compositionend', compositionEnd, true);
     const observer = createFileChangeObserver({ isComposing: () => composing });
+    const checkActiveFile = () => {
+      if (!window.__TAURI_INTERNALS__) return;
+      const path = useEditorStore.getState().getActiveTab()?.path;
+      if (path && !/^[a-z][a-z\d+.-]*:\/\//i.test(path)) observer({ path });
+    };
+    const unsubscribe = useEditorStore.subscribe((state, previous) => {
+      if (state.activeTabId !== previous.activeTabId) checkActiveFile();
+    });
+    window.addEventListener('focus', checkActiveFile);
     const unlisten = onFileChanged(observer).catch((error) => {
       console.warn('[App] Failed to subscribe to file changes:', error);
       return () => {};
     });
     return () => {
       observer.dispose();
+      unsubscribe();
+      window.removeEventListener('focus', checkActiveFile);
       setLocalFileComposing(false);
       document.removeEventListener('compositionstart', compositionStart, true);
       document.removeEventListener('compositionend', compositionEnd, true);
@@ -508,19 +519,9 @@ function App() {
     useEditorStore.getState().clearExternalFileConflict();
   }, [externalConflict]);
 
-  const handleUseExternalDisk = useCallback(() => {
+  const handleUseExternalDisk = useCallback(async () => {
     if (!externalConflict || typeof externalConflict.diskContent !== 'string') return;
-    useEditorStore.getState().replaceTabContent(externalConflict.tabId, {
-      content: externalConflict.diskContent,
-      encoding: externalConflict.encoding,
-      lineEnding: externalConflict.lineEnding,
-    });
-    rememberDiskBaseline(
-      externalConflict.path,
-      externalConflict.diskContent,
-      externalConflict,
-    );
-    useEditorStore.getState().clearExternalFileConflict();
+    await restoreExternalDisk(externalConflict);
   }, [externalConflict]);
 
   const handleSaveExternalAs = useCallback(async () => {
