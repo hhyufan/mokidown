@@ -100,6 +100,13 @@
   font: 13px var(--font-app);
   cursor: pointer;
 }
+/* Local containing block for the preview's fixed mask, image and controls. */
+.milkdown-media-preview-host {
+  position: fixed;
+  z-index: 1100;
+  contain: layout paint;
+}
+
 .milkdown-media-preview-toolbar {
   position: relative;
 }

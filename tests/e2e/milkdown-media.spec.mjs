@@ -72,7 +72,12 @@ test('inserting images requires an address, supplies alt, previews through antd 
   const image = page.locator('.milkdown-editor > p > img[src]');
   await expect(image).toHaveAttribute('alt', /.+/);
   await image.click();
-  await expect(page.locator('.ant-image-preview')).toBeVisible();
+  await expect(page.locator('.milkdown-media-preview-host .ant-image-preview')).toBeVisible();
+  const editorBounds = await page.locator('.md-preview--milkdown').boundingBox();
+  const previewBounds = await page.locator('.milkdown-media-preview-host .ant-image-preview-wrap').boundingBox();
+  for (const edge of ['x', 'y', 'width', 'height']) {
+    expect(previewBounds[edge]).toBeCloseTo(editorBounds[edge], 0);
+  }
   await page.keyboard.press('Escape');
   await expect(page.locator('.ant-image-preview')).not.toBeVisible();
   await image.click({ button: 'right' });

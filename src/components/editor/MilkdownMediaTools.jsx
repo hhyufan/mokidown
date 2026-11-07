@@ -4,6 +4,7 @@ import {
   useCallback,
   useEffect,
   useImperativeHandle,
+  useLayoutEffect,
   useRef,
   useState,
 } from 'react';
@@ -40,6 +41,27 @@ const MilkdownMediaTools = forwardRef(function MilkdownMediaTools(
   const [error, setError] = useState('');
   const [preview, setPreview] = useState(null);
   const [previewEdit, setPreviewEdit] = useState(null);
+  const [previewHost, setPreviewHost] = useState(null);
+  useLayoutEffect(() => {
+    if (!previewHost || !rootRef.current) return;
+    const editor = rootRef.current;
+    const fit = () => {
+      const { left, top, width, height } = editor.getBoundingClientRect();
+      Object.assign(previewHost.style, {
+        left: `${left}px`, top: `${top}px`, width: `${width}px`, height: `${height}px`,
+      });
+    };
+    fit();
+    const observer = new ResizeObserver(fit);
+    observer.observe(editor);
+    window.addEventListener('resize', fit);
+    document.addEventListener('scroll', fit, true);
+    return () => {
+      observer.disconnect();
+      window.removeEventListener('resize', fit);
+      document.removeEventListener('scroll', fit, true);
+    };
+  }, [previewHost, rootRef]);
   const current = useRef(null);
   const inputRef = useRef(null);
   const pickerOpen = useRef(false);
@@ -457,13 +479,15 @@ const MilkdownMediaTools = forwardRef(function MilkdownMediaTools(
           </form>,
           surface.dom,
         )}
-      {preview && (
+      {preview && createPortal(<div className="milkdown-media-preview-host" ref={setPreviewHost} />, document.body)}
+      {preview && previewHost && (
         <Image
           style={{ display: 'none' }}
           src={preview.src}
           alt={preview.alt}
           preview={{
             visible: true,
+            getContainer: () => previewHost,
             onVisibleChange: (visible) => {
               if (!visible) {
                 setPreview(null);
