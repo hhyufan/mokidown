@@ -124,7 +124,10 @@ function App() {
   const [unsavedPromptSaving, setUnsavedPromptSaving] = useState(false);
   const [pendingCloseTabId, setPendingCloseTabId] = useState(null);
   const [recoveryDrafts, setRecoveryDrafts] = useState([]);
-  const externalConflict = useEditorStore((s) => s.externalFileConflict);
+  const externalConflict = useEditorStore((s) => {
+    const path = s.tabRenderList.find((tab) => tab.id === s.activeTabId)?.path;
+    return s.externalFileConflicts.get(path);
+  });
   const [selectedUnsavedTabIds, setSelectedUnsavedTabIds] = useState([]);
   const [isDragOver, setIsDragOver] = useState(false);
   const [dragTarget, setDragTarget] = useState(null);
@@ -507,7 +510,9 @@ function App() {
   }, []);
 
   const handleKeepExternalEdit = useCallback(() => {
-    if (externalConflict?.path && typeof externalConflict.diskContent === 'string') {
+    const store = useEditorStore.getState();
+    if (!externalConflict || store.externalFileConflicts.get(externalConflict.path) !== externalConflict) return;
+    if (typeof externalConflict.diskContent === 'string') {
       // Acknowledge the observed disk side. The next explicit save may replace
       // it without reopening the same conflict for duplicate watcher events.
       rememberDiskBaseline(
@@ -516,7 +521,7 @@ function App() {
         externalConflict,
       );
     }
-    useEditorStore.getState().clearExternalFileConflict();
+    store.clearExternalFileConflict(externalConflict.path, externalConflict);
   }, [externalConflict]);
 
   const handleUseExternalDisk = useCallback(async () => {
@@ -526,9 +531,7 @@ function App() {
 
   const handleSaveExternalAs = useCallback(async () => {
     if (!externalConflict) return;
-    useEditorStore.getState().setActiveTab(externalConflict.tabId);
-    await saveAsDialog();
-    useEditorStore.getState().clearExternalFileConflict();
+    if (useEditorStore.getState().activeTabId === externalConflict.tabId) await saveAsDialog();
   }, [externalConflict, saveAsDialog]);
 
   /**
