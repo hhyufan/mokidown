@@ -31,6 +31,36 @@ test('recovery uses a full Monaco diff, switches files and restores only checked
   expect(errors).toEqual([]);
 });
 
+test('recovery comparison and footer use the glass surface in light and dark themes', async ({ page }) => {
+  await page.goto('/tests/fixtures/recovery-diff.html?glass');
+  const dialog = page.getByRole('dialog');
+  await expect(dialog.locator('.diff-hidden-lines .center').first()).toBeVisible({ timeout: 20000 });
+  for (const theme of ['light', 'dark']) {
+    await page.evaluate((mode) => { document.documentElement.dataset.theme = mode; }, theme);
+    const backgrounds = await dialog.evaluate((element) => {
+      const context = document.createElement('canvas').getContext('2d');
+      const alpha = (selector) => {
+        context.clearRect(0, 0, 1, 1);
+        context.fillStyle = getComputedStyle(element.querySelector(selector)).backgroundColor;
+        context.fillRect(0, 0, 1, 1);
+        return context.getImageData(0, 0, 1, 1).data[3];
+      };
+      return {
+        pane: alpha('.editor.original'),
+        editor: alpha('.monaco-editor-background'),
+        fold: alpha('.diff-hidden-lines .center'),
+        labels: alpha('.conflict-dialog__pane-labels'),
+        footer: alpha('.ant-modal-footer'),
+      };
+    });
+    expect(backgrounds).toMatchObject({ pane: 0, editor: 0, footer: 0 });
+    expect(backgrounds.fold).toBeGreaterThan(0);
+    expect(backgrounds.fold).toBeLessThan(255);
+    expect(backgrounds.labels).toBeGreaterThan(0);
+    expect(backgrounds.labels).toBeLessThan(255);
+  }
+});
+
 for (const viewport of [{ width: 1280, height: 800 }, { width: 1024, height: 600 }, { width: 390, height: 780 }]) {
   test(`recovery scrolls only its file list and editor at ${viewport.width}x${viewport.height}`, async ({ page }) => {
     test.setTimeout(60000);

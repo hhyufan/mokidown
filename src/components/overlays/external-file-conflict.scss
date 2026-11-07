@@ -106,6 +106,28 @@
   margin: 0;
 }
 
+body.moki-has-background :is(.moki-external-file-conflict-root, .moki-recovery-root) .ant-modal {
+  .ant-modal-footer,
+  .conflict-dialog__diff {
+    background: transparent;
+  }
+
+  .ant-btn-default,
+  .conflict-dialog__pane-labels {
+    background: var(--moki-glass-surface);
+  }
+
+  .conflict-dialog__diff {
+    box-shadow: none;
+    :is(.editor.original, .editor.modified, .monaco-editor, .monaco-editor-background,
+      .overflow-guard, .margin, .monaco-scrollable-element, .gutter, .diagonal-fill,
+      .diff-unchanged-lines, .noModificationsOverlay) {
+      background: transparent !important;
+    }
+    .diff-hidden-lines .center { background: var(--moki-glass-hover); }
+  }
+}
+
 .conflict-dialog__pane-labels {
   display: grid;
   grid-template-columns: 1fr 1fr;

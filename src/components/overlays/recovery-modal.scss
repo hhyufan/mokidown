@@ -58,6 +58,7 @@
 .recovery-modal__diff .conflict-dialog__pane-labels { flex: 0 0 auto; }
 .recovery-modal__loading { display: grid; place-items: center; flex: 1; min-height: 0; color: var(--text-sec); }
 .recovery-modal__diff .conflict-dialog__monaco { flex: 1; height: auto; min-height: 0; }
+body.moki-has-background .moki-recovery-root .recovery-modal__draft--active { background: var(--moki-glass-selected); }
 @media (max-width: 700px) {
   .recovery-modal__workspace {
     grid-template-columns: minmax(0, 1fr);
