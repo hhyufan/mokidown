@@ -172,8 +172,12 @@
 
   ol { list-style-type: lower-roman; }
 
-  ul li {
+  ul > li {
     list-style-type: disc;
+  }
+
+  :is(ul, ol) ul > li:not(.task-list-item, [data-item-type='task']) {
+    list-style-type: circle;
   }
 
   ul.contains-task-list,
