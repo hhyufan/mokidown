@@ -84,4 +84,4 @@
 
 **chore**
 
-* [ ] chore(explorer): 移除「最近文件」统计展示。
+* [x] chore(explorer): 移除「最近文件」统计展示。

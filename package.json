@@ -54,7 +54,6 @@
   },
   "dependencies": {
     "@ant-design/icons": "^5.2.6",
-    "@antv/g2": "^5.4.8",
     "@codemirror/language": "^6.12.3",
     "@codemirror/legacy-modes": "^6.5.3",
     "@codemirror/state": "^6.6.0",

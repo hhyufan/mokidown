@@ -62,9 +62,8 @@ import '@styles/App.scss';
  * Tauri/浏览器双通道拖拽投放，以及所有顶层浮层的懒加载挂载。
  */
 // 顶层浮层默认都不会在首屏出现，因此统一使用懒加载，避免把较重的依赖
-// 提前打进入口包；其中 `StatsPanel` 还会额外引入体积较大的 `@antv/g2`。
+// 提前打进入口包。
 const SettingsModal = lazy(() => import('@components/overlays/SettingsModal'));
-const StatsPanel = lazy(() => import('@components/overlays/StatsPanel'));
 // ConflictDialog owns a second Monaco entry point (the diff editor). Gate it
 // behind the same complete runtime bootstrap as the main editor so a restored
 // conflict cannot race localization, token providers or theme registration.
@@ -118,7 +117,6 @@ function App() {
   const openSearch = useCallback(() => setSearchOpen(true), []);
   const closeSearch = useCallback(() => setSearchOpen(false), []);
   const [settingsOpen, setSettingsOpen] = useState(false);
-  const [statsOpen, setStatsOpen] = useState(false);
 
   const [unsavedPromptOpen, setUnsavedPromptOpen] = useState(false);
   const [unsavedPromptSaving, setUnsavedPromptSaving] = useState(false);
@@ -818,7 +816,6 @@ function App() {
       >
         <Sidebar
           onOpenSettings={() => setSettingsOpen(true)}
-          onOpenStats={() => setStatsOpen(true)}
         />
         {isMobileLayout && sidebarVisible && (
           <button
@@ -875,7 +872,6 @@ function App() {
       <Suspense fallback={null}>
         <ExtensionHost />
         {settingsOpen && <SettingsModal open={settingsOpen} onClose={() => setSettingsOpen(false)} />}
-        {statsOpen && <StatsPanel open={statsOpen} onClose={() => setStatsOpen(false)} />}
         
         {unsavedPromptOpen && (
           <UnsavedChangesModal
