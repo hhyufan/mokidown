@@ -198,22 +198,15 @@ function OutlineToolbar() {
 }
 
 /**
- * 最近文件工具栏：统计入口与清空列表操作。
- *
- * @param {object} props 组件属性。
- * @param {Function} props.onOpenStats 打开统计面板的回调。
+ * 最近文件工具栏与清空列表操作。
  * @returns {JSX.Element} 最近文件视图工具栏。
  */
-function RecentToolbar({ onOpenStats }) {
+function RecentToolbar() {
   const { t } = useTranslation();
   const { clearRecentFiles } = useFileStore();
   return (
     <div className="sidebar__toolbar">
       <span className="sidebar__toolbar-label">{t('sidebar.recent.title')}</span>
-      <ToolbarButton title={t('sidebar.explorer.analytics')} onClick={onOpenStats}>
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><line x1="18" y1="20" x2="18" y2="10" /><line x1="12" y1="20" x2="12" y2="4" /><line x1="6" y1="20" x2="6" y2="14" /></svg>
-      </ToolbarButton>
-      <div className="stb-sep" />
       <ToolbarButton title={t('sidebar.recent.deleteAll')} onClick={clearRecentFiles}>
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="3 6 5 6 21 6" /><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" /></svg>
       </ToolbarButton>
@@ -221,7 +214,7 @@ function RecentToolbar({ onOpenStats }) {
   );
 }
 
-function RecentList({ onOpenStats }) {
+function RecentList() {
   const { t } = useTranslation();
   const userId = GUEST_USER_SCOPE;
   const recentEntries = useFileStore((s) => s.recentFiles);
@@ -244,7 +237,7 @@ function RecentList({ onOpenStats }) {
 
   return (
     <div className="sidebar__view">
-      <RecentToolbar onOpenStats={onOpenStats} />
+      <RecentToolbar />
       {sortedFiles.length === 0 ? (
         <MokiStatusEmpty
           title={t('empty.recent.title')}
@@ -333,7 +326,7 @@ function SidebarTabIcon({ id }) {
  * 承载 Explorer / Outline / Recent 三个核心工作流，同时在底部集中提供
  * 用户、主题、更新检查和设置入口。
  */
-function Sidebar({ onOpenSettings, onOpenStats }) {
+function Sidebar({ onOpenSettings }) {
   const { t } = useTranslation();
   const { sidebarVisible, sidebarView, setSidebarView } = useEditorStore();
   const activeTab = useEditorStore((s) => s.tabs.find((tab) => tab.id === s.activeTabId));
@@ -429,7 +422,7 @@ function Sidebar({ onOpenSettings, onOpenStats }) {
           </div>
         )}
         {effectiveView === 'recent' && (
-          <RecentList onOpenStats={onOpenStats} />
+          <RecentList />
         )}
       </div>
 
