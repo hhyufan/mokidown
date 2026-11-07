@@ -87,7 +87,13 @@ export default function ExplorerNavigation({ search, project = false, busy = fal
           <ExplorerIcon name="search" />
           <input ref={input} aria-label={t('sidebar.project.search')} placeholder={t('sidebar.project.searchPlaceholder')} value={search.query}
             onChange={(event) => search.setQuery(event.target.value)} onKeyDown={(event) => {
+              if (event.nativeEvent.isComposing || event.keyCode === 229) return;
               if (event.key === 'Enter') { event.preventDefault(); search.move(event.shiftKey ? -1 : 1); }
+              if (['ArrowUp', 'ArrowDown'].includes(event.key) && search.results.length && !search.loading &&
+                  !event.altKey && !event.ctrlKey && !event.metaKey && !event.shiftKey) {
+                event.preventDefault();
+                search.move(event.key === 'ArrowUp' ? -1 : 1);
+              }
               if (event.key === 'Escape') { event.stopPropagation(); search.toggle(); }
             }} />
           <span className="explorer-search__count" role="status" aria-live="polite">{search.loading ? '…' : `${search.results.length ? search.index + 1 : 0}/${search.results.length}${search.truncated ? '+' : ''}`}</span>
