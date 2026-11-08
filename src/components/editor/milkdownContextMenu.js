@@ -10,7 +10,7 @@ import { EditorView as CodeMirrorView } from '@codemirror/view';
 import { MENU_MOD } from '@utils/contextMenuShortcuts';
 import { readMenuClipboardText } from '@utils/menuClipboard';
 
-export function milkdownContextItems({ editor, target, x, y, t }) {
+export function milkdownContextItems({ editor, target, x, y, t, canReplayHistory, replayHistory }) {
   const view = editor.action((ctx) => ctx.get(editorViewCtx));
   const cmElement = target.closest('.cm-editor');
   const cm = cmElement ? CodeMirrorView.findFromDOM(cmElement) : null;
@@ -44,12 +44,17 @@ export function milkdownContextItems({ editor, target, x, y, t }) {
     editor.action((ctx) => ctx.get(commandsCtx).call(command.key, payload));
     view.focus();
   };
+  const history = (command, direction) => {
+    if (!restore()) return;
+    if (!replayHistory?.(direction)) editor.action((ctx) => ctx.get(commandsCtx).call(command.key));
+    view.focus();
+  };
   const shortcuts = { undo: `${MENU_MOD}+Z`, redo: `${MENU_MOD}+Y`, cut: `${MENU_MOD}+X`, copy: `${MENU_MOD}+C`, paste: `${MENU_MOD}+V`, selectAll: `${MENU_MOD}+A` };
   const item = (key, action, disabled = false) => ({ key, label: t(`editor.menu.${key}`), shortcut: shortcuts[key], run: action, disabled });
   const inCode = Boolean(cm || view.state.selection.$from.parent.type.spec.code);
   return [
-    item('undo', () => run(undoCommand), undoDepth(view.state) === 0),
-    item('redo', () => run(redoCommand), redoDepth(view.state) === 0),
+    item('undo', () => history(undoCommand, -1), undoDepth(view.state) === 0 && !canReplayHistory?.(-1)),
+    item('redo', () => history(redoCommand, 1), redoDepth(view.state) === 0 && !canReplayHistory?.(1)),
     { key: 's1', separator: true },
     item('cut', async () => { await navigator.clipboard.writeText(selected); edit(''); }, !selected),
     item('copy', () => navigator.clipboard.writeText(selected), !selected),
