@@ -113,6 +113,9 @@ export function installRuntimeLogging() {
       const strings = args.filter((arg) => typeof arg === 'string');
       if (isCancellation(error) || /^The above error occurred in the /.test(strings[0])) return;
       const message = error?.message || strings.join(' ');
+      // Dev HMR reloads leave Tauri's async callbacks orphaned; that is a
+      // tooling artifact, not an app error. Vue flags are injected at build time.
+      if (/Couldn't find callback id/.test(message) || /__VUE_(?:OPTIONS_API|PROD_DEVTOOLS|PROD_HYDRATION_MISMATCH_DETAILS)__/.test(message)) return;
       reportRuntimeLog({
         source: /^Warning: /.test(strings[0]) ? 'React' : 'WebView',
         level: method === 'warn' || /^Warning: /.test(strings[0]) ? 'warning' : 'error',
