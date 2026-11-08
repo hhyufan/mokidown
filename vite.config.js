@@ -91,6 +91,11 @@ export default defineConfig(async ({ mode }) => ({
   define: {
     'import.meta.env.VITE_APP_VERSION': JSON.stringify(appVersion),
     __MOKI_WEB_DEMO__: JSON.stringify(mode === 'demo' || webDemo),
+    // Milkdown 的 components 依赖 Vue 的 esm-bundler 构建；显式注入 feature flags，
+    // 避免 Vue 在 WebView 控制台输出未定义警告。
+    __VUE_OPTIONS_API__: true,
+    __VUE_PROD_DEVTOOLS__: false,
+    __VUE_PROD_HYDRATION_MISMATCH_DETAILS__: false,
   },
 
   resolve: {
