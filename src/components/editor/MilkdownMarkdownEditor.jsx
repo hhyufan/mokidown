@@ -1434,10 +1434,11 @@ function MilkdownInner({
     if (!saveTimerRef.current) {
       saveTimerRef.current = setTimeout(() => {
         saveTimerRef.current = null;
-        onAutoSaveRef.current?.();
+        const current = useEditorStore.getState().tabs.find((tab) => tab.id === tabId);
+        if (current && (current.contentRevision ?? 0) === contentRevision) onAutoSaveRef.current?.(tabId);
       }, 300);
     }
-  }, [markTabDirty, readOnly, setCharacterCount]);
+  }, [contentRevision, markTabDirty, readOnly, setCharacterCount]);
 
   const publishEditorContent = useCallback((ctx) => {
     if (!ctx.isInjected(editorViewCtx)) return;
@@ -2032,7 +2033,7 @@ const MilkdownMarkdownEditor = forwardRef(function MilkdownMarkdownEditor({
   const lineHeight = previewZoomSync ? editorLineHeight : (previewLineHeight || editorLineHeight);
 
   return (
-    <MilkdownErrorBoundary className={className}>
+    <MilkdownErrorBoundary key={`${activeTabId}:${contentRevision}`} className={className}>
       <MilkdownProvider>
         <ForwardedMilkdownInner
           key={readOnly ? `${activeTabId}:${content}` : activeTabId}

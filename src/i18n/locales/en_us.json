@@ -855,6 +855,7 @@
   "sync.conflict.later": "Review later",
   "sync.conflict.keepEdits": "Keep local edits",
   "sync.conflict.useDisk": "Use disk content",
+  "sync.conflict.reloadFailed": "Could not reload from disk. Check that the file is readable and try again.",
   "sync.conflict.saveAs": "Save as",
   "sync.conflict.removedMessage": "The file was deleted or moved.",
   "sync.conflict.changedMessage": "The file on disk differs from your unsaved edits.",

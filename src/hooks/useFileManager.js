@@ -242,11 +242,10 @@ export function useFileManager() {
    * @returns {(filePath: string, content: string, encoding: string, meta?: object) => void} 防抖后的保存函数。
    */
   const debouncedAutoSave = useMemo(
-    () => debounceByKey(async (filePath, content, encoding) => {
-      if (!filePath) return;
+    () => debounceByKey(async (filePath, tabId, revision) => {
+      if (!useConfigStore.getState().autoSave || !getLiveTabById(tabId)?.modified) return;
       try {
-        const tabId = useEditorStore.getState().getTabByPath(filePath)?.id || filePath;
-        await saveExistingFile(filePath, content, encoding, tabId);
+        await saveExistingFile(filePath, undefined, undefined, tabId, revision);
       } catch (_) { /* silent */ }
     }, 1000),
     []
@@ -263,8 +262,7 @@ export function useFileManager() {
     const autoSave = useConfigStore.getState().autoSave;
     if (!autoSave) return;
     const tab = typeof tabId === 'string' ? getLiveTabById(tabId) : useEditorStore.getState().getActiveTab();
-    if (!tab) return;
-    const content = getBuffer(tab.id, tab.content);
+    if (!tab?.modified) return;
 
     if (!tab.path) {
       // Desktop drafts stay in memory until an explicit Save / Save As action.
@@ -274,11 +272,7 @@ export function useFileManager() {
       persistUntitledTab(tab, { allowDialog: !canSaveToExplorerDir, source: 'auto-save' });
       return;
     }
-    debouncedAutoSave(tab.path, content, tab.encoding, {
-      name: tab.name,
-      ext: tab.ext,
-      lineEnding: tab.lineEnding,
-    });
+    debouncedAutoSave(tab.path, tab.id, tab.contentRevision ?? 0);
   }, [debouncedAutoSave, isAndroid]);
 
   /**
@@ -764,7 +758,7 @@ export function useFileManager() {
     }
 
     try {
-      const result = await saveExistingFile(tab.path, tab.content, tab.encoding, tab.id);
+      const result = await saveExistingFile(tab.path, tab.content, tab.encoding, tab.id, tab.contentRevision ?? 0);
       if (result.success) {
         // Ctrl+S path: tell plugins a save happened (cloud sync reacts to it).
         broadcastToPlugins({ type: 'event', name: 'didSave', payload: { path: tab.path, name: tab.path.split(/[\\\\/]/).pop() } });

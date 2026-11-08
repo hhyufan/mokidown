@@ -229,11 +229,20 @@ describe('local file save/watch coordination', () => {
     expect(await reconcileFileChange(path)).toBe('conflict');
     const externalFileConflict = useEditorStore.getState().externalFileConflicts.get(path);
     diskContent = 'latest external version';
+    expect(await reconcileFileChange(path)).toBe('conflict');
     expect(await restoreExternalDisk(externalFileConflict)).toBe(true);
     expect(getBuffer(path)).toBe(diskContent);
     expect(getDiskBaseline(path).content).toBe(diskContent);
     expect(useEditorStore.getState().tabs[0]).toMatchObject({ content: diskContent, modified: false });
     expect(useEditorStore.getState().externalFileConflicts.get(path)).toBeUndefined();
+  });
+
+  it('ignores an autosave queued before the same tab received recovered content', async () => {
+    useEditorStore.getState().restoreRecoveredTab({ path, tabId: path, content: 'recovered unsaved draft' });
+    expect(await saveExistingFile(path, undefined, undefined, path, 0)).toMatchObject({ superseded: true });
+    expect(invoke).not.toHaveBeenCalled();
+    expect(getBuffer(path)).toBe('recovered unsaved draft');
+    expect(diskContent).toBe('base');
   });
 
   it('reads current disk content for delayed events from earlier saves', async () => {

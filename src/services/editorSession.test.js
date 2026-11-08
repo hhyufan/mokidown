@@ -90,7 +90,18 @@ it('recovery replaces a clean reopened tab instead of duplicating it', () => {
   const id = useEditorStore.getState().restoreRecoveredTab({ tabId: '/a.md', path: '/a.md', content: 'draft' });
   expect(id).toBe('/a.md');
   expect(useEditorStore.getState().tabs).toHaveLength(1);
+  expect(useEditorStore.getState().tabs[0]).toMatchObject({ content: 'disk', contentRevision: 1 });
   expect(useEditorStore.getState().getActiveTab()).toMatchObject({ content: 'draft', modified: true });
+});
+
+it('recovers a separate draft when the same file has a newer unsaved working copy', () => {
+  const store = useEditorStore.getState();
+  store.openFile({ path: '/a.md', name: 'a.md', content: 'disk' });
+  store.markTabDirty('/a.md');
+  const id = store.restoreRecoveredTab({ tabId: '/a.md', path: '/a.md', name: 'a.md', content: 'draft' });
+  expect(id).not.toBe('/a.md');
+  expect(useEditorStore.getState().getActiveTab()).toMatchObject({ path: '', content: 'draft', modified: true });
+  expect(useEditorStore.getState().getTabByPath('/a.md')).toMatchObject({ content: 'disk', modified: true });
 });
 
 it('persists a reordered tab strip without changing the active document', async () => {
