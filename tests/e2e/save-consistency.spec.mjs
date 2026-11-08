@@ -74,6 +74,64 @@ for (const mode of ['edit', 'preview']) {
   });
 }
 
+for (const first of ['edit', 'preview']) {
+  test(`undo and redo follow the document across modes starting in ${first}`, async ({ page }) => {
+    await page.goto('/');
+    test.setTimeout(60000);
+    await expect(page.locator('.editor-content__welcome')).toBeVisible({ timeout: 30000 });
+    await page.evaluate(installDisk);
+    await page.evaluate(async () => {
+      const { default: store } = await import('/src/store/useEditorStore.js');
+      const { default: config } = await import('/src/store/useConfigStore.js');
+      config.getState().setConfig('autoSave', false);
+      localStorage.setItem('trial-save-disk', 'base');
+      store.getState().openFile({ path: '/history.md', name: 'history.md', content: 'base' });
+    });
+    const focusMode = async (mode) => {
+      await page.evaluate(async (mode) => {
+        (await import('/src/store/useEditorStore.js')).default.getState().setViewMode(mode);
+      }, mode);
+      if (mode === 'edit') {
+        const input = page.locator('.monaco-editor textarea').first();
+        await expect(input).toBeVisible();
+        await input.focus();
+        await page.keyboard.press('Control+Home');
+        await page.keyboard.press('End');
+        return page.locator('.monaco-editor .view-lines');
+      }
+      const prose = page.locator('.milkdown-editor > p');
+      await prose.click();
+      await page.keyboard.press('End');
+      return prose;
+    };
+    const second = first === 'edit' ? 'preview' : 'edit';
+    await focusMode(first);
+    await page.keyboard.type(' first');
+    let body = await focusMode(second);
+    await expect(body).toContainText('base first');
+    await page.keyboard.type(' second');
+    await expect(body).toContainText('base first second');
+    await page.keyboard.press('Control+z');
+    await expect(body).toContainText('base first');
+    await expect(body).not.toContainText('second');
+    await page.keyboard.press('Control+z');
+    await expect(body).toContainText('base');
+    await expect(body).not.toContainText('first');
+    body = await focusMode(first);
+    await page.keyboard.press('Control+y');
+    await expect(body).toContainText('base first');
+    await page.keyboard.press('Control+Shift+z');
+    await expect(body).toContainText('base first second');
+    await page.keyboard.press('Control+z');
+    await page.keyboard.press('End');
+    await page.keyboard.type(' branch');
+    body = await focusMode(second);
+    await page.keyboard.press('Control+y');
+    await expect(body).toContainText('base first branch');
+    await expect(body).not.toContainText('second');
+  });
+}
+
 test('focus catches a missed disk event and using disk content refreshes the live Markdown document', async ({ page }) => {
   test.setTimeout(60000);
   await page.goto('/');

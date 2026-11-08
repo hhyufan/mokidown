@@ -124,6 +124,8 @@ import { useEditorBufferContent } from '@hooks/useEditorBufferContent';
 import { useDocumentScrollState } from '@hooks/useDocumentScrollState';
 import { getDocumentViewState, registerDocumentViewState, requestDocumentViewStateSave } from '@utils/documentViewState';
 import { getBuffer, setBuffer, registerEditorBufferFlusher } from '@utils/editorBuffer';
+import { hasMarkdownUndoStep, markdownUndoDirection } from '@utils/markdownUndo';
+import { milkdownSharedHistory, replayMilkdownHistory } from './milkdownSharedHistory';
 import { isImeComposing } from '@utils/keyboard';
 import { hydrateMarkdownImages, parseMarkdownLineHint, resolveMarkdownLinkPath } from '@utils/markdownAssets';
 import { observeMarkdownEnhancements } from '@utils/observeMarkdownEnhancements';
@@ -1473,7 +1475,11 @@ function MilkdownInner({
   const handleContextMenu = (event) => {
     const editor = editorRef.current;
     if (!editor || readOnly || event.target.closest('input, textarea, button, select')) return;
-    const items = milkdownContextItems({ editor, target: event.target, x: event.clientX, y: event.clientY, t: i18n.t.bind(i18n) });
+    const items = milkdownContextItems({
+      editor, target: event.target, x: event.clientX, y: event.clientY, t: i18n.t.bind(i18n),
+      canReplayHistory: (direction) => hasMarkdownUndoStep(activeTabId, direction),
+      replayHistory,
+    });
     openMenu(event, items, 'wysiwyg');
   };
   const { openFileFromPath } = useFileManager();
@@ -1527,6 +1533,17 @@ function MilkdownInner({
     scheduleEditorSideEffects(markdown);
     setRenderTick((value) => value + 1);
   }, [activeTabId, contentRevision, scheduleEditorSideEffects]);
+
+  const replayHistory = (direction) => editorRef.current?.action((ctx) => {
+    const view = ctx.get(editorViewCtx);
+    publishEditorContent(ctx);
+    const result = replayMilkdownHistory(ctx, view, activeTabId, direction);
+    if (!result) return false;
+    publishedMarkdownRef.current = result.serialized;
+    scheduleEditorSideEffects(result.text);
+    setRenderTick((value) => value + 1);
+    return true;
+  });
 
   const editorInfo = useEditor((root) => {
     const editor = Editor.make()
@@ -1600,7 +1617,11 @@ function MilkdownInner({
       .use(milkdownBlockSelection)
       .use(listener);
 
-    if (!readOnly) editor.use(milkdownMarkdownPaste).use(clipboard).use(milkdownEditingFlow).use(milkdownGapCursor)
+    if (!readOnly) editor.use(milkdownSharedHistory(activeTabId, () => {
+      const store = useEditorStore.getState();
+      const tab = store.tabs.find((item) => item.id === activeTabId);
+      return tab && (tab.contentRevision ?? 0) === contentRevision;
+    })).use(milkdownMarkdownPaste).use(clipboard).use(milkdownEditingFlow).use(milkdownGapCursor)
       .use(milkdownInlineSyntaxSource).use(milkdownLiveSyntax).use(milkdownInlineLinkRule);
 
     editorRef.current = editor;
@@ -1984,6 +2005,13 @@ function MilkdownInner({
     <div
       ref={wrapperRef}
       onContextMenu={handleContextMenu}
+      onKeyDownCapture={(event) => {
+        const direction = markdownUndoDirection(event.nativeEvent);
+        if (readOnly || !direction || !event.target.closest('.milkdown-editor') ||
+            event.target.closest('input, textarea, select') || !replayHistory(direction)) return;
+        event.preventDefault();
+        event.stopPropagation();
+      }}
       className={`md-preview md-preview--milkdown ${editorInfo.loading ? 'md-preview--stale' : ''} ${className || ''}`}
       style={{
         fontSize: `${fontSize || 14}px`,

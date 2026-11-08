@@ -22,6 +22,7 @@ import { externalLink } from '@utils/editorLinks';
 import { getFileLanguage } from '@utils/fileLanguage';
 import { initMonacoShiki, isMonacoShikiReady, getMonacoThemeName } from '@utils/monacoShiki';
 import { setBuffer, getBuffer, registerEditorBufferFlusher } from '@utils/editorBuffer';
+import { markdownUndoDirection, markdownUndoStep, noteNativeMarkdownUndo, recordMarkdownEdit } from '@utils/markdownUndo';
 import { registerPluginEditor } from '@/services/pluginEditor';
 import { getDocumentViewState, setDocumentViewState, registerDocumentViewState, requestDocumentViewStateSave } from '@utils/documentViewState';
 import MonacoContextMenu from './MonacoContextMenu';
@@ -33,6 +34,8 @@ import { configureMonacoHotkeys, disposeMonacoHotkeys } from '@/services/monacoH
 import { bindMonacoMarkdownPairs } from './monacoMarkdownPairs';
 import MarkdownCodeLanguageMenu from './MarkdownCodeLanguageMenu';
 import './monaco-editor.scss';
+
+const nativeUndoGroups = new WeakMap();
 
 function documentModelInfo(tab) {
   const language = getFileLanguage(tab.name);
@@ -47,9 +50,9 @@ function documentModelInfo(tab) {
 }
 
 function disposeDocumentModel(model) {
-  if (model.uri.scheme === 'inmemory') {
-    // Monaco 0.52 can leave redo entries pointing to the old model when it
-    // discards an in-memory model with entries on both sides of its history.
+  if (model.uri.scheme === 'inmemory' || model.getLanguageId() === 'markdown') {
+    // Markdown history survives through the shared journal. Release native
+    // entries, which can otherwise retain disposed models during redo.
     StandaloneServices.get(IUndoRedoService).removeElements(model.uri);
   }
   model.dispose();
@@ -87,6 +90,7 @@ const MonacoEditorComponent = forwardRef(function MonacoEditorComponent({ classN
   const modelsRef = useRef(new Map());
   const currentTabIdRef = useRef(null);
   const suppressModelChangeRef = useRef(false);
+  const replayingHistoryRef = useRef(false);
   const pendingJump = useProblemsStore((state) => state.pendingJump);
 
   // 编辑器只关心当前激活的是哪个标签页，不直接订阅正文内容，因此输入过程
@@ -175,6 +179,26 @@ const MonacoEditorComponent = forwardRef(function MonacoEditorComponent({ classN
       editor.focus();
     },
   }), []);
+
+  const replayHistory = useCallback((direction) => {
+    const editor = editorRef.current;
+    const model = editor?.getModel();
+    if (model?.getLanguageId() !== 'markdown') return false;
+    if (direction < 0 ? model.canUndo() : model.canRedo()) return false;
+    const tabId = currentTabIdRef.current;
+    const step = markdownUndoStep(tabId, direction, getBuffer(tabId));
+    if (!step) return false;
+    const position = editor.getPosition();
+    replayingHistoryRef.current = true;
+    try {
+      model.setValue(step.text);
+      if (position) editor.setPosition(model.validatePosition(position));
+      step.commit();
+      return true;
+    } finally {
+      replayingHistoryRef.current = false;
+    }
+  }, []);
 
   const onAutoSaveRef = useRef(onAutoSave);
   onAutoSaveRef.current = onAutoSave;
@@ -321,11 +345,24 @@ const MonacoEditorComponent = forwardRef(function MonacoEditorComponent({ classN
       if (pendingAutoSave.size) scheduleAutoSave();
     });
 
-    editor.onDidChangeModelContent(() => {
+    editor.onDidChangeModelContent((event) => {
       if (suppressModelChangeRef.current) return;
       const tabId = currentTabIdRef.current;
       if (!tabId) return;
       const value = editor.getValue();
+      const model = editor.getModel();
+      if (!replayingHistoryRef.current && model?.getLanguageId() === 'markdown') {
+        if (event.isUndoing || event.isRedoing) {
+          noteNativeMarkdownUndo(tabId, event.isUndoing ? -1 : 1);
+        } else if (!event.isFlush) {
+          const before = getBuffer(tabId);
+          if (before !== value) {
+            const element = StandaloneServices.get(IUndoRedoService).getLastElement(model.uri);
+            if (element && !nativeUndoGroups.has(element)) nativeUndoGroups.set(element, Symbol());
+            recordMarkdownEdit(tabId, element ? nativeUndoGroups.get(element) : undefined, before, value);
+          }
+        }
+      }
       // 1. 先同步写入编辑缓冲区，让预览、大纲等消费者按各自节流节奏读取。
       setBuffer(tabId, value);
       // 2. 脏标记、字数统计与自动保存统一节流，避免每次击键都穿透 Zustand。
@@ -755,6 +792,12 @@ const MonacoEditorComponent = forwardRef(function MonacoEditorComponent({ classN
         // 再额外拦截一层容器级原生右键菜单，避免长按或右键冒泡穿透 Monaco
         // 视图节点后，又把宿主浏览器默认菜单弹出来。
         onContextMenu={(e) => e.preventDefault()}
+        onKeyDownCapture={(event) => {
+          const direction = markdownUndoDirection(event.nativeEvent);
+          if (!direction || !editorRef.current?.hasTextFocus() || !replayHistory(direction)) return;
+          event.preventDefault();
+          event.stopPropagation();
+        }}
       />
       {!useSelectionBar && (
         <MonacoContextMenu
@@ -763,6 +806,7 @@ const MonacoEditorComponent = forwardRef(function MonacoEditorComponent({ classN
           y={contextMenu.y}
           onClose={closeContextMenu}
           editorRef={editorRef}
+          replayHistory={replayHistory}
         />
       )}
       <MobileSelectionBar editor={editorInstance} enabled={useSelectionBar} containerRef={containerRef} />
