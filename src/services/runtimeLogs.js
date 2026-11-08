@@ -144,6 +144,9 @@ export function startNativeLogPolling() {
         if (disposed || !Array.isArray(entries)) return;
         for (const entry of entries) {
           cursor = Math.max(cursor, entry.id);
+          // Updater checks run at startup; an unreachable mirror or offline
+          // network is expected and must not flood the error panel.
+          if (/failed to check for updates/i.test(entry.message || '')) continue;
           reportRuntimeLog({ ...entry, source: 'Tauri', detail: entry.target });
         }
       }
