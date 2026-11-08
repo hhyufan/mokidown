@@ -3,7 +3,7 @@ import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import useEditorStore from '@store/useEditorStore';
 import { clearBuffer, registerEditorBufferFlusher, setBuffer } from '@utils/editorBuffer';
 import { clearRecoverySnapshot, readFileContent, readRecoverySnapshot, writeRecoverySnapshot } from '@utils/tauriApi';
-import { flushRecoverySnapshot, loadRecoveryCandidates } from './recoveryService';
+import { finishRecoveryReview, flushRecoverySnapshot, loadRecoveryCandidates } from './recoveryService';
 
 vi.mock('@utils/tauriApi', () => ({
   clearRecoverySnapshot: vi.fn(), readFileContent: vi.fn(), readRecoverySnapshot: vi.fn(), writeRecoverySnapshot: vi.fn(),
@@ -19,7 +19,7 @@ beforeEach(() => {
   setBuffer('/recovery.md', 'draft');
   useEditorStore.getState().markTabDirty('/recovery.md');
 });
-afterEach(() => { vi.restoreAllMocks(); vi.unstubAllGlobals(); delete window.__TAURI_INTERNALS__; });
+afterEach(async () => { delete window.__TAURI_INTERNALS__; await finishRecoveryReview(); vi.restoreAllMocks(); vi.unstubAllGlobals(); });
 
 it('does not overwrite a saved clean recovery state with an older pending hash operation', async () => {
   let finish, entered;
@@ -58,6 +58,11 @@ it('provides the full disk version for a Monaco comparison without modifying the
   const candidates = await loadRecoveryCandidates();
   expect(candidates[0]).toMatchObject({ content: 'draft', diskContent, diskState: 'changed' });
   expect(snapshot.tabs[0]).not.toHaveProperty('diskContent');
+  useEditorStore.getState().markTabSaved('/recovery.md', 'draft');
+  await flushRecoverySnapshot();
+  expect(clearRecoverySnapshot).not.toHaveBeenCalled();
+  await finishRecoveryReview();
+  expect(clearRecoverySnapshot).toHaveBeenCalledOnce();
 });
 
 it('keeps a draft without reading binary disk content into its comparison', async () => {

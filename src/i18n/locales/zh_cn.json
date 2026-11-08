@@ -855,6 +855,7 @@
   "sync.conflict.later": "稍后处理",
   "sync.conflict.keepEdits": "保留本地改动",
   "sync.conflict.useDisk": "使用磁盘内容",
+  "sync.conflict.reloadFailed": "暂时无法恢复磁盘内容，请确认文件仍可读取后重试。",
   "sync.conflict.saveAs": "另存为",
   "sync.conflict.removedMessage": "原文件已被删除或移动。",
   "sync.conflict.changedMessage": "磁盘文件与当前未保存内容存在差异。",
