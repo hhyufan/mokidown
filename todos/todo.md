@@ -66,7 +66,7 @@
 
 * [x] opt(editor): 图像预览弹层限制在编辑区域内。
 
-* [ ] opt(editor): Monaco 源码模式与 Milkdown 预览模式撤销/重做联动。
+* [x] opt(editor): Monaco 源码模式与 Milkdown 预览模式撤销/重做联动。
 
 * [x] opt(editor): 公式编辑区缺少「公式」标识，外观与引用块相同难以区分。
 
