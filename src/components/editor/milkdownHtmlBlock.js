@@ -36,7 +36,9 @@ export const htmlBlockView = $view(htmlBlockSchema.node, () => (initialNode, vie
   const panel = document.createElement('div'); panel.className = 'md-preview__html-panel'; panel.hidden = true;
   const toolbar = document.createElement('div'); toolbar.className = 'md-preview__html-toolbar';
   const label = document.createElement('span'); label.textContent = 'HTML';
-  const done = document.createElement('button'); done.type = 'button'; done.className = 'md-preview__html-done'; done.textContent = i18n.t('editor.finishHtml');
+  const done = document.createElement('button'); done.type = 'button'; done.className = 'md-preview__html-done md-preview__icon-action';
+  done.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m5 12 4 4L19 6"/></svg>';
+  done.setAttribute('aria-label', i18n.t('editor.finishHtml'));
   done.dataset.mokiTooltip = i18n.t('editor.finishHtml');
   toolbar.append(label, done); panel.append(toolbar, input); dom.append(preview, button, panel);
   const render = () => {

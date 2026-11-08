@@ -48,9 +48,17 @@ export default function CodeBlockExecution({ blockKey, language, source, filePat
         </svg>{running ? t('console.stop') : t('console.run')}
       </button>
     </div>
-    {run.runId && <div className={`md-code-execution__result is-${run.status}`}>
+    {run.runId && !run.dismissed && <div className={`md-code-execution__result is-${run.status}`}>
       <header><span><i />{STATUS[run.status]}{run.exitCode != null && ` · ${t('console.exitCode', { code: run.exitCode })}`}{run.elapsedMs > 0 && ` · ${(run.elapsedMs / 1000).toFixed(2)} s`}</span>
-        <button type="button" onClick={() => useCodeBlockRunStore.getState().clear(blockKey)}>{t('codeBlock.clear')}</button>
+        <Tooltip title={t('codeBlock.clear')} placement="top" mouseEnterDelay={0.3}>
+          <button type="button" className="md-code-execution__clear md-preview__icon-action" aria-label={t('codeBlock.clear')}
+            onMouseDown={(event) => event.preventDefault()}
+            onClick={() => useCodeBlockRunStore.getState().clear(blockKey)}>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden="true">
+              <path d="m6 6 12 12M18 6 6 18" />
+            </svg>
+          </button>
+        </Tooltip>
       </header>
       {stale && <div className="md-code-execution__hint">{t('codeBlock.stale')}</div>}
       <div className="md-code-execution__output" role="log" aria-label={t('codeBlock.output')} tabIndex={0}>

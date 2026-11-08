@@ -45,6 +45,11 @@
   &__result { border-top: 1px solid var(--border-light); background: var(--surface); }
   &__result > header { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 5px 12px; color: var(--text-sec); font-size: 11px;
     > span { display: inline-flex; align-items: center; gap: 5px; } i { width: 5px; height: 5px; border-radius: 50%; background: currentColor; }
+    .md-code-execution__clear {
+      color: var(--error);
+      &:hover { border-color: transparent; }
+      &:focus-visible { outline-color: var(--error); }
+    }
   }
   &__result.is-success > header > span { color: var(--success); }
   &__result.is-error > header > span { color: var(--error); }

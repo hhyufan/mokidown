@@ -41,6 +41,9 @@ export default create((set) => ({
   clear: (key) => set((state) => {
     const current = state.blocks[key];
     if (!current) return state;
-    return { blocks: { ...state.blocks, [key]: { ...current, logs: [], truncated: false } } };
+    const blocks = { ...state.blocks };
+    if (isBlockRunning(current.status)) blocks[key] = { ...current, dismissed: true, logs: [], truncated: false };
+    else delete blocks[key];
+    return { blocks };
   }),
 }));
