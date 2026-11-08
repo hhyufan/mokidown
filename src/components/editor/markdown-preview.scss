@@ -13,6 +13,23 @@
   font-family: var(--font-app);
   line-height: 1.75;
   color: var(--text);
+
+  button.md-preview__icon-action {
+    display: inline-grid;
+    place-items: center;
+    padding: 4px;
+    border-radius: 4px;
+
+    &:hover { background: var(--hover); }
+    > svg { width: 16px; height: 16px; }
+
+    @media (prefers-reduced-motion: no-preference) {
+      transition: background-color 150ms ease;
+      > svg { transition: transform 150ms ease; }
+      &:hover > svg { transform: translateY(-1px); }
+      &:active > svg { transform: scale(.86); }
+    }
+  }
   // 为长文档的滚动和绘制启用 GPU 加速。
   contain: content;
 
@@ -603,17 +620,11 @@
       line-height: 1.4;
     }
     .md-preview__html-done {
-      padding: 4px 8px;
-      font-family: var(--font-app);
-      font-size: 12px;
-      line-height: 1.4;
-      color: var(--text-sec);
+      color: var(--success);
       background: transparent;
       border: 1px solid transparent;
-      border-radius: 4px;
       cursor: pointer;
-      &:hover { color: var(--accent); background: var(--hover); }
-      &:focus-visible { outline: 2px solid var(--accent); }
+      &:focus-visible { outline: 2px solid var(--success); }
     }
     .md-preview__html-input {
       box-sizing: border-box;

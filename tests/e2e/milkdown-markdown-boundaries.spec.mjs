@@ -5,6 +5,46 @@ async function open(page, content) {
   await expect(page.locator('.milkdown-editor')).toBeVisible();
 }
 
+test('the HTML editor finishes through its labelled check icon', async ({ page }) => {
+  await open(page, '<div>Before</div>');
+  await page.locator('.md-preview__html-block-preview').dblclick();
+  await page.locator('.md-preview__html-input').fill('<div>After</div>');
+  const done = page.getByRole('button', { name: /完成|Done/ });
+  await expect(done.locator('svg path')).toHaveCount(1);
+  await done.click();
+  await expect(page.locator('.md-preview__html-block-preview')).toHaveText('After');
+});
+
+test('code Run shows the bottom panel and its cross shares the HTML action hover', async ({ page }) => {
+  await open(page, '<div>Before</div>\n\n```js\nconsole.log("test")\n```');
+  await page.locator('.md-preview__html-block-preview').dblclick();
+  const done = page.locator('.md-preview__html-done');
+  const hoverColor = await done.evaluate((element) => {
+    const probe = document.createElement('span');
+    probe.style.color = getComputedStyle(element).getPropertyValue('--hover').trim();
+    document.body.append(probe);
+    const color = getComputedStyle(probe).color;
+    probe.remove();
+    return color;
+  });
+  await done.hover();
+  await expect(done).toHaveCSS('background-color', hoverColor);
+  await expect(done.locator('svg')).toHaveCSS('transform', 'matrix(1, 0, 0, 1, 0, -1)');
+  await done.click();
+  const block = page.locator('.milkdown-code-block');
+  await block.locator('.md-code-execution__toolbar button').click();
+  const result = block.locator('.md-code-execution__result');
+  await expect(result).toBeVisible();
+  const clear = result.locator('header .md-code-execution__clear');
+  await expect(clear).toHaveCSS('background-color', 'rgba(0, 0, 0, 0)');
+  await clear.hover();
+  await expect(clear).toHaveCSS('background-color', hoverColor);
+  await expect(clear.locator('svg')).toHaveCSS('transform', 'matrix(1, 0, 0, 1, 0, -1)');
+  await clear.click();
+  await expect(result).toHaveCount(0);
+  await expect(block.locator('.md-code-execution__toolbar button')).toHaveCount(1);
+});
+
 for (const tag of ['<br>', '<br />', '<a id="section"></a>', '<div>标签</div>']) {
   test(`${tag} does not swallow an adjacent heading or formula`, async ({ page }) => {
     await open(page, `${tag}\n# 标题\n\n${tag}\n$$\nx^2\n$$\n`);

@@ -55,8 +55,32 @@ it('keeps output beneath its own block, escapes output, and reports edited sourc
   expect(within(blocks[0]).getByRole('log')).toHaveTextContent('<script>中文</script>');
   expect(within(blocks[1]).queryByRole('log')).toBeNull();
   expect(view.container.querySelector('script')).toBeNull();
+  const clear = within(blocks[0]).getByRole('button', { name: '清空' });
+  expect(clear.closest('.md-code-execution__result > header')).not.toBeNull();
+  expect(clear.querySelector('svg path')).not.toBeNull();
+  expect(within(blocks[1]).queryByRole('button', { name: '清空' })).toBeNull();
   view.rerender(<CodeBlockExecution blockKey="a" language="javascript" source="edited A" />);
   expect(screen.getByText('代码已修改，重新运行以更新结果。')).toBeInTheDocument();
+  fireEvent.click(screen.getByRole('button', { name: '清空' }));
+  expect(screen.queryByRole('log')).toBeNull();
+  expect(useCodeBlockRunStore.getState().blocks.a).toBeUndefined();
+});
+
+it('opens the result after Run and hides it without stopping an active process', () => {
+  scriptRunner.runBlock.mockImplementationOnce(({ key, source, language }) => {
+    const store = useCodeBlockRunStore.getState();
+    store.prepare(key, { runId: 'active', source, language });
+    store.receive(key, { runId: 'active', kind: 'status', text: 'started' });
+  });
+  render(<CodeBlockExecution blockKey="active" language="javascript" source="A" />);
+  expect(screen.queryByRole('log')).toBeNull();
+  fireEvent.click(screen.getByRole('button', { name: '运行此代码块' }));
+  expect(screen.getByRole('log')).toBeInTheDocument();
+  fireEvent.click(screen.getByRole('button', { name: '清空' }));
+  expect(screen.queryByRole('log')).toBeNull();
+  expect(screen.queryByRole('button', { name: '清空' })).toBeNull();
+  expect(scriptRunner.stopBlock).not.toHaveBeenCalled();
+  expect(useCodeBlockRunStore.getState().blocks.active.status).toBe('running');
 });
 
 it('does not submit IME candidate Enter, and sends committed input to this block', async () => {
