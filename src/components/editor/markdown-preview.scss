@@ -190,101 +190,89 @@
     list-style: none;
   }
 
-  li.task-list-item {
-    // 交给布局居中：勾选框与文字是同一行的两个 flex 项，align-items: center
-    // 让方框落在这一行的中线上。不用 calc((1lh - 14px)/2) 那类算式——它依赖
-    // 行高，字号一改就偏；也不用量出偏差再补 px。
-    display: flex;
-    align-items: center;
-    gap: 0.5em;
-    list-style: none;
-
-    > input[type='checkbox'] {
-      flex: 0 0 auto;
-      width: 14px;
-      height: 14px;
-      margin: 0;
-    }
-
-    > p:first-child {
-      margin: 0;
-    }
-  }
-
-  li[data-item-type='task'] {
+  :is(li.task-list-item, li[data-item-type='task']) {
     position: relative;
-    padding-left: 1.7em;
+    padding-inline-start: 1.7em;
     list-style: none;
 
-    > p:first-child {
-      margin-top: 0;
-    }
+    > p:first-of-type { margin-top: 0; }
+    > p:last-of-type { margin-bottom: 0; }
 
-    > p:last-child {
-      margin-bottom: 0;
-    }
-
-    &::before {
-      content: '';
-      position: absolute;
-      top: calc((1lh - 14px) / 2);
-      left: 0;
-      width: 14px;
-      height: 14px;
-      border: 1.5px solid var(--border);
-      border-radius: 3px;
-      background: var(--surface);
-      box-sizing: border-box;
-    }
-
-    &[data-checked='true']::before {
-      border-color: var(--accent);
-      // 勾用居中的背景图画，而不是拿 ::after 画一个方块再旋转：
-      // 后者靠 left/top 手算落点，外接尺寸又随字体行高变化，容易压出框外。
-      background: var(--accent) center / 10px 10px no-repeat
-        url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 12'%3E%3Cpath d='M2 6.2 4.6 8.8 10 3.4' fill='none' stroke='%23fff' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
-    }
-
-    // 勾已改为 ::before 的居中背景图，这里不再另画一个方块旋转出来的勾。
-    &[data-checked='true']::after {
-      content: none;
+    &[data-task-state='true'] > :is(p:first-of-type, .md-preview__task-label) {
+      color: color-mix(in srgb, var(--text) 55%, transparent);
+      text-decoration: line-through;
     }
   }
 
   .md-preview__task-checkbox {
-    flex: 0 0 auto;
-    width: 14px;
-    height: 14px;
-    margin-top: calc((1lh - 14px) / 2);
-  }
-
-  // 与所见即所得那侧（li[data-item-type='task'] 的 ::before/::after）保持同一套外观。
-  // 预览由 remark-gfm 产出真 input，原先只给了 accent-color：它只管勾选态，
-  // 未勾选仍是浏览器原生方框，于是同一份文档在两个视图里一个蓝、一个黑。
-  // input 没有伪元素可用，对勾只能用背景图，颜色随主题给两份。
-  input[type='checkbox'] {
     appearance: none;
-    width: 14px;
-    height: 14px;
-    margin-right: 6px;
+    position: absolute;
+    z-index: 1;
+    inset-block-start: .5lh;
+    inset-inline-start: 0;
+    transform: translateY(-50%);
+    font: inherit;
+    inline-size: 14px;
+    block-size: 14px;
+    margin: 0;
+    padding: 0;
     border: 1.5px solid var(--border);
     border-radius: 3px;
     background: var(--surface);
     box-sizing: border-box;
-    vertical-align: middle;
 
-    &:checked {
+    &:enabled { cursor: pointer; }
+    &:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+    &[aria-checked='true'] {
       border-color: var(--accent);
-      background: var(--accent) center / 11px 11px no-repeat
+      background: var(--accent) center / 10px 10px no-repeat
         url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 12'%3E%3Cpath d='M2 6.2 4.6 8.8 10 3.4' fill='none' stroke='%23fff' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+    }
+
+    &[aria-checked='mixed'] {
+      border-color: var(--accent);
+      background: var(--accent) center / 8px 2px no-repeat linear-gradient(white, white);
     }
   }
 
-  // vitality：勾选后的待办整行划掉并变淡。
-  li.task-list-item:has(> input[type='checkbox']:checked),
-  li[data-item-type='task'][data-checked='true'] {
-    color: color-mix(in srgb, var(--text) 55%, transparent);
-    text-decoration: line-through;
+  // An elbow on each row joins the branches, including when a task wraps.
+  :is(li.task-list-item, li[data-item-type='task']) > :is(ul, ol):has(:is(.task-list-item, [data-item-type='task'])) {
+    --task-branch-line: color-mix(in srgb, var(--accent) 35%, var(--border));
+    --task-branch-indent: 1.45em;
+    margin-inline-start: calc(7px - 1.7em);
+    padding-inline-start: var(--task-branch-indent);
+
+    > li {
+      position: relative;
+
+      &::before, &::after {
+        content: '';
+        position: absolute;
+        inset-inline-start: calc(-1 * var(--task-branch-indent));
+        inset-block-start: 0;
+        pointer-events: none;
+      }
+
+      &::before {
+        inset-block-start: .5lh;
+        inline-size: var(--task-branch-indent);
+        border-block-start: 1px solid var(--task-branch-line);
+      }
+
+      &::after {
+        block-size: calc(100% + .25em);
+        border-inline-start: 1px solid var(--task-branch-line);
+      }
+
+      &:first-child::after {
+        inset-block-start: calc(-.5em - .5lh);
+        block-size: calc(100% + .75em + .5lh);
+      }
+
+      &:last-child::after { block-size: .5lh; }
+      &:only-child::after { block-size: calc(1lh + .5em); }
+    }
   }
 
   hr {
@@ -462,10 +450,6 @@
       pointer-events: none;
       height: 0;
     }
-  }
-
-  .milkdown-editor:not(.milkdown-editor--readonly) li[data-item-type='task']::before {
-    cursor: pointer;
   }
 
   sup[data-type='footnote_reference'] {

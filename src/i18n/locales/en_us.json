@@ -187,6 +187,8 @@
   "settings.editor.fontFamilyDesc": "Editor font family.",
   "settings.editor.fontSize": "Editor Font Size",
   "settings.editor.fontSizeDesc": "Font size (px) for the source editor.",
+  "settings.editor.markdownTaskCascade": "Task List Cascade",
+  "settings.editor.markdownTaskCascadeDesc": "Summarize subtasks in their parent checkbox and apply parent changes to all subtasks.",
   "settings.editor.autoSave": "Auto Save",
   "settings.editor.autoSaveDesc": "Save files automatically.",
   "unsaved.recoveryTitle": "Restore unsaved content",

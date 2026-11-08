@@ -23,6 +23,8 @@ import ReactMarkdown from 'react-markdown';
 import MilkdownTooltips from './MilkdownTooltips';
 import rehypeTooltipTitles from '@utils/rehypeTooltipTitles';
 import remarkGfm from 'remark-gfm';
+import remarkTaskListSpacing from '@utils/remarkTaskListSpacing';
+import rehypeTaskListTree from '@utils/rehypeTaskListTree';
 import remarkMath from 'remark-math';
 import remarkMarkdownHtml from '@utils/remarkMarkdownHtml';
 import rehypeRaw from 'rehype-raw';
@@ -158,7 +160,7 @@ const sanitizeSchema = {
   },
 };
 
-const remarkPlugins = [remarkGfm, remarkMath, remarkMarkdownHtml];
+const remarkPlugins = [remarkGfm, remarkTaskListSpacing, remarkMath, remarkMarkdownHtml];
 const rehypePlugins = [
   rehypeRaw,
   [rehypeSanitize, sanitizeSchema],
@@ -166,6 +168,8 @@ const rehypePlugins = [
   rehypeCodeBlockIndexes,
   rehypeTooltipTitles,
 ];
+const taskCascadePlugins = [...rehypePlugins, rehypeTaskListTree];
+const independentTaskPlugins = [...rehypePlugins, [rehypeTaskListTree, { cascade: false }]];
 
 /**
  * 渲染 Markdown 代码节点，并按语言分流到普通代码、高亮代码或 Mermaid 组件。
@@ -248,11 +252,11 @@ function MarkdownImage({ src, alt, documentPath, ...props }) {
  * @param {object} props 预处理后的 Markdown 内容与节点渲染配置。
  * @returns {JSX.Element} 预览树根节点。
  */
-const MarkdownView = memo(function MarkdownView({ content, components }) {
+const MarkdownView = memo(function MarkdownView({ content, components, taskCascade }) {
   return (
     <ReactMarkdown
       remarkPlugins={remarkPlugins}
-      rehypePlugins={rehypePlugins}
+      rehypePlugins={taskCascade ? taskCascadePlugins : independentTaskPlugins}
       components={components}
     >
       {content}
@@ -292,6 +296,7 @@ const MarkdownPreview = forwardRef(function MarkdownPreview({ className }, ref) 
   }, [activeTabId]);
   const fallback = activeTab?.content || '';
   const documentPath = activeTab?.path || '';
+  const taskCascade = useConfigStore((state) => state.markdownTaskCascade !== false);
   const rawContent = useEditorBufferContent(activeTabId, fallback, 240);
   const containerRef = useRef(null);
   const { menu, openMenu, closeMenu } = useEditorContextMenu(activeTabId);
@@ -588,7 +593,7 @@ const MarkdownPreview = forwardRef(function MarkdownPreview({ className }, ref) 
         lineHeight: (lineHeight || 24) / (fontSize || 14),
       }}
     >
-      <MarkdownView content={content} components={components} />
+      <MarkdownView content={content} components={components} taskCascade={taskCascade} />
       <MilkdownTooltips rootRef={containerRef} readOnly />
       <EditorContextMenu menu={menu} onClose={closeMenu} />
     </div>
