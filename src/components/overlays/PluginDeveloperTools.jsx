@@ -48,8 +48,8 @@ export default function PluginDeveloperTools({ desktop }) {
         </div>
       </div>
     </section>
-    <AppDialog open={docs} onCancel={() => setDocs(false)} title={t('extensions.developerDocs')} footer={null} width={1180} destroyOnClose>
+    {docs && <AppDialog open onCancel={() => setDocs(false)} title={t('extensions.developerDocs')} footer={null} width={1180} destroyOnHidden>
       <iframe className="service-extensions__documentation" title={t('extensions.developerDocs')} src={`${new URL('docs/plugins/index.html', document.baseURI).href}?theme=${theme}`} sandbox="allow-scripts allow-same-origin" />
-    </AppDialog>
+    </AppDialog>}
   </>;
 }
