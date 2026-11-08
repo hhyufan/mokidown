@@ -65,6 +65,8 @@ import { tags } from '@lezer/highlight';
 import katex from 'katex';
 import remarkMath from 'remark-math';
 import remarkMarkdownHtml from '@utils/remarkMarkdownHtml';
+import remarkTaskListSpacing from '@utils/remarkTaskListSpacing';
+import { milkdownTaskListCheckboxes } from './milkdownTaskListCheckboxes';
 import { javascript, json, typescript } from '@codemirror/legacy-modes/mode/javascript';
 import { css, sCSS } from '@codemirror/legacy-modes/mode/css';
 import { html, xml } from '@codemirror/legacy-modes/mode/xml';
@@ -232,6 +234,7 @@ const tableSourceBlockType = 'table_source_block';
 const mathSourceEditMeta = 'mokidownMathSourceEdit';
 const markdownSourceEditMeta = 'mokidownMarkdownSourceEdit';
 const remarkMathPlugin = $remark('remarkMath', () => remarkMath);
+const taskListSpacingPlugin = $remark('mokiTaskListSpacing', () => remarkTaskListSpacing);
 const markdownHtmlPlugin = $remark('mokiMarkdownHtml', () => remarkMarkdownHtml, { editing: true });
 const katexOptionsCtx = $ctx({
   throwOnError: false,
@@ -806,92 +809,6 @@ function convertTaskListMarker(state, match, start, end) {
 }
 
 const taskListInputRule = $inputRule(() => new InputRule(taskListMarker, convertTaskListMarker));
-
-/**
- * 任务列表复选框交互插件。
- *
- * 让只命中复选框热区的点击直接切换任务完成状态，而不是触发普通文本选区。
- */
-const taskListCheckboxPlugin = $prose((ctx) => {
-  const listItemType = listItemSchema.type(ctx);
-
-  const closestTaskItem = (target) => {
-    const element = target instanceof Element ? target : target?.parentElement;
-    return element?.closest?.('li[data-item-type="task"]') || null;
-  };
-
-  const getTaskItem = (view, target) => {
-    const item = closestTaskItem(target);
-    if (!item || !view.dom.contains(item)) return null;
-
-    try {
-      const domPos = view.posAtDOM(item, 0);
-      const $pos = view.state.doc.resolve(domPos);
-      for (let depth = $pos.depth; depth > 0; depth -= 1) {
-        const node = $pos.node(depth);
-        if (node.type === listItemType && typeof node.attrs.checked === 'boolean') {
-          return { item, node, pos: $pos.before(depth) };
-        }
-      }
-    } catch {
-      return null;
-    }
-
-    return null;
-  };
-
-  const isCheckboxHotspot = (item, event) => {
-    const rect = item.getBoundingClientRect();
-    const style = window.getComputedStyle(item);
-    const paddingLeft = Number.parseFloat(style.paddingLeft) || 0;
-    const lineHeight = Number.parseFloat(style.lineHeight) || 24;
-    const x = event.clientX - rect.left;
-    const y = event.clientY - rect.top;
-    return x >= 0
-      && x <= Math.max(28, paddingLeft)
-      && y >= 0
-      && y <= Math.max(28, lineHeight);
-  };
-
-  return new Plugin({
-    props: {
-      handleDOMEvents: {
-        keydown(view, event) {
-          const { $from, empty } = view.state.selection;
-          if (!view.editable || !empty || event.key !== 'Enter' || event.shiftKey || event.ctrlKey || event.metaKey
-            || event.altKey || view.composing || isImeComposing(event) || event.target.closest?.('.cm-editor, input, textarea')
-            || $from.parentOffset !== $from.parent.content.size) return false;
-          const match = taskListMarker.exec(`${$from.parent.textContent} `);
-          const tr = match && convertTaskListMarker(view.state, match, $from.start(), $from.pos);
-          if (!tr) return false;
-          event.preventDefault();
-          view.dispatch(tr.scrollIntoView());
-          return true;
-        },
-        mousedown(view, event) {
-          if (!view.editable) return false;
-          const task = getTaskItem(view, event.target);
-          if (!task || !isCheckboxHotspot(task.item, event)) return false;
-          event.preventDefault();
-          return true;
-        },
-        click(view, event) {
-          if (!view.editable) return false;
-          const task = getTaskItem(view, event.target);
-          if (!task || !isCheckboxHotspot(task.item, event)) return false;
-          event.preventDefault();
-          event.stopPropagation();
-          view.dispatch(view.state.tr.setNodeMarkup(task.pos, undefined, {
-            ...task.node.attrs,
-            checked: task.node.attrs.checked !== true,
-          }).scrollIntoView());
-          view.focus();
-          return true;
-        },
-      },
-    },
-  });
-});
 
 const mathPlugins = [
   remarkMathPlugin,
@@ -1607,7 +1524,8 @@ function MilkdownInner({
       .use(milkdownTableView)
       .use(htmlBlockSchema)
       .use(htmlBlockView)
-      .use(taskListCheckboxPlugin)
+      .use(taskListSpacingPlugin)
+      .use(milkdownTaskListCheckboxes(taskListMarker, convertTaskListMarker))
       .use(taskListInputRule)
       .use(mathPlugins)
       .use(history)

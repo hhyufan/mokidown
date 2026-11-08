@@ -32,6 +32,7 @@ export function getLocalSettingsSnapshot({ includeDeviceLocal = false } = {}) {
     lineHeight: config.lineHeight,
     previewLineHeight: config.previewLineHeight,
     previewZoomSync: config.previewZoomSync,
+    markdownTaskCascade: config.markdownTaskCascade !== false,
     ...normalizeMarkdownPairSettings(config),
     tabSize: config.tabSize,
     wordWrap: config.wordWrap,
@@ -71,6 +72,8 @@ export function applySettingsSnapshot(snapshot = {}, { includeDeviceLocal = true
     lineHeight,
     previewLineHeight: snapshot.previewLineHeight ?? lineHeight,
     previewZoomSync: snapshot.previewZoomSync ?? true,
+    markdownTaskCascade: snapshot.markdownTaskCascade === undefined
+      ? useConfigStore.getState().markdownTaskCascade !== false : snapshot.markdownTaskCascade !== false,
     ...normalizeMarkdownPairSettings(snapshot, useConfigStore.getState()),
     tabSize: snapshot.tabSize ?? 2,
     wordWrap: snapshot.wordWrap ?? true,

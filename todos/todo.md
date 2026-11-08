@@ -44,7 +44,7 @@
 
 * [ ] feat(git): Git 历史文档对比。
 
-* [ ] feat(markdown): 任务列表多级嵌套与父任务级联汇总。
+* [x] feat(markdown): 任务列表多级嵌套与父任务级联汇总。
 
 * [x] feat(explorer): 文件与目录快速删除（项目树与文件列表）。
 
