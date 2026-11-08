@@ -11,7 +11,7 @@ const Mod = isMac ? '\u2318' : 'Ctrl';
  * Monaco 编辑器自定义右键菜单。
  * 仅负责菜单展示、关闭交互以及将菜单项映射到 Monaco 内建命令。
  */
-export default function MonacoContextMenu({ visible, x, y, onClose, editorRef }) {
+export default function MonacoContextMenu({ visible, x, y, onClose, editorRef, replayHistory }) {
   const { t } = useTranslation();
   const menuRef = useRef(null);
 
@@ -43,7 +43,8 @@ export default function MonacoContextMenu({ visible, x, y, onClose, editorRef })
     onClose();
     const editor = editorRef.current;
     if (!editor) return;
-    editor.trigger('contextmenu', actionId, null);
+    const direction = actionId === 'undo' ? -1 : actionId === 'redo' ? 1 : 0;
+    if (!direction || !replayHistory?.(direction)) editor.trigger('contextmenu', actionId, null);
     setTimeout(() => editor.focus(), 50);
   };
 

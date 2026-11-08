@@ -11,7 +11,9 @@ import {
   hasBuffer,
   clearBuffer,
   renameBuffer,
+  flushEditorBuffer,
 } from '@utils/editorBuffer';
+import { clearMarkdownUndo, renameMarkdownUndo } from '@utils/markdownUndo';
 import { historyCapture } from '@utils/tauriApi';
 import { renameDocumentViewState } from '@utils/documentViewState';
 import { untitledFileName } from '@utils/untitledFileName';
@@ -92,6 +94,8 @@ const useEditorStore = create(
        * 真正的实时编辑内容交给 `editorBuffer` 托管。
        */
       openFile: (file) => {
+        const { activeTabId } = get();
+        if (activeTabId !== file.path) flushEditorBuffer(activeTabId);
         const { tabs } = get();
         const existing = tabs.find((t) => t.path === file.path);
         if (existing) {
@@ -122,6 +126,7 @@ const useEditorStore = create(
        * 创建未命名标签，初始内容只落在内存缓冲中，等待首次保存拿到真实路径。
        */
       createUntitledTab: () => {
+        flushEditorBuffer(get().activeTabId);
         const { tabs } = get();
         const sequence = untitledCounter++;
         const id = `untitled-${Date.now()}-${sequence}`;
@@ -183,6 +188,7 @@ const useEditorStore = create(
         const existing = tabs.find((tab) => tab.id === baseId && tab.path === (draft.path || '')
           && !tab.modified && getBuffer(tab.id, tab.content) === tab.content);
         if (existing) {
+          clearMarkdownUndo(existing.id);
           setBuffer(existing.id, draft.content || '');
           set({ tabs: tabs.map((tab) => tab === existing ? { ...tab, content: draft.content || '', modified: true } : tab),
             tabRenderList: tabRenderList.map((tab) => tab.id === existing.id ? { ...tab, modified: true } : tab),
@@ -233,6 +239,7 @@ const useEditorStore = create(
       updateTabPath: (tabId, path, name) => {
         renameDocumentViewState(tabId, path);
         renameBuffer(tabId, path);
+        renameMarkdownUndo(tabId, path);
         const oldPath = get().tabs.find((tab) => tab.id === tabId)?.path;
         get().clearExternalFileConflict(oldPath);
         set((state) => ({
@@ -278,6 +285,7 @@ const useEditorStore = create(
           historyCapture(closing.path, getBuffer(tabId, closing.content || '')).catch(() => {});
         }
         clearBuffer(tabId);
+        clearMarkdownUndo(tabId);
         get().clearExternalFileConflict(closing?.path);
         const { tabs, activeTabId } = get();
         const filtered = tabs.filter((t) => t.id !== tabId);
@@ -293,7 +301,12 @@ const useEditorStore = create(
       },
 
       /** ??????????? */
-      setActiveTab: (tabId) => set({ activeTabId: tabId }),
+      setActiveTab: (tabId) => {
+        const { activeTabId } = get();
+        if (tabId === activeTabId) return;
+        flushEditorBuffer(activeTabId);
+        set({ activeTabId: tabId });
+      },
 
       /**
        * 只更新标签脏状态，不直接改写内容本身。
@@ -325,6 +338,7 @@ const useEditorStore = create(
        */
       replaceTabContent: (tabId, patch) => {
         if (patch && typeof patch.content === 'string') {
+          clearMarkdownUndo(tabId);
           setBuffer(tabId, patch.content);
         }
         set((state) => ({
@@ -354,6 +368,7 @@ const useEditorStore = create(
       replaceTabContentByPath: (path, patch) => {
         const tab = get().tabs.find((t) => t.path === path);
         if (tab && patch && typeof patch.content === 'string') {
+          clearMarkdownUndo(tab.id);
           setBuffer(tab.id, patch.content);
         }
         set((state) => ({
@@ -464,24 +479,20 @@ const useEditorStore = create(
       }),
 
       /** ?????????? */
-      setViewMode: (mode, meta = {}) => set({
-        viewMode: mode,
-        uiStateUpdatedAt: meta.updatedAt ?? Date.now(),
-      }),
-      toggleEditPreview: () =>
-        set((s) => {
-          if (s.viewMode === 'split') return {};
-          return {
-            viewMode: s.viewMode === 'edit' ? 'preview' : 'edit',
-            uiStateUpdatedAt: Date.now(),
-          };
-        }),
+      setViewMode: (mode, meta = {}) => {
+        const { activeTabId, viewMode } = get();
+        if (viewMode !== mode) flushEditorBuffer(activeTabId);
+        set({ viewMode: mode, uiStateUpdatedAt: meta.updatedAt ?? Date.now() });
+      },
+      toggleEditPreview: () => {
+        const { viewMode, setViewMode } = get();
+        if (viewMode !== 'split') setViewMode(viewMode === 'edit' ? 'preview' : 'edit');
+      },
       /** ????????????????? */
-      toggleSplit: () =>
-        set((s) => ({
-          viewMode: s.viewMode === 'split' ? 'edit' : 'split',
-          uiStateUpdatedAt: Date.now(),
-        })),
+      toggleSplit: () => {
+        const { viewMode, setViewMode } = get();
+        setViewMode(viewMode === 'split' ? 'edit' : 'split');
+      },
 
       toggleToolbar: () => set((s) => ({
         toolbarVisible: !s.toolbarVisible,
