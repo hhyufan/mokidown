@@ -3,24 +3,27 @@ import { getBuffer, flushEditorBuffer } from '@utils/editorBuffer';
 import { readFileContent, saveFile } from '@utils/tauriApi';
 import { classifyFileVersions, getDiskBaseline, rememberDiskBaseline, withFileOperation } from './localFileGuard';
 
-let inputComposing = false;
-export function setLocalFileComposing(composing) {
-  inputComposing = composing;
+let composingTarget = null;
+export function setLocalFileComposing(target) {
+  composingTarget = target;
 }
+const isInputComposing = () => composingTarget === true || Boolean(composingTarget?.isConnected);
 
 // Call only while holding the path's operation queue. Read editor state AFTER IO;
 // neither a captured Zustand state nor a watcher event is a disk snapshot.
-async function inspectFile(path, isCurrent = () => true) {
+async function inspectFile(path, isCurrent = () => true, tabId) {
+  const matches = (tab) => tab.path === path && (!tabId || tab.id === tabId);
   for (let attempt = 0; attempt < 3; attempt += 1) {
-    if (!useEditorStore.getState().tabs.some((tab) => tab.path === path)) return null;
+    if (!isCurrent() || !useEditorStore.getState().tabs.some(matches)) return null;
     const baseline = getDiskBaseline(path);
     const disk = await readFileContent(path).catch(() => null);
     if (!isCurrent()) return null;
     if (baseline !== getDiskBaseline(path)) continue;
     const state = useEditorStore.getState();
-    const tab = state.tabs.find((item) => item.path === path);
+    const tab = state.tabs.find(matches);
     if (!tab) return null;
     flushEditorBuffer(tab.id);
+    if (!isCurrent()) return null;
     const editorContent = getBuffer(tab.id, tab.content || '');
     const diskContent = disk?.content || '';
     return {
@@ -52,19 +55,22 @@ function reportConflict(path, version) {
 
 function reloadExternal(path, version) {
   const { state, tab, disk, diskContent } = version;
-  state.replaceTabContentByPath(path, {
+  if (!state.replaceTabContent(tab.id, {
     content: diskContent, encoding: disk.encoding || tab.encoding,
     lineEnding: disk.line_ending || tab.lineEnding,
-  });
-  rememberDiskBaseline(path, diskContent);
+  })) return false;
+  rememberDiskBaseline(path, diskContent, disk);
   clearConflict(path);
+  return true;
 }
 
 /** Compare and save as one operation; queued autosaves use the current buffer. */
-export function saveExistingFile(path, _content, encoding, _tabId) {
+export function saveExistingFile(path, _content, encoding, tabId, expectedRevision) {
   return withFileOperation(path, async () => {
-    if (inputComposing) return { success: false, superseded: true };
-    const version = await inspectFile(path, () => !inputComposing);
+    const isCurrent = () => !isInputComposing() && (expectedRevision == null ||
+      useEditorStore.getState().tabs.some((tab) => tab.id === tabId && tab.path === path &&
+        (tab.contentRevision ?? 0) === expectedRevision));
+    const version = await inspectFile(path, isCurrent, tabId);
     if (!version) return { success: false, superseded: true };
     const { state, tab, outcome, editorContent, diskContent } = version;
     if (outcome === 'conflict' || outcome === 'unavailable' || outcome === 'blocked') {
@@ -77,7 +83,7 @@ export function saveExistingFile(path, _content, encoding, _tabId) {
     }
     const result = outcome === 'converged' || editorContent === diskContent
       ? { success: true, converged: true, file_path: path }
-      : await saveFile(path, editorContent, encoding, { operationHeld: true });
+      : await saveFile(path, editorContent, encoding || tab.encoding, { operationHeld: true });
     if (result?.success) {
       rememberDiskBaseline(path, editorContent);
       state.markTabSaved(tab.id, editorContent);
@@ -92,18 +98,17 @@ export function restoreExternalDisk(conflict) {
   const { path, tabId } = conflict;
   const isCurrent = () => {
     const current = useEditorStore.getState().externalFileConflicts.get(path);
-    return current === conflict;
+    return current?.tabId === tabId;
   };
   return withFileOperation(path, async () => {
-    if (!isCurrent() || inputComposing) return false;
-    const version = await inspectFile(path, () => isCurrent() && !inputComposing);
+    if (!isCurrent() || isInputComposing()) return false;
+    const version = await inspectFile(path, () => isCurrent() && !isInputComposing(), tabId);
     if (!version || version.tab.id !== tabId) return false;
     if (!version.disk?.success) {
-      reportConflict(path, version);
+      if (version.disk?.blockedReason) reportConflict(path, version);
       return false;
     }
-    reloadExternal(path, version);
-    return true;
+    return reloadExternal(path, version);
   });
 }
 

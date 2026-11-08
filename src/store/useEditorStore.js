@@ -168,7 +168,15 @@ const useEditorStore = create(
         const current = get();
         const tabsToKeep = current.tabs === initialTabs ? [] : current.tabs;
         const existing = new Map(tabsToKeep.map((tab) => [tab.id, tab]));
-        const unique = new Map(restoredTabs.map((tab) => [tab.id, { ...tab, ext: tab.ext || tab.name.split('.').pop() || 'md' }]));
+        const paths = new Set(tabsToKeep.map((tab) => tab.path).filter(Boolean));
+        const unique = new Map();
+        for (const tab of restoredTabs) {
+          if (existing.has(tab.id)) continue;
+          const duplicate = tab.path && paths.has(tab.path);
+          if (duplicate && !tab.modified) continue;
+          if (tab.path) paths.add(tab.path);
+          unique.set(tab.id, { ...tab, path: duplicate ? '' : tab.path, ext: tab.ext || tab.name.split('.').pop() || 'md' });
+        }
         for (const tab of tabsToKeep) unique.set(tab.id, tab);
         const tabs = [...unique.values()];
         for (const tab of tabs) if (!existing.has(tab.id)) setBuffer(tab.id, tab.content || '');
@@ -183,16 +191,18 @@ const useEditorStore = create(
 
       /** Restore a draft as a dirty tab without writing over its original disk file. */
       restoreRecoveredTab: (draft) => {
+        flushEditorBuffer(get().activeTabId);
         const { tabs, tabRenderList } = get();
         const baseId = draft.tabId || draft.path || `recovered-${Date.now()}`;
-        const existing = tabs.find((tab) => tab.id === baseId && tab.path === (draft.path || '')
-          && !tab.modified && getBuffer(tab.id, tab.content) === tab.content);
-        if (existing) {
-          clearMarkdownUndo(existing.id);
-          setBuffer(existing.id, draft.content || '');
-          set({ tabs: tabs.map((tab) => tab === existing ? { ...tab, content: draft.content || '', modified: true } : tab),
-            tabRenderList: tabRenderList.map((tab) => tab.id === existing.id ? { ...tab, modified: true } : tab),
-            activeTabId: existing.id, tabsRevision: get().tabsRevision + 1 });
+        const path = draft.path || '';
+        const existing = tabs.find((tab) => path ? tab.path === path : tab.id === baseId && !tab.path);
+        const content = draft.content || '';
+        const metadata = {
+          encoding: draft.encoding || existing?.encoding || 'UTF-8',
+          lineEnding: draft.lineEnding || existing?.lineEnding || 'LF',
+        };
+        if (existing && !existing.modified && getBuffer(existing.id, existing.content) === existing.content) {
+          get().replaceTabContent(existing.id, { ...metadata, content }, { modified: true, activate: true });
           return existing.id;
         }
         const id = tabs.some((tab) => tab.id === baseId)
@@ -201,14 +211,14 @@ const useEditorStore = create(
         const recovered = {
           id,
           name: draft.name || 'Recovered.md',
-          path: draft.path || '',
+          // A second dirty copy must have its own editor and Save As target.
+          path: existing || ['missing', 'blocked'].includes(draft.diskState) ? '' : path,
           ext: (draft.name || '').split('.').pop() || 'md',
-          content: draft.content || '',
-          encoding: draft.encoding || 'UTF-8',
-          lineEnding: draft.lineEnding || 'LF',
+          content: existing ? '' : draft.diskContent || '',
+          ...metadata,
           modified: true,
         };
-        setBuffer(id, recovered.content);
+        setBuffer(id, content);
         set({
           tabs: [...tabs, recovered],
           tabRenderList: [...tabRenderList, toTabMeta(recovered)],
@@ -336,62 +346,22 @@ const useEditorStore = create(
        * 常用于文件监听器回写、远端同步落盘等场景；如果 patch 中包含文本，
        * 会先同步更新 `editorBuffer`，再推进 `tabsRevision` 通知编辑器刷新。
        */
-      replaceTabContent: (tabId, patch) => {
-        if (patch && typeof patch.content === 'string') {
+      replaceTabContent: (tabId, patch = {}, { modified = false, activate = false } = {}) => {
+        const tab = get().tabs.find((item) => item.id === tabId);
+        if (!tab) return false;
+        const next = { ...tab, ...patch, modified, contentRevision: (tab.contentRevision ?? 0) + 1 };
+        if (typeof patch.content === 'string') {
           clearMarkdownUndo(tabId);
           setBuffer(tabId, patch.content);
+          if (modified) next.content = tab.content;
         }
         set((state) => ({
-          tabs: state.tabs.map((t) =>
-            t.id === tabId
-              ? {
-                  ...t,
-                  ...patch,
-                  contentRevision: (t.contentRevision ?? 0) + 1,
-                  modified: false,
-                }
-              : t
-          ),
-          tabRenderList: state.tabRenderList.map((t) =>
-            t.id === tabId
-              ? {
-                  ...t,
-                  ...toTabMeta({ ...t, ...patch, modified: false }),
-                }
-              : t
-          ),
+          tabs: state.tabs.map((item) => item.id === tabId ? next : item),
+          tabRenderList: state.tabRenderList.map((item) => item.id === tabId ? { ...item, ...toTabMeta(next) } : item),
           tabsRevision: state.tabsRevision + 1,
+          ...(activate ? { activeTabId: tabId } : {}),
         }));
-      },
-
-      /** ?????????????????????????? */
-      replaceTabContentByPath: (path, patch) => {
-        const tab = get().tabs.find((t) => t.path === path);
-        if (tab && patch && typeof patch.content === 'string') {
-          clearMarkdownUndo(tab.id);
-          setBuffer(tab.id, patch.content);
-        }
-        set((state) => ({
-          tabs: state.tabs.map((t) =>
-            t.path === path
-              ? {
-                  ...t,
-                  ...patch,
-                  contentRevision: (t.contentRevision ?? 0) + 1,
-                  modified: false,
-                }
-              : t
-          ),
-          tabRenderList: state.tabRenderList.map((t) =>
-            t.path === path
-              ? {
-                  ...t,
-                  ...toTabMeta({ ...t, ...patch, modified: false }),
-                }
-              : t
-          ),
-          tabsRevision: state.tabsRevision + 1,
-        }));
+        return true;
       },
 
       /** ????? `fileId` ????????? */

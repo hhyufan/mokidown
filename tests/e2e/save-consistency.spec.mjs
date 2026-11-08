@@ -1,8 +1,10 @@
 import { test, expect } from '@playwright/test';
+import { createHash } from 'node:crypto';
 
 function installDisk() {
   const key = 'trial-save-disk';
   let callbackId = 0;
+  window.__TAURI_EVENT_PLUGIN_INTERNALS__ = { unregisterListener() {} };
   window.__TAURI_INTERNALS__ = {
     metadata: { currentWindow: { label: 'main' }, currentWebview: { label: 'main' } },
     transformCallback: () => ++callbackId, unregisterCallback() {},
@@ -22,6 +24,44 @@ function installDisk() {
       return true;
     },
   };
+}
+
+for (const mode of ['edit', 'preview']) {
+  test(`startup recovery replaces an already mounted ${mode} editor without writing to disk`, async ({ page }) => {
+    test.setTimeout(60000);
+    const path = '/startup-recovery.md';
+    const name = 'startup-recovery.md';
+    const disk = 'On disk\n';
+    const draft = 'Recovered unsaved text\n';
+    const hash = (text) => createHash('sha256').update(text).digest('hex');
+    await page.goto('/');
+    await expect(page.locator('.editor-content__welcome')).toBeVisible({ timeout: 30000 });
+    await page.addInitScript(({ path, name, disk, mode, snapshot }) => {
+      localStorage.setItem('trial-save-disk', disk);
+      localStorage.setItem('trial-recovery', JSON.stringify(snapshot));
+      localStorage.setItem('mokidown-session', JSON.stringify({ version: 1, activeTabId: path,
+        tabs: [{ id: path, name, path, ext: 'md' }] }));
+      localStorage.setItem('mokidown-editor', JSON.stringify({ version: 0, state: { viewMode: mode } }));
+    }, { path, name, disk, mode, snapshot: { activeTabId: path, tabs: [
+      { recoveryId: path, tabId: path, path, name, content: draft, lastSavedHash: hash(disk), recoveryHash: hash(draft) },
+    ] } });
+    await page.addInitScript(installDisk);
+    await page.reload();
+    const dialog = page.getByRole('dialog', { name: /恢复未保存内容|Restore unsaved content/ });
+    const text = page.locator(mode === 'preview'
+      ? '.editor-content__workspace .milkdown-editor' : '.editor-content__workspace .monaco-editor .view-lines');
+    await expect(dialog).toBeVisible({ timeout: 30000 });
+    await expect(text).toContainText(disk.trim(), { timeout: 20000 });
+    await page.evaluate(() => window.dispatchEvent(new Event('blur')));
+    await expect.poll(() => page.evaluate(() => JSON.parse(localStorage.getItem('trial-recovery'))?.tabs[0]?.content)).toBe(draft);
+    await dialog.getByRole('button', { name: /恢复所选|Restore selected/ }).click();
+    await expect(dialog).toBeHidden();
+    await expect(text).toContainText(draft.trim());
+    await expect(text).not.toContainText(disk.trim());
+    await expect(page.locator('.tabbar__tab')).toHaveCount(1);
+    await expect.poll(() => page.evaluate(() => JSON.parse(localStorage.getItem('trial-recovery'))?.tabs[0]?.content)).toBe(draft);
+    expect(await page.evaluate(() => localStorage.getItem('trial-save-disk'))).toBe(disk);
+  });
 }
 
 for (const mode of ['edit', 'preview']) {

@@ -294,7 +294,7 @@ const MonacoEditorComponent = forwardRef(function MonacoEditorComponent({ classN
     let charCountScheduled = false;
     let charCountTimer = null;
     let autoSaveTimer = null;
-    const pendingAutoSave = new Set();
+    const pendingAutoSave = new Map();
     let isComposing = false;
 
     /**
@@ -316,7 +316,11 @@ const MonacoEditorComponent = forwardRef(function MonacoEditorComponent({ classN
      * 在短暂空闲后触发自动保存回调，合并连续输入期间的多次变更。
      */
     const flushAutoSave = () => {
-      for (const tabId of pendingAutoSave) onAutoSaveRef.current?.(tabId);
+      const tabs = useEditorStore.getState().tabs;
+      for (const [tabId, revision] of pendingAutoSave) {
+        const tab = tabs.find((item) => item.id === tabId);
+        if (tab && (tab.contentRevision ?? 0) === revision) onAutoSaveRef.current?.(tabId);
+      }
       pendingAutoSave.clear();
     };
     const scheduleAutoSave = () => {
@@ -349,6 +353,9 @@ const MonacoEditorComponent = forwardRef(function MonacoEditorComponent({ classN
       if (suppressModelChangeRef.current) return;
       const tabId = currentTabIdRef.current;
       if (!tabId) return;
+      const revision = models.get(tabId)?.contentRevision ?? 0;
+      const tab = useEditorStore.getState().tabs.find((item) => item.id === tabId);
+      if (!tab || (tab.contentRevision ?? 0) !== revision) return;
       const value = editor.getValue();
       const model = editor.getModel();
       if (!replayingHistoryRef.current && model?.getLanguageId() === 'markdown') {
@@ -370,7 +377,7 @@ const MonacoEditorComponent = forwardRef(function MonacoEditorComponent({ classN
       // switching within 200 ms cannot attribute this edit to the next tab.
       markTabDirty(tabId, true);
       scheduleCharCount();
-      pendingAutoSave.add(tabId);
+      pendingAutoSave.set(tabId, revision);
       scheduleAutoSave();
     });
 
@@ -626,7 +633,8 @@ const MonacoEditorComponent = forwardRef(function MonacoEditorComponent({ classN
       if (!openIds.has(id)) { disposeDocumentModel(cached.model); modelsRef.current.delete(id); }
     }
 
-    if (editor.getValue() !== newValue) {
+    if (editor.getValue() !== newValue ||
+        (entry.contentRevision !== undefined && entry.contentRevision !== (tab.contentRevision ?? 0))) {
       const pos = editor.getPosition();
       suppressModelChangeRef.current = true;
       editor.setValue(newValue);

@@ -14,6 +14,7 @@ let unsubscribeBuffer = null;
 let unsubscribeStore = null;
 let writeChain = Promise.resolve();
 let snapshotRequest = 0;
+let reviewPending = false;
 
 function isTauriRuntime() {
   return typeof window !== 'undefined' && Boolean(window.__TAURI_INTERNALS__);
@@ -55,6 +56,8 @@ async function buildSnapshot() {
       && (tab.content || '') === lastSavedContent
       && getBuffer(tab.id, tab.content || '') === draft.content;
   }).map(({ draft }) => draft);
+  const latestMeta = new Map(latest.tabRenderList.map((tab) => [tab.id, tab.modified]));
+  if (tabs.length !== latest.tabs.filter((tab) => latestMeta.get(tab.id) ?? tab.modified).length) return null;
   return {
     schemaVersion: RECOVERY_SCHEMA_VERSION,
     updatedAt: Date.now(),
@@ -64,7 +67,7 @@ async function buildSnapshot() {
 }
 
 export async function flushRecoverySnapshot() {
-  if (!isTauriRuntime()) return;
+  if (!isTauriRuntime() || reviewPending) return;
   flushEditorBuffers();
   if (timer) {
     clearTimeout(timer);
@@ -73,6 +76,11 @@ export async function flushRecoverySnapshot() {
   const request = ++snapshotRequest;
   const snapshot = await buildSnapshot();
   if (request !== snapshotRequest) return writeChain;
+  if (!snapshot) {
+    // Keep the previous snapshot if an edit invalidated the captured drafts.
+    scheduleRecoverySnapshot();
+    return;
+  }
   writeChain = writeChain.catch(() => {}).then(() => request !== snapshotRequest ? undefined : (
     snapshot.tabs.length > 0
       ? writeNativeRecoverySnapshot(snapshot)
@@ -112,33 +120,44 @@ export function startRecoveryTracking() {
 
 export async function loadRecoveryCandidates() {
   if (!isTauriRuntime()) return [];
-  const snapshot = await readNativeRecoverySnapshot();
-  if (!snapshot?.tabs?.length) return [];
   const candidates = [];
-  for (const draft of snapshot.tabs) {
-    if (!draft.path) {
-      candidates.push(draft);
-      continue;
-    }
-    try {
-      const disk = await readFileContent(draft.path);
-      if (!disk?.success) {
-        candidates.push({ ...draft, diskState: disk.blockedReason && disk.blockedReason !== 'missing' ? 'blocked' : 'missing' });
+  reviewPending = true;
+  snapshotRequest++;
+  try {
+    const snapshot = await readNativeRecoverySnapshot();
+    for (const draft of snapshot?.tabs || []) {
+      if (!draft.path) {
+        candidates.push(draft);
         continue;
       }
-      const diskHash = await hashText(disk.content || '');
-      if (diskHash !== draft.recoveryHash) {
-        candidates.push({ ...draft, diskContent: disk.content || '', diskState: diskHash === draft.lastSavedHash ? 'unchanged' : 'changed' });
+      try {
+        const disk = await readFileContent(draft.path);
+        if (!disk?.success) {
+          candidates.push({ ...draft, diskState: disk?.blockedReason && disk.blockedReason !== 'missing' ? 'blocked' : 'missing' });
+          continue;
+        }
+        const diskHash = await hashText(disk.content || '');
+        if (diskHash !== draft.recoveryHash) {
+          candidates.push({ ...draft, diskContent: disk.content || '', diskState: diskHash === draft.lastSavedHash ? 'unchanged' : 'changed' });
+        }
+      } catch {
+        candidates.push({ ...draft, diskState: 'missing' });
       }
-    } catch {
-      candidates.push({ ...draft, diskState: 'missing' });
     }
+  } finally {
+    reviewPending = candidates.length > 0;
   }
   return candidates;
 }
 
+export async function finishRecoveryReview() {
+  reviewPending = false;
+  // Replace the previous snapshot atomically with the current unsaved tabs.
+  await flushRecoverySnapshot();
+}
+
 export async function discardRecoverySnapshot() {
-  if (!isTauriRuntime()) return;
+  if (!isTauriRuntime() || reviewPending) return;
   snapshotRequest++;
   if (timer) { clearTimeout(timer); timer = null; }
   writeChain = writeChain.catch(() => {}).then(() => clearNativeRecoverySnapshot());

@@ -17,6 +17,7 @@ function ExternalFileConflictModal({ conflict, onKeep, onUseDisk, onSaveAs, onCl
   const tab = useEditorStore((state) => state.tabs.find((item) => item.id === conflict?.tabId));
   const theme = useThemeStore((state) => state.theme);
   const { fontSize, fontFamily, lineHeight, tabSize } = useConfigStore();
+  const [reloading, setReloading] = useState(false);
   const [localContent, setLocalContent] = useState(() => getBuffer(conflict?.tabId, tab?.content || ''));
   useEffect(() => {
     if (!conflict?.tabId) return undefined;
@@ -27,6 +28,11 @@ function ExternalFileConflictModal({ conflict, onKeep, onUseDisk, onSaveAs, onCl
   }, [conflict?.tabId, tab?.content]);
   if (!conflict) return null;
   const unavailable = typeof conflict.diskContent !== 'string';
+  const useDisk = async () => {
+    if (reloading) return;
+    setReloading(true);
+    try { await onUseDisk(); } finally { setReloading(false); }
+  };
   /*
    * 宽度按内容定。只有「本地改动 vs 磁盘内容」的并排 diff 需要那么宽；
    * 「原文件已被删除或移动」没有 diff（下面 !unavailable 那段不渲染），
@@ -45,9 +51,9 @@ function ExternalFileConflictModal({ conflict, onKeep, onUseDisk, onSaveAs, onCl
       footer={(
         <Space wrap>
           <Button onClick={onClose}>{i18n.t('sync.conflict.later')}</Button>
-          <Button onClick={onKeep}>{i18n.t('sync.conflict.keepEdits')}</Button>
-          <Button disabled={unavailable} onClick={onUseDisk}>{i18n.t('sync.conflict.useDisk')}</Button>
-          <Button type="primary" onClick={onSaveAs}>{i18n.t('sync.conflict.saveAs')}</Button>
+          <Button disabled={reloading} onClick={onKeep}>{i18n.t('sync.conflict.keepEdits')}</Button>
+          <Button disabled={unavailable} loading={reloading} onClick={useDisk}>{i18n.t('sync.conflict.useDisk')}</Button>
+          <Button type="primary" disabled={reloading} onClick={onSaveAs}>{i18n.t('sync.conflict.saveAs')}</Button>
         </Space>
       )}
     >

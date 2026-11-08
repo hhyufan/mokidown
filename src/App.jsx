@@ -7,7 +7,7 @@
 import { lazy, Suspense, useEffect, useState, useCallback, useMemo, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
 import { listen } from '@tauri-apps/api/event';
-import { appWindow, getCliArgs, onFileChanged, onOpenPaths, historyCapture } from '@utils/tauriApi';
+import { appWindow, getCliArgs, onFileChanged, onOpenPaths, historyCapture, isSafUri, startFileWatching } from '@utils/tauriApi';
 import { isImeComposing } from '@utils/keyboard';
 import { rememberDiskBaseline } from '@/services/localFileGuard';
 import { createFileChangeObserver, restoreExternalDisk, setLocalFileComposing } from '@/services/localFileOperations';
@@ -32,6 +32,7 @@ import { createFullscreenController } from '@utils/windowFullscreen';
 import { restoreEditorSession, startEditorSessionTracking, flushEditorSession } from '@/services/editorSession';
 import {
   discardRecoverySnapshot,
+  finishRecoveryReview,
   flushRecoverySnapshot,
   loadRecoveryCandidates,
   startRecoveryTracking,
@@ -51,6 +52,7 @@ import TaskList from '@components/overlays/TaskList';
 import VersionList from '@components/overlays/VersionList';
 import CrtBoot from '@components/overlays/CrtBoot';
 import NotificationContainer from '@components/notification/NotificationContainer';
+import useNotificationStore from '@store/useNotificationStore';
 
 import { cn } from '@utils/classNames';
 import '@styles/App.scss';
@@ -212,12 +214,17 @@ function App() {
 
   useEffect(() => {
     if (isAndroid) return undefined;
-    let composing = false;
-    const compositionStart = () => { composing = true; setLocalFileComposing(true); };
-    const compositionEnd = () => { composing = false; setLocalFileComposing(false); };
+    let composing = null;
+    const compositionStart = (event) => { composing = event.target; setLocalFileComposing(composing); };
+    const compositionEnd = (event) => {
+      if (event.target !== composing) return;
+      composing = null;
+      setLocalFileComposing(false);
+    };
     document.addEventListener('compositionstart', compositionStart, true);
     document.addEventListener('compositionend', compositionEnd, true);
-    const observer = createFileChangeObserver({ isComposing: () => composing });
+    document.addEventListener('focusout', compositionEnd, true);
+    const observer = createFileChangeObserver({ isComposing: () => Boolean(composing?.isConnected) });
     const checkActiveFile = () => {
       if (!window.__TAURI_INTERNALS__) return;
       const path = useEditorStore.getState().getActiveTab()?.path;
@@ -238,6 +245,7 @@ function App() {
       setLocalFileComposing(false);
       document.removeEventListener('compositionstart', compositionStart, true);
       document.removeEventListener('compositionend', compositionEnd, true);
+      document.removeEventListener('focusout', compositionEnd, true);
       unlisten.then((fn) => fn()).catch(console.error);
     };
   }, [isAndroid]);
@@ -495,17 +503,24 @@ function App() {
 
   const handleRestoreRecovery = useCallback(async (drafts) => {
     for (const draft of drafts) {
-      useEditorStore.getState().restoreRecoveredTab(draft);
+      const id = useEditorStore.getState().restoreRecoveredTab(draft);
+      const tab = useEditorStore.getState().tabs.find((item) => item.id === id);
+      if (!tab?.path) continue;
+      if (typeof draft.diskContent === 'string') rememberDiskBaseline(tab.path, draft.diskContent);
+      if (!isAndroid && !isSafUri(tab.path)) void startFileWatching(tab.path).catch(console.error);
     }
     setRecoveryDrafts([]);
-    await discardRecoverySnapshot().catch(console.error);
-    await flushRecoverySnapshot().catch(console.error);
-  }, []);
+    await finishRecoveryReview().catch((error) => {
+      useNotificationStore.getState().notify('error', t('notification.error'), String(error));
+    });
+  }, [isAndroid, t]);
 
   const handleDiscardRecovery = useCallback(async () => {
     setRecoveryDrafts([]);
-    await discardRecoverySnapshot().catch(console.error);
-  }, []);
+    await finishRecoveryReview().catch((error) => {
+      useNotificationStore.getState().notify('error', t('notification.error'), String(error));
+    });
+  }, [t]);
 
   const handleKeepExternalEdit = useCallback(() => {
     const store = useEditorStore.getState();
@@ -524,8 +539,15 @@ function App() {
 
   const handleUseExternalDisk = useCallback(async () => {
     if (!externalConflict || typeof externalConflict.diskContent !== 'string') return;
-    await restoreExternalDisk(externalConflict);
-  }, [externalConflict]);
+    try {
+      if (await restoreExternalDisk(externalConflict)) return;
+      const pending = useEditorStore.getState().externalFileConflicts.get(externalConflict.path);
+      if (!pending) return;
+    } catch (error) {
+      console.warn('[App] Could not restore disk content:', error);
+    }
+    useNotificationStore.getState().notify('error', t('sync.conflict.reloadFailed'));
+  }, [externalConflict, t]);
 
   const handleSaveExternalAs = useCallback(async () => {
     if (!externalConflict) return;
