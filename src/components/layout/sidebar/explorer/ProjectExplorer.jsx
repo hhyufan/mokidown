@@ -16,6 +16,7 @@ import { inspectProjectChildren, projectDirectoryProvider, projectRootSource } f
 import FileTypeIcon from '@components/ui/FileTypeIcon';
 import MokiStatusEmpty from '@components/moki/MokiStatusEmpty';
 import VirtualFileList from './VirtualFileList';
+import { FILE_ROW_HEIGHT } from '@utils/virtualFileWindow';
 import FileNameField, { DEFAULT_FILE_EXTENSION } from './FileNameField';
 import ExplorerNavigation from './ExplorerNavigation';
 import ExplorerEntryIcon from './ExplorerEntryIcon';
@@ -329,8 +330,8 @@ export default function ProjectExplorer() {
         const empty = file.is_dir && !failed && row.depth > 0 && model.draft?.node !== node
           && (node ? !node.loading && node.error === '' && node.total === 0 : state === 'empty');
         const name = <span className="project-tree__name"><ExplorerMatchName name={file.name} search={search} /></span>;
-        return <div
-          key={file.path}
+        return <div key={file.path} style={style}>
+          <Tooltip title={file.path} placement="right" mouseEnterDelay={0.6} disabled={deferDetails}><div
           role="treeitem"
           tabIndex={0}
           aria-label={file.name}
@@ -344,7 +345,7 @@ export default function ProjectExplorer() {
           aria-selected={isSelected}
           aria-current={isCurrent ? 'true' : undefined}
           className={`project-tree__row${row.depth === 0 ? ' project-tree__row--root' : ''}${isSelected ? ' project-tree__row--active' : ''}${isCurrent ? ' project-tree__row--current' : ''}`}
-          style={{ ...style, paddingLeft: indent }}
+          style={{ paddingLeft: indent, height: FILE_ROW_HEIGHT, width: 'max-content', minWidth: '100%', boxSizing: 'border-box' }}
           onClick={(event) => { if (event.detail < 2) activate(row); }}
           onContextMenu={(event) => pathMenu.onPathMenu(event, file.path)}
           onKeyDown={(event) => {
@@ -363,9 +364,9 @@ export default function ProjectExplorer() {
           ><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="m9 5 7 7-7 7" /></svg></button>
             : <span className="project-tree__toggle-space" />}
           <span className="project-tree__icon"><ExplorerEntryIcon file={file} expanded={expanded && !empty} defer={deferDetails} /></span>
-          {deferDetails ? name : <Tooltip title={file.path} placement="right" mouseEnterDelay={0.6}>{name}</Tooltip>}
+          {name}
           {row.parent && <ExplorerDeleteButton file={file} defer={deferDetails} onClick={requestDeletion} />}
-        </div>;
+        </div></Tooltip></div>;
       }}
     />}
     </div>
