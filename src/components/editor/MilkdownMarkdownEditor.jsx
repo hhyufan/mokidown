@@ -66,6 +66,7 @@ import katex from 'katex';
 import remarkMath from 'remark-math';
 import remarkMarkdownHtml from '@utils/remarkMarkdownHtml';
 import remarkTaskListSpacing from '@utils/remarkTaskListSpacing';
+import { milkdownRawText } from './milkdownRawText';
 import { milkdownTaskListCheckboxes } from './milkdownTaskListCheckboxes';
 import { javascript, json, typescript } from '@codemirror/legacy-modes/mode/javascript';
 import { css, sCSS } from '@codemirror/legacy-modes/mode/css';
@@ -787,7 +788,7 @@ const mathValueEditPlugin = $prose((ctx) => {
   });
 });
 
-const taskListMarker = /^(?:([-+*])[ \u00a0]+)?\[([ xX\u00a0])\][ \u00a0]$/;
+const taskListMarker = /^(?:([-+*])[ \u00a0]+)?\[([ xX\u00a0])\][ \u00a0]+$/;
 
 function convertTaskListMarker(state, match, start, end) {
   const $start = state.doc.resolve(start);
@@ -1526,6 +1527,7 @@ function MilkdownInner({
       .use(htmlBlockSchema)
       .use(htmlBlockView)
       .use(taskListSpacingPlugin)
+      .use(milkdownRawText)
       .use(milkdownTaskListCheckboxes(taskListMarker, convertTaskListMarker))
       .use(taskListInputRule)
       .use(mathPlugins)

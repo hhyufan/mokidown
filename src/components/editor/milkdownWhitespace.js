@@ -29,7 +29,13 @@ export function configureEditingWhitespace(ctx, { readOnly = false } = {}) {
         ...schema.toMarkdown,
         runner(state, node) {
           if (!node.content.size) {
-            state.addNode('html', undefined, '', { data: { mokiEmptyParagraph: true } });
+            const parent = state.top();
+            if (parent.type === 'listItem' && typeof parent.props.checked === 'boolean' && !parent.children?.length) {
+              // GFM only emits a checkbox when its first paragraph is present.
+              state.openNode('paragraph').addNode('text', undefined, ' ').closeNode();
+            } else {
+              state.addNode('html', undefined, '', { data: { mokiEmptyParagraph: true } });
+            }
           } else {
             // Paragraph serialization must also work after the view is torn down:
             // Milkdown's debounced listener may still serialize its last transaction.
@@ -52,5 +58,9 @@ export function configureEditingWhitespace(ctx, { readOnly = false } = {}) {
         : schema.toDOM(node),
     };
   });
-  ctx.update(remarkStringifyOptionsCtx, (options) => ({ ...options, join: [...(options.join || []), joinEditingParagraphs] }));
+  ctx.update(remarkStringifyOptionsCtx, (options) => ({
+    ...options,
+    join: [...(options.join || []), joinEditingParagraphs],
+    handlers: { ...options.handlers, text: (node) => node.value },
+  }));
 }

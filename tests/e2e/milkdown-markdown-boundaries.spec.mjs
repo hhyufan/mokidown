@@ -5,6 +5,21 @@ async function open(page, content) {
   await expect(page.locator('.milkdown-editor')).toBeVisible();
 }
 
+test('ordinary Enter works and Milkdown emits typed punctuation without auto-escaping', async ({ page }) => {
+  const errors = [];
+  page.on('pageerror', (error) => errors.push(error.message));
+  await open(page, 'Keep \\*literal\\*');
+  await page.evaluate(() => window.trial.selectTextblock(0, 'end'));
+  await page.keyboard.press('Enter');
+  const typed = 'Raw: [open] 1. & < > _single and C:\\Notes';
+  await page.keyboard.insertText(typed);
+  await expect(page.locator('.milkdown-editor > p')).toHaveCount(2);
+  const markdown = await page.evaluate(() => window.trial.markdown());
+  expect(markdown).toContain('Keep \\*literal\\*');
+  expect(markdown).toContain(typed);
+  expect(errors).toEqual([]);
+});
+
 test('the HTML editor finishes through its labelled check icon', async ({ page }) => {
   await open(page, '<div>Before</div>');
   await page.locator('.md-preview__html-block-preview').dblclick();
