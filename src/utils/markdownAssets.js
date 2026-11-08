@@ -3,7 +3,7 @@
  *
  * ???????????????????????? object URL ?????
  */
-import { invoke } from '@tauri-apps/api/core';
+import { invoke } from '@utils/tauriInvoke';
 
 const EXTERNAL_SRC_RE = /^(?:https?:|data:|blob:|tauri:|asset:|content:|#)/i;
 const EXTERNAL_LINK_RE = /^(?:https?:|mailto:|tel:|sms:|data:|blob:|javascript:|tauri:|asset:)/i;

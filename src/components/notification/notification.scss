@@ -62,6 +62,19 @@
   margin-top: 2px;
 }
 
+.notif__action {
+  display: block;
+  margin-top: 4px;
+  padding: 2px 4px;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--accent);
+  font: inherit;
+  cursor: pointer;
+  &:hover { background: var(--hover); }
+}
+
 .notif__close {
   width: 24px;
   height: 24px;

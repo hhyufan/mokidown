@@ -3,7 +3,7 @@ import { sanitizePluginSvg } from './pluginSvg';
 import { validateStatusActions } from './pluginStatusActions';
 import { getPluginDocuments } from './pluginDocuments';
 import { finishPluginCommand } from '@utils/pluginBus';
-import { invoke } from '@tauri-apps/api/core';
+import { invoke } from '@utils/tauriInvoke';
 import { load } from '@tauri-apps/plugin-store';
 import useEditorStore from '@store/useEditorStore';
 import useHistoryStore from '@store/useHistoryStore';

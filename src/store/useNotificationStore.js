@@ -19,7 +19,7 @@ const useNotificationStore = create((set) => ({
   /**
    * 追加一条通知；`duration <= 0` 时保持常驻，等待手动关闭。
    */
-  notify: (type, title, message = '', duration = 4000) => {
+  notify: (type, title, message = '', duration = 4000, action) => {
     // Demo builds run the app in a browser without a Tauri runtime. Explain the
     // limitation instead of leaking invoke/TypeError text into a red error.
     const webDemo = typeof __MOKI_WEB_DEMO__ !== 'undefined' && __MOKI_WEB_DEMO__;
@@ -37,7 +37,7 @@ const useNotificationStore = create((set) => ({
     set((state) => ({
       notifications: [
         ...state.notifications,
-        { id, type: nextType, title: nextTitle, message: nextMessage, duration },
+        { id, type: nextType, title: nextTitle, message: nextMessage, duration, action },
       ],
     }));
     if (duration > 0) {

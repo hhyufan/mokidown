@@ -2464,6 +2464,7 @@ dependencies = [
  "encoding_rs",
  "flate2",
  "keyring",
+ "log",
  "notify",
  "once_cell",
  "open",

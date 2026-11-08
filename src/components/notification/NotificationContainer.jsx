@@ -59,6 +59,10 @@ function NotificationItem({ notification }) {
       <div className="notif__body">
         <div className="notif__title">{notification.title}</div>
         {notification.message && <div className="notif__message">{notification.message}</div>}
+        {notification.action && <button type="button" className="notif__action" onClick={() => {
+          notification.action.run();
+          dismiss(notification.id);
+        }}>{notification.action.label}</button>}
       </div>
       <Tooltip title={t('notification.dismiss')}>
       <button type="button" className="notif__close" aria-label={t('notification.dismiss')} onClick={() => dismiss(notification.id)}>

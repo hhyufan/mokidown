@@ -1,4 +1,4 @@
-import { invoke } from '@tauri-apps/api/core';
+import { invoke } from '@utils/tauriInvoke';
 
 export function hasNativeMenuClipboard() {
   return Boolean(window.__TAURI_INTERNALS__) && /^Win/i.test(navigator.platform);

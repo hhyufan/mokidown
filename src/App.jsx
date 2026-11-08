@@ -51,7 +51,7 @@ import ExternalFileConflictNotice from '@components/overlays/ExternalFileConflic
 import TaskList from '@components/overlays/TaskList';
 import VersionList from '@components/overlays/VersionList';
 import CrtBoot from '@components/overlays/CrtBoot';
-import NotificationContainer from '@components/notification/NotificationContainer';
+import RuntimeErrorBoundary from '@components/overlays/RuntimeErrorBoundary';
 import useNotificationStore from '@store/useNotificationStore';
 
 import { cn } from '@utils/classNames';
@@ -94,6 +94,7 @@ function isAssociatedMarkdownPath(path) {
  * 并渲染编辑器主布局与顶层模态层。
  */
 function App() {
+  useEffect(() => { window.__mokiRuntimeLogs?.ready(); }, []);
   useEffect(() => disableNativeContextMenu(), []);
   const { t } = useTranslation();
   const initTheme = useThemeStore((s) => s.initTheme);
@@ -865,7 +866,7 @@ function App() {
               onSaveAs={handleSaveExternalAs}
             />
           )}
-          <EditorContent />
+          <RuntimeErrorBoundary><EditorContent /></RuntimeErrorBoundary>
           <OutputConsole />
           <Footer />
         </div>
@@ -917,7 +918,6 @@ function App() {
         )}
 
       </Suspense>
-      <NotificationContainer />
       <TaskList />
       <VersionList />
       {/* 更新后的入场动画盖在所有内容之上，播完自行卸载 */}

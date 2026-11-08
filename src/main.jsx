@@ -24,8 +24,14 @@ import './i18n';
 installWebThemeBridge();
 import '@styles/index.scss';
 import NativeTitleTooltips from '@components/ui/NativeTitleTooltips';
+import RuntimeLogHost from '@components/overlays/RuntimeLogDialog';
+import RuntimeErrorBoundary from '@components/overlays/RuntimeErrorBoundary';
+import { installRuntimeLogging } from '@/services/runtimeLogs';
 import '@styles/prism-theme.scss';
 import '@styles/antd-overrides.scss';
+
+const stopRuntimeLogging = installRuntimeLogging();
+if (import.meta.hot) import.meta.hot.dispose(stopRuntimeLogging);
 
 void preloadMonacoEditor().catch((error) => console.error('[Monaco] Startup preload failed:', error));
 
@@ -55,11 +61,14 @@ ReactDOM.createRoot(document.getElementById('root')).render(
     <StyleProvider hashPriority="high">
       <ThemedConfigProvider>
         <NativeTitleTooltips />
-        <Suspense fallback={null}>
-          <SplashHandover>
-            <App />
-          </SplashHandover>
-        </Suspense>
+        <RuntimeLogHost />
+        <RuntimeErrorBoundary root>
+          <Suspense fallback={null}>
+            <SplashHandover>
+              <App />
+            </SplashHandover>
+          </Suspense>
+        </RuntimeErrorBoundary>
       </ThemedConfigProvider>
     </StyleProvider>
   </Root>

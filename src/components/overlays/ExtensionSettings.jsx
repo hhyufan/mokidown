@@ -3,7 +3,7 @@ import { Tooltip, Button, Input, InputNumber, Select, Space, Switch } from 'antd
 import { FolderOpenOutlined } from '@ant-design/icons';
 import { open } from '@tauri-apps/plugin-dialog';
 import { useTranslation } from 'react-i18next';
-import { invoke } from '@tauri-apps/api/core';
+import { invoke } from '@utils/tauriInvoke';
 import useExtensionStore from '@store/useExtensionStore';
 
 /**
