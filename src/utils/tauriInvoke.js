@@ -5,7 +5,7 @@ export async function invoke(command, args, options) {
   try {
     return await nativeInvoke(command, args, options);
   } catch (error) {
-    reportTauriFailure(command, error);
+    reportTauriFailure(command, error, args);
     throw error;
   }
 }
