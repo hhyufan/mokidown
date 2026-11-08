@@ -1,4 +1,4 @@
-import { invoke } from '@tauri-apps/api/core';
+import { invoke } from '@utils/tauriInvoke';
 import { listen } from '@tauri-apps/api/event';
 
 const connections = new Map();

@@ -7,6 +7,7 @@ import useExtensionStore from '@store/useExtensionStore';
 import useEditorStore from '@store/useEditorStore';
 import useTasks from '@hooks/useTasks';
 import { sendToPlugin } from '@utils/pluginBus';
+import { useRuntimeLogStore } from '@/services/runtimeLogs';
 import './task-list.scss';
 
 // 关闭一条任务：进行中的安装是真取消，失败的只是把记录去掉，
@@ -22,6 +23,8 @@ export default function TaskList() {
   const { t } = useTranslation();
   const update = useUpdateStore();
   const { tasks } = useTasks();
+  const logCount = useRuntimeLogStore((state) => state.entries.length);
+  const showLogs = useRuntimeLogStore((state) => state.show);
   const hasUnsaved = useEditorStore((s) => s.tabRenderList.some((tab) => tab.modified));
   useEffect(() => {
     void useUpdateStore.getState().check({ startup: true });
@@ -31,8 +34,8 @@ export default function TaskList() {
   // 必须放在下面的提前 return 之前，否则 Hooks 调用顺序会随 open 变化。
   const { open, dismiss } = update;
   useEffect(() => {
-    if (open && tasks.length === 0 && useExtensionStore.getState().pendingUpdates.length === 0) dismiss();
-  }, [open, tasks.length, dismiss]);
+    if (open && tasks.length === 0 && !logCount && useExtensionStore.getState().pendingUpdates.length === 0) dismiss();
+  }, [open, tasks.length, logCount, dismiss]);
 
   // 面板的展开只由用户点击状态栏触发（showTasks），没有任何"自动弹出来"的路径。
   if (!update.open) return null;
@@ -41,6 +44,10 @@ export default function TaskList() {
     <section className="task-panel" aria-label={t('tasks.title')}>
       <div className="task-header">
         <h3>{tasks.length ? t('tasks.title') : t('tasks.empty')}</h3>
+        <button type="button" className="task-log-entry" onClick={() => {
+          showLogs();
+          dismiss();
+        }}>{t('runtimeLogs.title')}{logCount > 0 && ` (${logCount})`}</button>
         <Tooltip title={t('tasks.hide')}>
         <button type="button" aria-label={t('tasks.hide')} onClick={update.dismiss}>
           &times;

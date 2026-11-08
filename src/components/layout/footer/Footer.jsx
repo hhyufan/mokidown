@@ -8,6 +8,7 @@ import usePluginContributions from '@store/usePluginContributions';
 import { sendToPlugin } from '@utils/pluginBus';
 import { useFileManager } from '@hooks/useFileManager';
 import useTasks from '@hooks/useTasks';
+import { useRuntimeLogStore } from '@/services/runtimeLogs';
 import { getDirectoryContents, isSafUri, safDisplayName } from '@utils/tauriApi';
 import { isWebDemo, notifyWebDemo } from '@utils/webDemo';
 import { splitPath, buildFullPath } from '@utils/pathUtils';
@@ -72,6 +73,7 @@ function Footer() {
   const characterCount = useEditorStore((s) => s.characterCount);
 
   const tasksOpen = useUpdateStore((s) => s.open);
+  const hasLogs = useRuntimeLogStore((s) => s.entries.length > 0);
   // 当前该在状态栏露出的任务（更新或语言服务安装），以及它的确定进度（没有则为 undefined）。
   const { active: activeTask } = useTasks();
   const { openFileFromPath } = useFileManager();
@@ -304,12 +306,12 @@ function Footer() {
       <EditorContextMenu menu={pathContext.menu} onClose={pathContext.closeMenu} />
 
       <div className="footer__right">
-        {activeTask && (
+        {(activeTask || hasLogs) && (
           <TaskStatusIndicator
-            stage={activeTask.stage}
-            leaving={activeTask.leaving}
-            label={`${activeTask.status}${Number.isFinite(activeTask.percent) ? ` ${activeTask.percent}%` : ''}`}
-            progress={activeTask.percent}
+            stage={activeTask?.stage}
+            leaving={activeTask?.leaving}
+            label={activeTask ? `${activeTask.status}${Number.isFinite(activeTask.percent) ? ` ${activeTask.percent}%` : ''}` : t('tasks.title')}
+            progress={activeTask?.percent}
             expanded={tasksOpen}
             onClick={() => tasksOpen ? useUpdateStore.getState().dismiss() : useUpdateStore.getState().showTasks()}
           />

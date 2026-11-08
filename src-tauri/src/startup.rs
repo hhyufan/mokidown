@@ -34,7 +34,7 @@ fn hand_over(app: &AppHandle) -> Result<(), String> {
     if let Some(splash) = app.get_webview_window("splash") {
         let _ = splash.set_always_on_top(false);
         if let Err(error) = splash.close() {
-            eprintln!("[startup] Could not close splash: {error}");
+            log::warn!("[startup] Could not close splash: {error}");
         }
     }
     main.set_focus().map_err(|error| error.to_string())?;
@@ -60,11 +60,11 @@ fn request_handover(app: AppHandle, force: bool) {
         if let Err(error) = app.run_on_main_thread(move || {
             if let Err(error) = hand_over(&handle) {
                 handle.state::<StartupState>().0.lock().unwrap().scheduled = false;
-                eprintln!("[startup] Window handover failed: {error}");
+                log::error!("[startup] Window handover failed: {error}");
             }
         }) {
             app.state::<StartupState>().0.lock().unwrap().scheduled = false;
-            eprintln!("[startup] Could not schedule window handover: {error}");
+            log::error!("[startup] Could not schedule window handover: {error}");
         }
     });
 }

@@ -18,142 +18,115 @@
       html[data-theme='dark'] { background: #121212; }
       #root { height: 100%; }
 
-      /* Visible fallback for fatal startup errors. Without this, any
-         uncaught error before React mounts (or any error during the
-         first render with no error boundary) results in a totally blank
-         screen — especially painful on Android where you can't easily
-         open devtools. */
-      #__startup_error__ {
-        display: none;
+      #moki-startup-recovery {
         position: fixed;
-        inset: 0;
-        z-index: 2147483647;
+        top: 16px;
+        right: 16px;
+        z-index: 1000;
+        width: min(380px, calc(100vw - 32px));
+        box-sizing: border-box;
         padding: 16px;
-        overflow: auto;
-        font: 12px/1.5 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
-        color: #fff;
-        background: #b71c1c;
-        white-space: pre-wrap;
-        word-break: break-word;
-        -webkit-user-select: text;
-        user-select: text;
+        border: 1px solid #b8bac1;
+        border-radius: 12px;
+        background: #fff;
+        color: #26272a;
+        box-shadow: 0 4px 20px #0002;
+        font: 14px/1.5 system-ui, sans-serif;
       }
-      #__startup_error__ h2 {
-        margin: 0 0 8px;
-        font: 600 14px/1.4 system-ui, -apple-system, "Segoe UI", sans-serif;
-      }
+      html[data-theme='dark'] #moki-startup-recovery { background: #242426; color: #f5f5f7; border-color: #555; }
+      #moki-startup-recovery h2 { margin: 0; font-size: 16px; }
+      #moki-startup-recovery button { margin-right: 8px; padding: 4px 8px; cursor: pointer; }
+
     </style>
 
     <!-- The native window is visible from creation, so startup errors are visible too. -->
     <script>
       (function () {
-        // ---- Startup error capture --------------------------------------
-        // Any uncaught error before React mounts (or while React is
-        // mounting with no error boundary) gets surfaced into a visible
-        // overlay. This is critical on Android where opening devtools
-        // requires USB + chrome://inspect.
-        function showStartupError(msg, kind) {
-          try {
-            // React 挂载完成后，后续运行时错误应交给组件级错误边界处理，
-            // 不再用全屏启动遮罩覆盖仍可工作的应用。
-            if (appMounted) {
-              console.error(msg);
-              return;
-            }
-            var box = document.getElementById('__startup_error__');
-            if (!box) {
-              box = document.createElement('pre');
-              box.id = '__startup_error__';
-              var heading = document.createElement('h2');
-              heading.textContent = 'Startup error';
-              box.appendChild(heading);
-              var body = document.createElement('div');
-              body.id = '__startup_error_body__';
-              box.appendChild(body);
-              (document.body || document.documentElement).appendChild(box);
-            }
-            // A timeout is only a diagnostic hint: the development server may
-            // still be transforming the initial module graph. Real runtime
-            // errors must remain visible until the app is restarted.
-            box.dataset.kind = kind || 'error';
-            var body = document.getElementById('__startup_error_body__');
-            var line = document.createElement('div');
-            line.textContent = String(msg);
-            body.appendChild(line);
-            box.style.display = 'block';
-          } catch (_) { /* swallow — overlay is best effort */ }
+        var pending = [];
+        var ready = false;
+        var timer;
+        var card;
+        var bootstrap = window.__mokiRuntimeLogs = {
+          pending: pending,
+          accept: null,
+          ready: function () {
+            ready = true;
+            clearTimeout(timer);
+            if (card) card.remove();
+            pending.length = 0;
+          }
+        };
+
+        function exportStartupLogs() {
+          var blob = new Blob([JSON.stringify({ schemaVersion: 1, entries: pending }, null, 2)], { type: 'application/json' });
+          var url = URL.createObjectURL(blob);
+          var link = document.createElement('a');
+          link.href = url;
+          link.download = 'mokidown-startup-errors.json';
+          document.body.appendChild(link);
+          link.click();
+          link.remove();
+          setTimeout(function () { URL.revokeObjectURL(url); }, 1000);
         }
-        var appMounted = false;
-        // Errors that should never reach the visible overlay. Monaco
-        // (and a couple of other Microsoft libs) throw `CancellationError`
-        // — name === 'Canceled' — as the standard mechanism for aborting
-        // in-flight async work whenever a model is swapped out, the user
-        // saves while a hover/format request is pending, etc. They are
-        // *not* failures, just cooperative cancellation. Same goes for
-        // any rejection whose reason is literally 'Canceled' or a thrown
-        // AbortError. Surfacing them in a red full-screen overlay would
-        // make every save look like a crash.
-        function isBenignCancellation(reason) {
-          if (!reason) return false;
-          var name = reason.name || (typeof reason === 'object' && reason.constructor && reason.constructor.name);
-          if (name === 'Canceled' || name === 'CancellationError' || name === 'AbortError') return true;
-          var msg = (reason.message || String(reason || '')).toLowerCase();
-          return msg === 'canceled' || msg === 'canceled: canceled' || msg === 'aborted';
+
+        function showStartupRecovery() {
+          if (ready || card || !document.body) return;
+          var chinese = (navigator.language || '').toLowerCase().indexOf('zh') === 0;
+          card = document.createElement('aside');
+          card.id = 'moki-startup-recovery';
+          card.setAttribute('role', 'status');
+          var heading = document.createElement('h2');
+          heading.textContent = chinese ? 'MokiDown 启动遇到问题' : 'MokiDown had a startup problem';
+          var message = document.createElement('p');
+          message.textContent = chinese ? '可以重试，或导出本次启动日志。' : 'Retry or export the startup log.';
+          var reload = document.createElement('button');
+          reload.textContent = chinese ? '重新加载' : 'Reload';
+          reload.addEventListener('click', function () { location.reload(); });
+          var download = document.createElement('button');
+          download.textContent = chinese ? '导出错误日志' : 'Export error log';
+          download.addEventListener('click', exportStartupLogs);
+          card.append(heading, message, reload, download);
+          document.body.appendChild(card);
         }
-        window.addEventListener('error', function (e) {
-          if (isBenignCancellation(e && e.error)) return;
-          var msg = (e && (e.message || (e.error && e.error.stack))) || 'Unknown error';
-          if (e && e.filename) msg += '\n  at ' + e.filename + ':' + e.lineno + ':' + e.colno;
-          if (e && e.error && e.error.stack) msg += '\n' + e.error.stack;
-          showStartupError(msg);
-        });
-        window.addEventListener('unhandledrejection', function (e) {
-          var reason = e && e.reason;
-          if (isBenignCancellation(reason)) {
-            if (typeof e.preventDefault === 'function') e.preventDefault();
-            return;
-          }
-          var msg = reason && (reason.stack || reason.message) ? (reason.stack || reason.message) : String(reason);
-          showStartupError('Unhandled promise rejection: ' + msg);
-        });
-        // Fail-safe: a cold Vite development start can spend more than a few
-        // seconds transforming the initial dependency graph. Wait long enough
-        // to avoid flagging normal startup as a crash, and automatically clear
-        // this diagnostic if React subsequently mounts successfully.
-        var startupTimeoutMs = 30000;
-        var startupTimer = setTimeout(function () {
-          var root = document.getElementById('root');
-          if (root && root.childElementCount === 0 && !document.getElementById('__startup_error__')) {
-            showStartupError(
-              'App did not render within ' + (startupTimeoutMs / 1000) + ' s.\n' +
-              'UA: ' + (navigator && navigator.userAgent) + '\n' +
-              'Tauri internals present: ' + !!window.__TAURI_INTERNALS__,
-              'timeout'
-            );
-          }
-        }, startupTimeoutMs);
 
-        window.addEventListener('DOMContentLoaded', function () {
-          var root = document.getElementById('root');
-          if (!root) return;
-
-          function handleReactMount() {
-            // Suspense 的启动占位节点并不代表应用已经可用；只有 App 根容器
-            // 出现后才结束启动错误捕获。
-            if (!root.querySelector('.app')) return false;
-            appMounted = true;
-            clearTimeout(startupTimer);
-            var box = document.getElementById('__startup_error__');
-            if (box && box.dataset.kind === 'timeout') box.remove();
-            return true;
+        function capture(message, error) {
+          var name = error && error.name;
+          var text = String(message || 'Unknown error');
+          if (name === 'Canceled' || name === 'CancellationError' || name === 'AbortError' ||
+              /^(canceled|cancelled|aborted)$/i.test(text)) return;
+          var entry = {
+            timestamp: Date.now(), level: 'error', source: ready ? 'WebView' : 'Startup',
+            message: redact(text, 4096), stack: redact(error && error.stack, 10000)
+          };
+          if (!ready || !bootstrap.accept) {
+            pending.push(entry);
+            if (pending.length > 100) pending.shift();
           }
+          if (bootstrap.accept) bootstrap.accept(entry);
+          if (!ready) {
+            if (document.body) showStartupRecovery();
+            else document.addEventListener('DOMContentLoaded', showStartupRecovery, { once: true });
+          }
+        }
 
-          if (handleReactMount()) return;
-          var observer = new MutationObserver(function () {
-            if (handleReactMount()) observer.disconnect();
-          });
-          observer.observe(root, { childList: true });
+        function redact(value, limit) {
+          return String(value || '').slice(0, limit)
+            .replace(/\b(Bearer\s+)[^\s,;"']+/gi, '$1[redacted]')
+            .replace(/([?&](?:access_token|refresh_token|token|api[_-]?key|password)=)[^&#\s]+/gi, '$1[redacted]');
+        }
+
+        window.addEventListener('error', function (event) {
+          if (event.message || event.error) capture(event.error?.message || event.message, event.error);
+          else if (event.target && event.target.tagName === 'SCRIPT') capture('Could not load application script.');
+        }, true);
+        window.addEventListener('unhandledrejection', function (event) {
+          var reason = event.reason;
+          capture(reason && reason.message || reason, reason);
         });
+        timer = setTimeout(function () {
+          if (!ready) capture('Application did not finish starting within 30 seconds.');
+        }, 30000);
+
 
         // 1. Apply persisted theme to <html> so the inline CSS picks it up.
         try {

@@ -21,6 +21,7 @@ import { useShallow } from 'zustand/react/shallow';
 import MarkdownTreeBlock from './MarkdownTreeBlock';
 import { useCodeBlockNavigation } from '@hooks/useCodeBlockNavigation';
 import { normalizeCodeLanguage } from '@utils/knowledgeTree';
+import { reportReactError } from '@/services/runtimeLogs';
 import { Milkdown, MilkdownProvider, useEditor } from '@milkdown/react';
 import { Editor, commandsCtx, defaultValueCtx, editorViewCtx, editorViewOptionsCtx, rootCtx, serializerCtx } from '@milkdown/kit/core';
 import {
@@ -1980,8 +1981,8 @@ class MilkdownErrorBoundary extends Component {
    * @param {Error} error 捕获到的异常。
    * @returns {void}
    */
-  componentDidCatch(error) {
-    console.error('Milkdown failed to mount:', error);
+  componentDidCatch(error, info) {
+    reportReactError(error, info);
   }
 
   /**

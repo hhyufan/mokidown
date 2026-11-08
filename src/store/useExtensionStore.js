@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
-import { invoke } from '@tauri-apps/api/core';
+import { invoke } from '@utils/tauriInvoke';
 import officialCatalog from '@/configs/service-plugins.json';
 import { validatePluginPackage, verifyPluginPackage } from '../../shared/plugin-package.mjs';
 import { developmentPackageUrl, readDevelopmentPackage } from '@/services/pluginDevelopment';

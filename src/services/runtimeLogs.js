@@ -1,0 +1,132 @@
+import { create } from 'zustand';
+import { invoke as nativeInvoke } from '@tauri-apps/api/core';
+import i18n from '@/i18n';
+import useNotificationStore from '@store/useNotificationStore';
+
+const limit = 200;
+const repeatWindow = 5000;
+let sequence = 0;
+let lastNotification = -Infinity;
+
+export const useRuntimeLogStore = create((set) => ({
+  entries: [],
+  open: false,
+  show: () => set({ open: true }),
+  hide: () => set({ open: false }),
+}));
+
+function clean(value, length) {
+  return String(value || '').slice(0, length)
+    .replace(/\b(Bearer\s+)[^\s,;"']+/gi, '$1[redacted]')
+    .replace(/([?&](?:access_token|refresh_token|token|api[_-]?key|password)=)[^&#\s]+/gi, '$1[redacted]');
+}
+
+function isCancellation(value) {
+  return /^(?:Canceled|CancellationError|AbortError)$/.test(value?.name || '') ||
+    /^(?:canceled|cancelled|aborted)$/i.test(value?.message || value || '');
+}
+
+export function reportRuntimeLog({ level = 'error', source = 'WebView', message, stack, detail, timestamp = Date.now(), announce = true }) {
+  if (!message || isCancellation(message)) return;
+  const entry = {
+    id: ++sequence, level, source, timestamp,
+    message: clean(message, 4096), stack: clean(stack, 10000), detail: clean(detail, 1024), count: 1,
+  };
+  useRuntimeLogStore.setState(({ entries }) => {
+    const index = entries.findIndex((item) => item.message === entry.message && item.level === entry.level &&
+      Math.abs(entry.timestamp - item.timestamp) <= repeatWindow);
+    if (index < 0) return { entries: [entry, ...entries].slice(0, limit) };
+    const previous = entries[index];
+    return { entries: [{ ...previous, ...entry, id: previous.id, stack: entry.stack || previous.stack,
+      detail: entry.detail || previous.detail, count: previous.count + 1 }, ...entries.filter((_, i) => i !== index)] };
+  });
+  const now = Date.now();
+  if (announce && level === 'error' && now - lastNotification >= repeatWindow) {
+    lastNotification = now;
+    useNotificationStore.getState().notify('error', i18n.t('runtimeLogs.reported'), '', 6000, {
+      label: i18n.t('runtimeLogs.view'),
+      run: useRuntimeLogStore.getState().show,
+    });
+  }
+}
+
+export function reportReactError(error, info) {
+  if (isCancellation(error)) return;
+  reportRuntimeLog({
+    source: 'React', message: error?.message || String(error), stack: error?.stack,
+    detail: info?.componentStack,
+  });
+}
+
+export function reportTauriFailure(command, reason) {
+  if (isCancellation(reason)) return;
+  reportRuntimeLog({
+    source: 'Tauri', detail: command, announce: false,
+    level: ['missing', 'binary', 'not-file', 'too-large'].includes(reason?.kind) ? 'warning' : 'error',
+    message: typeof reason === 'string' ? reason : reason?.message || 'Tauri command failed',
+    stack: reason?.stack,
+  });
+}
+
+export function installRuntimeLogging() {
+  const bootstrap = window.__mokiRuntimeLogs;
+  if (bootstrap) {
+    bootstrap.accept = reportRuntimeLog;
+    bootstrap.pending.forEach(reportRuntimeLog);
+  }
+  const original = { warn: console.warn, error: console.error };
+  const wrapped = {};
+  for (const method of ['warn', 'error']) {
+    wrapped[method] = (...args) => {
+      original[method].apply(console, args);
+      const error = args.find((arg) => arg instanceof Error);
+      const strings = args.filter((arg) => typeof arg === 'string');
+      if (isCancellation(error) || /^The above error occurred in the /.test(strings[0])) return;
+      const message = error?.message || strings.join(' ');
+      reportRuntimeLog({
+        source: /^Warning: /.test(strings[0]) ? 'React' : 'WebView',
+        level: method === 'warn' || /^Warning: /.test(strings[0]) ? 'warning' : 'error',
+        message, stack: error?.stack, detail: error ? strings.join(' ') : '',
+      });
+    };
+    console[method] = wrapped[method];
+  }
+  return () => {
+    if (bootstrap?.accept === reportRuntimeLog) bootstrap.accept = null;
+    for (const method of ['warn', 'error']) {
+      if (console[method] === wrapped[method]) console[method] = original[method];
+    }
+  };
+}
+
+export function startNativeLogPolling() {
+  if (!window.__TAURI_INTERNALS__) return;
+  let cursor = 0;
+  let disposed = false;
+  let busy = false;
+  let timer;
+  const poll = async () => {
+    if (disposed || busy) return;
+    busy = true;
+    try {
+      if (!document.hidden) {
+        const entries = await nativeInvoke('read_runtime_logs', { after: cursor });
+        if (disposed || !Array.isArray(entries)) return;
+        for (const entry of entries) {
+          cursor = Math.max(cursor, entry.id);
+          reportRuntimeLog({ ...entry, source: 'Tauri', detail: entry.target });
+        }
+      }
+      if (!disposed) timer = setTimeout(poll, 2500);
+    } catch {
+      // An older native binary has no log reader. JS logging still works.
+    } finally {
+      busy = false;
+    }
+  };
+  void poll();
+  return () => {
+    disposed = true;
+    clearTimeout(timer);
+  };
+}
