@@ -238,7 +238,6 @@
 
   // An elbow on each row joins the branches, including when a task wraps.
   :is(li.task-list-item, li[data-item-type='task']) > :is(ul, ol):has(:is(.task-list-item, [data-item-type='task'])) {
-    --task-branch-line: color-mix(in srgb, var(--accent) 35%, var(--border));
     --task-branch-indent: 1.45em;
     margin-inline-start: calc(7px - 1.7em);
     padding-inline-start: var(--task-branch-indent);
@@ -257,12 +256,12 @@
       &::before {
         inset-block-start: .5lh;
         inline-size: var(--task-branch-indent);
-        border-block-start: 1px solid var(--task-branch-line);
+        border-block-start: 1px solid var(--border);
       }
 
       &::after {
         block-size: calc(100% + .25em);
-        border-inline-start: 1px solid var(--task-branch-line);
+        border-inline-start: 1px solid var(--border);
       }
 
       &:first-child::after {
