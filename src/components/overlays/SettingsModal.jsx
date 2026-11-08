@@ -396,6 +396,16 @@ function SettingsModal({ open: openProp, onClose }) {
                     onChange={(v) => handleChange('autoSave', v)}
                   />
                 </SettingRow>
+                <SettingRow
+                  label={t('settings.editor.markdownTaskCascade')}
+                  desc={t('settings.editor.markdownTaskCascadeDesc')}
+                >
+                  <Switch
+                    aria-label={t('settings.editor.markdownTaskCascade')}
+                    checked={config.markdownTaskCascade !== false}
+                    onChange={(value) => handleChange('markdownTaskCascade', value)}
+                  />
+                </SettingRow>
                 <MarkdownPairSettings
                   enabled={config.markdownSmartPairsEnabled}
                   value={config.markdownSmartPairs}

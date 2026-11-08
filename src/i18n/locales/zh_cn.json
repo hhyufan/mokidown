@@ -187,6 +187,8 @@
   "settings.editor.fontFamilyDesc": "编辑器字体族。",
   "settings.editor.fontSize": "编辑区字号",
   "settings.editor.fontSizeDesc": "源码编辑区的字体大小（px）。",
+  "settings.editor.markdownTaskCascade": "任务列表级联",
+  "settings.editor.markdownTaskCascadeDesc": "在父任务显示子任务的完成状态，切换父任务时同步更新所有子任务。",
   "settings.editor.autoSave": "自动保存",
   "settings.editor.autoSaveDesc": "自动保存文件。",
   "unsaved.recoveryTitle": "恢复未保存内容",
