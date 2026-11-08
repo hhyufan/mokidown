@@ -1,5 +1,5 @@
 import i18n from '@/i18n';
-import { invoke } from '@tauri-apps/api/core';
+import { invoke } from '@utils/tauriInvoke';
 import { verifyPluginPackage } from '../../shared/plugin-package.mjs';
 
 export function developmentPackageUrl(value) {

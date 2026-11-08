@@ -1,7 +1,7 @@
 import i18n from '@/i18n';
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
-import { invoke } from '@tauri-apps/api/core';
+import { invoke } from '@utils/tauriInvoke';
 import { listen } from '@tauri-apps/api/event';
 import bundledCatalog from '@/configs/language-plugins.json';
 import useProblemsStore from './useProblemsStore';

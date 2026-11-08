@@ -2,7 +2,7 @@ import { LspConnection } from './lspConnection';
 import useLspStore, { selectLanguagePlugin } from '@store/useLspStore';
 import useProblemsStore, { problemDocumentKey, problemPathKey } from '@store/useProblemsStore';
 import { disableBundledLanguageServices } from './monacoLanguageServices';
-import { invoke } from '@tauri-apps/api/core';
+import { invoke } from '@utils/tauriInvoke';
 import { markdownLinkContext, normalizeMarkdownPathItems, markdownDirectoryItems, markdownDocumentLinks } from './markdownLspPaths';
 
 export const toPosition = ({ lineNumber, column }) => ({ line: lineNumber - 1, character: column - 1 });

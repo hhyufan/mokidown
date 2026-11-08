@@ -23,6 +23,7 @@ mod lsp;
 #[cfg(windows)]
 mod msvc;
 mod process;
+mod runtime_logs;
 mod script_runner;
 mod search;
 mod startup;
@@ -1623,7 +1624,7 @@ fn migrate_data_directory(legacy: &Path, current: &Path, name: &str) {
         return;
     }
     if let Err(error) = copy_data_directory(&source, &target) {
-        eprintln!("[migration] failed to copy legacy {name} directory: {error}");
+        log::warn!("[migration] failed to copy legacy {name} directory: {error}");
     }
 }
 
@@ -1703,7 +1704,7 @@ fn migrate_legacy_webview_profile() {
         Err(error) => {
             let _ = fs::remove_dir_all(&staging);
             // 迁移失败不阻塞启动：最坏结果是用户看到一次性的默认设置。
-            eprintln!("[mokidown] 旧 WebView 配置目录迁移跳过: {error}");
+            log::warn!("[mokidown] 旧 WebView 配置目录迁移跳过: {error}");
         }
     }
 }
@@ -1714,6 +1715,7 @@ fn migrate_legacy_webview_profile() {
 /// 这里统一挂载插件并注册所有可由前端 `invoke` 调用的桥接命令，
 /// 让启动配置集中维护在同一个位置。
 pub fn run() {
+    runtime_logs::init();
     // 必须在创建任何窗口之前执行，见 migrate_legacy_webview_profile 的说明。
     migrate_legacy_webview_profile();
 
@@ -1793,6 +1795,7 @@ pub fn run() {
         })
         // 注册通过 `invoke` 暴露给前端的 Rust <-> WebView 桥接接口。
         .invoke_handler(tauri::generate_handler![
+            runtime_logs::read_runtime_logs,
             read_file_content,
             read_file_head,
             check_file_text_head,

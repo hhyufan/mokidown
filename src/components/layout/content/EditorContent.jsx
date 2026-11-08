@@ -19,6 +19,7 @@ import { lazyWithRetry } from '@utils/lazyWithRetry';
 import { openExternal } from '@utils/tauriApi';
 import { externalLink } from '@utils/editorLinks';
 import { createAppHotkeyHandlers } from '@utils/hotkeyCommands';
+import { reportReactError } from '@/services/runtimeLogs';
 import './editor-content.scss';
 import WelcomeScreen from '@components/moki/WelcomeScreen';
 
@@ -49,7 +50,7 @@ class RendererErrorBoundary extends Component {
   }
 
   componentDidCatch(error, info) {
-    console.error('Markdown renderer failed:', error, info);
+    reportReactError(error, info);
   }
 
   render() {

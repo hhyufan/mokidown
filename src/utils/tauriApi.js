@@ -5,7 +5,7 @@
  * `content://` SAF URI 自动分流到 Rust 命令或 Android Bridge，屏蔽平台差异。
  */
 import i18n from '@/i18n';
-import { invoke } from '@tauri-apps/api/core';
+import { invoke } from '@utils/tauriInvoke';
 import { listen } from '@tauri-apps/api/event';
 import { getCurrentWindow } from '@tauri-apps/api/window';
 import { rememberDiskBaseline, withFileOperation } from '@/services/localFileGuard';
