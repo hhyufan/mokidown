@@ -5,6 +5,7 @@ import useLspStore, { availablePlugins } from '@store/useLspStore';
 import usePluginContributions from '@store/usePluginContributions';
 import useExtensionStore from '@store/useExtensionStore';
 import useTaskPresence from './useTaskPresence';
+import { useRuntimeLogStore } from '@/services/runtimeLogs';
 
 const MB = 1048576;
 
@@ -54,6 +55,7 @@ export default function useTasks() {
   const extensionUpdate = useExtensionStore((s) => s.updateState);
   const pendingExtensionUpdates = useExtensionStore((s) => s.pendingUpdates);
   const pluginTasks = usePluginContributions((s) => s.pluginTasks);
+  const logCount = useRuntimeLogStore((s) => s.entries.length);
 
   const rawTasks = useMemo(() => {
     const list = [];
@@ -164,8 +166,22 @@ export default function useTasks() {
       });
     }
 
+    if (logCount) {
+      list.push({
+        kind: 'runtime-logs',
+        id: 'runtime-logs',
+        stage: 'pending',
+        name: t('runtimeLogs.title'),
+        status: t('runtimeLogs.pending', { count: logCount }),
+        percent: undefined,
+        showBar: false,
+        close: 'discard-logs',
+        meta: '',
+      });
+    }
+
     return list;
-  }, [stage, version, downloaded, total, updateError, operations, extensionUpdate, pendingExtensionUpdates, pluginTasks, t]);
+  }, [stage, version, downloaded, total, updateError, operations, extensionUpdate, pendingExtensionUpdates, pluginTasks, logCount, t]);
   const tasks = useTaskPresence(rawTasks);
 
   const active = useMemo(() => {

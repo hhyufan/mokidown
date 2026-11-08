@@ -225,3 +225,10 @@
 }
 .task-panel .task-item { transition: opacity 220ms ease, transform 220ms ease; }
 .task-panel .task-item.is-leaving { opacity: 0; transform: translateY(-4px); pointer-events: none; }
+
+// Runtime log task row: icon buttons keep the inline task-action size.
+.ti-row .task-action {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}

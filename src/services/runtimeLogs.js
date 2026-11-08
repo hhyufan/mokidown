@@ -1,5 +1,7 @@
 import { create } from 'zustand';
 import { invoke as nativeInvoke } from '@tauri-apps/api/core';
+import { save } from '@tauri-apps/plugin-dialog';
+import { writeTextFile } from '@tauri-apps/plugin-fs';
 import i18n from '@/i18n';
 import useNotificationStore from '@store/useNotificationStore';
 
@@ -13,7 +15,29 @@ export const useRuntimeLogStore = create((set) => ({
   open: false,
   show: () => set({ open: true }),
   hide: () => set({ open: false }),
+  clear: () => set({ entries: [] }),
 }));
+
+/** Export the current runtime error entries as a JSON report. */
+export async function exportRuntimeLogs(entries) {
+  const name = `mokidown-errors-${new Date().toISOString().slice(0, 10)}.json`;
+  const data = JSON.stringify({ schemaVersion: 1, exportedAt: new Date().toISOString(), entries }, null, 2);
+  if (window.__TAURI_INTERNALS__) {
+    const path = await save({ defaultPath: name, filters: [{ name: 'JSON', extensions: ['json'] }] });
+    if (!path) return false;
+    await writeTextFile(path, data);
+  } else {
+    const url = URL.createObjectURL(new Blob([data], { type: 'application/json' }));
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = name;
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+  }
+  return true;
+}
 
 function clean(value, length) {
   return String(value || '').slice(0, length)
