@@ -30,17 +30,29 @@ async function expectAlignedTaskTree(root) {
     const childRow = child.getBoundingClientRect();
     const branch = getComputedStyle(child, '::before');
     const branchLeft = childRow.left + parseFloat(branch.left);
+    const trunk = getComputedStyle(child, '::after');
+    const probe = document.createElement('span');
+    probe.style.color = 'var(--border)';
+    probe.hidden = true;
+    child.append(probe);
+    const treeColor = getComputedStyle(probe).color;
+    probe.remove();
     return {
       parentCenterDelta: center(parentBox) - parent.getBoundingClientRect().top - parseFloat(getComputedStyle(parent).lineHeight) / 2,
       branchXDelta: branchLeft - (parentBox.left + parentBox.width / 2),
       branchYDelta: childRow.top + parseFloat(branch.top) - center(childBox),
       branchEndDelta: branchLeft + parseFloat(branch.width) - childBox.left,
-      trunkStartDelta: childRow.top + parseFloat(getComputedStyle(child, '::after').top) - center(parentBox),
+      trunkStartDelta: childRow.top + parseFloat(trunk.top) - center(parentBox),
       branchWidth: branch.borderTopWidth,
+      trunkWidth: trunk.borderLeftWidth,
+      branchColor: branch.borderTopColor,
+      trunkColor: trunk.borderLeftColor,
+      treeColor,
     };
   });
-  const { branchWidth, ...deltas } = positions;
-  expect(branchWidth).toBe('1px');
+  const { branchWidth, trunkWidth, branchColor, trunkColor, treeColor, ...deltas } = positions;
+  expect([branchWidth, trunkWidth]).toEqual(['1px', '1px']);
+  expect([branchColor, trunkColor]).toEqual([treeColor, treeColor]);
   for (const delta of Object.values(deltas)) expect(Math.abs(delta)).toBeLessThan(1);
 }
 
