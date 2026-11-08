@@ -6,14 +6,16 @@ import useLspStore from '@store/useLspStore';
 import useExtensionStore from '@store/useExtensionStore';
 import useEditorStore from '@store/useEditorStore';
 import useTasks from '@hooks/useTasks';
+import useNotificationStore from '@store/useNotificationStore';
 import { sendToPlugin } from '@utils/pluginBus';
-import { useRuntimeLogStore } from '@/services/runtimeLogs';
+import { exportRuntimeLogs, useRuntimeLogStore } from '@/services/runtimeLogs';
 import './task-list.scss';
 
 // 关闭一条任务：进行中的安装是真取消，失败的只是把记录去掉，
 // 更新则回到空闲并释放已拿到的更新资源。
 function closeTask(task) {
-  if (task.close === 'cancel') void useLspStore.getState().cancelInstall(task.id);
+  if (task.close === 'discard-logs') useRuntimeLogStore.getState().clear();
+  else if (task.close === 'cancel') void useLspStore.getState().cancelInstall(task.id);
   else if (task.close === 'dismiss') { if (task.kind === 'extension') useExtensionStore.getState().clearUpdateState(); else useLspStore.getState().dismissOperation(task.id); }
   else if (task.close === 'reset') void useUpdateStore.getState().reset();
 }
@@ -24,6 +26,7 @@ export default function TaskList() {
   const update = useUpdateStore();
   const { tasks } = useTasks();
   const logCount = useRuntimeLogStore((state) => state.entries.length);
+  const logEntries = useRuntimeLogStore((state) => state.entries);
   const showLogs = useRuntimeLogStore((state) => state.show);
   const hasUnsaved = useEditorStore((s) => s.tabRenderList.some((tab) => tab.modified));
   useEffect(() => {
@@ -62,6 +65,36 @@ export default function TaskList() {
             <div className={`task-item${task.leaving ? ' is-leaving' : ''}`} key={`${task.kind}-${task.id}`}>
               <div className="ti-row">
                 <span className="ti-name">{task.name}</span>
+                {task.kind === 'runtime-logs' && (
+                  <>
+                    <Tooltip title={t('runtimeLogs.preview')}>
+                      <button type="button" className="task-action" aria-label={t('runtimeLogs.preview')}
+                        onClick={() => { showLogs(); dismiss(); }}>
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
+                          <path d="M1 12s4-7 11-7 11 7 11 7-4 7-11 7-11-7-11-7z" />
+                          <circle cx="12" cy="12" r="3" />
+                        </svg>
+                      </button>
+                    </Tooltip>
+                    <Tooltip title={t('runtimeLogs.accept')}>
+                      <button type="button" className="task-action" aria-label={t('runtimeLogs.accept')}
+                        onClick={() => {
+                          void (async () => {
+                            try {
+                              if (await exportRuntimeLogs(logEntries)) {
+                                useRuntimeLogStore.getState().clear();
+                                useNotificationStore.getState().notify('success', t('runtimeLogs.exported'));
+                              }
+                            } catch (error) {
+                              useNotificationStore.getState().notify('error', t('runtimeLogs.exportFailed'), String(error?.message || error));
+                            }
+                          })();
+                        }}>
+                        ✓
+                      </button>
+                    </Tooltip>
+                  </>
+                )}
                 {task.action === 'plugin-command' && (
                   <button
                     type="button"
