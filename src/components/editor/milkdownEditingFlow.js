@@ -114,7 +114,8 @@ function outdentListLine(view) {
   if (item.type.name !== 'list_item' || !['bullet_list', 'ordered_list'].includes(list.type.name)) return false;
   const paragraphIndex = $from.index(-1);
   if (!paragraphIndex) {
-    if ($from.depth < 4 || $from.node(-3).type.name !== 'list_item' || !$from.parent.content.size) return false;
+    if ($from.depth < 4 || $from.node(-3).type.name !== 'list_item' ||
+        (!$from.parent.content.size && typeof item.attrs.checked !== 'boolean')) return false;
     return liftListItem(item.type)(state, (tr) => view.dispatch(closeHistory(tr)));
   }
 

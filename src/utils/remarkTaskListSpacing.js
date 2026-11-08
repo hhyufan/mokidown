@@ -1,25 +1,51 @@
-// Editors and pasted text can put a no-break space in the task marker.
-// Recognize it only at a list item's raw paragraph start, so escaped markers,
-// normal prose and fenced code keep their original meaning.
-export default function remarkTaskListSpacing() {
-  return (tree, file) => {
-    const source = String(file.value);
-    function visit(node) {
-      if (node.type === 'listItem' && node.checked == null) {
-        const paragraph = node.children[0];
-        const first = paragraph?.children?.[0];
-        const start = paragraph?.position?.start?.offset;
-        if (paragraph?.type === 'paragraph' && first?.type === 'text' && Number.isInteger(start)) {
-          const marker = /^\[([ xX\u00a0])\](?:[ \t\u00a0]+|$)/.exec(source.slice(start, paragraph.position.end.offset));
-          if (marker?.[0].includes('\u00a0') && first.value.startsWith(marker[0])) {
-            node.checked = /x/i.test(marker[1]);
-            first.value = first.value.slice(marker[0].length);
-            if (!first.value) paragraph.children.shift();
-          }
+const taskPrefix = /^([ \t]*(?:>[ \t]*)*)(?:[-+*]|\d{1,9}[.)])[ \t\u00a0]+\[[ xX\u00a0]\](?:[ \t\u00a0]+|(?=\r?$))/gm;
+const opaqueTypes = new Set(['code', 'inlineCode', 'html', 'yaml', 'toml', 'math', 'inlineMath', 'link', 'image', 'definition']);
+
+function recognizeEmptyTasks(tree, source) {
+  function visit(node) {
+    if (node.type === 'listItem' && node.checked == null) {
+      const paragraph = node.children[0];
+      const first = paragraph?.children?.[0];
+      const position = first?.position;
+      if (paragraph?.type === 'paragraph' && paragraph.children.length === 1 && first.type === 'text' && position) {
+        const raw = source.slice(position.start.offset, position.end.offset);
+        const marker = /^\[([ xX])\][ \t]*$/.exec(raw);
+        if (marker) {
+          node.checked = marker[1] !== ' ';
+          paragraph.children = [];
         }
       }
-      for (const child of node.children || []) visit(child);
+    }
+    node.children?.forEach(visit);
+  }
+  if (source.includes('[')) visit(tree);
+  return tree;
+}
+
+export default function remarkTaskListSpacing() {
+  const parse = this.parser;
+  this.parser = function parseWithTaskSpacing(source, file) {
+    const tree = parse.call(this, source, file);
+    if (!source.includes('\u00a0')) return recognizeEmptyTasks(tree, source);
+
+    const opaque = [];
+    function visit(node) {
+      if (opaqueTypes.has(node.type) && node.position) {
+        opaque.push([node.position.start.offset, node.position.end.offset]);
+        return;
+      }
+      node.children?.forEach(visit);
     }
     visit(tree);
+
+    let range = 0;
+    const normalized = source.replace(taskPrefix, (prefix, indentation, start) => {
+      const marker = start + indentation.length;
+      while (range < opaque.length && opaque[range][1] <= marker) range++;
+      if (range < opaque.length && opaque[range][0] <= marker) return prefix;
+      return prefix.replaceAll('\u00a0', ' ');
+    });
+    // Replace one character at a time so downstream source offsets stay valid.
+    return recognizeEmptyTasks(normalized === source ? tree : parse.call(this, normalized, file), normalized);
   };
 }

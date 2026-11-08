@@ -90,7 +90,7 @@ export function milkdownTaskListCheckboxes(marker, convertMarker) {
             view.dispatch(tr.scrollIntoView());
             return true;
           }
-          const item = $from.depth > 1 && $from.node(-1);
+          const item = $from.depth > 1 ? $from.node(-1) : null;
           if (item?.type.name !== 'list_item' || typeof item.attrs.checked !== 'boolean' ||
               $from.index(-1) !== 0 || !$from.parent.content.size) return false;
           const split = splitListItem(item.type);

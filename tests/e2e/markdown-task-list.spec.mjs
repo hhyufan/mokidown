@@ -1,9 +1,9 @@
 import { expect, test } from '@playwright/test';
 
 const markdown = [
-  '- [ ]\u00a0Parent',
+  '-\u00a0[\u00a0]\u00a0Parent',
   '  - [ ] Middle',
-  '    - [x]\u00a0Done',
+  '    -\u00a0[x]\u00a0Done',
   '    - [ ] Todo',
   '  - [x] Sibling',
   '',
@@ -102,6 +102,12 @@ test('split preview recognizes no-break task markers and reflects the cascade se
   await setCascade(page, false);
   await expect(boxes.first()).toHaveAttribute('aria-checked', 'false');
   await expect(boxes.nth(2)).toBeChecked();
+  await page.evaluate(async () => {
+    const { default: store } = await import('/src/store/useEditorStore.js');
+    store.getState().openFile({ path: '/empty-task.md', name: 'empty-task.md', content: '-\u00a0[\u00a0]\u00a0' });
+  });
+  await expect(boxes).toHaveCount(1);
+  await expect(boxes.first()).not.toBeChecked();
 });
 
 test('Enter continues a task list and Tab can nest the new task', async ({ page }) => {
@@ -118,4 +124,38 @@ test('Enter continues a task list and Tab can nest the new task', async ({ page 
   const child = editor.locator('li[data-item-type="task"] > ul > li[data-item-type="task"]');
   await expect(child).toContainText('Child');
   await expect(editor.getByRole('checkbox').first()).toHaveAttribute('aria-checked', 'false');
+});
+
+test('blank markers with no-break spaces remain tasks after input and serialization', async ({ page }) => {
+  await page.goto('/tests/milkdown-flow-harness.html?content=');
+  const editor = page.locator('.milkdown-editor');
+  await expect(editor).toBeVisible();
+  await page.evaluate(() => window.trial.selectTextblock(0));
+  await page.keyboard.insertText('-\u00a0[\u00a0]\u00a0');
+  await expect(editor.getByRole('checkbox')).toHaveCount(1);
+  const source = await page.evaluate(() => window.trial.markdown());
+  expect(source).toMatch(/^[-*] +\[ \]/);
+  await page.goto(`/tests/milkdown-flow-harness.html?content=${encodeURIComponent(source)}`);
+  await expect(editor.getByRole('checkbox')).toHaveCount(1);
+});
+
+test('Enter lifts an empty nested task one level while retaining its checkbox and branch', async ({ page }) => {
+  const markdown = '- [ ] Parent\n  - [ ] Middle\n    - [ ]\n  - [x] Sibling';
+  await page.goto(`/tests/milkdown-flow-harness.html?content=${encodeURIComponent(markdown)}`);
+  const editor = page.locator('.milkdown-editor');
+  const boxes = editor.getByRole('checkbox');
+  await expect(boxes).toHaveCount(4);
+  const parent = editor.locator(':scope > ul > li').first();
+  const children = parent.locator(':scope > ul > li');
+  await expect(children).toHaveCount(2);
+  await page.evaluate(() => window.trial.selectParagraph(''));
+  await page.keyboard.press('Enter');
+  await expect(boxes).toHaveCount(4);
+  await expect(children).toHaveCount(3);
+  await expect(children.nth(1).locator(':scope > p > [role="checkbox"]')).toHaveAttribute('aria-checked', 'false');
+  await expect(children.last().locator(':scope > p')).toHaveText('Sibling');
+  await expectAlignedTaskTree(editor);
+  await page.keyboard.press('Control+z');
+  await expect(children).toHaveCount(2);
+  await expect(boxes).toHaveCount(4);
 });
