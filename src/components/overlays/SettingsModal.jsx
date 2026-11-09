@@ -271,6 +271,21 @@ function SettingsModal({ open: openProp, onClose }) {
                 </SettingRow>
                 <SettingGroup label={t('settings.group.behavior')} />
                 <SettingRow
+                  label={t('settings.general.associatedOpenMode')}
+                  desc={t('settings.general.associatedOpenModeDesc')}
+                >
+                  <Select
+                    aria-label={t('settings.general.associatedOpenMode')}
+                    style={{ width: 200 }}
+                    value={config.associatedOpenMode}
+                    onChange={(value) => handleChange('associatedOpenMode', value)}
+                    options={[
+                      { value: 'editor', label: t('settings.general.openInEditor') },
+                      { value: 'reader', label: t('settings.general.openInReader') },
+                    ]}
+                  />
+                </SettingRow>
+                <SettingRow
                   label={t('settings.general.startup')}
                   desc={t('settings.general.startupDesc')}
                 >

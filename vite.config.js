@@ -141,6 +141,10 @@ export default defineConfig(async ({ mode }) => ({
       },
     },
     rollupOptions: {
+      input: {
+        index: resolve(__dirname, 'index.html'),
+        dragPreview: resolve(__dirname, 'drag-preview.html'),
+      },
       output: {
         // Keep the entry chunk as small as possible. Heavy deps go into
         // their own vendor chunks so they only download/parse on demand.
@@ -172,8 +176,9 @@ export default defineConfig(async ({ mode }) => ({
           // registered on a different module registry.
           if (pkgName === 'monaco-editor') return 'monaco-vendor';
           if (pkgName === 'axios') return 'axios-vendor';
+          // Read-only windows must never download the Milkdown runtime.
+          if (pkgName.startsWith('@milkdown/')) return 'milkdown-vendor';
           if (pkgName === 'react-markdown'
-            || pkgName.startsWith('@milkdown/')
             || pkgName === 'katex'
             || pkgName === 'remark-gfm'
             || pkgName === 'remark-math'

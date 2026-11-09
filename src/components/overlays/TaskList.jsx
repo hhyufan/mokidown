@@ -21,7 +21,7 @@ function closeTask(task) {
 }
 
 // Non-modal Task List, following UI/md-editor.html's task-panel component.
-export default function TaskList() {
+export default function TaskList({ reader = false }) {
   const { t } = useTranslation();
   const update = useUpdateStore();
   const { tasks } = useTasks();
@@ -30,8 +30,8 @@ export default function TaskList() {
   const showLogs = useRuntimeLogStore((state) => state.show);
   const hasUnsaved = useEditorStore((s) => s.tabRenderList.some((tab) => tab.modified));
   useEffect(() => {
-    void useUpdateStore.getState().check({ startup: true });
-  }, []);
+    if (!reader) void useUpdateStore.getState().check({ startup: true });
+  }, [reader]);
 
   // 最后一条任务被关掉（或被取消）后面板自己收起，不留一个"没有进行中的任务"的空壳。
   // 必须放在下面的提前 return 之前，否则 Hooks 调用顺序会随 open 变化。

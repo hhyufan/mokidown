@@ -1,0 +1,41 @@
+@font-face {
+  font-family: 'Poppins';
+  src: url('./assets/font/Poppins-Regular.woff2') format('woff2');
+  font-weight: 400;
+}
+
+@font-face {
+  font-family: 'Poppins';
+  src: url('./assets/font/Poppins-SemiBold.woff2') format('woff2');
+  font-weight: 600;
+}
+
+@font-face {
+  font-family: 'Source-HanSan';
+  src: url('./assets/font/SourceHanSansSC-Regular.woff2') format('woff2');
+}
+
+html, body, #root {
+  margin: 0;
+  width: 100%;
+  height: 100%;
+  background: transparent !important;
+  overflow: hidden;
+  pointer-events: none;
+}
+
+.drag-preview {
+  box-sizing: border-box;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  height: 36px;
+  margin: 24px;
+  padding: 0 12px;
+  border: 1px solid;
+  border-radius: 6px;
+  font: 500 13px 'Poppins', 'Source-HanSan', sans-serif;
+  box-shadow: 0 2px 5px #0003;
+  img { flex: none; width: 16px; height: 16px; }
+  span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+}

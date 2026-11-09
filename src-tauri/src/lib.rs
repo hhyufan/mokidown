@@ -23,6 +23,7 @@ mod lsp;
 #[cfg(windows)]
 mod msvc;
 mod process;
+mod reader;
 mod runtime_logs;
 mod script_runner;
 mod search;
@@ -1507,7 +1508,7 @@ async fn show_main_window(app: AppHandle) -> Result<(), String> {
                     .map_err(|e| format!("Failed to show window: {}", e))?;
                 window.unminimize().map_err(|error| error.to_string())?;
                 #[cfg(not(target_os = "android"))]
-        window.set_focus().map_err(|error| error.to_string())?;
+                window.set_focus().map_err(|error| error.to_string())?;
                 Ok(())
             }
             None => Err("Main window not found".to_string()),
@@ -1722,6 +1723,7 @@ pub fn run() {
     #[allow(unused_mut)]
     let mut builder = tauri::Builder::default()
         .manage(startup::StartupState::default())
+        .manage(reader::ReaderState::default())
         .plugin(tauri_plugin_fs::init())
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_store::Builder::default().build())
@@ -1779,14 +1781,18 @@ pub fn run() {
         builder = builder.plugin(tauri_plugin_single_instance::init(|app, argv, cwd| {
             let paths = collect_markdown_paths(&argv, Some(Path::new(&cwd)));
             if !paths.is_empty() {
-                let _ = app.emit("open-paths", &paths);
+                reader::route_associated_paths(app, paths);
+            } else {
+                focus_main_window(app);
             }
-            focus_main_window(app);
         }));
     }
 
     let builder = builder
         .on_window_event(|window, event| {
+            if matches!(event, tauri::WindowEvent::Destroyed) {
+                reader::forget_window(window.app_handle(), window.label());
+            }
             if window.label() == "main" && matches!(event, tauri::WindowEvent::Destroyed) {
                 script_runner::stop_all();
                 lsp::stop_all();
@@ -1796,6 +1802,9 @@ pub fn run() {
         // 注册通过 `invoke` 暴露给前端的 Rust <-> WebView 桥接接口。
         .invoke_handler(tauri::generate_handler![
             runtime_logs::read_runtime_logs,
+            runtime_logs::shared_runtime_logs,
+            runtime_logs::record_runtime_log,
+            runtime_logs::clear_runtime_logs,
             read_file_content,
             read_file_head,
             check_file_text_head,
@@ -1831,6 +1840,21 @@ pub fn run() {
             startup::main_window_ready,
             startup::splash_ready,
             startup::startup_after_update,
+            reader::set_associated_open_mode,
+            reader::reader_bootstrap,
+            reader::open_reader_window,
+            reader::begin_reader_tab_detach_watch,
+            reader::prepare_drag_preview,
+            reader::cancel_reader_tab_detach_watch,
+            reader::drag_preview_bootstrap,
+            reader::drag_preview_ready,
+            reader::close_drag_preview,
+            reader::reader_ready,
+            reader::reader_current_document,
+            reader::reader_replace_document,
+            reader::reader_present,
+            reader::reader_return_to_editor,
+            reader::reader_editor_handover,
             hotkeys::check_hotkey_available,
             get_app_documents_dir,
             get_cli_args,
@@ -1874,8 +1898,7 @@ pub fn run() {
                 })
                 .collect();
             if !paths.is_empty() {
-                let _ = _app_handle.emit("open-paths", &paths);
-                focus_main_window(_app_handle);
+                reader::route_associated_paths(_app_handle, paths);
             }
         }
     });

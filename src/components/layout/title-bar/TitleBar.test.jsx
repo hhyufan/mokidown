@@ -61,3 +61,15 @@ it('does not start desktop window operations in the mobile layout', () => {
   fireEvent.mouseDown(container.querySelector('.titlebar__drag'), { button: 0, detail: 1 });
   expect(mock.window.startDragging).not.toHaveBeenCalled();
 });
+
+it('uses the shared pin rotation states when toggling always-on-top', async () => {
+  mock.window.isAlwaysOnTop.mockResolvedValue(false);
+  const { container, getByRole } = render(<TitleBar />);
+  expect(container.querySelector('.window-pin-icon--unpinned')).not.toBeNull();
+  fireEvent.click(getByRole('button', { name: 'topbar.pin' }));
+  await waitFor(() => expect(container.querySelector('.window-pin-icon--unpinned')).toBeNull());
+  expect(mock.window.setAlwaysOnTop).toHaveBeenCalledWith(true);
+  fireEvent.click(getByRole('button', { name: 'topbar.unpin' }));
+  await waitFor(() => expect(container.querySelector('.window-pin-icon--unpinned')).not.toBeNull());
+  expect(mock.window.setAlwaysOnTop).toHaveBeenLastCalledWith(false);
+});

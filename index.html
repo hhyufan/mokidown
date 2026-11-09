@@ -35,7 +35,14 @@
       }
       html[data-theme='dark'] #moki-startup-recovery { background: #242426; color: #f5f5f7; border-color: #555; }
       #moki-startup-recovery h2 { margin: 0; font-size: 16px; }
-      #moki-startup-recovery button { margin-right: 8px; padding: 4px 8px; cursor: pointer; }
+      #moki-startup-recovery p { margin: 8px 0 12px; font-size: 13px; }
+      #moki-startup-recovery button {
+        margin-right: 8px; padding: 6px 12px; cursor: pointer;
+        font: inherit; font-size: 12px; color: inherit;
+        border: 1px solid #b8bac1; border-radius: 6px; background: transparent;
+      }
+      #moki-startup-recovery button:hover { background: #80808018; }
+      #moki-startup-recovery button:focus-visible { outline: 2px solid #4091ff; outline-offset: 2px; }
 
     </style>
 
@@ -57,8 +64,22 @@
           }
         };
 
-        function exportStartupLogs() {
-          var blob = new Blob([JSON.stringify({ schemaVersion: 1, entries: pending }, null, 2)], { type: 'application/json' });
+        async function exportStartupLogs() {
+          try {
+            if (bootstrap.export) { await bootstrap.export(); return; }
+            var data = JSON.stringify({ schemaVersion: 1, entries: pending }, null, 2);
+            var bridge = window.__TAURI_INTERNALS__;
+            if (bridge && bridge.invoke) {
+              var path = await bridge.invoke('plugin:dialog|save', {
+                options: { defaultPath: 'mokidown-startup-errors.json', filters: [{ name: 'JSON', extensions: ['json'] }] }
+              });
+              if (!path) return;
+              await bridge.invoke('plugin:fs|write_text_file', new TextEncoder().encode(data), {
+                headers: { path: encodeURIComponent(path), options: '{}' }
+              });
+              return;
+            }
+          var blob = new Blob([data], { type: 'application/json' });
           var url = URL.createObjectURL(blob);
           var link = document.createElement('a');
           link.href = url;
@@ -67,6 +88,12 @@
           link.click();
           link.remove();
           setTimeout(function () { URL.revokeObjectURL(url); }, 1000);
+          } catch (error) {
+            if (card) {
+              card.querySelector('p').textContent = String(error && error.message || error);
+              card.querySelector('p').setAttribute('role', 'alert');
+            }
+          }
         }
 
         function showStartupRecovery() {
