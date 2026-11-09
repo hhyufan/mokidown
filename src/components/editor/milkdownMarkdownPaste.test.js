@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { tsvToMarkdownTable } from './milkdownMarkdownPaste';
+import { looksLikeMarkdown, mixedTextToMarkdown, tsvToMarkdownTable } from './milkdownMarkdownPaste';
 
 describe('tsvToMarkdownTable', () => {
   it('converts a spreadsheet paste into a GFM table', () => {
@@ -37,13 +37,48 @@ describe('tsvToMarkdownTable', () => {
   });
 
   it('ignores blank lines and escapes pipes in cells', () => {
-    const text = 'a\tb\n\n1\tx | y\n';
-    expect(tsvToMarkdownTable(text)).toBe('| a | b |\n| --- | --- |\n| 1 | x \\| y |');
+    expect(tsvToMarkdownTable('a\tb\n\n1\tx | y\n')).toBe('| a | b |\n| --- | --- |\n| 1 | x \\| y |');
   });
 
   it('returns null for single-column or short input', () => {
     expect(tsvToMarkdownTable('only one column')).toBeNull();
     expect(tsvToMarkdownTable('a\tb')).toBeNull();
     expect(tsvToMarkdownTable('a\nb\nc')).toBeNull();
+  });
+});
+
+describe('mixedTextToMarkdown', () => {
+  it('keeps headings and converts each tab-separated block separately', () => {
+    const text = [
+      '五、常见警告',
+      '编号\t含义',
+      'CS8600\t把可能为 null 的值赋给非空类型',
+      'CS8601\t可能的 null 引用赋值',
+      '六、CS8618 的四种解法',
+      '方式\t写法\t适用',
+      'required\tpublic required string Name { get; init; }\t调用方必须赋值，否则编译错误',
+      '给初值\tpublic string Name { get; set; } = "";\t有合理默认值',
+    ].join('\n');
+    const markdown = mixedTextToMarkdown(text);
+    expect(markdown).toContain('五、常见警告');
+    expect(markdown).toContain('| 编号 | 含义 |');
+    expect(markdown).toContain('| CS8600 | 把可能为 null 的值赋给非空类型 |');
+    expect(markdown).toContain('六、CS8618 的四种解法');
+    expect(markdown).toContain('| 方式 | 写法 | 适用 |');
+    expect(markdown).toContain('| required | public required string Name { get; init; } | 调用方必须赋值，否则编译错误 |');
+  });
+
+  it('returns null when there is no convertible table block', () => {
+    expect(mixedTextToMarkdown('普通段落\n没有制表符')).toBeNull();
+    expect(mixedTextToMarkdown('单行\t两列')).toBeNull();
+  });
+});
+
+describe('looksLikeMarkdown', () => {
+  it('detects markdown source and ignores rendered plain text', () => {
+    expect(looksLikeMarkdown('## 标题\n\n内容')).toBe(true);
+    expect(looksLikeMarkdown('| a | b |\n| --- | --- |')).toBe(true);
+    expect(looksLikeMarkdown('**粗体**')).toBe(true);
+    expect(looksLikeMarkdown('五、常见警告\n编号 含义\nCS8600 把可能为 null 的值赋给非空类型')).toBe(false);
   });
 });
