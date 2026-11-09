@@ -50,7 +50,9 @@
     "tauri:android:build:debug": "tauri android build --debug --apk",
     "test:e2e": "playwright test --config tests/playwright.config.mjs",
     "test:e2e:production": "playwright test --config tests/playwright.production.config.mjs",
-    "check:extensions": "node scripts/check-extension-boundary.mjs"
+    "check:extensions": "node scripts/check-extension-boundary.mjs",
+    "android:build": "node scripts/android.mjs",
+    "android:build:release": "node scripts/android.mjs --release"
   },
   "dependencies": {
     "@ant-design/icons": "^5.2.6",
