@@ -18,6 +18,7 @@ import { renameFile } from '@utils/tauriApi';
 import { useFileManager } from '@hooks/useFileManager';
 
 import { moveDiskBaseline } from '@/services/localFileGuard';
+import { beginReaderTabDetachWatch, buildDragPreview, cancelReaderTabDetachWatch, detachMarkdownTab } from '@/services/readerWindows';
 import { consoleAvailable } from '@utils/consoleSupport';
 import { cn } from '@utils/classNames';
 import { isImeComposing } from '@utils/keyboard';
@@ -61,11 +62,31 @@ function TabBar({ onRequestCloseTab }) {
   const positionsRef = useRef(new Map());
   const [draggedId, setDraggedId] = useState(null);
   const [dropTarget, setDropTarget] = useState(null);
+  const nativeDetachWatch = Boolean(window.__TAURI_INTERNALS__ && /Windows/i.test(navigator.userAgent));
   useEffect(() => installTabStripDrag(scrollRef.current, {
-    onDragChange: (id) => { dragRef.current = id; setDraggedId(id); },
+    nativeTracking: nativeDetachWatch,
+    onDragChange: (id) => {
+      dragRef.current = id;
+      setDraggedId(id);
+    },
+    onGhost: (id, ghost, source, geometry) => {
+      if (nativeDetachWatch) void beginReaderTabDetachWatch(id, buildDragPreview(source, undefined, ghost, geometry)).catch((error) => {
+        console.error('[reader] Could not watch for an external tab drop:', error);
+        window.dispatchEvent(new CustomEvent('reader:native-preview-failed', { detail: geometry.token }));
+      });
+    },
     onDropTarget: (target) => setDropTarget((current) => current?.id === target?.id && current?.after === target?.after ? current : target),
     onReorder: reorderTabs,
-  }), [reorderTabs]);
+    onDetach: window.__TAURI_INTERNALS__ ? (id, position) => {
+      if (nativeDetachWatch) return;
+      void detachMarkdownTab(id, position).catch((error) => notify('error', t('reader.openFailed'), String(error)));
+    } : undefined,
+    onDragCancel: nativeDetachWatch ? () => {
+      void cancelReaderTabDetachWatch().catch((error) => {
+        console.error('[reader] Could not cancel external tab drop:', error);
+      });
+    } : undefined,
+  }), [reorderTabs, notify, t, nativeDetachWatch]);
   useEffect(() => installTabStripWheel(scrollRef.current, scrollRef.current.closest('.tabbar')), []);
 
   useLayoutEffect(() => {
