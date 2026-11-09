@@ -1,5 +1,5 @@
 import { parserCtx } from '@milkdown/kit/core';
-import { Slice } from '@milkdown/kit/prose/model';
+import { DOMParser as PMDOMParser, Slice } from '@milkdown/kit/prose/model';
 import { Plugin } from '@milkdown/kit/prose/state';
 import { $prose } from '@milkdown/kit/utils';
 
@@ -66,6 +66,19 @@ export function looksLikeMarkdown(text) {
 
 const RICH_HTML = /<(?:h[1-6]|table|thead|tbody|ul|ol|pre|blockquote|strong|em)\b/i;
 
+/**
+ * 解析 HTML 片段并插入。不能调用 view.pasteHTML：它会再次触发 handlePaste，
+ * 在本插件里形成递归（Maximum call stack size exceeded）。
+ */
+function insertHtml(view, html) {
+  const dom = new window.DOMParser().parseFromString(html, 'text/html');
+  const slice = PMDOMParser.fromSchema(view.state.schema).parseSlice(dom.body, { preserveWhitespace: true });
+  if (!slice || slice.size === 0) return false;
+  view.dispatch(view.state.tr.replaceSelection(slice).scrollIntoView()
+    .setMeta('paste', true).setMeta('uiEvent', 'paste'));
+  return true;
+}
+
 function insertMarkdown(view, ctx, markdown) {
   const doc = ctx.get(parserCtx)(String(markdown).replace(/\r\n?/g, '\n'));
   if (!doc) return false;
@@ -96,7 +109,7 @@ export const milkdownMarkdownPaste = $prose((ctx) => new Plugin({
       }
       // 渲染后的富文本（DeepSeek/网页复制）：text/plain 已失去语法，改用 HTML 解析，
       // 保留标题、表格、列表和代码块。
-      if (RICH_HTML.test(html) && !/data-pm-slice\s*=/i.test(html) && view.pasteHTML(html, event)) return true;
+      if (RICH_HTML.test(html) && !/data-pm-slice\s*=/i.test(html) && insertHtml(view, html)) return true;
       // 没有可用的 HTML 时，退回混合文本处理：连续制表符行转表格，其余保留。
       const mixed = mixedTextToMarkdown(text);
       if (mixed) return insertMarkdown(view, ctx, mixed);
