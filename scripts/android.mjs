@@ -11,7 +11,7 @@
  *   node scripts/android.mjs --release   # release（读取 keystore.properties 签名）
  */
 import { spawnSync } from 'node:child_process';
-import { copyFileSync, existsSync, mkdirSync } from 'node:fs';
+import { copyFileSync, cpSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { initializeMsvc } from './windows-msvc.mjs';
 
@@ -59,24 +59,40 @@ function run(command, args, options = {}) {
   }
 }
 
-run('npm', ['run', 'build']);
-run('cargo', [
-  'build', '--package', 'mokidown',
-  '--manifest-path', 'src-tauri/Cargo.toml',
-  '--target', target,
-  '--features', 'tauri/custom-protocol',
-  '--lib',
-  ...(release ? ['--release'] : []),
-]);
+// 用 Tauri CLI 生成 Android 工程与前端 assets（tauri.conf.json + dist 文件），
+// 它会先构建前端、合并 tauri.android.conf.json、再交叉编译 Rust。非开发者模式下
+// 最后的 jniLibs 符号链接会失败，但此时 cargo 产物与 assets 已经就绪，可以忽略。
+console.log('\n> tauri android build（生成 Android assets；符号链接失败可忽略）');
+spawnSync(process.execPath, [
+  'node_modules/@tauri-apps/cli/tauri.js', 'android', 'build',
+  ...(release ? [] : ['--debug']), '--apk', '-t', 'aarch64',
+], { cwd: root, stdio: 'inherit', env: process.env, shell: process.platform === 'win32' });
 
 const so = resolve(root, 'src-tauri', 'target', target, profile, 'libmokidown_lib.so');
 const jniDir = resolve(root, 'src-tauri', 'gen', 'android', 'app', 'src', 'main', 'jniLibs', 'arm64-v8a');
 if (!existsSync(so)) {
-  console.error(`找不到编译产物：${so}`);
+  console.error(`找不到编译产物：${so}（Tauri CLI 可能在前置步骤失败，请查看上方输出）`);
   process.exit(1);
 }
 mkdirSync(jniDir, { recursive: true });
 copyFileSync(so, resolve(jniDir, 'libmokidown_lib.so'));
+
+// 跳过 rust gradle 任务时，Tauri 不会把 dist 同步进 assets；手动同步，
+// 否则 APK 里没有 index.html，WebView 起不来会一直停在系统启动图。
+const distDir = resolve(root, 'dist');
+const assetsDir = resolve(root, 'src-tauri', 'gen', 'android', 'app', 'src', 'main', 'assets');
+if (existsSync(distDir)) {
+  rmSync(assetsDir, { recursive: true, force: true });
+  mkdirSync(assetsDir, { recursive: true });
+  cpSync(distDir, assetsDir, { recursive: true });
+  const base = JSON.parse(readFileSync(resolve(root, 'src-tauri', 'tauri.conf.json'), 'utf8'));
+  const androidPath = resolve(root, 'src-tauri', 'tauri.android.conf.json');
+  const merged = existsSync(androidPath)
+    ? { ...base, app: { ...base.app, ...JSON.parse(readFileSync(androidPath, 'utf8')).app } }
+    : base;
+  writeFileSync(resolve(assetsDir, 'tauri.conf.json'), JSON.stringify(merged, null, 2));
+  console.log(`已同步前端 assets：${assetsDir}`);
+}
 
 const gradlew = resolve(root, 'src-tauri', 'gen', 'android', process.platform === 'win32' ? 'gradlew.bat' : 'gradlew');
 run(gradlew, [
