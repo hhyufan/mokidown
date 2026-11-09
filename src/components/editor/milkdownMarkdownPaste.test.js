@@ -18,14 +18,32 @@ describe('tsvToMarkdownTable', () => {
     ].join('\n'));
   });
 
+  it('leaves the top-left header empty when the first row misses a cell', () => {
+    const text = [
+      'int?（可空值类型）\tstring?（可空引用类型）',
+      '本质\tNullable<int> 结构体\t就是 string，只是编译器注解',
+      '运行时\t真实存在的类型\t没有区别',
+    ].join('\n');
+    expect(tsvToMarkdownTable(text)).toBe([
+      '|  | int?（可空值类型） | string?（可空引用类型） |',
+      '| --- | --- | --- |',
+      '| 本质 | Nullable<int> 结构体 | 就是 string，只是编译器注解 |',
+      '| 运行时 | 真实存在的类型 | 没有区别 |',
+    ].join('\n'));
+  });
+
+  it('pads a short data row with empty cells', () => {
+    expect(tsvToMarkdownTable('a\tb\tc\n1\t2')).toBe('| a | b | c |\n| --- | --- | --- |\n| 1 | 2 |  |');
+  });
+
   it('ignores blank lines and escapes pipes in cells', () => {
     const text = 'a\tb\n\n1\tx | y\n';
     expect(tsvToMarkdownTable(text)).toBe('| a | b |\n| --- | --- |\n| 1 | x \\| y |');
   });
 
-  it('returns null for single-column, short or ragged input', () => {
+  it('returns null for single-column or short input', () => {
     expect(tsvToMarkdownTable('only one column')).toBeNull();
-    expect(tsvToMarkdownTable('a\tb\n1\t2\t3')).toBeNull();
     expect(tsvToMarkdownTable('a\tb')).toBeNull();
+    expect(tsvToMarkdownTable('a\nb\nc')).toBeNull();
   });
 });
