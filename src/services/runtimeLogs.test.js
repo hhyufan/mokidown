@@ -1,9 +1,26 @@
 import { afterEach, expect, it, vi } from 'vitest';
 import { invoke as nativeInvoke } from '@tauri-apps/api/core';
 import { invoke } from '@utils/tauriInvoke';
-import { startNativeLogPolling, useRuntimeLogStore } from './runtimeLogs';
+import { installRuntimeLogging, startNativeLogPolling, useRuntimeLogStore } from './runtimeLogs';
 
 vi.mock('@tauri-apps/api/core', () => ({ invoke: vi.fn() }));
+
+it('defers console capture so render-time warnings do not update subscribers synchronously', async () => {
+  vi.spyOn(console, 'warn').mockImplementation(() => {});
+  const stop = installRuntimeLogging();
+  try {
+    const subscriber = vi.fn();
+    const unsubscribe = useRuntimeLogStore.subscribe(subscriber);
+    console.warn('Warning: render-time warning');
+    expect(subscriber).not.toHaveBeenCalled();
+    await Promise.resolve();
+    expect(subscriber).toHaveBeenCalledTimes(1);
+    expect(useRuntimeLogStore.getState().entries[0].message).toBe('Warning: render-time warning');
+    unsubscribe();
+  } finally {
+    stop();
+  }
+});
 
 afterEach(() => {
   delete window.__TAURI_INTERNALS__;

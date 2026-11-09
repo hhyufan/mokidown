@@ -12,6 +12,7 @@ import { normalizeMarkdownPairSettings } from '@utils/markdownPairs';
 
 const DEVICE_LOCAL_CONFIG_KEYS = new Set([
   'workspacePath',
+  'associatedOpenMode',
   'backgroundImage', 'backgroundImageName', 'backgroundEnabled', 'backgroundTransparency',
   // 键位取决于本机键盘布局与外接键盘，跨设备同步会把别人机器上的手感带过来。
   'hotkeys',
@@ -60,6 +61,7 @@ const useConfigStore = create(
       mokiIcon: false,
       autoSave: true,
       workspacePath: '',
+      associatedOpenMode: 'editor',
 
       hotkeys: { ...DEFAULT_HOTKEYS },
       configUpdatedAt: 0,
@@ -167,6 +169,7 @@ const useConfigStore = create(
         // 键位表补齐缺失动作、剔除已下线的动作 id：旧版本遗留的数据不该让
         // “未绑定”或幽灵动作进入设置界面。
         merged.hotkeys = resolveHotkeys(persisted?.hotkeys);
+        merged.associatedOpenMode = merged.associatedOpenMode === 'reader' ? 'reader' : 'editor';
         Object.assign(merged, normalizeMarkdownPairSettings(persisted || {}, current));
         return merged;
       },

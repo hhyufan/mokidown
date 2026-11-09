@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { Button, Select } from 'antd';
 import { useTranslation } from 'react-i18next';
 import useNotificationStore from '@store/useNotificationStore';
-import { exportRuntimeLogs, startNativeLogPolling, useRuntimeLogStore } from '@/services/runtimeLogs';
+import { exportRuntimeLogs, startNativeLogPolling, startRuntimeLogSync, useRuntimeLogStore } from '@/services/runtimeLogs';
 import NotificationContainer from '@components/notification/NotificationContainer';
 import ChevronIcon from '@components/ui/ChevronIcon';
 import AppDialog from './AppDialog';
@@ -76,6 +76,7 @@ function RuntimeLogDialog({ onClose }) {
 export default function RuntimeLogHost() {
   const open = useRuntimeLogStore((state) => state.open);
   const hide = useRuntimeLogStore((state) => state.hide);
+  useEffect(startRuntimeLogSync, []);
   useEffect(startNativeLogPolling, []);
   return <>
     <NotificationContainer />

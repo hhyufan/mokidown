@@ -10,6 +10,9 @@ import { listen } from '@tauri-apps/api/event';
 import { appWindow, getCliArgs, onFileChanged, onOpenPaths, historyCapture, isSafUri, startFileWatching } from '@utils/tauriApi';
 import { isImeComposing } from '@utils/keyboard';
 import { rememberDiskBaseline } from '@/services/localFileGuard';
+import { prepareReaderDragPreview, receiveReaderDocument } from '@/services/readerWindows';
+import { installReaderFileDrag } from '@/services/readerFileDrag';
+import { invoke } from '@utils/tauriInvoke';
 import { createFileChangeObserver, restoreExternalDisk, setLocalFileComposing } from '@/services/localFileOperations';
 import useThemeStore from '@store/useThemeStore';
 import useEditorStore from '@store/useEditorStore';
@@ -93,7 +96,11 @@ function isAssociatedMarkdownPath(path) {
  * 统一协调主题、认证、目录恢复、窗口事件、拖拽投放和全局弹窗状态，
  * 并渲染编辑器主布局与顶层模态层。
  */
-function App() {
+function App({ skipCliArgs = false }) {
+  useEffect(() => installReaderFileDrag(document.body), []);
+  useEffect(() => {
+    void prepareReaderDragPreview().catch((error) => console.error('[reader] Could not prepare drag preview:', error));
+  }, []);
   useEffect(() => { window.__mokiRuntimeLogs?.ready(); }, []);
   useEffect(() => disableNativeContextMenu(), []);
   const { t } = useTranslation();
@@ -316,7 +323,7 @@ function App() {
   }, [isMobileLayout, setSidebarVisible]);
 
   useEffect(() => {
-    if (cliArgsOpenedRef.current || isAndroid) return;
+    if (cliArgsOpenedRef.current || isAndroid || skipCliArgs) return;
 
     let cancelled = false;
     (async () => {
@@ -338,7 +345,51 @@ function App() {
     return () => {
       cancelled = true;
     };
+  }, [isAndroid, openFileFromPath, skipCliArgs]);
+
+  useEffect(() => {
+    if (!window.__TAURI_INTERNALS__ || isAndroid) return undefined;
+    let disposed = false;
+    let queue = Promise.resolve();
+    const drain = () => {
+      queue = queue.then(async () => {
+        if (disposed) return;
+        const documents = await invoke('reader_editor_handover');
+        for (const document of documents || []) await receiveReaderDocument(document, openFileFromPath);
+      }).catch((error) => console.error('[reader] Could not return document to editor:', error));
+    };
+    const subscription = listen('reader:open-in-editor', drain);
+    // Register before draining: native queues requests while the editor imports or restores its session.
+    void subscription.then(drain).catch((error) => console.error('[reader] Could not register handover:', error));
+    return () => { disposed = true; void subscription.then((stop) => stop()).catch(() => {}); };
   }, [isAndroid, openFileFromPath]);
+
+  useEffect(() => {
+    if (!window.__TAURI_INTERNALS__ || isAndroid) return undefined;
+    const previews = ['reader:native-drag-end', 'reader:native-preview-failed'].map((name) =>
+      listen(name, (event) => window.dispatchEvent(new CustomEvent(name, { detail: event.payload }))));
+    const subscription = listen('reader:tab-detach-drop', async (event) => {
+      const { document, x, y } = event.payload || {};
+      if (!document) return;
+      try {
+        await invoke('open_reader_window', { document, x, y });
+        if (document.keepSource || document.modified || !document.path) return;
+        const store = useEditorStore.getState();
+        const source = store.tabs.find((tab) => tab.id === document.id || tab.path === document.path);
+        if (source && !source.modified && store.getTabContent(source.id) === document.content) {
+          store.closeTab(source.id);
+        }
+      } catch (error) {
+        console.error('[reader] Could not open detached tab:', error);
+        if (document.opening?.preview.token) {
+          void invoke('close_drag_preview', { token: document.opening.preview.token }).catch(() => {});
+        }
+      }
+    });
+    return () => {
+      [subscription, ...previews].forEach((subscription) => { void subscription.then((stop) => stop()).catch(() => {}); });
+    };
+  }, [isAndroid]);
 
   /**
    * 处理运行中的关联打开请求。

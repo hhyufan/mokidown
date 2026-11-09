@@ -254,6 +254,8 @@ function RecentList() {
               <Tooltip key={f.path} title={titleText} placement="right" mouseEnterDelay={0.5}>
                 <div
                   className={cn('sidebar__recent-item', isBookmarked && 'sidebar__recent-item--bookmarked')}
+                  data-reader-path={f.path}
+                  data-reader-name={f.name}
                   onClick={() => openFileFromPath(f.path, f.name)}
                 >
                   <span className="sidebar__recent-icon">

@@ -71,6 +71,14 @@ afterEach(() => {
   delete window.__TAURI_INTERNALS__;
 });
 
+it('chooses whether associated Markdown files open in the project editor or a single reader', async () => {
+  useConfigStore.setState({ associatedOpenMode: 'editor' });
+  await act(async () => render(<SettingsModal open onClose={vi.fn()} />));
+  fireEvent.mouseDown(screen.getByRole('combobox', { name: '关联 Markdown 打开方式' }));
+  fireEvent.click(await screen.findByText('单 MD 只读窗口'));
+  expect(useConfigStore.getState().associatedOpenMode).toBe('reader');
+});
+
 it('adjusts both font sizes with compact controls without deprecated InputNumber addons', async () => {
   const errors = vi.spyOn(console, 'error').mockImplementation(() => {});
   await act(async () =>

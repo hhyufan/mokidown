@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 import { invoke as nativeInvoke } from '@tauri-apps/api/core';
+import { listen } from '@tauri-apps/api/event';
 import { save } from '@tauri-apps/plugin-dialog';
 import { writeTextFile } from '@tauri-apps/plugin-fs';
 import i18n from '@/i18n';
@@ -9,13 +10,29 @@ const limit = 200;
 const repeatWindow = 5000;
 let sequence = 0;
 let lastNotification = -Infinity;
+const origin = crypto.randomUUID();
+let sharedVersion = -1;
+let syncActive = false;
+let logQueue = Promise.resolve();
+
+function applySharedLogs(snapshot) {
+  if (!snapshot || !Array.isArray(snapshot.entries) || snapshot.version < sharedVersion) return;
+  sharedVersion = snapshot.version;
+  useRuntimeLogStore.setState({ entries: snapshot.entries });
+}
+
+function synchronize(command, args) {
+  if (!syncActive) return;
+  // 保持同一窗口的记录/清空顺序，桥接失败不能递归产生新错误日志。
+  logQueue = logQueue.then(() => nativeInvoke(command, args)).then(applySharedLogs).catch(() => {});
+}
 
 export const useRuntimeLogStore = create((set) => ({
   entries: [],
   open: false,
   show: () => set({ open: true }),
   hide: () => set({ open: false }),
-  clear: () => set({ entries: [] }),
+  clear: () => { set({ entries: [] }); synchronize('clear_runtime_logs'); },
 }));
 
 /** Export the current runtime error entries as a JSON report. */
@@ -50,10 +67,10 @@ function isCancellation(value) {
     /^(?:canceled|cancelled|aborted)$/i.test(value?.message || value || '');
 }
 
-export function reportRuntimeLog({ level = 'error', source = 'WebView', message, stack, detail, timestamp = Date.now(), announce = true }) {
+export function reportRuntimeLog({ level = 'error', source = 'WebView', message, stack, detail, timestamp = Date.now(), announce = true, nativeId }) {
   if (!message || isCancellation(message)) return;
   const entry = {
-    id: ++sequence, level, source, timestamp,
+    id: `${origin}:${++sequence}`, level, source, timestamp, nativeId,
     message: clean(message, 4096), stack: clean(stack, 10000), detail: clean(detail, 1024), count: 1,
   };
   useRuntimeLogStore.setState(({ entries }) => {
@@ -64,6 +81,7 @@ export function reportRuntimeLog({ level = 'error', source = 'WebView', message,
     return { entries: [{ ...previous, ...entry, id: previous.id, stack: entry.stack || previous.stack,
       detail: entry.detail || previous.detail, count: previous.count + 1 }, ...entries.filter((_, i) => i !== index)] };
   });
+  synchronize('record_runtime_log', { entry });
   const now = Date.now();
   if (announce && level === 'error' && now - lastNotification >= repeatWindow) {
     lastNotification = now;
@@ -103,6 +121,8 @@ export function installRuntimeLogging() {
   if (bootstrap) {
     bootstrap.accept = reportRuntimeLog;
     bootstrap.pending.forEach(reportRuntimeLog);
+    bootstrap.pending.length = 0;
+    bootstrap.export = () => exportRuntimeLogs(useRuntimeLogStore.getState().entries);
   }
   const original = { warn: console.warn, error: console.error };
   const wrapped = {};
@@ -116,20 +136,43 @@ export function installRuntimeLogging() {
       // Dev HMR reloads leave Tauri's async callbacks orphaned; that is a
       // tooling artifact, not an app error. Vue flags are injected at build time.
       if (/Couldn't find callback id/.test(message) || /__VUE_(?:OPTIONS_API|PROD_DEVTOOLS|PROD_HYDRATION_MISMATCH_DETAILS)__/.test(message)) return;
-      reportRuntimeLog({
+      // React 可能在渲染期间调用 console；延后发布，避免同步更新任务面板。
+      const entry = {
         source: /^Warning: /.test(strings[0]) ? 'React' : 'WebView',
         level: method === 'warn' || /^Warning: /.test(strings[0]) ? 'warning' : 'error',
         message, stack: error?.stack, detail: error ? strings.join(' ') : '',
-      });
+      };
+      queueMicrotask(() => reportRuntimeLog(entry));
     };
     console[method] = wrapped[method];
   }
   return () => {
-    if (bootstrap?.accept === reportRuntimeLog) bootstrap.accept = null;
+    if (bootstrap?.accept === reportRuntimeLog) { bootstrap.accept = null; bootstrap.export = null; }
     for (const method of ['warn', 'error']) {
       if (console[method] === wrapped[method]) console[method] = original[method];
     }
   };
+}
+
+export function startRuntimeLogSync() {
+  if (!window.__TAURI_INTERNALS__) return;
+  let disposed = false;
+  let stop;
+  sharedVersion = -1;
+  syncActive = true;
+  const local = useRuntimeLogStore.getState().entries.slice().reverse();
+  void listen('runtime-logs:changed', ({ payload }) => {
+    if (!disposed) applySharedLogs(payload);
+  }).then(async (unlisten) => {
+    stop = unlisten;
+    if (disposed) { stop(); return; }
+    // 先订阅再取快照；版本号防止晚到的旧快照覆盖新日志。
+    const snapshot = await nativeInvoke('shared_runtime_logs');
+    if (disposed) return;
+    applySharedLogs(snapshot);
+    for (const entry of local) synchronize('record_runtime_log', { entry });
+  }).catch(() => {});
+  return () => { disposed = true; syncActive = false; stop?.(); };
 }
 
 export function startNativeLogPolling() {
@@ -150,7 +193,7 @@ export function startNativeLogPolling() {
           // Updater checks run at startup; an unreachable mirror or offline
           // network is expected and must not flood the error panel.
           if (/failed to check for updates/i.test(entry.message || '')) continue;
-          reportRuntimeLog({ ...entry, source: 'Tauri', detail: entry.target });
+          reportRuntimeLog({ ...entry, source: 'Tauri', detail: entry.target, nativeId: entry.id });
         }
       }
       if (!disposed) timer = setTimeout(poll, 2500);

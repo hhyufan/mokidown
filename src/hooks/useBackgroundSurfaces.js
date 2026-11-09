@@ -11,12 +11,12 @@ const POSITIONERS = '.ant-dropdown, .ant-picker-dropdown, .moki-tree-jump-popup'
 // Portal popups need the same image, cover dimensions and viewport coordinates
 // as the workspace. Explicit coordinates also work inside transformed antd
 // containers, where background-attachment: fixed uses a different origin.
-export function useBackgroundSurfaces({ enabled, imageUrl, opacity }) {
+export function useBackgroundSurfaces({ enabled, imageUrl, opacity, workspaceSelector = '.app' }) {
   useLayoutEffect(() => {
     if (!enabled || !imageUrl) return undefined;
     const root = document.documentElement;
-    const app = document.querySelector('.app');
-    if (!app) return undefined;
+    const workspace = document.querySelector(workspaceSelector);
+    if (!workspace) return undefined;
     const popups = new Set();
     const positions = new Set();
     const writtenStyles = new WeakMap();
@@ -30,7 +30,7 @@ export function useBackgroundSurfaces({ enabled, imageUrl, opacity }) {
     const sync = () => {
       // Read every rectangle before writing any style to avoid repeated forced
       // layout. Workspace geometry stays cached while only a popup moves.
-      const rect = workspaceDirty ? app.getBoundingClientRect() : null;
+      const rect = workspaceDirty ? workspace.getBoundingClientRect() : null;
       const boxes = [];
       for (const popup of popups) {
         if (popup.isConnected) boxes.push([popup, popup.getBoundingClientRect()]);
@@ -74,7 +74,7 @@ export function useBackgroundSurfaces({ enabled, imageUrl, opacity }) {
       });
     };
     const resize = new ResizeObserver((entries) => {
-      if (entries.some(({ target }) => target === app)) workspaceDirty = true;
+      if (entries.some(({ target }) => target === workspace)) workspaceDirty = true;
       // ResizeObserver runs before paint; keep the first visible frame aligned.
       sync();
       if (!following) follow();
@@ -131,10 +131,10 @@ export function useBackgroundSurfaces({ enabled, imageUrl, opacity }) {
       if (!following) follow();
     });
     observer.observe(document.body, { childList: true, subtree: true });
-    resize.observe(app);
+    resize.observe(workspace);
     discover(document.body);
     const scroll = ({ target }) => {
-      const workspaceMoved = target === document || (target instanceof Element && target !== app && target.contains(app));
+      const workspaceMoved = target === document || (target instanceof Element && target !== workspace && target.contains(workspace));
       const popupMoved = target instanceof Element
         && [...popups].some((popup) => target !== popup && target.contains(popup));
       // Scrolling editor text or a card's own list does not move the card.
@@ -158,7 +158,7 @@ export function useBackgroundSurfaces({ enabled, imageUrl, opacity }) {
         popup.style.removeProperty('--moki-popup-x'); popup.style.removeProperty('--moki-popup-y');
       }
     };
-  }, [enabled, imageUrl]);
+  }, [enabled, imageUrl, workspaceSelector]);
 
   useLayoutEffect(() => {
     const root = document.documentElement;

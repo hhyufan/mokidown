@@ -1,0 +1,10 @@
+.window-pin-icon {
+  transition: transform 0.3s ease-in-out;
+  transform-origin: center;
+
+  &--unpinned { transform: rotate(45deg); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .window-pin-icon { transition: none; }
+}

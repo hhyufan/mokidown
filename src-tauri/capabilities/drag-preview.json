@@ -1,0 +1,10 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "drag-preview",
+  "description": "Receive updates in the mouse-transparent drag preview",
+  "windows": ["drag-preview"],
+  "permissions": [
+    "core:event:allow-listen",
+    "core:event:allow-unlisten"
+  ]
+}

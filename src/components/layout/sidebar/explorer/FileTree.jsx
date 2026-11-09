@@ -461,6 +461,8 @@ function FileTree() {
               role="listitem"
               tabIndex={0}
               data-path={file.path}
+              data-reader-path={!file.is_dir && renamingPath !== file.path ? file.path : undefined}
+              data-reader-name={file.name}
               data-directory-path={currentDir}
               aria-current={isCurrent ? 'true' : undefined}
               data-details={deferDetails ? 'deferred' : 'ready'}
