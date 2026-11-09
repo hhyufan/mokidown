@@ -28,6 +28,44 @@ export function tsvToMarkdownTable(text) {
   return [header, separator, ...body].join('\n');
 }
 
+/**
+ * 聊天/网页复制整段内容时，text/plain 是混合文本：标题、代码行和表格混在一起，
+ * 表格块表现为连续的制表符行。把连续表格块转成 GFM 表格，其余行原样保留，
+ * 这样即使剪贴板没有 text/html 也能保留表格结构。
+ */
+export function mixedTextToMarkdown(text) {
+  const lines = String(text || '').replace(/\r\n?/g, '\n').split('\n');
+  const out = [];
+  let block = [];
+  let changed = false;
+  const flush = () => {
+    if (block.length >= 2) {
+      const table = tsvToMarkdownTable(block.join('\n'));
+      if (table) {
+        out.push(table);
+        changed = true;
+        block = [];
+        return;
+      }
+    }
+    out.push(...block);
+    block = [];
+  };
+  for (const line of lines) {
+    if (line.includes('\t') && line.trim() !== '') block.push(line);
+    else { flush(); out.push(line); }
+  }
+  flush();
+  return changed ? out.join('\n') : null;
+}
+
+/** 纯文本里是否已经带 Markdown 结构（而不是渲染后的普通文本）。 */
+export function looksLikeMarkdown(text) {
+  return /^(?:#{1,6}\s|```)/m.test(text) || /\|.*\|/m.test(text) || /\*\*[^*\n]+\*\*/.test(text);
+}
+
+const RICH_HTML = /<(?:h[1-6]|table|thead|tbody|ul|ol|pre|blockquote|strong|em)\b/i;
+
 function insertMarkdown(view, ctx, markdown) {
   const doc = ctx.get(parserCtx)(String(markdown).replace(/\r\n?/g, '\n'));
   if (!doc) return false;
@@ -37,7 +75,8 @@ function insertMarkdown(view, ctx, markdown) {
 }
 
 // Source copied from a code editor often includes highlighted HTML. Prefer
-// Markdown in that case, while the stock clipboard plugin handles rich text.
+// Markdown in that case; rendered rich text (chat/markdown previews) is parsed
+// from HTML so headings, tables and code blocks keep their structure.
 export const milkdownMarkdownPaste = $prose((ctx) => new Plugin({
   props: {
     handlePaste(view, event) {
@@ -51,18 +90,17 @@ export const milkdownMarkdownPaste = $prose((ctx) => new Plugin({
       let mode;
       try { mode = JSON.parse(data.getData('vscode-editor-data') || '{}').mode; } catch { /* Optional source metadata. */ }
       if (mode && mode !== 'markdown') return false;
-      const html = data.getData('text/html');
-      if (mode !== 'markdown' && (!/<(?:pre|code)(?:\s|>)/i.test(html) || /data-pm-slice\s*=/i.test(html))) return false;
-      const doc = ctx.get(parserCtx)(text.replace(/\r\n?/g, '\n'));
-      if (!doc) return false;
-      let formatted = false;
-      doc.descendants((node) => {
-        if ((node.type.name !== 'paragraph' && !node.isText) || node.marks.length) formatted = true;
-      });
-      if (mode !== 'markdown' && !formatted) return false;
-      view.dispatch(view.state.tr.replaceSelection(Slice.maxOpen(doc.content)).scrollIntoView()
-        .setMeta('paste', true).setMeta('uiEvent', 'paste'));
-      return true;
+      const html = data.getData('text/html') || '';
+      if (mode === 'markdown' || looksLikeMarkdown(text)) {
+        return insertMarkdown(view, ctx, text);
+      }
+      // 渲染后的富文本（DeepSeek/网页复制）：text/plain 已失去语法，改用 HTML 解析，
+      // 保留标题、表格、列表和代码块。
+      if (RICH_HTML.test(html) && !/data-pm-slice\s*=/i.test(html) && view.pasteHTML(html, event)) return true;
+      // 没有可用的 HTML 时，退回混合文本处理：连续制表符行转表格，其余保留。
+      const mixed = mixedTextToMarkdown(text);
+      if (mixed) return insertMarkdown(view, ctx, mixed);
+      return false;
     },
   },
 }));
