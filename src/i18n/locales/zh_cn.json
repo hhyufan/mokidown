@@ -1,4 +1,12 @@
 {
+  "reader.returnToEditor": "返回 MokiDown 编辑器",
+  "reader.readOnly": "只读",
+  "reader.loading": "正在读取 Markdown…",
+  "reader.openFailed": "无法打开只读窗口",
+  "settings.general.associatedOpenMode": "关联 Markdown 打开方式",
+  "settings.general.associatedOpenModeDesc": "双击系统关联的 MD 文件时，使用完整主编辑器，或独立的单 MD 只读窗口。",
+  "settings.general.openInEditor": "主项目编辑器",
+  "settings.general.openInReader": "单 MD 只读窗口",
   "runtimeLogs.title": "错误日志",
   "runtimeLogs.view": "查看错误日志",
   "runtimeLogs.reported": "MokiDown 遇到错误",

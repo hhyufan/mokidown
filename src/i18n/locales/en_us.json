@@ -1,4 +1,12 @@
 {
+  "reader.returnToEditor": "Return to the MokiDown editor",
+  "reader.readOnly": "Read only",
+  "reader.loading": "Reading Markdown...",
+  "reader.openFailed": "Could not open read-only window",
+  "settings.general.associatedOpenMode": "Associated Markdown files",
+  "settings.general.associatedOpenModeDesc": "Open system-associated MD files in the full editor or a standalone read-only window.",
+  "settings.general.openInEditor": "Main project editor",
+  "settings.general.openInReader": "Single MD reader",
   "runtimeLogs.title": "Error log",
   "runtimeLogs.view": "View error log",
   "runtimeLogs.reported": "MokiDown encountered an error",

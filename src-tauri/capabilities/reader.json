@@ -1,0 +1,22 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "reader",
+  "description": "Read-only Markdown windows and their native window controls",
+  "windows": ["reader-*"],
+  "permissions": [
+    "core:default",
+    "dialog:allow-save",
+    "fs:allow-write-text-file",
+    "core:window:allow-close",
+    "core:window:allow-minimize",
+    "core:window:allow-start-dragging",
+    "core:window:allow-maximize",
+    "core:window:allow-unmaximize",
+    "core:window:allow-is-maximized",
+    "core:window:allow-is-always-on-top",
+    "core:window:allow-set-always-on-top",
+    "core:window:allow-set-title",
+    "core:event:allow-listen",
+    "core:event:allow-unlisten"
+  ]
+}

@@ -64,15 +64,6 @@
   }
 }
 
-.titlebar__pin-icon {
-  transition: transform 0.3s ease-in-out;
-  transform-origin: center;
-
-  &--unpinned {
-    transform: rotate(45deg);
-  }
-}
-
 .titlebar__search {
   flex: 0 1 380px;
   height: 36px;

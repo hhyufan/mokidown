@@ -341,6 +341,8 @@ export default function ProjectExplorer() {
           aria-expanded={file.is_dir ? expanded : undefined}
           aria-busy={node?.loading || undefined}
           data-path={file.path}
+          data-reader-path={!file.is_dir ? file.path : undefined}
+          data-reader-name={file.name}
           data-directory-path={row.parent?.file.path || currentDir}
           aria-selected={isSelected}
           aria-current={isCurrent ? 'true' : undefined}

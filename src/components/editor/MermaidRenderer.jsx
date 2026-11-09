@@ -20,16 +20,20 @@ mermaid.initialize({
  * 负责接收 Markdown 中提取出的 Mermaid 源码，并根据当前明暗主题异步生成 SVG 预览；
  * 当渲染失败时，改为展示本地化错误提示，避免预览区域直接空白。
  */
-function MermaidRenderer({ code, isDark }) {
+function MermaidRenderer({ code, isDark, onRendered, eager = false }) {
   const { t } = useTranslation();
   const ref = useRef(null);
   const [svg, setSvg] = useState('');
   const [error, setError] = useState(null);
-  const [visible, setVisible] = useState(false);
+  const [visible, setVisible] = useState(eager);
+
+  useEffect(() => {
+    if (svg || error || !code) onRendered?.();
+  }, [svg, error, code, onRendered]);
 
   useEffect(() => {
     const node = ref.current;
-    if (!node || typeof IntersectionObserver === 'undefined') {
+    if (eager || !node || typeof IntersectionObserver === 'undefined') {
       setVisible(true);
       return undefined;
     }
@@ -41,7 +45,7 @@ function MermaidRenderer({ code, isDark }) {
     }, { rootMargin: '300px' });
     observer.observe(node);
     return () => observer.disconnect();
-  }, [code]);
+  }, [code, eager]);
 
   useEffect(() => {
     if (!code || !visible) return;

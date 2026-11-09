@@ -49,7 +49,10 @@ export function getLocalSettingsSnapshot({ includeDeviceLocal = false } = {}) {
     
     updatedAt,
   };
-  if (includeDeviceLocal) snapshot.workspacePath = config.workspacePath;
+  if (includeDeviceLocal) {
+    snapshot.workspacePath = config.workspacePath;
+    snapshot.associatedOpenMode = config.associatedOpenMode;
+  }
   return snapshot;
 }
 
@@ -87,6 +90,9 @@ export function applySettingsSnapshot(snapshot = {}, { includeDeviceLocal = true
     workspacePath: includeDeviceLocal
       ? snapshot.workspacePath ?? useConfigStore.getState().workspacePath ?? ''
       : useConfigStore.getState().workspacePath ?? '',
+    associatedOpenMode: includeDeviceLocal && snapshot.associatedOpenMode !== undefined
+      ? (snapshot.associatedOpenMode === 'reader' ? 'reader' : 'editor')
+      : useConfigStore.getState().associatedOpenMode,
   }, { updatedAt });
   i18n.changeLanguage(language === 'zh' ? 'zh' : 'en');
   useEditorStore.getState().applyLayoutSnapshot(snapshot.editorState || {}, { updatedAt });
