@@ -99,6 +99,41 @@
   }
 }
 
+/* 拖拽跟手浮层：克隆当前标签节点，保留文件类型图标与名称，随指针移动。 */
+.tabbar__tab.tabbar__tab-ghost {
+  position: fixed;
+  top: 0;
+  left: 0;
+  z-index: 3000;
+  margin: 0;
+  padding: 0 14px;
+  background: var(--surface);
+  color: var(--text);
+  font-weight: 500;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  box-shadow: 0 10px 24px rgba(0, 0, 0, 0.22);
+  opacity: 0.96;
+  pointer-events: none;
+  cursor: grabbing;
+  transform-origin: top left;
+  will-change: transform;
+  transition: opacity 0.12s ease;
+
+  &::after {
+    display: none;
+  }
+
+  .tabbar__tab-close {
+    display: none;
+  }
+}
+
+.tabbar__tab.tabbar__tab-ghost--out {
+  opacity: 0.72;
+  box-shadow: 0 6px 16px rgba(0, 0, 0, 0.16);
+}
+
 .tabbar__tab-icon {
   width: 16px;
   height: 16px;
