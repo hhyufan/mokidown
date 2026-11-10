@@ -60,6 +60,21 @@ export function emptyAsteriskPair(text, offset) {
     && text.slice(start, end) === '*'.repeat(width * 2) && !isEscaped(text, start) ? width : 0;
 }
 
+export function emptyMarkdownMarkPair(text, offset) {
+  const symbol = text[offset];
+  if (symbol === '*') return emptyAsteriskPair(text, offset);
+  if (symbol === '`') return Number(isEmptyBacktickPair(text, offset));
+  if (symbol !== '_' && symbol !== '~') return 0;
+  const width = text[offset + 1] === symbol ? 2 : 1;
+  const start = offset - width, end = offset + width;
+  if (start < 0 || (symbol === '~' && width !== 2) || isEscaped(text, start)
+    || text[start - 1] === symbol || text[end] === symbol
+    || text.slice(start, end) !== symbol.repeat(width * 2)) return 0;
+  // Underscores inside identifiers are literal in Markdown.
+  if (symbol === '_' && /[\p{L}\p{N}]/u.test((text[start - 1] || '') + (text[end] || ''))) return 0;
+  return width;
+}
+
 export function markdownAsteriskEdit(text, offset) {
   if (text[offset] === '*') {
     const pair = markdownPairDeletion(text, offset, 'Delete');
