@@ -1,4 +1,4 @@
-* [x] **修复（fix）15/15**
+* [x] **修复（fix）19/19**
   * [x] fix(editor): Monaco 重开文档后重做报 "Model is disposed!"。
 
   * [x] fix(editor): 公式行输入 `$$` 后按空格崩溃。
@@ -29,7 +29,15 @@
 
   * [x] fix(markdown): 级联任务列表在空子任务行首按 Enter 后，复选框与分支线错位、层级渲染异常；期望退为父级任务列表项，而不是生成错位的嵌套结构。
 
-* [ ] **新功能（feat）5/11**
+  * [x] fix(editor): 粘贴富文本 HTML 时 handlePaste 递归，报 Maximum call stack size exceeded。
+
+  * [x] fix(editor): 粘贴内容到 `**|**` 空粗体对中间后不渲染粗体，刷新页面才正确。
+
+  * [x] fix(editor): 无序列表空项后面还有续段或子列表时，Backspace/Delete 无法删除。
+
+  * [x] fix(android): Android 安装包缺少前端 assets，启动一直停在启动图。
+
+* [ ] **新功能（feat）9/15**
   * [x] feat(editor): 实现 LaTeX 公式编辑器（已委托 77）。
 
   * [ ] feat(editor): HTML 代码块实时预览（分屏渲染、编辑热刷新、预览端口设置）。
@@ -52,7 +60,15 @@
 
   * [x] feat(ui): 错误日志面板：统一收集 Tauri/React 警告与报错，可查看并导出，不再直接红屏崩溃。
 
-* [ ] **体验优化（opt）10/11**
+  * [x] feat(reader): 独立阅读器窗口：只读 Markdown / 源码视图、缩放、置顶、主窗口与阅读器互转。
+
+  * [x] feat(tabs): 标签拖拽分离到阅读器窗口。
+
+  * [x] feat(editor): 粘贴 TSV / 混合文本中的表格自动转 GFM 表格（含缺表头列补齐）。
+
+  * [x] feat(android): Android 一键构建脚本（注入 MSVC/NDK，解决 msvcrt.lib 缺失）。
+
+* [ ] **体验优化（opt）11/12**
   * [x] opt(explorer): 前进/后退/上一级、项目上一级与打开选中的方向键快捷键。
 
   * [x] opt(explorer): 项目搜索上一处/下一处的方向键切换。
@@ -74,6 +90,8 @@
   * [ ] opt(editor): 重做脚注引用动画。
 
   * [x] opt(files): 外部修改冲突提示过于频繁、打断编辑，参考开源编辑器改为低打扰策略。
+
+  * [x] opt(explorer): 项目树 / 文件树路径 tooltip 与最近文件一致，从侧栏右缘外侧弹出。
 
 * [x] **样式（style）2/2**
   * [x] style(editor): HTML 编辑器内嵌编辑框「完成」改为绿色线性 ✓。
