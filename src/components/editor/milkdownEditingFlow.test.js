@@ -2,6 +2,7 @@ import { expect, it, vi } from 'vitest';
 import { Schema } from '@milkdown/kit/prose/model';
 import { EditorState, NodeSelection, TextSelection } from '@milkdown/kit/prose/state';
 import { GapCursor } from '@milkdown/kit/prose/gapcursor';
+import { history, undo } from '@milkdown/kit/prose/history';
 import { createMilkdownEditingFlowPlugin, persistentMilkdownDocument, handleMilkdownBlankPointerDown, handleMilkdownBlockKeyDown, moveOutsideBlock } from './milkdownEditingFlow';
 
 const schema = new Schema({
@@ -11,6 +12,9 @@ const schema = new Schema({
     heading: { group: 'block', content: 'inline*', createGapCursor: true },
     code_block: { group: 'block', content: 'text*', code: true },
     blockquote: { group: 'block', content: 'block+' },
+    bullet_list: { group: 'block', content: 'list_item+' },
+    ordered_list: { group: 'block', content: 'list_item+', attrs: { order: { default: 1 } } },
+    list_item: { content: 'paragraph block*', attrs: { checked: { default: null } } },
     table: { group: 'block', content: 'table_row+', isolating: true },
     table_row: { content: 'table_cell+' },
     table_cell: { content: 'paragraph+', isolating: true },
@@ -142,6 +146,55 @@ it('does not activate blank documents during readonly, composition or multi-touc
 
 const htmlParagraph = (value = '<!-- keep -->') => schema.nodes.html_block.create({ value });
 const deleteKey = (key = 'Backspace') => ({ key, target: document.createElement('div'), preventDefault: vi.fn(), stopPropagation: vi.fn() });
+
+const listItem = (...blocks) => schema.nodes.list_item.create(null, blocks);
+const bulletList = (...items) => schema.nodes.bullet_list.create(null, items);
+
+it.each(['Backspace', 'Delete'])('exits an empty list marker with continuation blocks using %s', (key) => {
+  const doc = schema.nodes.doc.create(null, bulletList(listItem(paragraph(), paragraph('keep'))));
+  const view = viewFor(doc, TextSelection.create(doc, 3));
+  view.state = EditorState.create({ doc, selection: TextSelection.create(doc, 3), plugins: [history(), createMilkdownEditingFlowPlugin()] });
+  expect(handleMilkdownBlockKeyDown(view, deleteKey(key))).toBe(true);
+  expect(view.state.doc.eq(doc)).toBe(false);
+  view.state.doc.check();
+  expect(view.state.doc.firstChild.type.name).toBe('paragraph');
+  expect(view.state.doc.textContent).toBe('keep');
+  expect(view.state.selection.from).toBe(1);
+  expect(undo(view.state, view.dispatch)).toBe(true);
+  expect(view.state.doc.eq(doc)).toBe(true);
+  expect(view.state.selection.from).toBe(3);
+});
+
+it('preserves nested list content when removing an empty outer marker', () => {
+  const childList = bulletList(listItem(paragraph('child')));
+  const doc = schema.nodes.doc.create(null, bulletList(listItem(paragraph(), childList)));
+  const view = viewFor(doc, TextSelection.create(doc, 3));
+  expect(handleMilkdownBlockKeyDown(view, deleteKey())).toBe(true);
+  view.state.doc.check();
+  expect(view.state.doc.firstChild.type.name).toBe('paragraph');
+  expect(view.state.doc.lastChild.eq(childList)).toBe(true);
+});
+
+it('lifts an empty nested item without losing its continuation text or sibling items', () => {
+  const nested = bulletList(listItem(paragraph(), paragraph('keep')), listItem(paragraph('next')));
+  const doc = schema.nodes.doc.create(null, bulletList(listItem(paragraph('parent'), nested)));
+  let cursor;
+  doc.descendants((node, pos) => {
+    if (node.type.name === 'paragraph' && !node.content.size) cursor = pos + 1;
+  });
+  const view = viewFor(doc, TextSelection.create(doc, cursor));
+  expect(handleMilkdownBlockKeyDown(view, deleteKey())).toBe(true);
+  view.state.doc.check();
+  expect(view.state.doc.textContent).toBe('parentkeepnext');
+  expect(view.state.selection.$from.depth).toBe(3);
+});
+
+it('leaves nonempty list text and ordinary list boundaries to the default keymap', () => {
+  const doc = schema.nodes.doc.create(null, bulletList(listItem(paragraph('keep'))));
+  const view = viewFor(doc, TextSelection.create(doc, 3));
+  expect(handleMilkdownBlockKeyDown(view, deleteKey())).toBe(false);
+  expect(view.dispatch).not.toHaveBeenCalled();
+});
 
 it('deleting a real empty paragraph below HTML leaves a block boundary caret', () => {
   const html = htmlParagraph();
