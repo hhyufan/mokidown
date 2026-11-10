@@ -76,12 +76,13 @@ export function emptyMarkdownMarkPair(text, offset) {
 }
 
 export function markdownAsteriskEdit(text, offset) {
+  // 空对优先：*|* 再输入 * 扩成 **|**（粗体空对），**|** 再输入 * 保持空对。
+  const pairWidth = emptyAsteriskPair(text, offset);
+  if (pairWidth === 1) return { text: '**', advance: 1 };
+  if (pairWidth === 2) return { text: '', advance: 0 };
   if (text[offset] === '*') {
     const pair = markdownPairDeletion(text, offset, 'Delete');
     if (pair && pair[0].to !== offset && offset >= pair[1].from) return { text: '', advance: 1 };
-    const width = emptyAsteriskPair(text, offset);
-    if (width === 1) return { text: '**', advance: 1 };
-    if (width === 2) return { text: '', advance: 2 };
   }
   if (text[offset - 1] === '*' && text[offset - 2] !== '*' && text[offset] !== '*' && !isEscaped(text, offset - 1)) {
     const closing = markdownPairDeletion(text, offset, 'Backspace')?.[1];

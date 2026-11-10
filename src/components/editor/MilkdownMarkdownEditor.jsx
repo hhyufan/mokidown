@@ -147,7 +147,7 @@ import MilkdownTooltips from './MilkdownTooltips';
 import { milkdownMediaEditor, milkdownMediaImageView } from './milkdownMedia';
 import { openExternal } from '@utils/tauriApi';
 import './markdown-preview.scss';
-import { milkdownBlockSelection, milkdownInlineLinkRule, milkdownInlineSyntaxSource, milkdownLiveSyntax } from './milkdownLiveSyntax';
+import { milkdownBlockSelection, milkdownFenceConfirmation, milkdownInlineLinkRule, milkdownInlineSyntaxSource, milkdownLiveSyntax } from './milkdownLiveSyntax';
 import { CODE_FENCE_LANGUAGE_EVENT } from '@utils/markdownCodeFence';
 import MarkdownCodeLanguageMenu from './MarkdownCodeLanguageMenu';
 
@@ -222,6 +222,7 @@ const codeMirrorTheme = CodeMirrorView.theme({
 });
 
 const codeBlockExtensions = [
+  milkdownFenceConfirmation,
   codeMirrorTheme,
   CodeMirrorView.lineWrapping,
   syntaxHighlighting(codeHighlightStyle),

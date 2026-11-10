@@ -2,6 +2,7 @@ import { parserCtx } from '@milkdown/kit/core';
 import { DOMParser as PMDOMParser, Slice } from '@milkdown/kit/prose/model';
 import { Plugin } from '@milkdown/kit/prose/state';
 import { $prose } from '@milkdown/kit/utils';
+import { completePastedInlinePair } from './milkdownLiveSyntax';
 
 /**
  * 把制表符分隔的表格文本（Excel / 网页表格复制出的 text/plain）转成 GFM 表格。
@@ -90,20 +91,25 @@ function insertMarkdown(view, ctx, markdown) {
 // Source copied from a code editor often includes highlighted HTML. Prefer
 // Markdown in that case; rendered rich text (chat/markdown previews) is parsed
 // from HTML so headings, tables and code blocks keep their structure.
-export const milkdownMarkdownPaste = $prose((ctx) => new Plugin({
+export const createMarkdownPastePlugin = (ctx) => new Plugin({
   props: {
     handlePaste(view, event) {
       if (!view.editable || view.state.selection.$from.parent.type.spec.code) return false;
       const data = event.clipboardData;
       const text = data?.getData('text/plain');
       if (!text) return false;
+      const html = data.getData('text/html') || '';
+      // 普通文本粘贴也要完成空标记对；富文本和 Markdown 结构保留原解析路径。
+      if (!looksLikeMarkdown(text) && !RICH_HTML.test(html)
+        && completePastedInlinePair(view, text)) return true;
       // 表格软件/网页表格复制出的纯文本是 TSV，优先转成 GFM 表格。
       const table = tsvToMarkdownTable(text);
       if (table && insertMarkdown(view, ctx, table)) return true;
       let mode;
       try { mode = JSON.parse(data.getData('vscode-editor-data') || '{}').mode; } catch { /* Optional source metadata. */ }
-      if (mode && mode !== 'markdown') return false;
-      const html = data.getData('text/html') || '';
+      // 非 Markdown 来源（如 VS Code 的 plaintext）也可能复制出 **...** 文本，
+      // 只要文本本身带 Markdown 结构就继续解析，不能直接放弃。
+      if (mode && mode !== 'markdown' && !looksLikeMarkdown(text)) return false;
       if (mode === 'markdown' || looksLikeMarkdown(text)) {
         return insertMarkdown(view, ctx, text);
       }
@@ -116,4 +122,6 @@ export const milkdownMarkdownPaste = $prose((ctx) => new Plugin({
       return false;
     },
   },
-}));
+});
+
+export const milkdownMarkdownPaste = $prose(createMarkdownPastePlugin);

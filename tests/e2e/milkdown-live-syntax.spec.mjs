@@ -210,6 +210,50 @@ test('asterisk completion pairs two strokes and upgrades the third stroke to bol
   await expect(editor.locator('hr')).toHaveCount(1);
 });
 
+for (const [source, offset, selector, expected] of [
+  ['Before **** after', 9, 'strong', 'Before **中文** after'],
+  ['Before __ after', 8, 'em', 'Before _中文_ after'],
+  ['Before ~~~~ after', 9, 'del', 'Before ~~中文~~ after'],
+  ['Before `` after', 8, 'code', 'Before `中文` after'],
+]) {
+  test(`committing IME text between the markers in ${source} renders immediately`, async ({ page }) => {
+    const editor = await openEditor(page, source);
+    await page.evaluate((offset) => {
+      window.trial.selectTextblock(0);
+      window.trial.dispatch((state) => state.tr.setSelection(state.selection.constructor.create(state.doc, offset + 1)));
+    }, offset);
+    const cdp = await page.context().newCDPSession(page);
+    try {
+      await cdp.send('Input.imeSetComposition', { text: 'zhong', selectionStart: 5, selectionEnd: 5 });
+      await page.keyboard.insertText('中文');
+      await expect(editor.locator(selector)).toHaveText('中文');
+      expect(await page.evaluate(() => window.trial.markdown().trimEnd())).toBe(expected);
+    } finally {
+      await cdp.detach();
+    }
+  });
+}
+
+test('undo restores the empty bold markers after committing a long-lived IME candidate', async ({ page }) => {
+  const editor = await openEditor(page);
+  await page.evaluate(() => window.trial.selectTextblock(0));
+  await page.keyboard.type('***');
+  const cdp = await page.context().newCDPSession(page);
+  try {
+    await cdp.send('Input.imeSetComposition', { text: '中文', selectionStart: 2, selectionEnd: 2 });
+    await expect(editor.locator('p')).toHaveText('**中文**');
+    // An unchanged candidate can be confirmed after the editor history delay.
+    await page.waitForTimeout(650);
+    await page.keyboard.insertText('中文');
+    await expect(editor.locator('strong')).toHaveText('中文');
+    await page.keyboard.press('Control+z');
+    await expect(editor.locator('p')).toHaveText('****');
+    await expect(editor.locator('strong')).toHaveCount(0);
+  } finally {
+    await cdp.detach();
+  }
+});
+
 test('paired deletion removes one emphasis layer, keeps code text and supports undo and redo', async ({ page }) => {
   const editor = await openEditor(page, '**213**\n\n`Task.Run`\n\n(outer [inside])');
   await page.evaluate(() => window.trial.selectTextblock(0));
@@ -299,6 +343,30 @@ test('Enter or a complete language confirms the fence, and a space leaves it pen
   await expect(editor.locator('.cm-content')).toBeFocused();
 });
 
+test('Enter after auto-opening a Rust fence confirms it without inserting a blank first line', async ({ page }) => {
+  const editor = await openEditor(page);
+  await page.evaluate(() => window.trial.selectTextblock(0));
+  await page.keyboard.type('```rust');
+  const code = editor.locator('.cm-content');
+  await expect(code).toBeFocused();
+  await page.keyboard.press('Enter');
+  await page.keyboard.insertText('let x = 1;');
+  const source = () => page.evaluate(() => window.trial.markdown().trimEnd());
+  await expect.poll(source).toBe('```rust\nlet x = 1;\n```');
+  await page.keyboard.press('Enter');
+  await page.keyboard.insertText('let y = 2;');
+  await expect.poll(source).toBe('```rust\nlet x = 1;\nlet y = 2;\n```');
+});
+
+test('Enter inside an existing Rust block can still insert an intentional blank line', async ({ page }) => {
+  const editor = await openEditor(page, '```rust\nlet x = 1;\n```');
+  await page.evaluate(() => window.trial.selectCode('start'));
+  await expect(editor.locator('.cm-content')).toBeFocused();
+  await page.keyboard.press('Enter');
+  await expect.poll(() => page.evaluate(() => window.trial.markdown().trimEnd()))
+    .toBe('```rust\n\nlet x = 1;\n```');
+});
+
 test('individual pair preferences disable backticks and square brackets while leaving round brackets enabled', async ({ page }) => {
   const editor = await openEditor(page);
   await page.evaluate(async () => {
@@ -372,4 +440,49 @@ test('Enter at a nested list item start outdents one level', async ({ page }) =>
   await page.evaluate(() => window.trial.selectParagraph('Child'));
   await page.keyboard.press('Enter');
   await expect(editor.locator(':scope > ul > li')).toHaveText(['Parent', 'Child']);
+});
+
+
+
+
+test('four stars then content renders strong instead of plain text', async ({ page }) => {
+  const editor = await openEditor(page);
+  await editor.click();
+  await page.keyboard.type('****');
+  await page.keyboard.type('321321');
+  await expect(editor.locator('strong')).toHaveText('321321');
+  expect(await page.evaluate(() => window.trial.markdown().trimEnd())).toBe('**321321**');
+});
+
+
+
+
+test('pasting plain **bold** renders strong instead of text', async ({ page }) => {
+  const editor = await openEditor(page);
+  await editor.locator('p').first().click();
+  await page.evaluate(() => {
+    const root = document.querySelector('.milkdown-editor');
+    const target = root.querySelector('.ProseMirror') || root.querySelector('[contenteditable="true"]') || root;
+    const data = new DataTransfer();
+    data.setData('text/plain', '**321321**');
+    target.dispatchEvent(new ClipboardEvent('paste', { clipboardData: data, bubbles: true, cancelable: true }));
+  });
+  await expect(editor.locator('strong')).toHaveText('321321');
+  expect(await page.evaluate(() => window.trial.markdown().trimEnd())).toBe('**321321**');
+});
+
+
+test('pasting into an empty bold pair renders strong', async ({ page }) => {
+  const editor = await openEditor(page);
+  await editor.click();
+  await page.keyboard.type('****');
+  await page.evaluate(() => {
+    const root = document.querySelector('.milkdown-editor');
+    const target = root.querySelector('.ProseMirror') || root.querySelector('[contenteditable="true"]') || root;
+    const data = new DataTransfer();
+    data.setData('text/plain', '321321');
+    target.dispatchEvent(new ClipboardEvent('paste', { clipboardData: data, bubbles: true, cancelable: true }));
+  });
+  await expect(editor.locator('strong')).toHaveText('321321');
+  expect(await page.evaluate(() => window.trial.markdown().trimEnd())).toBe('**321321**');
 });

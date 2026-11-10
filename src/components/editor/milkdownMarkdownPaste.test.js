@@ -1,5 +1,82 @@
-import { describe, expect, it } from 'vitest';
-import { looksLikeMarkdown, mixedTextToMarkdown, tsvToMarkdownTable } from './milkdownMarkdownPaste';
+import { describe, expect, it, vi } from 'vitest';
+import { Schema } from '@milkdown/kit/prose/model';
+import { EditorState, TextSelection } from '@milkdown/kit/prose/state';
+import { history, undo } from '@milkdown/kit/prose/history';
+import { createMarkdownPastePlugin, looksLikeMarkdown, mixedTextToMarkdown, tsvToMarkdownTable } from './milkdownMarkdownPaste';
+
+const schema = new Schema({
+  nodes: {
+    doc: { content: 'block+' },
+    paragraph: { group: 'block', content: 'inline*' },
+    code_block: { group: 'block', content: 'text*', code: true },
+    text: { group: 'inline' },
+  },
+  marks: {
+    strong: { attrs: { marker: { default: '*' } } },
+    emphasis: { attrs: { marker: { default: '*' } } },
+    inlineCode: { code: true },
+    strike_through: {},
+  },
+});
+
+function pasteFixture(source = '****', position = 3, type = 'paragraph') {
+  const doc = schema.nodes.doc.create(null, schema.nodes[type].create(null, schema.text(source)));
+  const plugin = createMarkdownPastePlugin({ get: vi.fn(() => () => null) });
+  const view = {
+    editable: true,
+    state: EditorState.create({ doc, selection: TextSelection.create(doc, position), plugins: [history(), plugin] }),
+  };
+  view.dispatch = vi.fn((tr) => { view.state = view.state.apply(tr); });
+  const paste = (text, extra = {}) => plugin.props.handlePaste(view, {
+    clipboardData: { getData: (format) => ({ 'text/plain': text, ...extra })[format] || '' },
+  });
+  return { view, paste };
+}
+
+describe('paste into empty inline markers', () => {
+  it('immediately creates bold content, places the caret after it and preserves paste metadata', () => {
+    const { view, paste } = pasteFixture();
+    expect(paste('粘贴内容')).toBe(true);
+    expect(view.state.doc.textContent).toBe('粘贴内容');
+    expect(view.state.doc.firstChild.firstChild.marks[0].type.name).toBe('strong');
+    expect(view.state.selection.from).toBe(5);
+    expect(view.state.storedMarks[0].type.name).toBe('strong');
+    expect(view.dispatch.mock.calls[0][0].getMeta('uiEvent')).toBe('paste');
+    expect(undo(view.state, view.dispatch)).toBe(true);
+    expect(view.state.doc.textContent).toBe('****');
+    expect(view.state.selection.from).toBe(3);
+  });
+
+  it.each([['**', 2, 'emphasis'], ['____', 3, 'strong'], ['~~ ~~', 3, null], ['~~~~', 3, 'strike_through'], ['``', 2, 'inlineCode']])(
+    'uses typing semantics for %s',
+    (source, position, mark) => {
+      const { view, paste } = pasteFixture(source, position);
+      expect(paste('text')).toBe(Boolean(mark));
+      if (mark) expect(view.state.doc.firstChild.firstChild.marks[0].type.name).toBe(mark);
+    },
+  );
+
+  it.each(['line one\nline two', ' padded ', '**formatted**'])('keeps existing parsing for %j', (text) => {
+    const { view, paste } = pasteFixture();
+    expect(paste(text)).toBe(false);
+    expect(view.dispatch).not.toHaveBeenCalled();
+  });
+
+  it('also handles plain text copied from a non-Markdown source editor', () => {
+    const { paste, view } = pasteFixture();
+    expect(paste('text', { 'vscode-editor-data': '{"mode":"plaintext"}' })).toBe(true);
+    expect(view.state.doc.firstChild.firstChild.marks[0].type.name).toBe('strong');
+  });
+
+  it('does not consume a selection, a read-only editor or a code block', () => {
+    const { paste, view } = pasteFixture();
+    view.state = view.state.apply(view.state.tr.setSelection(TextSelection.create(view.state.doc, 2, 3)));
+    expect(paste('text')).toBe(false);
+    view.editable = false;
+    expect(paste('text')).toBe(false);
+    expect(pasteFixture('****', 3, 'code_block').paste('text')).toBe(false);
+  });
+});
 
 describe('tsvToMarkdownTable', () => {
   it('converts a spreadsheet paste into a GFM table', () => {
