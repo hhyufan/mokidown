@@ -4,16 +4,41 @@ import { closeHistory, undo } from '@milkdown/kit/prose/history';
 import { Fragment } from '@milkdown/kit/prose/model';
 import { Plugin, PluginKey, TextSelection } from '@milkdown/kit/prose/state';
 import { Decoration, DecorationSet } from '@milkdown/kit/prose/view';
+import { EditorView as CodeMirrorView } from '@codemirror/view';
 import { $inputRule, $nodeSchema, $prose } from '@milkdown/kit/utils';
 import { isImeComposing } from '@utils/keyboard';
 import useConfigStore from '@store/useConfigStore';
-import { activeMarkdownPairs, emptyAsteriskPair, isEmptyBacktickPair, markdownAsteriskEdit, markdownBacktickEdit, markdownBrackets, markdownPairDeletion, markdownPairEnabled, matchingMarkdownBracket } from '@utils/markdownPairs';
+import { activeMarkdownPairs, emptyAsteriskPair, emptyMarkdownMarkPair, markdownAsteriskEdit, markdownBacktickEdit, markdownBrackets, markdownPairDeletion, markdownPairEnabled, matchingMarkdownBracket } from '@utils/markdownPairs';
 import { CODE_FENCE_LANGUAGE_EVENT, completedFenceLanguage, readMarkdownFence } from '@utils/markdownCodeFence';
 
 const sourceTypeName = 'moki_inline_syntax_source';
 const liveSyntaxKey = new PluginKey('moki-live-syntax');
 const inlineLinkPattern = /(?<!\\)!?\[([^\n[\]]*)\]\((?:[^()\n]|\([^()\n]*\))*\)$/;
 const graphemes = Intl.Segmenter && new Intl.Segmenter(undefined, { granularity: 'grapheme' });
+const autoOpenedFences = new WeakSet();
+const inlineCompositions = new WeakMap();
+
+// Typing the full language name already opens the block. A following Enter
+// confirms that fence once, rather than inserting an empty first code line.
+function clearFenceConfirmation(view) {
+  return autoOpenedFences.delete(view.dom.closest('.milkdown-code-block'));
+}
+
+export const milkdownFenceConfirmation = [
+  CodeMirrorView.domEventHandlers({
+    keydown(event, view) {
+      if (['Shift', 'Alt', 'Control', 'Meta'].includes(event.key)) return false;
+      return clearFenceConfirmation(view) && event.key === 'Enter' && !event.repeat
+        && !event.shiftKey && !event.ctrlKey && !event.metaKey && !event.altKey
+        && !view.composing && !isImeComposing(event) && view.state.doc.length === 0;
+    },
+    pointerdown(_event, view) { clearFenceConfirmation(view); },
+    blur(_event, view) { clearFenceConfirmation(view); },
+  }),
+  CodeMirrorView.updateListener.of((update) => {
+    if (update.docChanged) clearFenceConfirmation(update.view);
+  }),
+];
 
 // Preserve unfinished delimiters verbatim through the Markdown serializer.
 export const milkdownInlineSyntaxSource = $nodeSchema(sourceTypeName, () => ({
@@ -294,7 +319,7 @@ function pendingCodeFence(view) {
   return fence && { ...fence, $from };
 }
 
-function openCodeFence(view, $pos, language) {
+function openCodeFence(view, $pos, language, autoOpened = false) {
   const { state } = view;
   const type = state.schema.nodes.code_block;
   const pos = $pos.before();
@@ -304,9 +329,13 @@ function openCodeFence(view, $pos, language) {
     : Fragment.fromArray([state.schema.nodes.paragraph.create(), code]);
   if (!parent.canReplace(index, index + 1, replacement)) return false;
   const tr = closeHistory(state.tr).replaceWith(pos, $pos.after(), replacement);
-  tr.setSelection(TextSelection.create(tr.doc, pos + replacement.size - code.nodeSize + 1));
+  const codePos = pos + replacement.size - code.nodeSize;
+  tr.setSelection(TextSelection.create(tr.doc, codePos + 1));
   view.dispatch(tr.scrollIntoView());
-  view.focus();
+  const block = view.nodeDOM(codePos);
+  // If ProseMirror did not focus the node view during dispatch, focus it now.
+  if (!block?.contains(view.dom.ownerDocument.activeElement)) view.focus();
+  if (autoOpened && block) autoOpenedFences.add(block);
   return true;
 }
 
@@ -336,6 +365,31 @@ function asteriskWidth(mark) {
   return mark.type.name === 'strong' ? 2 : Number(mark.type.name === 'emphasis');
 }
 
+
+// 逐字输入闭合星号后，段落文本恰好构成 **内容**（或 __ 内容 __）时，
+// 直接替换为 strong mark；避免依赖刷新时重新解析 Markdown。
+const CLOSED_ASTERISK_PAIR = /^(\*\*|__)([^\s*_~\`](?:[\s\S]*?[^\s*_~\`])?)\1$/;
+
+function completeClosedAsterisk(view, $pos, value) {
+  const { state } = view;
+  const offset = $pos.parentOffset;
+  if ($pos.parent.childCount !== 1 || !$pos.parent.firstChild?.isText || $pos.parent.firstChild.marks.length) return false;
+  const next = value.slice(0, offset) + '*' + value.slice(offset);
+  const match = CLOSED_ASTERISK_PAIR.exec(next);
+  if (!match) return false;
+  const [, delimiter, content] = match;
+  const type = state.schema.marks.strong;
+  if (!type) return false;
+  const mark = type.create({ marker: delimiter[0] });
+  const from = $pos.before() + 1;
+  const tr = closeHistory(state.tr);
+  tr.insertText('*', $pos.pos);
+  tr.replaceWith(from, from + next.length, state.schema.text(content, mark));
+  tr.setSelection(TextSelection.create(tr.doc, from + content.length)).setStoredMarks([mark]);
+  view.dispatch(tr.scrollIntoView());
+  return true;
+}
+
 function typeAsterisk(view, $pos, value, text) {
   const { state } = view;
   const marks = state.storedMarks ?? $pos.marks();
@@ -350,6 +404,7 @@ function typeAsterisk(view, $pos, value, text) {
       view.dispatch(tr);
       return true;
     }
+    if (completeClosedAsterisk(view, $pos, value)) return true;
     const edit = markdownAsteriskEdit(value, $pos.parentOffset);
     if (!edit) return false;
     const tr = closeHistory(state.tr);
@@ -357,9 +412,8 @@ function typeAsterisk(view, $pos, value, text) {
     view.dispatch(tr.setSelection(TextSelection.create(tr.doc, $pos.pos + edit.advance)).scrollIntoView());
     return true;
   }
-  const width = emptyAsteriskPair(value, $pos.parentOffset);
-  if (!width) return false;
-  if (width === 2 && $pos.parent.type.name === 'paragraph' && /^ {0,3}\*{4}$/.test(value) && /^[\t \u00a0]$/.test(text)) {
+  if (/^[\t \u00a0]$/.test(text) && $pos.parent.type.name === 'paragraph'
+    && /^ {0,3}\*{4}$/.test(value) && emptyAsteriskPair(value, $pos.parentOffset) === 2) {
     // The third typed asterisk also starts the existing thematic break shortcut.
     const type = state.schema.nodes.hr;
     const index = $pos.index(-1);
@@ -368,14 +422,42 @@ function typeAsterisk(view, $pos, value, text) {
       return true;
     }
   }
-  if (!/^\S[^\r\n]*$/.test(text)) return false;
-  const type = width === 2 ? state.schema.marks.strong : state.schema.marks.emphasis;
-  const nextMarks = type.create({ marker: '*' }).addToSet(marks);
+  return false;
+}
+
+
+
+function completeInlinePair(view, $pos, value, text, composition, paste = false) {
+  const { state } = view;
+  const offset = $pos.parentOffset;
+  const symbol = value[offset];
+  const width = emptyMarkdownMarkPair(value, offset);
+  if (!width || !text || text === symbol || /[\r\n]/.test(text)
+    || (symbol !== '`' && text.trim() !== text)) return false;
+  const marks = state.storedMarks ?? $pos.marks();
+  if (marks.some((mark) => mark.type.spec.code) || $pos.nodeAfter?.marks.some((mark) => mark.type.spec.code)) return false;
+  const type = state.schema.marks[symbol === '`' ? 'inlineCode'
+    : symbol === '~' ? 'strike_through' : width === 2 ? 'strong' : 'emphasis'];
+  if (!type) return false;
+  const nextMarks = type.create({ marker: symbol }).addToSet(marks);
   const from = $pos.pos - width;
-  const tr = closeHistory(state.tr).replaceWith(from, $pos.pos + width, state.schema.text(text, nextMarks));
+  // The IME has already inserted its committed text; ordinary typing hasn't.
+  const insertedLength = composition?.length ?? 0;
+  const tr = composition ? state.tr : closeHistory(state.tr);
+  if (paste) tr.setMeta('paste', true).setMeta('uiEvent', 'paste');
+  if (composition?.id) tr.setMeta('composition', composition.id);
+  tr.replaceWith(from, $pos.pos + insertedLength + width, state.schema.text(text, nextMarks));
   tr.setSelection(TextSelection.create(tr.doc, from + text.length)).setStoredMarks(nextMarks);
   view.dispatch(tr.scrollIntoView());
   return true;
+}
+
+export function completePastedInlinePair(view, text) {
+  const { empty, $from } = view.state.selection;
+  if (!view.editable || view.composing || !empty || !$from.parent.isTextblock
+    || $from.parent.type.spec.code) return false;
+  const value = $from.parent.textBetween(0, $from.parent.content.size, '\n', '\ufffc');
+  return completeInlinePair(view, $from, value, text, undefined, true);
 }
 
 function handleSmartTextInput(view, from, to, text) {
@@ -387,13 +469,6 @@ function handleSmartTextInput(view, from, to, text) {
   const preference = activeMarkdownPairs(useConfigStore.getState());
   if (markdownPairEnabled(preference, '`')) {
     if (text === '`') return typeBacktick(view, $pos, value);
-    if (text && !/[\r\n]/.test(text) && isEmptyBacktickPair(value, $pos.parentOffset)) {
-      const marks = state.schema.marks.inlineCode.create().addToSet(state.storedMarks || $pos.marks());
-      const tr = closeHistory(state.tr).replaceWith(from - 1, from + 1, state.schema.text(text, marks));
-      tr.setSelection(TextSelection.create(tr.doc, from - 1 + text.length)).setStoredMarks(marks);
-      view.dispatch(tr.scrollIntoView());
-      return true;
-    }
     if (from === state.selection.from && pendingCodeFence(view)) {
       if (text === ' ') {
         // Keep Markdown whitespace instead of Chromium's trailing nonbreaking space.
@@ -403,11 +478,12 @@ function handleSmartTextInput(view, from, to, text) {
       if (/^[\w+.#-]+$/.test(text)) {
         const next = readMarkdownFence(value + text);
         const language = next && completedFenceLanguage(next.language);
-        if (language && openCodeFence(view, $pos, language)) return true;
+        if (language && openCodeFence(view, $pos, language, true)) return true;
       }
     }
   }
   if (markdownPairEnabled(preference, '*') && typeAsterisk(view, $pos, value, text)) return true;
+  if (completeInlinePair(view, $pos, value, text)) return true;
   // Explicitly exiting an inline mark takes precedence over DOM mark inheritance.
   if (text && state.storedMarks && (liveSyntaxKey.getState(state).caret || $pos.nodeBefore?.marks.some((mark) => !mark.isInSet(state.storedMarks)
     && !mark.isInSet($pos.nodeAfter?.marks || []) && (mark.type.spec.code
@@ -429,11 +505,12 @@ function handleSmartTextInput(view, from, to, text) {
 export const milkdownLiveSyntax = $prose((ctx) => new Plugin({
   key: liveSyntaxKey,
   state: {
-    init: () => ({ closing: false, caret: null }),
+    init: () => ({ closing: false, caret: null, composition: null }),
     apply(tr, previous) {
       const update = tr.getMeta(liveSyntaxKey);
       if (!update && !tr.docChanged && !tr.selectionSet && !tr.storedMarksSet) return previous;
-      return { closing: update?.closing || false, caret: update?.caret || null };
+      return { closing: update?.closing || false, caret: update?.caret || null,
+        composition: tr.getMeta('composition') ?? previous.composition };
     },
   },
   view(editorView) {
@@ -496,6 +573,41 @@ export const milkdownLiveSyntax = $prose((ctx) => new Plugin({
     attributes: (state) => liveSyntaxKey.getState(state).caret ? { class: 'moki-markdown-virtual-caret' } : {},
     handleTextInput: handleSmartTextInput,
     handleDOMEvents: {
+      compositionstart(view) {
+        inlineCompositions.delete(view);
+        const { empty, $from } = view.state.selection;
+        if (!empty || !$from.parent.isTextblock || $from.parent.type.spec.code) return false;
+        const value = $from.parent.textBetween(0, $from.parent.content.size, '\n', '\ufffc');
+        if (emptyMarkdownMarkPair(value, $from.parentOffset)) {
+          inlineCompositions.set(view, { $from, value, previousId: liveSyntaxKey.getState(view.state).composition });
+        }
+        return false;
+      },
+      compositionend(view) {
+        const pending = inlineCompositions.get(view);
+        inlineCompositions.delete(view);
+        if (!pending) return false;
+        // Let ProseMirror commit the browser's composition before changing marks.
+        setTimeout(() => {
+          if (view.isDestroyed || view.composing || !view.editable) return;
+          const { $from: before, value, previousId } = pending;
+          const { doc, selection } = view.state;
+          if (!selection.empty || before.pos > doc.content.size) return;
+          const $pos = doc.resolve(before.pos);
+          const offset = before.parentOffset;
+          const length = $pos.parent.content.size - before.parent.content.size;
+          if (length <= 0 || selection.from !== before.pos + length
+            || $pos.parent.type !== before.parent.type || $pos.parentOffset !== offset
+            || !$pos.parent.content.cut(0, offset).eq(before.parent.content.cut(0, offset))
+            || !$pos.parent.content.cut(offset + length).eq(before.parent.content.cut(offset))) return;
+          const text = $pos.parent.textBetween(offset, offset + length);
+          const id = liveSyntaxKey.getState(view.state).composition;
+          // Keep the conversion in the same undo group even if the IME
+          // candidate was visible for longer than the normal history delay.
+          if (text.length === length) completeInlinePair(view, $pos, value, text, { length, id: id !== previousId ? id : null });
+        }, 0);
+        return false;
+      },
       keydown(view, event) {
         if (view.editable && !view.composing && !isImeComposing(event)
           && !event.ctrlKey && !event.metaKey && !event.altKey && !event.target.closest?.('.cm-editor, input, textarea, button')
