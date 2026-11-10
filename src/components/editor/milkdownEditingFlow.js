@@ -173,6 +173,14 @@ export function handleMilkdownBlockKeyDown(view, event) {
     if ($from.depth > 0) {
       const pos = $from.before();
       const paragraph = $from.parent;
+      const parent = $from.node($from.depth - 1);
+      // 列表项的首段落是必需节点；直接删它会被补回，必须提升整个列表项。
+      if (paragraph.type.name === 'paragraph' && !paragraph.content.size
+        && parent.type.name === 'list_item' && $from.index(-1) === 0 && parent.childCount > 1) {
+        if (!liftListItem(parent.type)(view.state, (tr) => view.dispatch(closeHistory(tr)))) return false;
+        view.focus();
+        event.preventDefault(); event.stopPropagation(); return true;
+      }
       const previous = view.state.doc.resolve(pos).nodeBefore;
       let from;
       let to;
