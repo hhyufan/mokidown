@@ -18,7 +18,7 @@ export function parseFootnotes(content) {
     definitions.set(m[1].trim(), m[2].trim());
   }
 
-  let processed = content.replace(defRe, '');
+  let processed = content.replace(defRe, (definition) => definition.replace(/[^\r\n]/g, ''));
 
   const usedRefs = [];
   const seen = new Set();
@@ -45,7 +45,7 @@ export function parseFootnotes(content) {
       .join('\n');
 
     if (items) {
-      processed = processed.trim() + `\n\n<div class="footnotes"><hr/><ol>\n${items}\n</ol></div>\n`;
+      processed += `\n\n<div class="footnotes"><hr/><ol>\n${items}\n</ol></div>\n`;
     }
   }
 

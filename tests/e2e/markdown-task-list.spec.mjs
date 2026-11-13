@@ -65,6 +65,20 @@ test('WYSIWYG task states cascade through three levels and the setting takes eff
   await expect.poll(states).toEqual(['mixed', 'mixed', 'true', 'false', 'true']);
   await expectAlignedTaskTree(editor);
 
+  const parent = editor.locator('li[data-task-state]').first();
+  const fold = parent.locator(':scope > p > .md-preview__fold');
+  await fold.click();
+  await expect(boxes).toHaveCount(1);
+  await expect(boxes.first()).toHaveAttribute('aria-checked', 'mixed');
+  await expect(parent.locator(':scope > p > .md-preview__fold-ellipsis')).toBeVisible();
+  await boxes.first().click();
+  await expect(fold).toHaveAttribute('aria-expanded', 'false');
+  await expect(boxes.first()).toHaveAttribute('aria-checked', 'false');
+  await fold.click();
+  await expect.poll(states).toEqual(['false', 'false', 'false', 'false', 'false']);
+  await page.keyboard.press('Control+z');
+  await expect.poll(states).toEqual(['mixed', 'mixed', 'true', 'false', 'true']);
+
   await boxes.nth(3).click();
   await expect.poll(states).toEqual(['true', 'true', 'true', 'true', 'true']);
   expect(await page.evaluate(() => window.trial.markdown())).toMatch(/\[x\] Parent/);
@@ -98,6 +112,14 @@ test('split preview recognizes no-break task markers and reflects the cascade se
   await expect(boxes.first()).toHaveAttribute('aria-checked', 'mixed');
   await expect(boxes.nth(2)).toBeChecked();
   await expectAlignedTaskTree(preview);
+  const parent = preview.locator('li[data-task-state]').first();
+  const fold = parent.locator(':scope > .md-preview__fold');
+  await fold.click();
+  await expect(boxes).toHaveCount(1);
+  await expect(boxes.first()).toHaveAttribute('aria-checked', 'mixed');
+  await expect(parent.locator(':scope > :is(p, .md-preview__task-label) > .md-preview__fold-ellipsis')).toBeVisible();
+  await fold.click();
+  await expect(boxes).toHaveCount(5);
   await expect(preview.locator('pre')).toContainText('literal');
   await setCascade(page, false);
   await expect(boxes.first()).toHaveAttribute('aria-checked', 'false');

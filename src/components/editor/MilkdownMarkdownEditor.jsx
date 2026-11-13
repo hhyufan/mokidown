@@ -21,6 +21,7 @@ import { useShallow } from 'zustand/react/shallow';
 import MarkdownTreeBlock from './MarkdownTreeBlock';
 import { useCodeBlockNavigation } from '@hooks/useCodeBlockNavigation';
 import { normalizeCodeLanguage } from '@utils/knowledgeTree';
+import { milkdownHeadingFolds } from './milkdownHeadingFolds';
 import { reportReactError } from '@/services/runtimeLogs';
 import { Milkdown, MilkdownProvider, useEditor } from '@milkdown/react';
 import { Editor, commandsCtx, defaultValueCtx, editorViewCtx, editorViewOptionsCtx, rootCtx, serializerCtx } from '@milkdown/kit/core';
@@ -1538,6 +1539,7 @@ function MilkdownInner({
       .use(milkdownMediaImageView)
       .use(codeBlockComponent)
       .use(milkdownBlockSelection)
+      .use(milkdownHeadingFolds)
       .use(listener);
 
     if (!readOnly) editor.use(milkdownSharedHistory(activeTabId, () => {

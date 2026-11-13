@@ -2,6 +2,7 @@
  * Markdown 预览区样式，覆盖正文排版、块级内容与延迟渲染提示状态。
  */
 @use '../../assets/styles/inline-code' as inline;
+@use '../../assets/styles/fold-control' as fold;
 
 .md-preview {
   flex: 1;
@@ -13,6 +14,82 @@
   font-family: var(--font-app);
   line-height: 1.75;
   color: var(--text);
+
+  .md-preview__source-block,
+  .moki-foldable-heading,
+  .md-preview__foldable-item,
+  .md-preview__foldable-code { position: relative; }
+  .md-preview__source-block[hidden],
+  .moki-folded-block,
+  .md-preview__foldable-item[data-md-collapsed='true'] > :is(ol, ul),
+  .md-preview__foldable-code[data-md-collapsed='true'] > :not(.md-preview__fold, .md-preview__folded-code-summary) { display: none; }
+
+  .md-preview__fold-ellipsis {
+    display: none;
+    margin-inline-start: .35em;
+    color: var(--text-sec);
+    font-family: var(--font-editor);
+    font-weight: normal;
+    white-space: nowrap;
+    user-select: none;
+    &::after { content: '⋯'; }
+  }
+
+  [data-md-collapsed='true'] > .md-preview__fold-ellipsis,
+  [data-md-collapsed='true'] > :is(p, .md-preview__task-label, .md-preview__folded-code-summary, .md-preview__fold-heading-label) > .md-preview__fold-ellipsis {
+    display: inline-block;
+  }
+
+  .md-preview__folded-code-summary {
+    display: none;
+    font-family: var(--font-editor);
+  }
+  [data-md-collapsed='true'] > .md-preview__folded-code-summary { display: block; }
+
+  .md-preview__fold {
+    position: absolute;
+    inset-inline-end: calc(100% + 2px);
+    inset-block-start: var(--fold-top, 0);
+    display: inline-grid;
+    place-items: center;
+    font: inherit;
+    inline-size: 1lh;
+    block-size: 1lh;
+    padding: 0;
+    border: 0;
+    border-radius: 4px;
+    background: transparent;
+    opacity: 0;
+    cursor: pointer;
+    &:focus-visible { outline: 1px solid var(--text-sec); outline-offset: -2px; }
+    &::before { @include fold.arrow; content: ''; inline-size: 75%; aspect-ratio: 1; }
+    &[aria-expanded='false']::before { transform: rotate(-90deg); }
+  }
+
+  [data-md-collapsed]:hover > .md-preview__fold,
+  .md-preview__foldable-item:hover > p > .md-preview__fold,
+  .moki-code-fold:has(+ .milkdown-code-block:hover) > .md-preview__fold,
+  .md-preview__fold:is(:hover, :focus-visible, [aria-expanded='false']) { opacity: 1; }
+
+  .moki-foldable-heading > .md-preview__fold {
+    inset-inline-start: max(calc(-1lh - 2px), -30px);
+    inset-inline-end: auto;
+  }
+  h1.moki-foldable-heading > .md-preview__fold {
+    inset-inline-start: calc(-1lh - 2px);
+    &::before { inline-size: 100%; }
+  }
+  .md-preview__foldable-item > .md-preview__fold,
+  .md-preview__foldable-item > p > .md-preview__fold { inset-inline-end: calc(100% + 1.4em); }
+  :is(.task-list-item, [data-item-type='task']) > .md-preview__fold,
+  :is(.task-list-item, [data-item-type='task']) > p > .md-preview__fold { inset-inline-end: calc(100% + 2px); }
+
+  .moki-code-fold {
+    position: relative;
+    height: 0;
+    z-index: 1;
+    &[data-md-collapsed='true'] { height: auto; margin-block: 1em; }
+  }
 
   button.md-preview__icon-action {
     display: inline-grid;
@@ -98,6 +175,12 @@
   h1 {
     font-size: 2.1em;
     text-align: center;
+
+    &.moki-foldable-heading {
+      width: fit-content;
+      max-width: calc(100% - max(0px, 2lh - 60px));
+      margin-inline: auto;
+    }
 
     &::before {
       content: '';

@@ -1,3 +1,5 @@
+@use '../../assets/styles/fold-control' as fold;
+
 /**
  * Monaco 编辑器容器样式，统一编辑区背景、当前行与内部层级的视觉覆盖规则。
  */
@@ -15,6 +17,43 @@
 
 .monaco-editor {
   background: transparent !important;
+
+  .margin-view-overlays :is(.moki-fold-hovered, .moki-fold-rotating) { pointer-events: none; }
+
+  .margin-view-overlays:hover .codicon:is(.codicon-folding-expanded, .codicon-folding-manual-expanded) {
+    opacity: 0;
+  }
+  .margin-view-overlays :has(> :is(.moki-fold-hovered, .moki-fold-rotating)) > .codicon:is(.codicon-folding-expanded, .codicon-folding-manual-expanded),
+  .margin-view-overlays .codicon:is(.codicon-folding-expanded, .codicon-folding-manual-expanded):hover {
+    opacity: 1;
+  }
+
+  .margin-view-overlays :is(.codicon-folding-expanded, .codicon-folding-collapsed,
+    .codicon-folding-manual-expanded, .codicon-folding-manual-collapsed) {
+    background: transparent;
+    &::before {
+      @include fold.arrow;
+      content: '';
+      flex: none;
+      aspect-ratio: 1;
+      block-size: 100%;
+    }
+  }
+
+  .margin-view-overlays :is(.codicon-folding-collapsed, .codicon-folding-manual-collapsed)::before {
+    transform: rotate(-90deg);
+  }
+
+  @media (prefers-reduced-motion: no-preference) {
+    .margin-view-overlays :has(> .moki-fold-rotating) > :is(.codicon-folding-expanded, .codicon-folding-manual-expanded)::before {
+      animation: moki-fold-expand 160ms ease;
+    }
+    .margin-view-overlays :has(> .moki-fold-rotating) > :is(.codicon-folding-collapsed, .codicon-folding-manual-collapsed)::before {
+      animation: moki-fold-collapse 160ms ease;
+    }
+  }
+
+  .inline-folded::after { color: var(--text-sec); }
 
   .margin {
     background: transparent !important;
@@ -73,6 +112,9 @@
     z-index: 1000 !important;
   }
 }
+
+@keyframes moki-fold-expand { from { transform: rotate(-90deg); } to { transform: rotate(0); } }
+@keyframes moki-fold-collapse { from { transform: rotate(0); } to { transform: rotate(-90deg); } }
 
 /* 搜索结果跳转高亮，从蓝色逐渐淡出到透明 */
 @keyframes search-jump-fade {
