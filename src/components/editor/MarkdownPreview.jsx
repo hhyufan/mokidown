@@ -11,11 +11,15 @@ import {
   createElement,
   useCallback,
   useDeferredValue,
+  useId,
   memo,
   useState,
   forwardRef,
   useImperativeHandle,
+  useLayoutEffect,
 } from 'react';
+import { useTranslation } from 'react-i18next';
+import { rehypeMarkdownSections } from './markdownSections';
 import { useEditorBufferContent } from '@hooks/useEditorBufferContent';
 import { useDocumentScrollState } from '@hooks/useDocumentScrollState';
 import { useMarkdownAnalysis } from '@hooks/useMarkdownAnalysis';
@@ -161,6 +165,7 @@ const sanitizeSchema = {
 };
 
 const remarkPlugins = [remarkGfm, remarkTaskListSpacing, remarkMath, remarkMarkdownHtml];
+const noFolds = [];
 const rehypePlugins = [
   rehypeRaw,
   [rehypeSanitize, sanitizeSchema],
@@ -168,8 +173,8 @@ const rehypePlugins = [
   rehypeCodeBlockIndexes,
   rehypeTooltipTitles,
 ];
-const taskCascadePlugins = [...rehypePlugins, rehypeTaskListTree];
-const independentTaskPlugins = [...rehypePlugins, [rehypeTaskListTree, { cascade: false }]];
+const taskCascadePlugins = [...rehypePlugins, rehypeTaskListTree, rehypeMarkdownSections];
+const independentTaskPlugins = [...rehypePlugins, [rehypeTaskListTree, { cascade: false }], rehypeMarkdownSections];
 
 /**
  * 渲染 Markdown 代码节点，并按语言分流到普通代码、高亮代码或 Mermaid 组件。
@@ -200,15 +205,19 @@ const CodeBlock = memo(function CodeBlock({ children, className, ...props }) {
  * @param {keyof JSX.IntrinsicElements} tag 标题标签名。
  * @returns {Function} 供 React Markdown 使用的标题渲染函数。
  */
-function makeHeading(tag) {
-  return function Heading({ children, ...props }) {
+function makeHeading(tag, foldControl) {
+  return function Heading({ children, node: _node, ...props }) {
+    const labelId = useId();
     const text = typeof children === 'string'
       ? children
       : Array.isArray(children)
         ? children.map((c) => (typeof c === 'string' ? c : c?.props?.children ?? '')).join('')
         : '';
     const id = slugify(text);
-    return createElement(tag, { id, ...props }, children);
+    const control = foldControl(props['data-md-heading']);
+    if (!control) return createElement(tag, { id, ...props }, children);
+    return createElement(tag, { id, ...props, className: `${props.className || ''} moki-foldable-heading`, 'aria-labelledby': labelId },
+      control, <span className="md-preview__fold-heading-label" id={labelId}>{children}</span>);
   };
 }
 
@@ -283,7 +292,8 @@ const cancelIdle =
  * @param {object} props 组件属性。
  * @returns {JSX.Element} Markdown 预览面板。
  */
-const MarkdownPreview = forwardRef(function MarkdownPreview({ className }, ref) {
+const MarkdownPreview = forwardRef(function MarkdownPreview({ className, foldedRanges = noFolds, onToggleFold }, ref) {
+  const { t } = useTranslation();
   const activeTabId = useEditorStore((s) => s.activeTabId);
   const editorFontSize = useConfigStore((s) => s.fontSize);
   const editorLineHeight = useConfigStore((s) => s.lineHeight);
@@ -323,6 +333,34 @@ const MarkdownPreview = forwardRef(function MarkdownPreview({ className }, ref) 
   // 预览树尚在构建时，旧树仍然保持可交互，从而降低长文档下编辑器、滚动条
   // 与侧边栏一起卡顿的概率。
   const content = useDeferredValue(processedContent);
+  const [localFolds, setLocalFolds] = useState({ tabId: null, lines: new Set() });
+  const localLines = localFolds.tabId === activeTabId ? localFolds.lines : null;
+  useLayoutEffect(() => {
+    const container = containerRef.current;
+    if (!container) return;
+    const blocks = Array.from(container.querySelectorAll(':scope > .md-preview__source-block'));
+    const foldedLines = new Set(foldedRanges.map(({ start }) => start));
+    const isFolded = (line) => foldedLines.has(line) || Boolean(localLines?.has(line));
+    let hiddenUntil = 0;
+    let rangeIndex = 0;
+    for (const [index, block] of blocks.entries()) {
+      const line = Number(block.dataset.mdStart);
+      const endLine = Number(block.dataset.mdEnd);
+      const end = Number(block.dataset.mdFold);
+      while (foldedRanges[rangeIndex]?.end < line) rangeIndex++;
+      const range = foldedRanges[rangeIndex];
+      block.hidden = index < hiddenUntil || Boolean(range && line > range.start && endLine <= range.end);
+      if (end && isFolded(line)) hiddenUntil = Math.max(hiddenUntil, end);
+    }
+    for (const button of container.querySelectorAll('button.md-preview__fold')) {
+      const folded = isFolded(Number(button.dataset.mdFoldLine));
+      button.parentElement.dataset.mdCollapsed = String(folded);
+      button.setAttribute('aria-expanded', String(!folded));
+      const label = t(folded ? 'editor.expandSection' : 'editor.collapseSection');
+      button.setAttribute('aria-label', label);
+      button.title = label;
+    }
+  }, [content, foldedRanges, localLines, taskCascade, t]);
   useEffect(() => {
     if (containerRef.current) return observePreviewBlockSelection(containerRef.current);
   }, [content]);
@@ -501,15 +539,43 @@ const MarkdownPreview = forwardRef(function MarkdownPreview({ className }, ref) 
     }
   }, [documentPath, openFileFromPath]);
 
+  const foldControl = useCallback((sourceLine) => {
+    const line = Number(sourceLine);
+    if (!line) return null;
+    return <button type="button" className="md-preview__fold" data-md-fold-line={line} aria-expanded="true"
+      aria-label={t('editor.collapseSection')}
+      onClick={() => {
+        if (onToggleFold?.(line)) return;
+        setLocalFolds(({ tabId, lines }) => {
+          const next = new Set(tabId === activeTabId ? lines : []);
+          if (next.has(line)) next.delete(line);
+          else next.add(line);
+          return { tabId: activeTabId, lines: next };
+        });
+      }} />;
+  }, [activeTabId, onToggleFold, t]);
+
   const components = useMemo(() => ({
+    div: ({ node: _node, children, className, ...props }) => (
+      <div className={className} {...props}>
+        {props['data-md-code'] != null && <>
+          {foldControl(props['data-md-start'])}
+          <span className="md-preview__folded-code-summary">{'```'}{props['data-md-code']}
+            <span className="md-preview__fold-ellipsis" aria-hidden="true" />
+          </span>
+        </>}
+        {children}
+      </div>
+    ),
+    li: ({ node: _node, children, ...props }) => <li {...props}>{foldControl(props['data-md-item'])}{children}</li>,
     code: CodeBlock,
     pre: (props) => <MarkdownCodePre {...props} onTreeJump={jumpToCode} documentId={activeTabId} filePath={documentPath} fileName={activeTab?.name || 'Markdown'} />,
-    h1: makeHeading('h1'),
-    h2: makeHeading('h2'),
-    h3: makeHeading('h3'),
-    h4: makeHeading('h4'),
-    h5: makeHeading('h5'),
-    h6: makeHeading('h6'),
+    h1: makeHeading('h1', foldControl),
+    h2: makeHeading('h2', foldControl),
+    h3: makeHeading('h3', foldControl),
+    h4: makeHeading('h4', foldControl),
+    h5: makeHeading('h5', foldControl),
+    h6: makeHeading('h6', foldControl),
     a: ({ href, children, id, ...props }) => {
       if (href?.startsWith('#')) {
         return (
@@ -569,7 +635,7 @@ const MarkdownPreview = forwardRef(function MarkdownPreview({ className }, ref) 
     img: ({ src, alt, ...props }) => (
       <MarkdownImage src={src} alt={alt} documentPath={documentPath} {...props} />
     ),
-  }), [activeTabId, activeTab?.name, documentPath, handleLinkClick, jumpToCode]);
+  }), [activeTabId, activeTab?.name, documentPath, foldControl, handleLinkClick, jumpToCode]);
 
   const isStale = isAnalyzing || content !== processedContent;
   const fontSize = previewZoomSync ? editorFontSize : (previewFontSize || editorFontSize);

@@ -20,6 +20,7 @@ import { openExternal } from '@utils/tauriApi';
 import { externalLink } from '@utils/editorLinks';
 import { createAppHotkeyHandlers } from '@utils/hotkeyCommands';
 import { reportReactError } from '@/services/runtimeLogs';
+import { bindMarkdownFolding, bindMarkdownScroll, toggleMonacoSection } from '@components/editor/markdownSplitSync';
 import './editor-content.scss';
 import WelcomeScreen from '@components/moki/WelcomeScreen';
 
@@ -238,13 +239,13 @@ function EditorContent() {
     [toggleSidebar, toggleEditPreview],
   );
   const historyDiff = useHistoryStore((s) => s.diff);
-  const previewZoomSync = useConfigStore((s) => s.previewZoomSync ?? true);
   const monacoRef = useRef(null);
-  const previewRef = useRef(null);
   const containerRef = useRef(null);
   const isDragging = useRef(false);
   const [splitRatio, setSplitRatio] = useState(() => useEditorStore.getState().splitRatio);
   const [previewSyncHandle, setPreviewSyncHandle] = useState(null);
+  const [splitEditor, setSplitEditor] = useState(null);
+  const [foldedRanges, setFoldedRanges] = useState([]);
   const setConfig = useConfigStore((s) => s.setConfig);
   const { triggerAutoSave } = useFileManager();
   const { isMobileLayout } = useResponsiveLayout();
@@ -264,10 +265,7 @@ function EditorContent() {
     editor.pushUndoStop();
     return true;
   }, []);
-  const handlePreviewRef = useCallback((instance) => {
-    previewRef.current = instance;
-    setPreviewSyncHandle((current) => (current === instance ? current : instance));
-  }, []);
+  const togglePreviewFold = useCallback((line) => toggleMonacoSection(splitEditor, line), [splitEditor]);
 
   /**
    * 响应浮动工具栏插入动作，优先走编辑器原生能力，失败时回退到通用插入。
@@ -468,58 +466,15 @@ function EditorContent() {
   }, [activeTabId, hasPreview, setConfig, viewMode]);
 
   useEffect(() => {
-    if (viewMode !== 'split' || !isMarkdown || !previewZoomSync) return undefined;
+    if (viewMode !== 'split' || !isMarkdown || !splitEditor) return;
+    return bindMarkdownFolding(splitEditor, setFoldedRanges);
+  }, [isMarkdown, splitEditor, viewMode]);
 
-    const editor = monacoRef.current?.getEditor?.();
-    const previewEl = previewSyncHandle?.getScrollContainer?.();
-    if (!editor || !previewEl) return undefined;
-
-    let syncRaf = 0;
-    const syncScroll = () => {
-      syncRaf = 0;
-      // Explicit tree navigation takes priority over delayed code highlighting,
-      // image loading and initial editor scroll synchronization.
-      if (previewEl.querySelector('.knowledge-tree-target')) return;
-      const editorViewportHeight = editor.getLayoutInfo?.().height || 0;
-      const editorScrollable = Math.max(0, (editor.getScrollHeight?.() || 0) - editorViewportHeight);
-      const previewScrollable = Math.max(0, previewEl.scrollHeight - previewEl.clientHeight);
-
-      if (editorScrollable <= 0 || previewScrollable <= 0) {
-        previewEl.scrollTop = 0;
-        return;
-      }
-
-      const ratio = Math.max(0, Math.min(1, (editor.getScrollTop?.() || 0) / editorScrollable));
-      previewEl.scrollTop = ratio * previewScrollable;
-    };
-
-    const scheduleSync = () => {
-      if (syncRaf) cancelAnimationFrame(syncRaf);
-      syncRaf = requestAnimationFrame(syncScroll);
-    };
-
-    const scrollDisposable = editor.onDidScrollChange?.(() => {
-      scheduleSync();
-    });
-
-    const mutationObserver = new MutationObserver(() => {
-      scheduleSync();
-    });
-    mutationObserver.observe(previewEl, {
-      childList: true,
-      subtree: true,
-      characterData: true,
-    });
-
-    scheduleSync();
-
-    return () => {
-      if (syncRaf) cancelAnimationFrame(syncRaf);
-      scrollDisposable?.dispose?.();
-      mutationObserver.disconnect();
-    };
-  }, [activeTabId, isMarkdown, previewSyncHandle, previewZoomSync, viewMode]);
-
+  useEffect(() => {
+    const preview = previewSyncHandle?.getScrollContainer();
+    if (viewMode !== 'split' || !isMarkdown || !splitEditor || !preview) return;
+    return bindMarkdownScroll(splitEditor, preview);
+  }, [activeTabId, isMarkdown, previewSyncHandle, splitEditor, viewMode]);
   if (!activeTabMeta) {
     return (
       <main className={`editor-content ${isMobileLayout ? 'editor-content--mobile' : ''}`}>
@@ -578,6 +533,7 @@ function EditorContent() {
             <MonacoEditor
               ref={monacoRef}
               className="editor-content__editor editor-content__editor--half"
+              onEditorReady={setSplitEditor}
               onAutoSave={triggerAutoSave}
               appHotkeyHandlers={appHotkeyHandlers}
             />
@@ -611,7 +567,9 @@ function EditorContent() {
                   onAutoSave={triggerAutoSave}
                   onSourceChange={handleTreeSourceChange}
                 /> : <MarkdownPreview
-                  ref={handlePreviewRef}
+                  ref={setPreviewSyncHandle}
+                  foldedRanges={foldedRanges}
+                  onToggleFold={togglePreviewFold}
                   className="editor-content__preview editor-content__preview--half"
                 />}
               </Suspense>

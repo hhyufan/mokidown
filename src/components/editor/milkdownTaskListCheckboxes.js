@@ -27,7 +27,7 @@ function toggle(view, pos) {
   if (!task) return;
   const tr = closeHistory(view.state.tr);
   const setChecked = ({ node, pos: itemPos }, checked) => {
-    if (node.attrs.checked !== checked) tr.setNodeMarkup(itemPos, undefined, { ...node.attrs, checked });
+    if (node.attrs.checked !== checked) tr.setNodeAttribute(itemPos, 'checked', checked);
   };
   if (cascadeEnabled()) toggleTaskBranch(task, setChecked);
   else setChecked(task, !task.checked);

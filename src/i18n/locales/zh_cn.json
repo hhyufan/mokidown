@@ -1,4 +1,6 @@
 {
+  "editor.expandSection": "展开章节",
+  "editor.collapseSection": "折叠章节",
   "reader.returnToEditor": "返回 MokiDown 编辑器",
   "reader.readOnly": "只读",
   "reader.loading": "正在读取 Markdown…",
