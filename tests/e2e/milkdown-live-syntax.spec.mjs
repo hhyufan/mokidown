@@ -238,6 +238,7 @@ test('undo restores the empty bold markers after committing a long-lived IME can
   const editor = await openEditor(page);
   await page.evaluate(() => window.trial.selectTextblock(0));
   await page.keyboard.type('***');
+  await page.waitForTimeout(550);
   const cdp = await page.context().newCDPSession(page);
   try {
     await cdp.send('Input.imeSetComposition', { text: '中文', selectionStart: 2, selectionEnd: 2 });
@@ -274,6 +275,22 @@ test('paired deletion removes one emphasis layer, keeps code text and supports u
   await page.keyboard.press('Delete');
   await expect(editor.locator('p').nth(2)).toHaveText('outer [inside]');
 });
+
+for (const [markup, selector] of [['**abcdef**', 'strong'], ['`abcdef`', 'code']]) {
+  test(`clicking rendered ${selector} inserts at the clicked character boundary`, async ({ page }) => {
+    const editor = await openEditor(page, `before ${markup} after`);
+    const point = await editor.locator(selector).evaluate((element) => {
+      const range = document.createRange();
+      range.setStart(element.firstChild, 3);
+      range.collapse(true);
+      const { left, top, height } = range.getBoundingClientRect();
+      return { x: left, y: top + height / 2 };
+    });
+    await page.mouse.click(point.x, point.y);
+    await page.keyboard.insertText('X');
+    await expect(editor.locator(selector)).toHaveText('abcXdef');
+  });
+}
 
 test('two backticks place the caret between them and the next text renders as inline code', async ({ page }) => {
   const editor = await openEditor(page);
