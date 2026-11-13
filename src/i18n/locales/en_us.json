@@ -1,4 +1,6 @@
 {
+  "editor.expandSection": "Expand section",
+  "editor.collapseSection": "Collapse section",
   "reader.returnToEditor": "Return to the MokiDown editor",
   "reader.readOnly": "Read only",
   "reader.loading": "Reading Markdown...",

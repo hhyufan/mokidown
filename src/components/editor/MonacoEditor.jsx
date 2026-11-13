@@ -34,8 +34,23 @@ import { configureMonacoHotkeys, disposeMonacoHotkeys } from '@/services/monacoH
 import { bindMonacoMarkdownPairs } from './monacoMarkdownPairs';
 import MarkdownCodeLanguageMenu from './MarkdownCodeLanguageMenu';
 import './monaco-editor.scss';
+import { markdownFoldingRanges } from './markdownSections';
+import { bindMonacoFoldControls } from './markdownSplitSync';
+import { computeRanges } from 'monaco-editor/esm/vs/editor/contrib/folding/browser/indentRangeProvider.js';
+import { conf as markdownLanguage } from 'monaco-editor/esm/vs/basic-languages/markdown/markdown.js';
 
 const nativeUndoGroups = new WeakMap();
+const markdownFoldingProvider = monaco.languages.registerFoldingRangeProvider('markdown', {
+  provideFoldingRanges(model) {
+    const ranges = markdownFoldingRanges(model.getValue());
+    const existing = computeRanges(model, false, markdownLanguage.folding.markers);
+    for (let index = 0; index < existing.length; index++) {
+      ranges.push({ start: existing.getStartLineNumber(index), end: existing.getEndLineNumber(index) });
+    }
+    return ranges;
+  },
+});
+if (import.meta.hot) import.meta.hot.dispose(() => markdownFoldingProvider.dispose());
 
 function documentModelInfo(tab) {
   const language = getFileLanguage(tab.name);
@@ -80,7 +95,7 @@ function horizontalScrollbarOptions(wrapped) {
  * 负责初始化编辑器实例、同步标签缓冲区、接入右键菜单与移动端选区能力，
  * 并对主题、字号、语言与自动保存等外部配置变化做增量响应。
  */
-const MonacoEditorComponent = forwardRef(function MonacoEditorComponent({ className, onAutoSave, appHotkeyHandlers = {} }, ref) {
+const MonacoEditorComponent = forwardRef(function MonacoEditorComponent({ className, onAutoSave, appHotkeyHandlers = {}, onEditorReady }, ref) {
   const containerRef = useRef(null);
   const editorRef = useRef(null);
   // 快捷键回调通过 ref 传递：它们来自上层工作区，身份每次渲染都可能变化，
@@ -252,6 +267,7 @@ const MonacoEditorComponent = forwardRef(function MonacoEditorComponent({ classN
     });
 
     editorRef.current = editor;
+    const stopFoldControls = bindMonacoFoldControls(editor);
     // Follow effective wrapping, including temporary runtime overrides, so an
     // unwrapped line never becomes inaccessible behind a hidden scrollbar.
     const syncHorizontalScrollbar = () => {
@@ -579,6 +595,7 @@ const MonacoEditorComponent = forwardRef(function MonacoEditorComponent({ classN
       stopBufferFlusher();
       stopPluginEditor();
       stopSessionView();
+      stopFoldControls();
       linkOpener.dispose();
       editor.dispose();
       for (const entry of models.values()) disposeDocumentModel(entry.model);
@@ -587,6 +604,12 @@ const MonacoEditorComponent = forwardRef(function MonacoEditorComponent({ classN
       setEditorInstance(null);
     };
   }, []);
+
+  useLayoutEffect(() => {
+    if (!onEditorReady) return;
+    onEditorReady(editorRef.current);
+    return () => onEditorReady(null);
+  }, [onEditorReady]);
 
   // 激活标签切换时，同步替换编辑器内容。优先读取最新缓冲区内容，必要时再
   // 回退到标签页持久化内容，保证切回标签时未保存修改仍然保留。
