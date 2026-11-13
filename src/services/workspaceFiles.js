@@ -47,7 +47,7 @@ export async function loadWorkspaceFiles(path, { navigate = false, isCurrent = (
   const state = useFileStore.getState();
   if (native && navigate && state.currentDir !== path) state.setCurrentDir(path);
   const request = ++sequence;
-  release(activeRequest?.id);
+  if (activeRequest?.id !== state.directoryIndex?.id) release(activeRequest?.id);
   activeRequest = null;
   if (!native) {
     const contents = await getDirectoryContents(path);
@@ -62,16 +62,36 @@ export async function loadWorkspaceFiles(path, { navigate = false, isCurrent = (
   const id = `directory-${generation}`;
   activeRequest = { id, path };
   const { sortBy, sortOrder } = state;
-  useFileStore.setState({ files: [], directoryIndex: null, directoryLoading: true, directoryError: '' });
+  const currentIndex = state.directoryIndex?.path === path ? state.directoryIndex : null;
+  const sameOrder = currentIndex && currentIndex.sortBy === sortBy && currentIndex.sortOrder === sortOrder;
+  useFileStore.setState({ files: [], directoryIndex: currentIndex, directoryLoading: true, directoryError: '' });
   try {
     const result = await openDirectoryIndex(id, path, sortBy, sortOrder);
     if (request !== sequence || useFileStore.getState().currentDir !== path || !isCurrent()) {
       release(id);
       return;
     }
-    useFileStore.setState({ directoryIndex: { ...result, path, sortBy, sortOrder, pages: new Map() }, directoryLoading: false });
+    const pages = new Map();
+    if (result.total > 0) {
+      const viewport = sameOrder && pageReader?.id === currentIndex.id ? pageReader.request : null;
+      const first = Math.floor(Math.min(viewport?.visibleStart ?? 0, result.total - 1) / result.pageSize);
+      const last = Math.floor(Math.min((viewport?.visibleEnd ?? 1) - 1, result.total - 1) / result.pageSize);
+      const count = Math.min(DIRECTORY_CACHE_PAGES, Math.max(1, last - first + 1));
+      await Promise.all(Array.from({ length: count }, async (_, offset) => {
+        const page = first + offset;
+        const rows = await readDirectoryPage(id, page * result.pageSize, result.pageSize);
+        if (!Array.isArray(rows) || !rows.length) throw new Error('Could not read directory page');
+        pages.set(page, rows);
+      }));
+    }
+    if (request !== sequence || useFileStore.getState().currentDir !== path || !isCurrent()) {
+      release(id);
+      return;
+    }
+    useFileStore.setState({ directoryIndex: { ...result, path, sortBy, sortOrder, pages }, directoryLoading: false });
   } catch (error) {
     if (request !== sequence || useFileStore.getState().currentDir !== path || !isCurrent()) return;
+    activeRequest = null;
     useFileStore.setState({ directoryLoading: false, directoryError: String(error) });
     release(id);
     throw error;
@@ -120,7 +140,7 @@ function publishPages(reader) {
   reader.frame = requestAnimationFrame(() => {
     reader.frame = null;
     const index = useFileStore.getState().directoryIndex;
-    if (reader.disposed || index?.id !== reader.id) return;
+    if (reader.disposed || index?.id !== reader.id || activeRequest?.id !== reader.id) return;
     const plan = currentPlan(reader);
     const wanted = new Set(plan.map(({ page }) => page));
     const pages = new Map(index.pages);
@@ -145,7 +165,7 @@ function publishPages(reader) {
 
 function pumpPages(reader) {
   const index = useFileStore.getState().directoryIndex;
-  if (reader.disposed || index?.id !== reader.id) return;
+  if (reader.disposed || index?.id !== reader.id || activeRequest?.id !== reader.id) return;
   for (const item of currentPlan(reader)) {
     if (reader.inFlight.size >= 2) break;
     const { page, visible } = item;
@@ -158,7 +178,7 @@ function pumpPages(reader) {
     void (async () => {
       try {
         const rows = await readDirectoryPage(reader.id, page * index.pageSize, index.pageSize);
-        if (reader.disposed || useFileStore.getState().directoryIndex?.id !== reader.id) return;
+        if (reader.disposed || activeRequest?.id !== reader.id) return;
         if (!Array.isArray(rows) || !rows.length) throw new Error('Could not read directory page');
         reader.latency = reader.latency * 0.75 + (performance.now() - started) * 0.25;
         if (currentPlan(reader).some((item) => item.page === page)) {
@@ -166,6 +186,7 @@ function pumpPages(reader) {
           publishPages(reader);
         }
       } catch (error) {
+        if (reader.disposed || activeRequest?.id !== reader.id) return;
         reader.failed.add(page);
         if (currentPlan(reader).some((item) => item.page === page && item.visible)) {
           reader.errors.set(page, String(error));
@@ -180,7 +201,7 @@ function pumpPages(reader) {
 }
 
 export function ensureDirectoryRange(start, end, motion) {
-  const index = useFileStore.getState().directoryIndex;
+  const { directoryIndex: index } = useFileStore.getState();
   if (!index || end <= start) return;
   if (!pageReader || pageReader.id !== index.id) {
     disposePageReader();
