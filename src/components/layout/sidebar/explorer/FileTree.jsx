@@ -433,13 +433,12 @@ function FileTree() {
 
       <DeleteFileModal {...deletion.dialog} />
       <EditorContextMenu menu={pathMenu.menu} onClose={pathMenu.closeMenu} />
-      {directoryLoading && <div className="file-tree__status" role="status">{t('sidebar.explorer.loadingDirectory')}</div>}
       {directoryError && <div className="file-tree__status" role="alert">{directoryError}</div>}
       {/* Only visible rows exist in the DOM; native directories retain a bounded page cache. */}
       <VirtualFileList
         footer={creatingRow}
           scrollTarget={scrollTarget}
-        key={`${currentDir}:${sortBy}:${sortOrder}`}
+        key={`${currentDir}:${directoryIndex?.sortBy ?? sortBy}:${directoryIndex?.sortOrder ?? sortOrder}`}
         count={directoryIndex?.total ?? sortedFiles.length}
         dataVersion={directoryIndex?.id}
         currentFilePath={activeTabId}

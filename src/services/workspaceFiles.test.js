@@ -50,14 +50,14 @@ it('coalesces fast scrolling to the latest viewport while one page is in flight'
   let finish;
   await loadWorkspaceFiles('/notes', { navigate: true });
   readDirectoryPage.mockImplementationOnce(() => new Promise((resolve) => { finish = resolve; }));
-  ensureDirectoryRange(0, 20);
-  for (let i = 1; i <= 1000; i += 1) ensureDirectoryRange(i * 256, i * 256 + 20);
-  expect(readDirectoryPage).toHaveBeenCalledTimes(2);
+  ensureDirectoryRange(256, 276);
+  for (let i = 2; i <= 1000; i += 1) ensureDirectoryRange(i * 256, i * 256 + 20);
+  expect(readDirectoryPage).toHaveBeenCalledTimes(3);
   finish([{ name: 'first' }]);
   await tick();
-  expect(readDirectoryPage).toHaveBeenCalledTimes(3);
-  expect(readDirectoryPage.mock.calls[2][1]).toBe(1000 * 256);
-  expect(useFileStore.getState().directoryIndex.pages.has(0)).toBe(false);
+  expect(readDirectoryPage).toHaveBeenCalledTimes(4);
+  expect(readDirectoryPage.mock.calls[3][1]).toBe(1000 * 256);
+  expect(useFileStore.getState().directoryIndex.pages.has(1)).toBe(false);
 });
 
 it('cancels old builds on navigation and close, and rejects stale pages', async () => {
@@ -69,7 +69,7 @@ it('cancels old builds on navigation and close, and rejects stale pages', async 
   expect(useFileStore.getState().directoryIndex.path).toBe('/notes');
   expect(closeDirectoryIndex).toHaveBeenCalledWith(openDirectoryIndex.mock.calls[0][0]);
   readDirectoryPage.mockImplementationOnce(() => new Promise((resolve) => { finish = resolve; }));
-  ensureDirectoryRange(0, 20);
+  ensureDirectoryRange(256, 276);
   useFileStore.getState().clearDirectory();
   finish([{ name: 'stale' }]); await tick();
   expect(useFileStore.getState().directoryIndex).toBeNull();
@@ -93,8 +93,8 @@ it('reports indexing and page failures without retaining loading state or retryi
   expect(useFileStore.getState().directoryError).toContain('Access denied');
   await loadWorkspaceFiles('/notes');
   readDirectoryPage.mockRejectedValueOnce(new Error('Disk error'));
-  ensureDirectoryRange(0, 20); await tick();
-  expect(readDirectoryPage).toHaveBeenCalledTimes(1);
+  ensureDirectoryRange(256, 276); await tick();
+  expect(readDirectoryPage).toHaveBeenCalledTimes(2);
   expect(useFileStore.getState().directoryError).toContain('Disk error');
 });
 
@@ -115,7 +115,7 @@ it('loads actually visible pages before offscreen render buffers and publishes c
   let updates = 0;
   const stop = useFileStore.subscribe((state, previous) => { if (state.directoryIndex !== previous.directoryIndex) updates += 1; });
   ensureDirectoryRange(250, 550, { visibleStart: 500, visibleEnd: 520, direction: 1, velocity: 32 });
-  expect(readDirectoryPage.mock.calls.slice(0, 2).map((call) => call[1])).toEqual([256, 512]);
+  expect(readDirectoryPage.mock.calls.slice(1, 3).map((call) => call[1])).toEqual([256, 512]);
   await microtasks();
   expect(updates).toBe(0);
   expect(frames.size).toBe(1);
@@ -166,7 +166,7 @@ it('adapts directional prefetch to observed IO latency and keeps the cache bound
 
 it('drops staged pages and scheduled publication when the directory is closed', async () => {
   await loadWorkspaceFiles('/notes', { navigate: true });
-  ensureDirectoryRange(0, 20);
+  ensureDirectoryRange(256, 276);
   await microtasks();
   expect(frames.size).toBe(1);
   useFileStore.getState().clearDirectory();
@@ -178,10 +178,28 @@ it('drops staged pages and scheduled publication when the directory is closed', 
 it('does not publish errors from a viewport superseded before its publication frame', async () => {
   await loadWorkspaceFiles('/notes', { navigate: true });
   readDirectoryPage.mockRejectedValueOnce(new Error('Old viewport error'));
-  ensureDirectoryRange(0, 20);
+  ensureDirectoryRange(256, 276);
   await microtasks();
   ensureDirectoryRange(10_000, 10_020);
   await tick();
   expect(useFileStore.getState().directoryError).toBe('');
   expect(useFileStore.getState().directoryIndex.pages.has(39)).toBe(true);
+});
+
+it('keeps the previous snapshot visible until every page in the refreshed viewport has arrived', async () => {
+  await loadWorkspaceFiles('/notes', { navigate: true });
+  ensureDirectoryRange(250, 270);
+  await tick();
+  const previous = useFileStore.getState().directoryIndex;
+  let finish;
+  readDirectoryPage.mockResolvedValueOnce([{ name: 'new-first-page.md' }]);
+  readDirectoryPage.mockImplementationOnce(() => new Promise((resolve) => { finish = resolve; }));
+  const refresh = loadWorkspaceFiles('/notes');
+  await microtasks();
+  expect(useFileStore.getState().directoryIndex).toBe(previous);
+  finish([{ name: 'new-second-page.md' }]);
+  await refresh;
+  const refreshed = useFileStore.getState().directoryIndex;
+  expect(getIndexedFile(refreshed, 0).name).toBe('new-first-page.md');
+  expect(getIndexedFile(refreshed, 256).name).toBe('new-second-page.md');
 });
