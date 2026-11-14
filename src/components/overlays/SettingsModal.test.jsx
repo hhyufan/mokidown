@@ -148,6 +148,19 @@ it('enables task cascade by default and persists the editor switch', async () =>
   expect(toggle).toBeChecked();
 });
 
+it('enables Markdown folding by default and updates the editor setting', async () => {
+  expect(useConfigStore.getInitialState().markdownFolding).toBe(true);
+  await act(async () => render(<SettingsModal open onClose={vi.fn()} />));
+  fireEvent.click(screen.getByText('编辑器'));
+  const toggle = screen.getByRole('switch', { name: 'Markdown 展开与折叠' });
+  expect(toggle).toBeChecked();
+  fireEvent.click(toggle);
+  expect(toggle).not.toBeChecked();
+  expect(useConfigStore.getState().markdownFolding).toBe(false);
+  fireEvent.click(toggle);
+  expect(toggle).toBeChecked();
+});
+
 it('imports a native image, persists its reference, previews theme-specific opacity, and removes the stored asset', async () => {
   window.__TAURI_INTERNALS__ = {};
   open.mockResolvedValue('C:\\pictures\\background.png');
