@@ -88,7 +88,7 @@ it('adjusts both font sizes with compact controls without deprecated InputNumber
       </React.StrictMode>,
     ),
   );
-  fireEvent.click(screen.getByText('外观'));
+  fireEvent.click(screen.getByText('渲染器'));
   expect(screen.getByRole('spinbutton', { name: '预览字号' })).toHaveValue('14');
   fireEvent.click(screen.getByRole('button', { name: '增大预览字号' }));
   expect(useConfigStore.getState().previewFontSize).toBe(15);
@@ -112,7 +112,7 @@ it('shows named Markdown syntax options and changes each smart pair independentl
   useConfigStore.setState({ markdownSmartPairs: pairs, markdownSmartPairsEnabled: true });
   try {
     await act(async () => render(<SettingsModal open onClose={vi.fn()} />));
-    fireEvent.click(screen.getByText('编辑器'));
+    fireEvent.click(screen.getByText('渲染器'));
     expect(screen.getByRole('list', { name: 'Markdown 智能配对' })).toBeInTheDocument();
     const backtick = screen.getByRole('checkbox', { name: '行内代码与代码块' });
     const parentheses = screen.getByRole('checkbox', { name: '圆括号' });
@@ -138,7 +138,7 @@ it('shows named Markdown syntax options and changes each smart pair independentl
 it('enables task cascade by default and persists the editor switch', async () => {
   expect(useConfigStore.getInitialState().markdownTaskCascade).toBe(true);
   await act(async () => render(<SettingsModal open onClose={vi.fn()} />));
-  fireEvent.click(screen.getByText('编辑器'));
+  fireEvent.click(screen.getByText('渲染器'));
   const toggle = screen.getByRole('switch', { name: '任务列表级联' });
   expect(toggle).toBeChecked();
   fireEvent.click(toggle);
@@ -151,7 +151,7 @@ it('enables task cascade by default and persists the editor switch', async () =>
 it('enables Markdown folding by default and updates the editor setting', async () => {
   expect(useConfigStore.getInitialState().markdownFolding).toBe(true);
   await act(async () => render(<SettingsModal open onClose={vi.fn()} />));
-  fireEvent.click(screen.getByText('编辑器'));
+  fireEvent.click(screen.getByText('渲染器'));
   const toggle = screen.getByRole('switch', { name: 'Markdown 展开与折叠' });
   expect(toggle).toBeChecked();
   fireEvent.click(toggle);

@@ -153,6 +153,9 @@
   "settings.group.typography": "字体排印",
   "settings.group.font": "字体",
   "settings.group.formatting": "格式化",
+  "settings.group.taskList": "任务列表",
+  "settings.group.folding": "折叠",
+  "settings.group.inputAssist": "输入辅助",
   "settings.group.display": "显示",
   "settings.group.file": "文件",
   "settings.group.connection": "连接",
@@ -929,5 +932,6 @@
   "unsaved.compareDraft": "草稿内容对比",
   "unsaved.noDiskFile": "此文档尚未保存到磁盘",
   "unsaved.noDiskContent": "无可用的磁盘内容",
-  "unsaved.recoveredContent": "待恢复内容"
+  "unsaved.recoveredContent": "待恢复内容",
+  "settings.nav.renderer": "渲染器"
 }

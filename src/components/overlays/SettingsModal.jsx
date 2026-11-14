@@ -19,6 +19,7 @@ import {
   StarFilled,
   AppstoreOutlined,
   ThunderboltOutlined,
+  FileMarkdownOutlined,
 } from '@ant-design/icons';
 import AppMark from '@components/ui/AppMark';
 import { REPO_URL, INSTALLER_URL } from '@/configs/repository';
@@ -52,13 +53,14 @@ const NAV_ICONS = {
   general: <SettingOutlined />,
   appearance: <BgColorsOutlined />,
   editor: <EditOutlined />,
+  renderer: <FileMarkdownOutlined />,
   shortcuts: <ThunderboltOutlined />,
   languages: <AppstoreOutlined />,
 
   about: <InfoCircleOutlined />,
 };
 
-const NAV_KEYS = ['general', 'appearance', 'editor', 'shortcuts', 'languages',  'about'];
+const NAV_KEYS = ['general', 'appearance', 'editor', 'renderer', 'shortcuts', 'languages',  'about'];
 
 function SettingsModal({ open: openProp, onClose }) {
   const { t, i18n } = useTranslation();
@@ -303,27 +305,6 @@ function SettingsModal({ open: openProp, onClose }) {
                 <BackgroundSettings SettingGroup={SettingGroup} SettingRow={SettingRow} />
                 {/* 主题切换统一由上面的 Moki 卡片区承担；这里曾有一份 Light/Dark 单选，
                     两处改的是同一个 store，属于重复入口，已移除。 */}
-                <SettingGroup label={t('settings.group.typography')} />
-                <SettingRow
-                  label={t('settings.appearance.previewZoomSync')}
-                  desc={t('settings.appearance.previewZoomSyncDesc')}
-                >
-                  <Switch
-                    checked={config.previewZoomSync ?? true}
-                    onChange={(v) => handleChange('previewZoomSync', v)}
-                  />
-                </SettingRow>
-                <SettingRow
-                  label={t('settings.appearance.previewFontSize')}
-                  desc={t('settings.appearance.previewFontSizeDesc')}
-                >
-                  <FontSizeControl
-                    label={t('settings.appearance.previewFontSize')}
-                    disabled={config.previewZoomSync ?? true}
-                    value={config.previewFontSize ?? config.fontSize ?? 14}
-                    onChange={(v) => handleChange('previewFontSize', Number(v) || config.fontSize || 14)}
-                  />
-                </SettingRow>
               </div>
             )}
 
@@ -411,6 +392,33 @@ function SettingsModal({ open: openProp, onClose }) {
                     onChange={(v) => handleChange('autoSave', v)}
                   />
                 </SettingRow>
+              </div>
+            )}
+
+            {activeNav === 'renderer' && (
+              <div className="settings-section">
+                <SettingGroup label={t('settings.group.typography')} />
+                <SettingRow
+                  label={t('settings.appearance.previewZoomSync')}
+                  desc={t('settings.appearance.previewZoomSyncDesc')}
+                >
+                  <Switch
+                    checked={config.previewZoomSync ?? true}
+                    onChange={(v) => handleChange('previewZoomSync', v)}
+                  />
+                </SettingRow>
+                <SettingRow
+                  label={t('settings.appearance.previewFontSize')}
+                  desc={t('settings.appearance.previewFontSizeDesc')}
+                >
+                  <FontSizeControl
+                    label={t('settings.appearance.previewFontSize')}
+                    disabled={config.previewZoomSync ?? true}
+                    value={config.previewFontSize ?? config.fontSize ?? 14}
+                    onChange={(v) => handleChange('previewFontSize', Number(v) || config.fontSize || 14)}
+                  />
+                </SettingRow>
+                <SettingGroup label={t('settings.group.taskList')} />
                 <SettingRow
                   label={t('settings.editor.markdownTaskCascade')}
                   desc={t('settings.editor.markdownTaskCascadeDesc')}
@@ -421,6 +429,7 @@ function SettingsModal({ open: openProp, onClose }) {
                     onChange={(value) => handleChange('markdownTaskCascade', value)}
                   />
                 </SettingRow>
+                <SettingGroup label={t('settings.group.folding')} />
                 <SettingRow
                   label={t('settings.editor.markdownFolding')}
                   desc={t('settings.editor.markdownFoldingDesc')}
@@ -431,6 +440,7 @@ function SettingsModal({ open: openProp, onClose }) {
                     onChange={(value) => handleChange('markdownFolding', value)}
                   />
                 </SettingRow>
+                <SettingGroup label={t('settings.group.inputAssist')} />
                 <MarkdownPairSettings
                   enabled={config.markdownSmartPairsEnabled}
                   value={config.markdownSmartPairs}
