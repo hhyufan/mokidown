@@ -186,18 +186,7 @@
   align-items: center;
   justify-content: space-between;
   padding: 12px 0;
-  border-bottom: 1px solid var(--border-light);
   gap: 16px;
-
-  &:last-child {
-    border-bottom: none;
-  }
-
-  // 当下一项是分组标题时，去掉当前项底边框，
-  // 避免与分组分割线叠出双线效果。
-  &:has(+ .settings-group) {
-    border-bottom: none;
-  }
 }
 
 .setting-row__info {
