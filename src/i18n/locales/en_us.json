@@ -153,6 +153,9 @@
   "settings.group.typography": "Typography",
   "settings.group.font": "Font",
   "settings.group.formatting": "Formatting",
+  "settings.group.taskList": "Task list",
+  "settings.group.folding": "Folding",
+  "settings.group.inputAssist": "Input assist",
   "settings.group.display": "Display",
   "settings.group.file": "File",
   "settings.group.connection": "Connection",
@@ -929,5 +932,6 @@
   "unsaved.compareDraft": "Draft comparison",
   "unsaved.noDiskFile": "This document has not been saved to disk",
   "unsaved.noDiskContent": "No disk content available",
-  "unsaved.recoveredContent": "Recovered draft"
+  "unsaved.recoveredContent": "Recovered draft",
+  "settings.nav.renderer": "Renderer"
 }
