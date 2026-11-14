@@ -17,7 +17,6 @@ const DEVICE_LOCAL_CONFIG_KEYS = new Set([
   // 键位取决于本机键盘布局与外接键盘，跨设备同步会把别人机器上的手感带过来。
   'hotkeys',
   // 品牌标识属于本机外观偏好，不必跟着账号同步到其它设备。
-  'mokiIcon',
 ]);
 const initialLanguage = readInitialLanguage();
 
@@ -59,7 +58,6 @@ const useConfigStore = create(
       backgroundTransparency: { dark: 80, light: 80 },
       mokiDisplay: 'welcome',
       // 是否用 Moki 形象徽章替换界面左上角的 M 图标。纯外观偏好，默认关闭。
-      mokiIcon: false,
       autoSave: true,
       workspacePath: '',
       associatedOpenMode: 'editor',
