@@ -4,6 +4,12 @@ const providers = new Set();
 const listeners = new Set();
 
 export const getDocumentViewState = (id, surface) => states.get(id)?.[surface];
+export function captureDocumentViewState(id, surface) {
+  for (const provider of providers) {
+    if (provider.surface === surface && provider.getId() === id) capture(provider);
+  }
+  return getDocumentViewState(id, surface);
+}
 export function setDocumentViewState(id, surface, value) {
   if (!id || !value) return;
   states.set(id, { ...states.get(id), [surface]: value });

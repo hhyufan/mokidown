@@ -15,7 +15,7 @@ import {
 } from '@utils/editorBuffer';
 import { clearMarkdownUndo, renameMarkdownUndo } from '@utils/markdownUndo';
 import { historyCapture } from '@utils/tauriApi';
-import { renameDocumentViewState } from '@utils/documentViewState';
+import { captureDocumentViewState, renameDocumentViewState } from '@utils/documentViewState';
 import { untitledFileName } from '@utils/untitledFileName';
 
 let untitledCounter = 1;
@@ -451,7 +451,11 @@ const useEditorStore = create(
       /** ?????????? */
       setViewMode: (mode, meta = {}) => {
         const { activeTabId, viewMode } = get();
-        if (viewMode !== mode) flushEditorBuffer(activeTabId);
+        if (viewMode !== mode) {
+          flushEditorBuffer(activeTabId);
+          // 在替换源码编辑器前抓取实时折叠状态，供 Milkdown 挂载时恢复。
+          captureDocumentViewState(activeTabId, 'monaco');
+        }
         set({ viewMode: mode, uiStateUpdatedAt: meta.updatedAt ?? Date.now() });
       },
       toggleEditPreview: () => {

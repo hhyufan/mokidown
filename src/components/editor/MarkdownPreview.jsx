@@ -20,6 +20,7 @@ import {
 } from 'react';
 import { useTranslation } from 'react-i18next';
 import { rehypeMarkdownSections } from './markdownSections';
+import { clearFoldAnimations, updateFoldControl } from './markdownFoldControl';
 import { useEditorBufferContent } from '@hooks/useEditorBufferContent';
 import { useDocumentScrollState } from '@hooks/useDocumentScrollState';
 import { useMarkdownAnalysis } from '@hooks/useMarkdownAnalysis';
@@ -75,7 +76,7 @@ import useNotificationStore from '@store/useNotificationStore';
 import { useEditorContextMenu } from '@hooks/useEditorContextMenu';
 import EditorContextMenu from './EditorContextMenu';
 import { MENU_MOD } from '@utils/contextMenuShortcuts';
-import { addFootnoteJumpHandlers } from '@utils/footnoteParser';
+import { jumpToFootnote } from '@utils/footnoteParser';
 import { loadMarkdownImageSrc, parseMarkdownLineHint, resolveMarkdownLinkPath } from '@utils/markdownAssets';
 import MermaidRenderer from './MermaidRenderer';
 import MarkdownCodePre from './MarkdownCodePre';
@@ -151,7 +152,7 @@ const sanitizeSchema = {
   attributes: {
     ...defaultSchema.attributes,
     '*': [...(defaultSchema.attributes?.['*'] || []), 'className', 'class', 'style', 'id'],
-    a: [...(defaultSchema.attributes?.a || []), 'id', 'className', 'class'],
+    a: [...(defaultSchema.attributes?.a || []), 'id', 'className', 'class', 'dataFootnoteRef', 'dataFootnoteBackref'],
     code: [...(defaultSchema.attributes?.code || []), 'className', 'class'],
     span: [...(defaultSchema.attributes?.span || []), 'className', 'class', 'style', 'id'],
     div: [...(defaultSchema.attributes?.div || []), 'className', 'class', 'style'],
@@ -166,12 +167,38 @@ const sanitizeSchema = {
 
 const remarkPlugins = [remarkGfm, remarkTaskListSpacing, remarkMath, remarkMarkdownHtml];
 const noFolds = [];
+
+function rehypeSingleFootnoteBackref() {
+  return (tree) => {
+    let seen;
+    const visit = (node) => {
+      if (node.tagName === 'li' && /^user-content-fn-/.test(node.properties?.id || '')) {
+        seen = false;
+        visitChildren(node);
+        seen = undefined;
+      } else visitChildren(node);
+    };
+    const visitChildren = (node) => {
+      if (!node.children) return;
+      node.children = node.children.filter((child) => {
+        if (seen !== undefined && child.properties?.dataFootnoteBackref != null) {
+          if (seen) return false;
+          seen = true;
+        }
+        visit(child);
+        return true;
+      });
+    };
+    visit(tree);
+  };
+}
 const rehypePlugins = [
   rehypeRaw,
   [rehypeSanitize, sanitizeSchema],
   rehypeKatex,
   rehypeCodeBlockIndexes,
   rehypeTooltipTitles,
+  rehypeSingleFootnoteBackref,
 ];
 const taskCascadePlugins = [...rehypePlugins, rehypeTaskListTree, rehypeMarkdownSections];
 const independentTaskPlugins = [...rehypePlugins, [rehypeTaskListTree, { cascade: false }], rehypeMarkdownSections];
@@ -266,6 +293,7 @@ const MarkdownView = memo(function MarkdownView({ content, components, taskCasca
     <ReactMarkdown
       remarkPlugins={remarkPlugins}
       rehypePlugins={taskCascade ? taskCascadePlugins : independentTaskPlugins}
+      remarkRehypeOptions={{ footnoteBackContent: '↩' }}
       components={components}
     >
       {content}
@@ -294,6 +322,7 @@ const cancelIdle =
  */
 const MarkdownPreview = forwardRef(function MarkdownPreview({ className, foldedRanges = noFolds, onToggleFold }, ref) {
   const { t } = useTranslation();
+  const footnoteOrigins = useRef(new WeakMap());
   const activeTabId = useEditorStore((s) => s.activeTabId);
   const editorFontSize = useConfigStore((s) => s.fontSize);
   const editorLineHeight = useConfigStore((s) => s.lineHeight);
@@ -307,6 +336,7 @@ const MarkdownPreview = forwardRef(function MarkdownPreview({ className, foldedR
   const fallback = activeTab?.content || '';
   const documentPath = activeTab?.path || '';
   const taskCascade = useConfigStore((state) => state.markdownTaskCascade !== false);
+  const foldingEnabled = useConfigStore((state) => state.markdownFolding !== false);
   const rawContent = useEditorBufferContent(activeTabId, fallback, 240);
   const containerRef = useRef(null);
   const { menu, openMenu, closeMenu } = useEditorContextMenu(activeTabId);
@@ -335,6 +365,11 @@ const MarkdownPreview = forwardRef(function MarkdownPreview({ className, foldedR
   const content = useDeferredValue(processedContent);
   const [localFolds, setLocalFolds] = useState({ tabId: null, lines: new Set() });
   const localLines = localFolds.tabId === activeTabId ? localFolds.lines : null;
+  const foldAnimations = useRef(new Map());
+  useEffect(() => {
+    const pending = foldAnimations.current;
+    return () => clearFoldAnimations(pending);
+  }, [activeTabId]);
   useLayoutEffect(() => {
     const container = containerRef.current;
     if (!container) return;
@@ -353,14 +388,13 @@ const MarkdownPreview = forwardRef(function MarkdownPreview({ className, foldedR
       if (end && isFolded(line)) hiddenUntil = Math.max(hiddenUntil, end);
     }
     for (const button of container.querySelectorAll('button.md-preview__fold')) {
-      const folded = isFolded(Number(button.dataset.mdFoldLine));
+      const line = Number(button.dataset.mdFoldLine);
+      const folded = isFolded(line);
       button.parentElement.dataset.mdCollapsed = String(folded);
-      button.setAttribute('aria-expanded', String(!folded));
       const label = t(folded ? 'editor.expandSection' : 'editor.collapseSection');
-      button.setAttribute('aria-label', label);
-      button.title = label;
+      updateFoldControl(button, folded, foldingEnabled, label, foldAnimations.current);
     }
-  }, [content, foldedRanges, localLines, taskCascade, t]);
+  }, [content, foldedRanges, foldingEnabled, localLines, taskCascade, t]);
   useEffect(() => {
     if (containerRef.current) return observePreviewBlockSelection(containerRef.current);
   }, [content]);
@@ -478,12 +512,11 @@ const MarkdownPreview = forwardRef(function MarkdownPreview({ className, foldedR
     idleJobRef.current = requestIdle(work, { timeout: 500 });
   }, [addLangTags, cancelHighlightJob]);
 
-  // 延迟渲染提交后，再在下一帧补挂代码高亮与脚注跳转，确保目标 DOM 已稳定。
+  // 延迟渲染提交后，再在下一帧补挂代码高亮，确保目标 DOM 已稳定。
   useEffect(() => {
     let raf = requestAnimationFrame(() => {
       raf = 0;
       scheduleHighlight();
-      addFootnoteJumpHandlers(containerRef.current);
     });
     return () => {
       if (raf) cancelAnimationFrame(raf);
@@ -544,7 +577,8 @@ const MarkdownPreview = forwardRef(function MarkdownPreview({ className, foldedR
     if (!line) return null;
     return <button type="button" className="md-preview__fold" data-md-fold-line={line} aria-expanded="true"
       aria-label={t('editor.collapseSection')}
-      onClick={() => {
+      onClick={(event) => {
+        if (useConfigStore.getState().markdownFolding === false && event.currentTarget.getAttribute('aria-expanded') !== 'false') return;
         if (onToggleFold?.(line)) return;
         setLocalFolds(({ tabId, lines }) => {
           const next = new Set(tabId === activeTabId ? lines : []);
@@ -576,23 +610,31 @@ const MarkdownPreview = forwardRef(function MarkdownPreview({ className, foldedR
     h4: makeHeading('h4', foldControl),
     h5: makeHeading('h5', foldControl),
     h6: makeHeading('h6', foldControl),
-    a: ({ href, children, id, ...props }) => {
+    a: ({ href, children, id, className, ...props }) => {
       if (href?.startsWith('#')) {
         return (
           <a
             href={href}
             id={id}
+            className={props['data-footnote-ref'] != null ? 'footnote-ref'
+              : props['data-footnote-backref'] != null ? 'footnote-backref' : className}
             onClick={(e) => {
               e.preventDefault();
+              const back = e.currentTarget.matches('.footnote-backref, [data-footnote-backref]');
               const target = containerRef.current?.querySelector(`#${CSS.escape(href.slice(1))}`);
               if (!target) return;
-              target.scrollIntoView({ behavior: 'smooth', block: 'center' });
-              target.classList.add('footnote-highlight');
-              window.setTimeout(() => target.classList.remove('footnote-highlight'), 1200);
+              if (back) {
+                const definition = e.currentTarget.closest('li[id^="user-content-fn-"]');
+                const origin = footnoteOrigins.current.get(definition);
+                jumpToFootnote(origin?.isConnected ? origin : target, true);
+              } else if (e.currentTarget.matches('.footnote-ref, [data-footnote-ref]')) {
+                footnoteOrigins.current.set(target, e.currentTarget);
+                jumpToFootnote(target, false);
+              } else target.scrollIntoView({ behavior: 'smooth', block: 'center' });
             }}
             {...props}
           >
-            {children}
+            {props['data-footnote-ref'] != null ? `[${children}]` : children}
           </a>
         );
       }
@@ -602,6 +644,7 @@ const MarkdownPreview = forwardRef(function MarkdownPreview({ className, foldedR
           <a
             href={target.path}
             id={id}
+            className={className}
             onClick={(e) => {
               handleLinkClick(e, href);
             }}
@@ -611,7 +654,7 @@ const MarkdownPreview = forwardRef(function MarkdownPreview({ className, foldedR
           </a>
         );
       }
-      return <a href={href} id={id} target="_blank" rel="noopener noreferrer" {...props}>{children}</a>;
+      return <a href={href} id={id} className={className} target="_blank" rel="noopener noreferrer" {...props}>{children}</a>;
     },
     table: ({ children, ...props }) => (
       <div className="md-preview__table-wrap">
