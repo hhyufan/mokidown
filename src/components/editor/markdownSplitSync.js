@@ -1,6 +1,14 @@
+import { setDocumentViewState } from '@utils/documentViewState';
+
 const foldingId = 'editor.contrib.folding';
 
-export function bindMonacoFoldControls(editor) {
+export function restoreMonacoViewState(editor, state) {
+  if (!state) return;
+  if (state.cursorState && state.viewState) editor.restoreViewState(state);
+  else editor.getContribution(foldingId)?.restoreViewState(state.contributionsState?.[foldingId]);
+}
+
+export function bindMonacoFoldControls(editor, getDocumentId) {
   const animated = editor.createDecorationsCollection();
   const hovered = editor.createDecorationsCollection();
   let foldingListener;
@@ -24,6 +32,10 @@ export function bindMonacoFoldControls(editor) {
       model = folding;
       foldingListener = folding.onDidChange(({ collapseStateChanged }) => {
         if (!collapseStateChanged?.length) return;
+        // 模式切换前就保存折叠结果，Milkdown 初始化不再依赖 Monaco 卸载时序。
+        const id = getDocumentId?.();
+        const state = editor.saveViewState();
+        if (id && state) setDocumentViewState(id, 'monaco', state);
         animated.set(collapseStateChanged.map(({ startLineNumber }) => markLine(startLineNumber, 'moki-fold-rotating')));
         clearTimeout(timer);
         timer = setTimeout(() => animated.clear(), 240);
