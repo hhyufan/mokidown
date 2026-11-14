@@ -18,10 +18,13 @@ import {
 import { createRoot } from 'react-dom/client';
 import { createPortal } from 'react-dom';
 import { useShallow } from 'zustand/react/shallow';
+import useThemeStore from '@store/useThemeStore';
 import MarkdownTreeBlock from './MarkdownTreeBlock';
 import { useCodeBlockNavigation } from '@hooks/useCodeBlockNavigation';
 import { normalizeCodeLanguage } from '@utils/knowledgeTree';
-import { milkdownHeadingFolds } from './milkdownHeadingFolds';
+import { createMilkdownHeadingFoldsPlugin, restoreMilkdownFolds } from './milkdownHeadingFolds';
+import { jumpToFootnote } from '@utils/footnoteParser';
+import { createMilkdownFoldBridge } from './milkdownFoldBridge';
 import { reportReactError } from '@/services/runtimeLogs';
 import { Milkdown, MilkdownProvider, useEditor } from '@milkdown/react';
 import { Editor, commandsCtx, defaultValueCtx, editorViewCtx, editorViewOptionsCtx, rootCtx, serializerCtx } from '@milkdown/kit/core';
@@ -41,6 +44,8 @@ import {
 } from '@milkdown/kit/preset/commonmark';
 import {
   gfm,
+  footnoteDefinitionSchema,
+  footnoteReferenceSchema,
   insertTableCommand,
   insertTableInputRule,
   tableCellSchema,
@@ -240,6 +245,22 @@ const markdownSourceEditMeta = 'mokidownMarkdownSourceEdit';
 const remarkMathPlugin = $remark('remarkMath', () => remarkMath);
 const taskListSpacingPlugin = $remark('mokiTaskListSpacing', () => remarkTaskListSpacing);
 const markdownHtmlPlugin = $remark('mokiMarkdownHtml', () => remarkMarkdownHtml, { editing: true });
+
+const footnoteReferenceLink = footnoteReferenceSchema.extendSchema((base) => (ctx) => ({
+  ...base(ctx),
+  toDOM: (node) => ['sup', { 'data-type': 'footnote_reference', 'data-label': node.attrs.label },
+    ['a', { class: 'footnote-ref', href: '#', contenteditable: 'false' }, `[${node.attrs.label}]`]],
+}));
+
+const footnoteDefinitionWithBackref = footnoteDefinitionSchema.extendSchema((base) => (ctx) => ({
+  ...base(ctx),
+  toDOM: (node) => ['dl', { 'data-type': 'footnote_definition', 'data-label': node.attrs.label },
+    ['dt', node.attrs.label], ['dd', ['div', 0], ['a', {
+      class: 'footnote-backref', href: '#', contenteditable: 'false', 'aria-label': i18n.t('editor.footnoteBack'),
+    }, '↩']]],
+  parseDOM: [{ tag: 'dl[data-type="footnote_definition"]',
+    getAttrs: (dom) => ({ label: dom.dataset.label }), contentElement: (dom) => dom.querySelector('dd > div') || dom.querySelector('dd') }],
+}));
 const katexOptionsCtx = $ctx({
   throwOnError: false,
   strict: false,
@@ -1073,7 +1094,23 @@ function commitTypedCodeBlockLanguage(view, event) {
  */
 function isFootnoteBackrefTarget(target) {
   if (!(target instanceof Element)) return false;
-  return !!target.closest('dl[data-type="footnote_definition"]');
+  return !!target.closest('dl[data-type="footnote_definition"] .footnote-backref');
+}
+
+function handleFootnoteClick(event, origins) {
+  const ref = event.target.closest?.('sup[data-type="footnote_reference"]');
+  const back = event.target.closest?.('.footnote-backref')?.closest('dl[data-type="footnote_definition"]');
+  if (!ref && !back) return;
+  const root = event.currentTarget;
+  const label = CSS.escape((ref || back).dataset.label || '');
+  const origin = back && origins.get(back);
+  const target = ref
+    ? root.querySelector(`dl[data-type="footnote_definition"][data-label="${label}" i]`)
+    : origin?.isConnected ? origin : root.querySelector(`sup[data-type="footnote_reference"][data-label="${label}" i]`);
+  if (target && ref) origins.set(target, ref);
+  if (target) jumpToFootnote(target, Boolean(back));
+  event.preventDefault();
+  event.stopPropagation();
 }
 
 /**
@@ -1107,34 +1144,13 @@ function isNonEditablePreviewTarget(target) {
  * @param {() => any} getEditor 用于延迟获取 Milkdown 实例的函数。
  * @returns {(event: Event) => void} 预览区域事件处理器。
  */
-function createNonEditablePreviewSelectionHandler(getEditor) {
+function createNonEditablePreviewSelectionHandler(getEditor, readOnly) {
   return function stopNonEditablePreviewSelection(event) {
     if (event.target.closest?.('.knowledge-tree')) return;
     if (event.target.closest?.('img[src], .milkdown-media-inline')) return;
-    if (event.target.closest?.('[data-type="html_block"]')) return;
-    if (!isNonEditablePreviewTarget(event.target)) return;
+    if (event.target.closest?.('sup[data-type="footnote_reference"], .footnote-backref')) return;
 
-    const footnoteRef = event.target.closest?.('sup[data-type="footnote_reference"]');
-    const footnoteBackref = !footnoteRef && isFootnoteBackrefTarget(event.target)
-      ? event.target.closest('dl[data-type="footnote_definition"]')
-      : null;
-    if (footnoteRef || footnoteBackref) {
-      const root = event.currentTarget;
-      const label = footnoteRef?.dataset.label || footnoteBackref?.dataset.label || '';
-      const target = footnoteRef
-        ? root.querySelector(`dl[data-type="footnote_definition"][data-label="${CSS.escape(label)}"]`)
-        : root.querySelector(`sup[data-type="footnote_reference"][data-label="${CSS.escape(label)}"]`);
-      if (event.type === 'click' && target) {
-        target.scrollIntoView({ behavior: 'smooth', block: 'center' });
-        target.classList.add('footnote-highlight');
-        window.setTimeout(() => target.classList.remove('footnote-highlight'), 1200);
-      }
-      event.preventDefault();
-      event.stopPropagation();
-      event.nativeEvent?.stopImmediatePropagation?.();
-      event.stopImmediatePropagation?.();
-      return;
-    }
+    if (readOnly || event.target.closest?.('[data-type="html_block"]') || !isNonEditablePreviewTarget(event.target)) return;
 
     getEditor()?.action((ctx) => {
       const view = ctx.get(editorViewCtx);
@@ -1366,6 +1382,8 @@ function MilkdownInner({
   readOnly,
 }, ref) {
   const wrapperRef = useRef(null);
+  const footnoteOrigins = useRef(new WeakMap());
+  const darkTheme = useThemeStore((state) => state.theme === 'dark');
   const editorRef = useRef(null);
   const currentTabIdRef = useRef(activeTabId);
   const onAutoSaveRef = useRef(onAutoSave);
@@ -1468,6 +1486,8 @@ function MilkdownInner({
   });
 
   const editorInfo = useEditor((root) => {
+    const foldBridge = createMilkdownFoldBridge(activeTabId, content || '', (state) =>
+      editor.ctx.get(serializerCtx)(persistentMilkdownDocument(state)));
     const editor = Editor.make()
       .config((ctx) => {
         configureEditingWhitespace(ctx, { readOnly });
@@ -1517,6 +1537,9 @@ function MilkdownInner({
             const view = editorCtx.get(editorViewCtx);
             const selection = !readOnly && initialEditingSelection(view.state);
             if (selection) view.dispatch(view.state.tr.setSelection(selection));
+            // 在完整文档与 NodeView 挂载后显式恢复，不能只依赖插件初始化快照。
+            const folds = foldBridge.initialFolds(view.state.doc);
+            restoreMilkdownFolds(view, folds);
             const state = view.state;
             publishedMarkdownRef.current = editorCtx.get(serializerCtx)(persistentMilkdownDocument(state));
           })
@@ -1525,7 +1548,9 @@ function MilkdownInner({
       .use(markdownHtmlPlugin)
       .use(milkdownTableKeys)
       .use(commonmark.filter((plugin) => plugin !== createCodeBlockInputRule))
-      .use(gfm.filter((plugin) => plugin !== insertTableInputRule && plugin !== wrapInTaskListInputRule))
+      .use(gfm.filter((plugin) => ![insertTableInputRule, wrapInTaskListInputRule, footnoteDefinitionSchema, footnoteReferenceSchema].includes(plugin)))
+      .use(footnoteDefinitionWithBackref)
+      .use(footnoteReferenceLink)
       .use(milkdownTableView)
       .use(htmlBlockSchema)
       .use(htmlBlockView)
@@ -1539,7 +1564,7 @@ function MilkdownInner({
       .use(milkdownMediaImageView)
       .use(codeBlockComponent)
       .use(milkdownBlockSelection)
-      .use(milkdownHeadingFolds)
+      .use($prose(() => createMilkdownHeadingFoldsPlugin(foldBridge)))
       .use(listener);
 
     if (!readOnly) editor.use(milkdownSharedHistory(activeTabId, () => {
@@ -1581,6 +1606,7 @@ function MilkdownInner({
     let stopView;
     editor.action((ctx) => {
       const view = ctx.get(editorViewCtx);
+      if (!view?.state || view.isDestroyed) return;
       const saved = getDocumentViewState(activeTabId, 'milkdown');
       if (saved && Number.isFinite(saved.anchor) && Number.isFinite(saved.head)) {
         const end = view.state.doc.content.size;
@@ -1855,11 +1881,10 @@ function MilkdownInner({
   }, [readOnly, editorInfo.loading]);
 
   useEffect(() => {
-    if (readOnly) return undefined;
     const wrapper = wrapperRef.current;
     if (!wrapper) return undefined;
 
-    const handler = createNonEditablePreviewSelectionHandler(() => editorRef.current);
+    const handler = createNonEditablePreviewSelectionHandler(() => editorRef.current, readOnly);
     const events = ['pointerdown', 'mousedown', 'mouseup', 'click', 'dblclick', 'touchstart'];
     events.forEach((eventName) => {
       wrapper.addEventListener(eventName, handler, true);
@@ -1929,6 +1954,7 @@ function MilkdownInner({
   return (
     <div
       ref={wrapperRef}
+      onClickCapture={(event) => handleFootnoteClick(event, footnoteOrigins.current)}
       onContextMenu={handleContextMenu}
       onKeyDownCapture={(event) => {
         const direction = markdownUndoDirection(event.nativeEvent);
@@ -1938,6 +1964,7 @@ function MilkdownInner({
         event.stopPropagation();
       }}
       className={`md-preview md-preview--milkdown ${editorInfo.loading ? 'md-preview--stale' : ''} ${className || ''}`}
+      data-editor-theme={darkTheme ? 'dark' : 'light'}
       style={{
         fontSize: `${fontSize || 14}px`,
         lineHeight: (lineHeight || 24) / (fontSize || 14),

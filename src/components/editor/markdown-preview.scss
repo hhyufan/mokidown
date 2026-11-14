@@ -4,13 +4,23 @@
 @use '../../assets/styles/inline-code' as inline;
 @use '../../assets/styles/fold-control' as fold;
 
+// Resolve the gutter against the preview font size before headings inherit it.
+@property --md-fold-gutter {
+  syntax: '<length>';
+  inherits: true;
+  initial-value: 32px;
+}
+
 .md-preview {
   flex: 1;
+  position: relative;
   // 只写 overflow-y 会让横向的 visible 被算成 auto：预览容器自己就变成横向滚动容器，
   // 连 1px 的取整误差都滚出滚动条。横向交给各块自己（表格包裹层、代码块），外层关掉。
   overflow-x: hidden;
   overflow-y: auto;
+  --md-fold-gutter: max(32px, 3.15em + 8px);
   padding: 24px 32px;
+  padding-inline-start: var(--md-fold-gutter);
   font-family: var(--font-app);
   line-height: 1.75;
   color: var(--text);
@@ -20,6 +30,8 @@
   .md-preview__foldable-item,
   .md-preview__foldable-code { position: relative; }
   .md-preview__source-block[hidden],
+  .moki-folded-under-heading,
+  .moki-code-fold[hidden],
   .moki-folded-block,
   .md-preview__foldable-item[data-md-collapsed='true'] > :is(ol, ul),
   .md-preview__foldable-code[data-md-collapsed='true'] > :not(.md-preview__fold, .md-preview__folded-code-summary) { display: none; }
@@ -48,7 +60,7 @@
 
   .md-preview__fold {
     position: absolute;
-    inset-inline-end: calc(100% + 2px);
+    inset-inline-start: calc((var(--md-fold-gutter) + 1lh) / -2);
     inset-block-start: var(--fold-top, 0);
     display: inline-grid;
     place-items: center;
@@ -61,26 +73,26 @@
     background: transparent;
     opacity: 0;
     cursor: pointer;
+    &[hidden] { display: none; }
     &:focus-visible { outline: 1px solid var(--text-sec); outline-offset: -2px; }
     &::before { @include fold.arrow; content: ''; inline-size: 75%; aspect-ratio: 1; }
     &[aria-expanded='false']::before { transform: rotate(-90deg); }
+    @media (prefers-reduced-motion: no-preference) {
+      &[data-fold-motion='expand']::before { animation: md-fold-expand 160ms ease; }
+      &[data-fold-motion='collapse']::before { animation: md-fold-collapse 160ms ease; }
+    }
   }
 
   [data-md-collapsed]:hover > .md-preview__fold,
   .md-preview__foldable-item:hover > p > .md-preview__fold,
   .moki-code-fold:has(+ .milkdown-code-block:hover) > .md-preview__fold,
-  .md-preview__fold:is(:hover, :focus-visible, [aria-expanded='false']) { opacity: 1; }
+  .md-preview__fold:is(:hover, :focus-visible, [aria-expanded='false'], .md-preview__fold--rotating) { opacity: 1; }
 
-  .moki-foldable-heading > .md-preview__fold {
-    inset-inline-start: max(calc(-1lh - 2px), -30px);
-    inset-inline-end: auto;
-  }
-  h1.moki-foldable-heading > .md-preview__fold {
-    inset-inline-start: calc(-1lh - 2px);
-    &::before { inline-size: 100%; }
-  }
   .md-preview__foldable-item > .md-preview__fold,
-  .md-preview__foldable-item > p > .md-preview__fold { inset-inline-end: calc(100% + 1.4em); }
+  .md-preview__foldable-item > p > .md-preview__fold {
+    inset-inline-start: auto;
+    inset-inline-end: calc(100% + 1.4em);
+  }
   :is(.task-list-item, [data-item-type='task']) > .md-preview__fold,
   :is(.task-list-item, [data-item-type='task']) > p > .md-preview__fold { inset-inline-end: calc(100% + 2px); }
 
@@ -176,12 +188,6 @@
     font-size: 2.1em;
     text-align: center;
 
-    &.moki-foldable-heading {
-      width: fit-content;
-      max-width: calc(100% - max(0px, 2lh - 60px));
-      margin-inline: auto;
-    }
-
     &::before {
       content: '';
       display: inline-block;
@@ -235,7 +241,20 @@
       transition: width var(--md-duration) var(--md-ease);
     }
 
-    &:hover::before { width: 100%; }
+    &:is(:hover, :focus-visible, [data-footnote-jump='reference'])::before { width: 100%; }
+
+    // 脚注引用与回引是点击驱动的装饰链接，不需要浏览器默认 focus 蓝框。
+    &:focus-visible { outline: none; }
+  }
+
+  // 脚注引用与回引是点击驱动的装饰链接：浏览器 focus ring、选区框与
+  // ProseMirror 的 selectednode 蓝框都不应该出现。
+  sup[data-type='footnote_reference'],
+  sup[data-type='footnote_reference'] *,
+  dl[data-type='footnote_definition'] .footnote-backref,
+  dl[data-type='footnote_definition'] .footnote-backref * {
+    outline: none !important;
+    user-select: none;
   }
 
   // 引用块：淡蓝圆角块，不再使用左侧竖线。
@@ -424,7 +443,17 @@
   }
 }
 
+@keyframes md-fold-expand { from { transform: rotate(-90deg); } to { transform: rotate(0deg); } }
+@keyframes md-fold-collapse { from { transform: rotate(0deg); } to { transform: rotate(-90deg); } }
+
 .md-preview--milkdown {
+  // 应用主题优先于系统配色：系统深色、应用浅色时，浏览器默认光标会沿用
+  // 系统配色变白；这里显式声明 color-scheme 与 caret-color 兜底。
+  &[data-editor-theme='light'] .milkdown-editor,
+  &[data-editor-theme='dark'] .milkdown-editor {
+    caret-color: var(--text, #2c2c2e);
+  }
+
   --md-code-text: #383a42;
   --md-code-keyword: #a626a4;
   --md-code-name: #e45649;
@@ -480,7 +509,7 @@
     padding-bottom: 3em;
     h1::before, h2::before { pointer-events: none; }
 
-    &:not(.ProseMirror-hideselection) { caret-color: var(--text); }
+    &:not(.ProseMirror-hideselection) { caret-color: var(--text, #2c2c2e); }
     .moki-markdown-marker { display: none; }
 
     &.ProseMirror-focused {
@@ -497,7 +526,9 @@
         white-space: pre-wrap;
         &::before { content: attr(data-moki-marker); }
       }
-      &.moki-markdown-virtual-caret { caret-color: transparent; }
+      &.moki-markdown-virtual-caret,
+      &.moki-markdown-pointer-pending { caret-color: transparent; }
+      &.moki-markdown-pointer-pending .moki-markdown-marker--with-caret > i::after { visibility: hidden; }
       .moki-markdown-marker--with-caret {
         &::before { content: attr(data-marker-before); }
         &::after { content: attr(data-marker-after); }
@@ -510,7 +541,7 @@
             inset-inline-start: 0;
             inset-block-start: var(--moki-caret-top, 0px);
             block-size: var(--moki-caret-height, 100%);
-            border-inline-start: 1px solid var(--text);
+            border-inline-start: 1px solid var(--text, #2c2c2e);
             animation: ProseMirror-cursor-blink 1.1s steps(2, start) infinite;
             content: '';
             @media (prefers-reduced-motion: reduce) { animation: none; }
@@ -552,6 +583,7 @@
   }
 
   sup[data-type='footnote_reference'] {
+    display: inline-block;
     color: var(--accent);
     cursor: pointer;
     font-size: 0.78em;
@@ -559,17 +591,7 @@
     text-decoration: none;
     vertical-align: super;
 
-    &::before {
-      content: '[';
-    }
-
-    &::after {
-      content: ']';
-    }
-
-    &:hover {
-      text-decoration: underline;
-    }
+    &[data-footnote-jump='reference'] > a::before { width: 100%; }
   }
 
   dl[data-type='footnote_definition'] {
@@ -598,26 +620,11 @@
 
     dd {
       margin-left: 0;
-      cursor: pointer;
 
-      p {
+      > div,
+      > div > p {
         display: inline;
         margin: 0;
-      }
-
-      &::after {
-        content: ' ↩';
-        color: var(--accent);
-        margin-left: 0.25em;
-      }
-
-      a {
-        color: var(--accent);
-        text-decoration: none;
-
-        &:hover {
-          text-decoration: underline;
-        }
       }
     }
   }
@@ -1212,6 +1219,15 @@
   font-size: 0.88em;
   color: var(--text-sec);
 
+  .sr-only {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+  }
+
   hr {
     margin-bottom: 1em;
   }
@@ -1228,11 +1244,6 @@
     }
   }
 
-  a {
-    color: var(--accent);
-    text-decoration: none;
-    &:hover { text-decoration: underline; }
-  }
 }
 
 .footnote-ref {
@@ -1240,9 +1251,6 @@
   text-decoration: none;
   cursor: pointer;
 
-  &:hover {
-    text-decoration: underline;
-  }
 }
 
 .footnote-backref {
@@ -1251,17 +1259,42 @@
   margin-left: 0.4em;
   cursor: pointer;
 
-  &:hover {
-    text-decoration: underline;
-  }
 }
 
-.footnote-highlight {
-  border-radius: 4px;
-  outline: 2px solid color-mix(in srgb, var(--accent) 70%, transparent);
-  background: color-mix(in srgb, var(--accent) 12%, transparent);
-  transition: outline-color 0.25s ease, background-color 0.25s ease;
+.md-preview [data-footnote-jump='definition'] {
+  position: relative;
+  &::before {
+    content: '';
+    position: absolute;
+    inset-block: .25em;
+    inset-inline-start: -.65em;
+    width: 2px;
+    border-radius: 2px;
+    background: var(--accent);
+    pointer-events: none;
+    @media (prefers-reduced-motion: no-preference) { animation: footnote-indicator .2s var(--md-ease); }
+  }
+  a:hover::before { opacity: 0; }
+  &[data-footnote-leaving]::before { animation: footnote-indicator-out var(--md-duration) var(--md-ease) both; }
 }
+
+.md-preview .footnote-jump-lines {
+  position: absolute;
+  pointer-events: none;
+  z-index: 2;
+  > i {
+    position: absolute;
+    height: 1px;
+    background: var(--accent);
+    @media (prefers-reduced-motion: no-preference) { animation: footnote-underline var(--md-duration) var(--md-ease); }
+  }
+  &[data-footnote-leaving] > i { animation: footnote-underline-out var(--md-duration) var(--md-ease) both; }
+}
+
+@keyframes footnote-indicator { from { opacity: 0; transform: scaleY(.35); } }
+@keyframes footnote-indicator-out { to { opacity: 0; transform: scaleY(.35); } }
+@keyframes footnote-underline { from { transform: scaleX(0); } }
+@keyframes footnote-underline-out { to { transform: scaleX(0); } }
 
 /* 键盘按键 */
 .md-preview__kbd {
