@@ -13,6 +13,7 @@ import { CODE_FENCE_LANGUAGE_EVENT, completedFenceLanguage, readMarkdownFence } 
 
 const sourceTypeName = 'moki_inline_syntax_source';
 const liveSyntaxKey = new PluginKey('moki-live-syntax');
+const inlinePointerCleanup = new WeakMap();
 const inlineLinkPattern = /(?<!\\)!?\[([^\n[\]]*)\]\((?:[^()\n]|\([^()\n]*\))*\)$/;
 const graphemes = Intl.Segmenter && new Intl.Segmenter(undefined, { granularity: 'grapheme' });
 const autoOpenedFences = new WeakSet();
@@ -117,6 +118,7 @@ function delimiterBoundary($pos) {
 // its caret offset in plugin state and leave the document untouched.
 function selectDelimiterPosition(view, $pos, boundary, offset, scroll = true) {
   const tr = view.state.tr.setSelection(TextSelection.create(view.state.doc, $pos.pos));
+  const meta = { pointer: null };
   if (boundary) {
     let marks = $pos.nodeBefore?.marks || [];
     let end = 0;
@@ -125,8 +127,10 @@ function selectDelimiterPosition(view, $pos, boundary, offset, scroll = true) {
       if (!mark || offset < end) continue;
       marks = opens ? mark.addToSet(marks) : mark.removeFromSet(marks);
     }
-    tr.setStoredMarks(marks).setMeta(liveSyntaxKey, { caret: { offset } });
+    tr.setStoredMarks(marks);
+    meta.caret = { offset };
   }
+  tr.setMeta(liveSyntaxKey, meta);
   view.dispatch(scroll ? tr.scrollIntoView() : tr);
   return true;
 }
@@ -285,25 +289,42 @@ function trackInlineClick(view, event) {
       offset += boundary.text.length - marker.dataset.mokiMarker.length;
     }
   }
-  // Leave the native mousedown in charge of drag selection. Only correct a
-  // stationary click on mouseup, using the position captured before reflow.
-  const { doc } = view.state;
+  // Keep the rendered layout stable while native drag/word selection runs.
+  // Reveal the caret and its delimiters together with the final selection.
+  const { doc, selection } = view.state;
   const window = view.dom.ownerDocument.defaultView;
   if (!window) return;
-  const finish = (up) => {
-    window.removeEventListener('blur', cancel);
-    if (up.button !== 0 ||
-      Math.hypot(up.clientX - event.clientX, up.clientY - event.clientY) > 4 ||
-      !view.dom.contains(up.target)) return;
+  inlinePointerCleanup.get(view)?.();
+  const listeners = new AbortController();
+  const options = { capture: true, signal: listeners.signal };
+  const pointer = { selection, caret: liveSyntaxKey.getState(view.state).caret, focused: view.hasFocus() };
+  const cleanup = () => {
+    listeners.abort();
+    inlinePointerCleanup.delete(view);
+  };
+  const release = (click) => {
+    cleanup();
     queueMicrotask(() => {
-      if (view.isDestroyed || view.state.doc !== doc) return;
-      view.focus();
-      selectDelimiterPosition(view, $pos, boundary, offset, false);
+      if (view.isDestroyed || view.state.doc !== doc || liveSyntaxKey.getState(view.state).pointer !== pointer) return;
+      const nativeSelection = view.dom.ownerDocument.getSelection();
+      if (click && nativeSelection?.isCollapsed !== false) {
+        view.focus();
+        selectDelimiterPosition(view, $pos, boundary, offset, false);
+      } else {
+        view.dispatch(view.state.tr.setMeta(liveSyntaxKey, { pointer: null }));
+      }
     });
   };
-  const cancel = () => window.removeEventListener('mouseup', finish, true);
-  window.addEventListener('mouseup', finish, { once: true, capture: true });
-  window.addEventListener('blur', cancel, { once: true });
+  const moved = (point) => Math.hypot(point.clientX - event.clientX, point.clientY - event.clientY) > 4;
+  let dragged = false;
+  inlinePointerCleanup.set(view, cleanup);
+  window.addEventListener('mousemove', (move) => { dragged ||= moved(move); }, options);
+  window.addEventListener('mouseup', (up) => {
+    if (up.button === 0) release(!dragged && !moved(up) && view.dom.contains(up.target));
+  }, options);
+  window.addEventListener('dragend', () => release(false), options);
+  window.addEventListener('blur', () => release(false), { signal: listeners.signal });
+  view.dispatch(view.state.tr.setMeta(liveSyntaxKey, { pointer, caret: pointer.caret }));
 }
 
 function alignVirtualCaret(view) {
@@ -563,12 +584,13 @@ function handleSmartTextInput(view, from, to, text) {
 export const milkdownLiveSyntax = $prose((ctx) => new Plugin({
   key: liveSyntaxKey,
   state: {
-    init: () => ({ closing: false, caret: null, composition: null }),
+    init: () => ({ closing: false, caret: null, composition: null, pointer: null }),
     apply(tr, previous) {
       const update = tr.getMeta(liveSyntaxKey);
       if (!update && !tr.docChanged && !tr.selectionSet && !tr.storedMarksSet) return previous;
       return { closing: update?.closing || false, caret: update?.caret || null,
-        composition: tr.getMeta('composition') ?? previous.composition };
+        composition: tr.getMeta('composition') ?? previous.composition,
+        pointer: update && 'pointer' in update ? update.pointer : tr.docChanged ? null : previous.pointer };
     },
   },
   view(editorView) {
@@ -603,7 +625,10 @@ export const milkdownLiveSyntax = $prose((ctx) => new Plugin({
         }
         view.dom.dispatchEvent(new CustomEvent(CODE_FENCE_LANGUAGE_EVENT, { bubbles: true, detail }));
       },
-      destroy() { resize?.disconnect(); },
+      destroy() {
+        resize?.disconnect();
+        inlinePointerCleanup.get(editorView)?.();
+      },
     };
   },
   appendTransaction(transactions, _oldState, state) {
@@ -628,7 +653,11 @@ export const milkdownLiveSyntax = $prose((ctx) => new Plugin({
     return tr.setSelection(TextSelection.create(tr.doc, from + offset));
   },
   props: {
-    attributes: (state) => liveSyntaxKey.getState(state).caret ? { class: 'moki-markdown-virtual-caret' } : {},
+    attributes(state) {
+      const { caret, pointer } = liveSyntaxKey.getState(state);
+      if (pointer) return { class: 'moki-markdown-pointer-pending' };
+      return caret ? { class: 'moki-markdown-virtual-caret' } : {};
+    },
     handleTextInput: handleSmartTextInput,
     handleDOMEvents: {
       compositionstart(view) {
@@ -697,7 +726,10 @@ export const milkdownLiveSyntax = $prose((ctx) => new Plugin({
       },
     },
     decorations(state) {
-      const { selection, doc } = state;
+      const { doc } = state;
+      const { caret, pointer } = liveSyntaxKey.getState(state);
+      if (pointer && !pointer.focused) return null;
+      const selection = pointer?.selection || state.selection;
       const { $from } = selection;
       if (!$from.parent.isTextblock || $from.parent.type.spec.code) return null;
       const next = selection.empty ? $from.nodeAfter : selection.node;
@@ -705,26 +737,26 @@ export const milkdownLiveSyntax = $prose((ctx) => new Plugin({
         class: 'moki-markdown-math-source', 'data-moki-math-source': `$${next.attrs.value}$`,
       });
       if (!selection.empty) return formula ? DecorationSet.create(doc, [formula]) : null;
-      const caret = liveSyntaxKey.getState(state).caret;
+      const virtualCaret = pointer ? pointer.caret : caret;
       const decorations = pendingMarkers($from);
       const opening = new Map(), closing = new Map();
       const ranges = activeMarkRanges($from);
-      if (caret) ranges.push(...activeMarkRanges($from, -1).filter((range) => range.to === $from.pos));
+      if (virtualCaret) ranges.push(...activeMarkRanges($from, -1).filter((range) => range.to === $from.pos));
       ranges.sort((a, b) => a.from - b.from || b.to - a.to || a.order - b.order);
       for (const { from, to, delimiters: [open, close] } of ranges) {
         opening.set(from, (opening.get(from) || '') + open);
         closing.set(to, close + (closing.get(to) || ''));
       }
       if ($from.parent.type.name === 'heading' && $from.parentOffset === 0) {
-        if (!caret) decorations.push(markerWidget($from.pos, '#'.repeat($from.parent.attrs.level), -2, true));
+        if (!virtualCaret) decorations.push(markerWidget($from.pos, '#'.repeat($from.parent.attrs.level), -2, true));
         decorations.push(Decoration.node($from.before(), $from.after(), { class: 'moki-markdown-heading-source' }));
       }
       if (formula) decorations.push(formula);
-      if (caret) {
+      if (virtualCaret) {
         const boundary = delimiterBoundary($from);
         opening.delete($from.pos);
         closing.delete($from.pos);
-        if (boundary) decorations.push(markerWidget($from.pos, boundary.text, -1, boundary.heading, caret.offset));
+        if (boundary) decorations.push(markerWidget($from.pos, boundary.text, -1, boundary.heading, virtualCaret.offset));
       }
       for (const [pos, text] of opening) decorations.push(markerWidget(pos, text, -1));
       for (const [pos, text] of closing) decorations.push(markerWidget(pos, text, 1));

@@ -55,6 +55,14 @@
 
   .inline-folded::after { color: var(--text-sec); }
 
+  // Monaco's runtime theme also supplies cursor rules. Keep the visible
+  // cursor tied to the application theme, including while Shiki initializes.
+  .cursors-layer[class] > .cursor {
+    background-color: var(--code-caret);
+    border-color: var(--code-caret);
+    color: var(--surface);
+  }
+
   .margin {
     background: transparent !important;
   }
