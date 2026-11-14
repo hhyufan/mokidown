@@ -239,6 +239,7 @@ function SettingsModal({ open: openProp, onClose }) {
           <div className="settings-modal__content">
             {activeNav === 'general' && (
               <div className="settings-section">
+                <SettingGroup label={t('settings.group.snapshot')} />
                 <SettingRow label={t('settings.snapshot.title')}>
                   <Space>
                     <Button icon={<ExportOutlined />} loading={settingsBusy} onClick={handleExportJson}>{t('settings.snapshot.exportJson')}</Button>
