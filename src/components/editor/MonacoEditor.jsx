@@ -35,7 +35,7 @@ import { bindMonacoMarkdownPairs } from './monacoMarkdownPairs';
 import MarkdownCodeLanguageMenu from './MarkdownCodeLanguageMenu';
 import './monaco-editor.scss';
 import { markdownFoldingRanges } from './markdownSections';
-import { bindMonacoFoldControls } from './markdownSplitSync';
+import { bindMonacoFoldControls, restoreMonacoViewState } from './markdownSplitSync';
 import { computeRanges } from 'monaco-editor/esm/vs/editor/contrib/folding/browser/indentRangeProvider.js';
 import { conf as markdownLanguage } from 'monaco-editor/esm/vs/basic-languages/markdown/markdown.js';
 
@@ -267,7 +267,7 @@ const MonacoEditorComponent = forwardRef(function MonacoEditorComponent({ classN
     });
 
     editorRef.current = editor;
-    const stopFoldControls = bindMonacoFoldControls(editor);
+    const stopFoldControls = bindMonacoFoldControls(editor, () => currentTabIdRef.current);
     // Follow effective wrapping, including temporary runtime overrides, so an
     // unwrapped line never becomes inaccessible behind a hidden scrollbar.
     const syncHorizontalScrollbar = () => {
@@ -283,7 +283,7 @@ const MonacoEditorComponent = forwardRef(function MonacoEditorComponent({ classN
         || event.hasChanged(monaco.editor.EditorOption.scrollbar)) syncHorizontalScrollbar();
     });
     syncHorizontalScrollbar();
-    if (initialView) editor.restoreViewState(initialView);
+    restoreMonacoViewState(editor, initialView);
     const stopSessionView = registerDocumentViewState('monaco', () => currentTabIdRef.current, () => editor.saveViewState());
     editor.onDidChangeCursorSelection(requestDocumentViewStateSave);
     editor.onDidScrollChange(requestDocumentViewStateSave);
@@ -643,10 +643,10 @@ const MonacoEditorComponent = forwardRef(function MonacoEditorComponent({ classN
       modelsRef.current.set(activeTabId, entry);
       replacedModel = replaced?.model;
     }
-    if (editor.getModel() !== entry.model) {
+    const switchedModel = editor.getModel() !== entry.model;
+    if (switchedModel) {
       suppressModelChangeRef.current = true;
       editor.setModel(entry.model);
-      if (entry.viewState) editor.restoreViewState(entry.viewState);
       suppressModelChangeRef.current = false;
       setContextMenu((menu) => menu.visible ? { ...menu, visible: false } : menu);
     }
@@ -683,6 +683,7 @@ const MonacoEditorComponent = forwardRef(function MonacoEditorComponent({ classN
         model.updateOptions({ tabSize: desiredTabSize, insertSpaces: true });
       }
     }
+    if (switchedModel) restoreMonacoViewState(editor, entry.viewState);
 
     setCharacterCount(newValue.length);
   }, [activeTabId, tabsRevision, languageRevision, setCharacterCount, tabSize]);
