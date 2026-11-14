@@ -47,6 +47,7 @@ const useConfigStore = create(
       previewLineHeight: 24,
       previewZoomSync: true,
       markdownTaskCascade: true,
+      markdownFolding: true,
       ...normalizeMarkdownPairSettings(),
       tabSize: 2,
       wordWrap: true,

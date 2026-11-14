@@ -2,10 +2,16 @@ import { Plugin, PluginKey, Selection } from '@milkdown/kit/prose/state';
 import { Decoration, DecorationSet } from '@milkdown/kit/prose/view';
 import { $prose } from '@milkdown/kit/utils';
 import i18n from '@/i18n';
+import useConfigStore from '@store/useConfigStore';
 import { headingSections } from './markdownSections';
+import { clearFoldAnimations, updateFoldControl } from './markdownFoldControl';
 
 const key = new PluginKey('moki-markdown-folds');
 const isList = (node) => node.type.name === 'ordered_list' || node.type.name === 'bullet_list';
+
+export function restoreMilkdownFolds(view, positions) {
+  view.dispatch(view.state.tr.setMeta(key, { restore: positions }).setMeta('addToHistory', false));
+}
 
 function ellipsis(doc) {
   const marker = doc.createElement('span');
@@ -46,9 +52,9 @@ function build(doc, candidates) {
   const ranges = [];
   let hiddenUntil = 0;
   for (const { start, size } of blocks) {
-    if (start < hiddenUntil) decorations.push(Decoration.node(start, start + size, { class: 'moki-folded-block' }));
+    if (start < hiddenUntil) decorations.push(Decoration.node(start, start + size, { class: 'moki-folded-under-heading' }));
     const end = sections.get(start);
-    if (end > start + size && candidates.has(start)) hiddenUntil = end;
+    if (end > start + size && candidates.has(start)) hiddenUntil = Math.max(hiddenUntil, end);
   }
   doc.descendants((node, start, parent) => {
     const end = start + node.nodeSize;
@@ -84,46 +90,72 @@ function build(doc, candidates) {
   return { folded, ranges, decorations: DecorationSet.create(doc, decorations) };
 }
 
-function updateControls(view) {
+function updateControls(view, pending) {
+  const enabled = useConfigStore.getState().markdownFolding !== false;
+  for (const [button, timer] of pending) {
+    if (!view.dom.contains(button)) {
+      clearTimeout(timer);
+      pending.delete(button);
+    }
+  }
   for (const button of view.dom.querySelectorAll('button.md-preview__fold')) {
     const codeWidget = button.parentElement.closest('.moki-code-fold');
     const fold = codeWidget ? codeWidget.nextElementSibling : button.closest('[data-md-collapsed]');
     if (!fold?.hasAttribute('data-md-collapsed')) continue;
     const collapsed = fold.dataset.mdCollapsed === 'true';
     if (codeWidget) {
+      codeWidget.hidden = Boolean(fold.closest('.moki-folded-under-heading'));
       codeWidget.dataset.mdCollapsed = String(collapsed);
       codeWidget.querySelector('.md-preview__folded-code-summary').firstChild.nodeValue = `\`\`\`${fold.dataset.foldLanguage || ''}`;
     }
     const label = i18n.t(collapsed ? 'editor.expandSection' : 'editor.collapseSection');
-    button.setAttribute('aria-label', label);
-    button.setAttribute('aria-expanded', String(!collapsed));
-    button.title = label;
+    updateFoldControl(button, collapsed, enabled, label, pending);
   }
 }
 
-export const milkdownHeadingFolds = $prose(() => new Plugin({
+export const createMilkdownHeadingFoldsPlugin = (options = {}) => new Plugin({
   key,
   state: {
-    init: (_, { doc }) => build(doc, new Set()),
+    init: (_, { doc }) => build(doc, options.initialFolds?.(doc) || new Set()),
     apply(tr, previous) {
       const toggle = tr.getMeta(key);
       if (!tr.docChanged && toggle == null) return previous;
+      if (toggle?.restore instanceof Set) return build(tr.doc, toggle.restore);
       const folded = new Set();
       for (const position of previous.folded) {
         const mapped = tr.mapping.mapResult(position, 1);
         if (!mapped.deleted) folded.add(mapped.pos);
       }
-      if (toggle != null) {
+      if (typeof toggle === 'number') {
         if (folded.has(toggle)) folded.delete(toggle);
-        else folded.add(toggle);
+        else if (useConfigStore.getState().markdownFolding !== false) folded.add(toggle);
       }
       return build(tr.doc, folded);
     },
   },
   view(view) {
-    updateControls(view);
+    const pending = new Map();
+    updateControls(view, pending);
+    const unsubscribe = useConfigStore.subscribe((next, previous) => {
+      if (next.markdownFolding !== previous.markdownFolding) {
+        view.dispatch(view.state.tr.setMeta(key, true).setMeta('addToHistory', false));
+      }
+    });
     return { update(view, previous) {
-      if (key.getState(view.state) !== key.getState(previous)) updateControls(view);
+      const currentFolds = key.getState(view.state);
+      const previousFolds = key.getState(previous);
+      if (currentFolds !== previousFolds) {
+        updateControls(view, pending);
+        const changed = !view.state.doc.eq(previous.doc)
+          || currentFolds.folded.size !== previousFolds.folded.size
+          || [...currentFolds.folded].some((pos) => !previousFolds.folded.has(pos));
+        if (changed && (currentFolds.folded.size || previousFolds.folded.size)) {
+          options.onFoldsChanged?.(view.state, currentFolds.folded, previousFolds.folded);
+        }
+      }
+    }, destroy() {
+      unsubscribe();
+      clearFoldAnimations(pending);
     } };
   },
   appendTransaction(transactions, previous, state) {
@@ -140,4 +172,6 @@ export const milkdownHeadingFolds = $prose(() => new Plugin({
     return state.tr.setSelection(selection).setMeta('addToHistory', false);
   },
   props: { decorations: (state) => key.getState(state).decorations },
-}));
+});
+
+export const milkdownHeadingFolds = $prose(createMilkdownHeadingFoldsPlugin);

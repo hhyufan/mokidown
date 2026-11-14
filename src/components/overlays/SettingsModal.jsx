@@ -421,6 +421,16 @@ function SettingsModal({ open: openProp, onClose }) {
                     onChange={(value) => handleChange('markdownTaskCascade', value)}
                   />
                 </SettingRow>
+                <SettingRow
+                  label={t('settings.editor.markdownFolding')}
+                  desc={t('settings.editor.markdownFoldingDesc')}
+                >
+                  <Switch
+                    aria-label={t('settings.editor.markdownFolding')}
+                    checked={config.markdownFolding !== false}
+                    onChange={(value) => handleChange('markdownFolding', value)}
+                  />
+                </SettingRow>
                 <MarkdownPairSettings
                   enabled={config.markdownSmartPairsEnabled}
                   value={config.markdownSmartPairs}

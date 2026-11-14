@@ -5,6 +5,26 @@ import remarkMath from 'remark-math';
 
 const parser = unified().use(remarkParse).use(remarkGfm).use(remarkMath);
 
+// 以同类节点的文档顺序连接 Markdown 行号和 ProseMirror 位置，不依赖标题文本唯一。
+export function markdownFoldAnchors(source) {
+  const anchors = [];
+  const blocks = parser.parse(source).children;
+  const ranges = collectFoldingRanges(blocks, source.split('\n').length + 1);
+  const ends = new Map(ranges.map(({ kind, start, end }) => [`${kind}:${start}`, end]));
+  const visit = (nodes) => {
+    for (const node of nodes) {
+      const kind = { heading: 'heading', code: 'code_block', listItem: 'list_item' }[node.type];
+      if (kind) {
+        const start = node.position.start.line;
+        anchors.push({ kind, start, end: ends.get(`${kind}:${start}`) });
+      }
+      if (node.children) visit(node.children);
+    }
+  };
+  visit(blocks);
+  return anchors;
+}
+
 // Close a heading at the next heading of equal or higher rank.
 export function headingSections(blocks, documentEnd) {
   const sections = [];
@@ -20,21 +40,23 @@ export function headingSections(blocks, documentEnd) {
 }
 
 export function markdownFoldingRanges(source) {
-  const blocks = parser.parse(source).children;
+  return collectFoldingRanges(parser.parse(source).children, source.split('\n').length + 1);
+}
+
+function collectFoldingRanges(blocks, documentEnd) {
   const headings = blocks.filter((node) => node.type === 'heading').map((node) => ({
     level: node.depth, start: node.position.start.line, headingEnd: node.position.end.line,
   }));
-  const end = source.split('\n').length + 1;
-  const sections = headingSections(headings, end)
+  const sections = headingSections(headings, documentEnd)
     .filter(({ headingEnd, end: sectionEnd }) => headingEnd < sectionEnd - 1)
-    .map(({ start, end: sectionEnd }) => ({ start, end: sectionEnd - 1 }));
+    .map(({ start, end: sectionEnd }) => ({ kind: 'heading', start, end: sectionEnd - 1 }));
   const ranges = [...sections];
   const visit = (nodes) => {
     for (const node of nodes) {
       const { start, end } = node.position;
       if ((node.type === 'code' && end.line > start.line) ||
         (node.type === 'listItem' && node.children.some((child) => child.type === 'list'))) {
-        ranges.push({ start: start.line, end: end.line });
+        ranges.push({ kind: node.type === 'code' ? 'code_block' : 'list_item', start: start.line, end: end.line });
       }
       if (node.children) visit(node.children);
     }

@@ -1,25 +1,107 @@
 import { expect, test } from '@playwright/test';
 
+function setMarkdownFolding(page, enabled) {
+  return page.evaluate(async (value) => {
+    (await import('/src/store/useConfigStore.js')).default.getState().setConfig('markdownFolding', value);
+  }, enabled);
+}
+
+test('folds created in Milkdown are restored in Monaco on the first mode switch', async ({ page }) => {
+  test.setTimeout(60000);
+  await page.goto('/');
+  await expect(page.locator('.editor-content__welcome')).toBeVisible({ timeout: 30000 });
+  const setMode = (mode) => page.evaluate(async (value) => {
+    (await import('/src/store/useEditorStore.js')).default.getState().setViewMode(value);
+  }, mode);
+  await setMode('preview');
+  await page.evaluate(async () => {
+    const { default: store } = await import('/src/store/useEditorStore.js');
+    store.getState().openFile({ path: '/first-fold.md', name: 'first-fold.md',
+      content: '# Parent\n\n## Child\n\nHidden child\n\n## Sibling\n\nHidden sibling\n\n# Next\n\nVisible next' });
+  });
+  const milkdown = page.locator('.milkdown-editor');
+  await milkdown.locator('h2').first().getByRole('button').click();
+  await milkdown.locator('h1').first().getByRole('button').click();
+  await expect(milkdown.getByText('Hidden sibling')).toBeHidden();
+  await setMode('split');
+  const preview = page.locator('.editor-content__preview--half');
+  const parent = preview.getByRole('heading', { name: 'Parent', exact: true }).getByRole('button');
+  await expect(parent).toHaveAttribute('aria-expanded', 'false', { timeout: 20000 });
+  await expect(preview.getByText('Hidden sibling')).toBeHidden();
+  await parent.click();
+  await expect(preview.getByText('Hidden sibling')).toBeVisible();
+  await expect(preview.getByText('Hidden child')).toBeHidden();
+  await setMarkdownFolding(page, false);
+  await setMode('preview');
+  const child = milkdown.locator('h2').first().getByRole('button');
+  await expect(child).toHaveAttribute('aria-expanded', 'false');
+  await child.click();
+  await expect(milkdown.getByText('Hidden child')).toBeVisible();
+  await setMode('split');
+  await expect(preview.getByText('Hidden child')).toBeVisible();
+});
+
+function foldGeometry(button) {
+  return button.evaluate((control) => {
+    const heading = control.parentElement;
+    const pane = control.closest('.md-preview');
+    const lineHeight = parseFloat(getComputedStyle(heading).lineHeight);
+    const { width, height, left, right, top } = control.getBoundingClientRect();
+    const headingBox = heading.getBoundingClientRect();
+    const paneLeft = pane.getBoundingClientRect().left;
+    return { width, height, lineHeight, gap: headingBox.left - right, topDelta: headingBox.top - top,
+      leftInset: left - paneLeft, center: (left + right) / 2 - paneLeft };
+  });
+}
+
+function expectHeadingArrows(first, second) {
+  for (const arrow of [first, second]) {
+    expect(Math.abs(arrow.height - arrow.lineHeight)).toBeLessThan(.1);
+    expect(arrow.width).toBe(arrow.height);
+    expect(arrow.gap).toBeGreaterThanOrEqual(3);
+    expect(arrow.leftInset).toBeGreaterThanOrEqual(3);
+    expect(arrow.topDelta).toBe(0);
+  }
+  expect(Math.abs(first.center - second.center)).toBeLessThan(.1);
+  expect(first.height).toBeGreaterThan(second.height);
+}
+
 test('Milkdown folds a heading and keeps a nested heading folded after reopening it', async ({ page }) => {
-  const source = '# Parent\n\nParent body\n\n## Child\n\nChild body\n\n# Next\n\nNext body';
+  const source = '# Parent\n\nParent body\n\n## Child\n\nChild body\n\n## Later\n\nLater body\n\n```js\nconst item = 1;\n```\n\n# Next\n\nNext body';
   await page.goto(`/tests/milkdown-flow-harness.html?content=${encodeURIComponent(source)}`);
   const editor = page.locator('.milkdown-editor');
   const parent = editor.locator('h1').first();
-  const child = editor.locator('h2');
+  const child = editor.locator('h2').first();
   const body = editor.getByText('Child body');
-  expect(await parent.locator('button').evaluate((button) => button.offsetHeight))
-    .toBeGreaterThan(await child.locator('button').evaluate((button) => button.offsetHeight));
+  const codeFold = editor.locator('.moki-code-fold').getByRole('button', { includeHidden: true });
+  expectHeadingArrows(await foldGeometry(parent.locator('button')), await foldGeometry(child.locator('button')));
   await child.locator('button').click();
   await expect(body).toBeHidden();
   await expect(child.locator('.md-preview__fold-ellipsis')).toBeVisible();
+  await codeFold.click();
+  await expect(codeFold).toHaveAttribute('aria-expanded', 'false');
   await parent.locator('button').click();
   await expect(child).toBeHidden();
+  await expect(editor.getByText('Later body')).toBeHidden();
+  await expect(codeFold).toBeHidden();
   await expect(editor.getByText('Next body')).toBeVisible();
   await parent.locator('button').click();
   await expect(child).toBeVisible();
+  await expect(codeFold).toBeVisible();
+  await expect(codeFold).toHaveAttribute('aria-expanded', 'false');
   await expect(body).toBeHidden();
   await child.locator('button').click();
   await expect(body).toBeVisible();
+  await child.locator('button').click();
+  await setMarkdownFolding(page, false);
+  await expect(parent.locator('button')).toBeHidden();
+  await expect(body).toBeHidden();
+  await expect(child.locator('button')).toHaveAttribute('aria-expanded', 'false');
+  await child.locator('button').click();
+  await expect(body).toBeVisible();
+  await expect(child.locator('button')).toBeHidden();
+  await setMarkdownFolding(page, true);
+  await expect(child.locator('button')).toHaveAttribute('aria-expanded', 'true');
   expect(await page.evaluate(() => window.trial.dirty())).toBe(false);
 });
 
@@ -69,7 +151,7 @@ test('Monaco and split Markdown share folds and synchronize scroll in both direc
     const { default: config } = await import('/src/store/useConfigStore.js');
     config.getState().setConfig('previewZoomSync', false);
     const sections = Array.from({ length: 18 }, (_, i) =>
-      `# Section ${i}\n\n${`body for ${i}\n\n`.repeat(8)}`).join('\n');
+      `# Section ${i}\n\n${i === 0 ? '## Details\n\n' : ''}${`body for ${i}\n\n`.repeat(8)}`).join('\n');
     const source = `${sections}\n# Blocks\n\n\`\`\`text\nFenced content\n\`\`\`\n\n1. Parent item\n   1. Child item\n2. Next item\n\n<!-- #region -->\n\nRegion content\n\n<!-- #endregion -->\n`;
     store.getState().openFile({ path: '/fold.md', name: 'fold.md', content: source });
     store.getState().setViewMode('split');
@@ -85,28 +167,23 @@ test('Monaco and split Markdown share folds and synchronize scroll in both direc
   }, { action, line });
   await expect(heading).toBeVisible();
   const button = heading.getByRole('button');
-  const previewArrowGeometry = () => button.evaluate((control) => {
-    const heading = control.parentElement;
-    const lineHeight = parseFloat(getComputedStyle(heading).lineHeight);
-    const { width, height, right, top } = control.getBoundingClientRect();
-    const headingBox = heading.getBoundingClientRect();
-    return { width, height, lineHeight, gap: headingBox.left - right, topDelta: headingBox.top - top };
-  });
-  const originalPreview = await previewArrowGeometry();
-  expect(Math.abs(originalPreview.height - originalPreview.lineHeight)).toBeLessThan(.1);
-  expect(originalPreview.height).toBe(originalPreview.width);
+  const details = preview.getByRole('heading', { name: 'Details', exact: true }).getByRole('button');
+  const originalPreview = await foldGeometry(button);
+  expectHeadingArrows(originalPreview, await foldGeometry(details));
   await page.evaluate(async () => {
     const { default: config } = await import('/src/store/useConfigStore.js');
     config.getState().setConfig('previewFontSize', 22);
   });
-  await expect.poll(async () => (await previewArrowGeometry()).height).toBeGreaterThan(originalPreview.height);
-  const enlargedPreview = await previewArrowGeometry();
-  expect(Math.abs(enlargedPreview.height - enlargedPreview.lineHeight)).toBeLessThan(.1);
-  expect(enlargedPreview.height).toBe(enlargedPreview.width);
-  expect(enlargedPreview.gap).toBe(2);
-  expect(enlargedPreview.topDelta).toBe(0);
+  await expect.poll(async () => (await foldGeometry(button)).height).toBeGreaterThan(originalPreview.height);
+  expectHeadingArrows(await foldGeometry(button), await foldGeometry(details));
   const monacoPane = page.locator('.editor-content__editor--half .monaco-editor');
   await expect(monacoPane).toBeVisible();
+  const caret = monacoPane.locator('.cursors-layer > .cursor').first();
+  await page.emulateMedia({ colorScheme: 'dark' });
+  for (const [theme, color] of [['dark', 'rgb(82, 139, 255)'], ['light', 'rgb(82, 111, 255)']]) {
+    await page.evaluate((value) => { document.documentElement.dataset.theme = value; }, theme);
+    await expect(caret).toHaveCSS('background-color', color);
+  }
   const gutter = monacoPane.locator('.codicon-folding-expanded').first();
   await expect(gutter).toHaveCSS('opacity', '0');
   await monacoPane.locator('.view-line').first().hover();
@@ -139,6 +216,23 @@ test('Monaco and split Markdown share folds and synchronize scroll in both direc
   await expect(body).toBeVisible();
   await expect(button).toHaveAttribute('aria-expanded', 'true');
   await expect.poll(() => page.evaluate(() => window.foldAnimations)).toEqual(expect.arrayContaining(['moki-fold-collapse', 'moki-fold-expand']));
+  await run('editor.fold', 1);
+  await expect(body).toBeHidden();
+  await setMarkdownFolding(page, false);
+  await expect(button).toHaveAttribute('aria-expanded', 'false');
+  await expect(button).toBeVisible();
+  await expect(body).toBeHidden();
+  await button.click();
+  await expect(body).toBeVisible();
+  await expect(button).toBeHidden();
+  await run('editor.fold', 1);
+  await expect(body).toBeHidden();
+  await expect(button).toBeVisible();
+  await run('editor.unfold', 1);
+  await expect(body).toBeVisible();
+  await expect(button).toBeHidden();
+  await setMarkdownFolding(page, true);
+  await expect(button).toBeVisible();
   const sourceLine = await preview.getByRole('heading', { name: 'Section 5', exact: true })
     .locator('..').getAttribute('data-md-start');
   await run('scroll', Number(sourceLine));
