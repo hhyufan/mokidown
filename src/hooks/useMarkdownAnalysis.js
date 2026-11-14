@@ -1,11 +1,10 @@
 import { useEffect, useMemo, useState } from 'react';
 import { markdownAnalysis } from '@/services/markdownAnalysis';
-import { parseFootnotes } from '@utils/footnoteParser';
 import { extractItems } from '@utils/markdownOutline';
 
 const EMPTY_ITEMS = [];
 function analyze(content, type) {
-  return type === 'outline' ? extractItems(content) : parseFootnotes(content).content;
+  return type === 'outline' ? extractItems(content) : content;
 }
 
 export function useMarkdownAnalysis(documentId, content, type) {

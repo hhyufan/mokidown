@@ -1,82 +1,73 @@
-/**
- * 解析 Markdown 中的脚注引用与定义。
- *
- * 返回 `{ content }`，其中内联 `[^id]` 会被替换成可跳转锚点，文末则追加
- * 一段统一的脚注列表 HTML。
- */
-/**
- * ?? Markdown ??????????????? HTML ???
- */
-export function parseFootnotes(content) {
-  if (!content) return { content: '' };
+const highlights = new WeakMap();
 
-  const definitions = new Map();
-  // 支持多行脚注定义，后续缩进内容会被并入同一条脚注正文。
-  const defRe = /^\[(\^[^\]]+)\]:\s*(.+(?:\n(?:    .+|\t.+))*)$/gm;
-  let m;
-  while ((m = defRe.exec(content)) !== null) {
-    definitions.set(m[1].trim(), m[2].trim());
-  }
-
-  let processed = content.replace(defRe, (definition) => definition.replace(/[^\r\n]/g, ''));
-
-  const usedRefs = [];
-  const seen = new Set();
-
-  processed = processed.replace(/\[(\^[^\]]+)\]/g, (full, id) => {
-    // 同一个脚注引用只在脚注列表中生成一次，避免重复条目。
-    const cleanId = id.substring(1).trim().replace(/\s+/g, '');
-    const refId = `fnref-${cleanId}`;
-    const targetId = `fn-${cleanId}`;
-    if (!seen.has(id.trim())) {
-      seen.add(id.trim());
-      usedRefs.push({ raw: id.trim(), cleanId, refId, targetId });
-    }
-    return `<a href="#${targetId}" id="${refId}" class="footnote-ref"><sup>[${cleanId}]</sup></a>`;
+function underlineFootnote(marker) {
+  const doc = marker.ownerDocument;
+  const bounds = marker.getBoundingClientRect();
+  const walker = doc.createTreeWalker(marker, NodeFilter.SHOW_TEXT, {
+    acceptNode: (text) => text.data.trim() && !text.parentElement.closest('.footnote-backref')
+      ? NodeFilter.FILTER_ACCEPT : NodeFilter.FILTER_REJECT,
   });
-
-  if (usedRefs.length > 0) {
-    const items = usedRefs
-      .filter((r) => definitions.has(r.raw))
-      .map((r) => {
-        const text = definitions.get(r.raw).replace(/\n/g, ' ').replace(/\s+/g, ' ');
-        return `<li><span id="${r.targetId}">${text} <a href="#${r.refId}" class="footnote-backref">↩</a></span></li>`;
-      })
-      .join('\n');
-
-    if (items) {
-      processed += `\n\n<div class="footnotes"><hr/><ol>\n${items}\n</ol></div>\n`;
+  const range = doc.createRange();
+  const lines = [];
+  for (let text = walker.nextNode(); text; text = walker.nextNode()) {
+    range.selectNodeContents(text);
+    for (const rect of range.getClientRects()) {
+      if (!rect.width || !rect.height) continue;
+      const line = lines.find(({ top, bottom }) => rect.top < bottom && rect.bottom > top);
+      if (line) {
+        line.left = Math.min(line.left, rect.left);
+        line.right = Math.max(line.right, rect.right);
+        line.bottom = Math.max(line.bottom, rect.bottom);
+      } else {
+        lines.push({ top: rect.top, bottom: rect.bottom, left: rect.left, right: rect.right });
+      }
     }
   }
-
-  return { content: processed };
+  const overlay = doc.createElement('span');
+  overlay.className = 'footnote-jump-lines';
+  overlay.setAttribute('aria-hidden', 'true');
+  overlay.contentEditable = 'false';
+  for (const { left, right, bottom } of lines) {
+    const underline = doc.createElement('i');
+    underline.style.left = `${left - bounds.left}px`;
+    underline.style.top = `${bottom - bounds.top + 2}px`;
+    underline.style.width = `${right - left}px`;
+    overlay.append(underline);
+  }
+  // Overlay sits beside the editor content, outside ProseMirror's document.
+  const pane = marker.closest('.md-preview');
+  if (!pane) return null;
+  const paneBounds = pane.getBoundingClientRect();
+  overlay.style.left = `${bounds.left - paneBounds.left - pane.clientLeft + pane.scrollLeft}px`;
+  overlay.style.top = `${bounds.top - paneBounds.top - pane.clientTop + pane.scrollTop}px`;
+  pane.append(overlay);
+  return overlay;
 }
 
-/**
- * 预览 DOM 渲染完成后，为脚注锚点补充平滑滚动跳转行为。
- */
-/**
- * ?????????????????????????
- */
-export function addFootnoteJumpHandlers(container) {
-  if (!container) return;
-
-  // 采用事件委托，并通过 data 标记避免重复绑定监听器。
-  if (container.dataset.footnoteDelegatedHandler) return;
-  container.dataset.footnoteDelegatedHandler = '1';
-  container.addEventListener('click', (e) => {
-    const link = e.target.closest?.('a[href^="#fn"]');
-    if (!link || !container.contains(link)) return;
-
-    e.preventDefault();
-    e.stopPropagation();
-
-    const href = link.getAttribute('href');
-    const target = href ? container.querySelector(`#${CSS.escape(href.slice(1))}`) : null;
-    if (!target) return;
-
-    target.scrollIntoView({ behavior: 'smooth', block: 'center' });
-    target.classList.add('footnote-highlight');
-    window.setTimeout(() => target.classList.remove('footnote-highlight'), 1200);
-  });
+export function jumpToFootnote(target, back) {
+  const window = target.ownerDocument.defaultView;
+  const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  target.scrollIntoView({ behavior: reducedMotion ? 'instant' : 'smooth', block: 'center' });
+  const marker = back ? target : target.closest('li, dl[data-type="footnote_definition"]') || target;
+  const attribute = 'data-footnote-jump';
+  highlights.get(marker)?.();
+  marker.setAttribute(attribute, back ? 'reference' : 'definition');
+  const overlay = back ? null : underlineFootnote(marker);
+  const clear = () => {
+    marker.removeAttribute(attribute);
+    marker.removeAttribute('data-footnote-leaving');
+    overlay?.remove();
+    highlights.delete(marker);
+    window.clearTimeout(timer);
+  };
+  let timer = window.setTimeout(() => {
+    if (back || reducedMotion) {
+      clear();
+      return;
+    }
+    marker.setAttribute('data-footnote-leaving', '');
+    overlay?.setAttribute('data-footnote-leaving', '');
+    timer = window.setTimeout(clear, 200);
+  }, 1200);
+  highlights.set(marker, clear);
 }
