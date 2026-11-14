@@ -13,16 +13,34 @@ function visibleMarkers(editor) {
 
 test('the writing caret uses the active theme foreground in light and dark modes', async ({ page }) => {
   const editor = await openEditor(page, '正文');
-  for (const theme of ['light', 'dark']) {
+  await page.emulateMedia({ colorScheme: 'dark' });
+  for (const theme of ['light', 'dark', 'light']) {
     await page.evaluate((theme) => { document.documentElement.dataset.theme = theme; }, theme);
     await editor.locator('p').click();
     const colors = await editor.evaluate((element) => {
       const style = getComputedStyle(element);
-      return { caret: style.caretColor, text: style.color };
+      return { caret: style.caretColor, text: style.color, colorScheme: style.colorScheme };
     });
     expect(colors.caret).toBe(colors.text);
-    if (theme === 'light') expect(colors.caret).not.toBe('rgb(255, 255, 255)');
+    expect(colors.colorScheme).toBe(theme);
+    if (theme === 'light') expect(colors.caret).toBe('rgb(44, 44, 46)');
   }
+});
+
+test('code and virtual Markdown carets follow the application theme', async ({ page }) => {
+  const editor = await openEditor(page, '```text\nhello\n```\n\n**bold**');
+  const code = editor.locator('.cm-content');
+  await code.click();
+  const codeCaret = editor.locator('.cm-cursor-primary').first();
+  for (const [theme, color] of [['dark', 'rgb(82, 139, 255)'], ['light', 'rgb(82, 111, 255)']]) {
+    await page.evaluate((value) => { document.documentElement.dataset.theme = value; }, theme);
+    await expect(codeCaret).toHaveCSS('border-left-color', color);
+  }
+  await page.evaluate(() => window.trial.selectParagraph('bold'));
+  await page.keyboard.press('ArrowLeft');
+  const virtual = editor.locator('.moki-markdown-marker--with-caret i');
+  await expect(virtual).toHaveCount(1);
+  expect(await virtual.evaluate((node) => getComputedStyle(node, '::after').borderInlineStartColor)).toBe('rgb(44, 44, 46)');
 });
 
 test('draft delimiters are muted, completed formatting is solid, and clicking its left edge reveals source markers', async ({ page }) => {
@@ -277,7 +295,7 @@ test('paired deletion removes one emphasis layer, keeps code text and supports u
 });
 
 for (const [markup, selector] of [['**abcdef**', 'strong'], ['`abcdef`', 'code']]) {
-  test(`clicking rendered ${selector} inserts at the clicked character boundary`, async ({ page }) => {
+  test(`clicking rendered ${selector} draws no interim caret and inserts at the clicked character boundary`, async ({ page }) => {
     const editor = await openEditor(page, `before ${markup} after`);
     const point = await editor.locator(selector).evaluate((element) => {
       const range = document.createRange();
@@ -286,11 +304,33 @@ for (const [markup, selector] of [['**abcdef**', 'strong'], ['`abcdef`', 'code']
       const { left, top, height } = range.getBoundingClientRect();
       return { x: left, y: top + height / 2 };
     });
-    await page.mouse.click(point.x, point.y);
+    await page.mouse.move(point.x, point.y);
+    await page.mouse.down();
+    await expect(editor).toHaveCSS('caret-color', 'rgba(0, 0, 0, 0)');
+    await expect(editor.locator('.moki-markdown-marker:visible')).toHaveCount(0);
+    await page.mouse.up();
     await page.keyboard.insertText('X');
     await expect(editor.locator(selector)).toHaveText('abcXdef');
   });
 }
+
+test('dragging from rendered bold text keeps the native text selection', async ({ page }) => {
+  const editor = await openEditor(page, 'Before **abcdef** after');
+  const [start, end] = await editor.locator('strong').evaluate((element) => [1, 5].map((offset) => {
+    const range = document.createRange();
+    range.setStart(element.firstChild, offset);
+    range.collapse(true);
+    const { left, top, height } = range.getBoundingClientRect();
+    return { x: left, y: top + height / 2 };
+  }));
+  await page.mouse.move(start.x, start.y);
+  await page.mouse.down();
+  await page.mouse.move(end.x, end.y, { steps: 8 });
+  await page.mouse.up();
+  await expect.poll(() => page.evaluate(() => window.getSelection().toString())).toBe('bcde');
+  await editor.locator('strong').dblclick();
+  await expect.poll(() => page.evaluate(() => window.getSelection().toString().trim())).toBe('abcdef');
+});
 
 test('two backticks place the caret between them and the next text renders as inline code', async ({ page }) => {
   const editor = await openEditor(page);
