@@ -1,13 +1,18 @@
 import { installTabStripDrag } from '@/components/layout/tab-bar/tabStripDrag';
 import { beginReaderFileDetachWatch, buildDragPreview, cancelReaderTabDetachWatch } from './readerWindows';
+import useConfigStore from '@store/useConfigStore';
+import { isSafUri, isWebPath } from '@utils/tauriApi';
 
-export function installReaderFileDrag(container) {
-  if (!window.__TAURI_INTERNALS__ || !/Windows/i.test(navigator.userAgent)) return undefined;
-  return installTabStripDrag(container, {
-    nativeTracking: true,
+export function installReaderFileDrag(container, { onMove, onRelease, onEnd, onError } = {}) {
+  if (!window.__TAURI_INTERNALS__) return undefined;
+  const windows = /Windows/i.test(navigator.userAgent);
+  const outside = ({ x, y }) => x < 0 || y < 0 || x >= innerWidth || y >= innerHeight;
+  const stop = installTabStripDrag(container, {
+    nativeTracking: windows,
     selector: '[data-reader-path]',
     getId: (row) => row.dataset.readerPath,
-    onDragChange: () => {},
+    canDrag: (row) => !isSafUri(row.dataset.readerPath) && !isWebPath(row.dataset.readerPath),
+    onDragChange: (id) => { if (!id) onEnd?.(); },
     onDropTarget: () => {},
     onGhost: (path, ghost, source, geometry) => {
       // Reuse only the file icon and name; never clone badges or row actions.
@@ -36,14 +41,26 @@ export function installReaderFileDrag(container) {
         borderRadius: '6px', pointerEvents: 'none', overflow: 'hidden', whiteSpace: 'nowrap',
       });
       if (ghost.firstChild?.tagName === 'IMG') Object.assign(ghost.firstChild.style, { width: '16px', height: '16px', flexShrink: '0' });
-      const nativePreview = buildDragPreview(source, preview.name, ghost, geometry);
-      void beginReaderFileDetachWatch(path, preview.name, nativePreview).catch((error) => {
-        console.error('[reader] Could not start file drag:', error);
+      if (!windows) {
+        ghost.style.visibility = 'visible';
+        return;
+      }
+      const shellDrop = source.dataset.readerDirectory === 'true' || useConfigStore.getState().externalFileDrag === 'explorer';
+      const floating = buildDragPreview(source, preview.name, ghost, geometry);
+      void beginReaderFileDetachWatch(path, preview.name, floating, shellDrop).catch((error) => {
+        onError?.(error);
         window.dispatchEvent(new CustomEvent('reader:native-preview-failed', { detail: geometry.token }));
       });
     },
-    // On Windows only the native monitor commits an outside-window release.
+    onMove,
+    onRelease(gesture) {
+      if (outside(gesture)) return true;
+      onRelease?.(gesture);
+      return true;
+    },
+    // Windows handles drags once the pointer leaves the window.
     onDetach: () => {},
-    onDragCancel: () => { void cancelReaderTabDetachWatch().catch(console.error); },
+    onDragCancel: () => { if (windows) void cancelReaderTabDetachWatch().catch(console.error); },
   });
+  return stop;
 }
