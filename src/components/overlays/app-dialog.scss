@@ -8,7 +8,7 @@
   .ant-modal-header {
     margin: 0;
     padding: 14px 48px 14px 20px;
-    background: var(--bg);
+    background: transparent;
     border-bottom: 1px solid var(--border);
   }
 
@@ -19,7 +19,7 @@
   .ant-modal-footer {
     margin: 0;
     padding: 12px 20px;
-    background: var(--bg);
+    background: transparent;
     border-top: 1px solid var(--border);
     display: flex;
     flex-wrap: wrap;
