@@ -13,6 +13,7 @@ import { isSafUri, safDisplayName } from '@utils/tauriApi';
 import { sortDirectoryContents } from '@utils/directoryContents';
 import { ProjectTreeModel } from '@utils/projectTreeModel';
 import { inspectProjectChildren, projectDirectoryProvider, projectRootSource } from '@/services/projectDirectories';
+import { isMovedExplorerEntry } from '@/services/workspaceFiles';
 import FileTypeIcon from '@components/ui/FileTypeIcon';
 import MokiStatusEmpty from '@components/moki/MokiStatusEmpty';
 import VirtualFileList from './VirtualFileList';
@@ -36,6 +37,9 @@ export default function ProjectExplorer() {
   const activeTabId = useEditorStore((state) => state.activeTabId);
   const { openFileFromPath, loadFilesOnly, loadDirectory, createFileInCurrentDir } = useFileManager();
   const [model, setModel] = useState(null);
+  const previousMoves = useRef(null);
+  const movedPaths = snapshot?.movedPaths || (previousMoves.current?.model === model ? previousMoves.current.paths : null);
+  useLayoutEffect(() => { previousMoves.current = { model, paths: movedPaths }; }, [model, movedPaths]);
   const [revision, setRevision] = useState(0);
   const [creating, setCreating] = useState(false);
   const [stem, setStem] = useState('');
@@ -315,6 +319,7 @@ export default function ProjectExplorer() {
         </div>;
         if (!row.file) return null;
         const { file, node } = row;
+        if (isMovedExplorerEntry(movedPaths, file.path)) return null;
         const requestDeletion = (event) => {
           if (!row.parent) return;
           const parent = withAncestors({ file: row.parent.file, parent: row.parent.parent });
@@ -341,7 +346,9 @@ export default function ProjectExplorer() {
           aria-expanded={file.is_dir ? expanded : undefined}
           aria-busy={node?.loading || undefined}
           data-path={file.path}
-          data-reader-path={!file.is_dir ? file.path : undefined}
+          data-reader-path={row.parent ? file.path : undefined}
+          data-reader-directory={file.is_dir ? 'true' : undefined}
+          data-drop-directory={file.is_dir ? file.path : undefined}
           data-reader-name={file.name}
           data-directory-path={row.parent?.file.path || currentDir}
           aria-selected={isSelected}

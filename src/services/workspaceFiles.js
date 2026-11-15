@@ -102,6 +102,32 @@ export function getIndexedFile(index, position) {
   return index?.pages.get(Math.floor(position / index.pageSize))?.[position % index.pageSize];
 }
 
+function dropPathKey(path) {
+  const normalized = path.replace(/\\/g, '/').replace(/\/+$/, '');
+  return /^([a-z]:|\/\/)/i.test(normalized) ? normalized.toLowerCase() : normalized;
+}
+
+export function isMovedExplorerEntry(movedPaths, path) {
+  if (!movedPaths?.size) return false;
+  const parts = dropPathKey(path).split('/');
+  for (let length = parts.length; length > 0; length -= 1) {
+    if (movedPaths.has(parts.slice(0, length).join('/'))) return true;
+  }
+  return false;
+}
+
+export function hideMovedExplorerEntry(path) {
+  // Mark the old snapshot without changing its native page offsets.
+  const state = useFileStore.getState();
+  const movedPaths = new Set(state.directoryIndex?.movedPaths);
+  movedPaths.add(dropPathKey(path));
+  if (state.directoryIndex) {
+    useFileStore.setState({ directoryIndex: { ...state.directoryIndex, movedPaths } });
+  } else {
+    useFileStore.setState({ files: state.files.filter((file) => !isMovedExplorerEntry(movedPaths, file.path)) });
+  }
+}
+
 // This plan is rebuilt from the *latest* viewport, never an accumulated queue.
 // Visible pages come first, then render buffers, then directional prefetch. IO
 // latency and logical velocity determine the bounded lookahead distance.

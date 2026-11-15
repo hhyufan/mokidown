@@ -34,12 +34,14 @@ import useNotificationStore from '@store/useNotificationStore';
 
 import { getBuffer, flushEditorBuffer } from '@utils/editorBuffer';
 import { debounceByKey } from '@utils/debounce';
-import { loadWorkspaceFiles } from '@/services/workspaceFiles';
+import { hideMovedExplorerEntry, loadWorkspaceFiles } from '@/services/workspaceFiles';
 import { isAndroidRuntime } from '@utils/platform';
-import { rememberDiskBaseline } from '@/services/localFileGuard';
+import { moveDiskBaseline, rememberDiskBaseline } from '@/services/localFileGuard';
+import { invoke } from '@utils/tauriInvoke';
 import { saveExistingFile } from '@/services/localFileOperations';
 import i18n from '@/i18n';
 import { untitledFileName } from '@utils/untitledFileName';
+import { decodeTextBytes, MAX_TEXT_BYTES, TextFileError } from '@utils/textFilePolicy';
 
 // Marketing-site demo builds (VITE_WEB_DEMO=1) may pick files through the
 // browser File System Access API; the desktop build compiles these branches away.
@@ -80,7 +82,8 @@ function joinPath(dirPath, fileName) {
  * @returns {string} 去掉尾部分隔符并转小写后的路径。
  */
 function normalizePath(path) {
-  return (path || '').replace(/[\\/]+$/, '').toLowerCase();
+  const normalized = path.replace(/\\/g, '/').replace(/\/+$/, '');
+  return /^(?:[a-z]:|\/\/)/i.test(normalized) ? normalized.toLowerCase() : normalized;
 }
 
 /**
@@ -951,67 +954,81 @@ export function useFileManager() {
     }
   }, [notify, openFileFromPath, t]);
 
+  const openDroppedBrowserFiles = useCallback(async (files) => {
+    for (const file of files) {
+      try {
+        if (file.size > MAX_TEXT_BYTES) throw new TextFileError('too-large');
+        const { content, encoding } = decodeTextBytes(new Uint8Array(await file.arrayBuffer()));
+        const newline = /\r\n|\n|\r/.exec(content)?.[0];
+        useEditorStore.getState().createUntitledTab({ name: file.name, content, encoding,
+          lineEnding: newline === '\r\n' ? 'CRLF' : newline === '\r' ? 'CR' : 'LF' });
+      } catch (error) {
+        notify('error', t('drag.failed'), String(error));
+      }
+    }
+  }, [notify, t]);
+
   /**
    * 将拖入路径移动到当前 Explorer 目录，并更新相关标签与书签引用。
    *
    * @param {string[]} [paths=[]] 拖入路径列表。
    * @returns {Promise<void>}
    */
-  const moveDroppedPathsToExplorer = useCallback(async (paths = []) => {
-    const currentDir = useFileStore.getState().currentDir;
-    if (!currentDir) {
+  const moveDroppedPathsToExplorer = useCallback(async (paths, { directory, effect = null, resolveConflict } = {}) => {
+    if (!directory) {
       notify('error', t('notification.error'), t('sidebar.explorer.openFolder'));
       return;
     }
 
-    for (const sourcePath of paths) {
+    for (const sourcePath of paths || []) {
       try {
-        const info = await getFileInfo(sourcePath);
-        const targetPath = joinPath(currentDir, info.name);
-        const samePath = normalizePath(sourcePath) === normalizePath(targetPath);
-
-        if (!samePath) {
-          if (await checkFileExists(targetPath)) {
-            notify('error', t('notification.error'), t('sidebar.explorer.fileExists'));
-            continue;
+        let name = null;
+        let result;
+        do {
+          result = await invoke('transfer_dropped_entry', { source: sourcePath, directory, name, effect });
+          if (result.status !== 'conflict') break;
+          name = await resolveConflict?.(sourcePath, result.path);
+          if (!name) break;
+        } while (name);
+        if (result.status !== 'finished' || !result.moved) continue;
+        hideMovedExplorerEntry(sourcePath);
+        const from = sourcePath.replace(/[\\/]+$/, '');
+        const source = normalizePath(from);
+        const store = useFileStore.getState();
+        const tabs = useEditorStore.getState().tabs.filter(({ path }) => path);
+        const referenced = new Set([
+          ...[...tabs, ...store.recentFiles].map(({ path }) => path),
+          ...store.bookmarkedPaths.map((entry) => typeof entry === 'string' ? entry : entry.path),
+        ].filter(Boolean));
+        for (const path of referenced) {
+          const current = normalizePath(path);
+          if (current !== source && (!result.directory || !current.startsWith(`${source}/`))) continue;
+          const target = current === source ? result.path : result.path + path.slice(from.length);
+          const fileName = target.split(/[\\/]/).pop();
+          const tab = tabs.find((entry) => entry.path === path);
+          if (tab) {
+            moveDiskBaseline(path, target);
+            updateTabPath(tab.id, target, fileName);
+            void stopFileWatching(path).catch(() => {});
+            void startFileWatching(target).catch(() => {});
           }
-
-          const result = await renameFile(sourcePath, targetPath);
-          if (!result.success) {
-            notify('error', t('notification.error'), result.message);
-            continue;
-          }
-
-          if (info.is_file) {
-            const existingTab = useEditorStore.getState().getTabByPath(sourcePath);
-            if (existingTab) {
-              updateTabPath(existingTab.id, targetPath, info.name);
-              stopFileWatching(sourcePath).catch(() => {});
-              if (!isAndroid) startFileWatching(targetPath).catch(() => {});
-            }
-            replaceRecentFilePath(sourcePath, targetPath, info.name);
-            replaceBookmarkPath(sourcePath, targetPath);
-          }
-        }
-
-        if (info.is_file) {
-          await openFileFromPath(targetPath, info.name);
+          replaceRecentFilePath(path, target, fileName);
+          replaceBookmarkPath(path, target);
         }
       } catch (err) {
         notify('error', t('notification.error'), String(err));
       }
     }
 
-    await loadDirectory(currentDir);
+    const currentDir = useFileStore.getState().currentDir;
+    if (currentDir) await loadFilesOnly(currentDir);
   }, [
-    loadDirectory,
+    loadFilesOnly,
     notify,
-    openFileFromPath,
     replaceBookmarkPath,
     replaceRecentFilePath,
     t,
     updateTabPath,
-    isAndroid,
   ]);
 
   /**
@@ -1085,6 +1102,7 @@ export function useFileManager() {
     renameEntry,
     openDroppedPathsInEditor,
     moveDroppedPathsToExplorer,
+    openDroppedBrowserFiles,
     triggerAutoSave,
     saveTab,
   };

@@ -25,7 +25,6 @@
         "closable": true,
         "center": true,
         "visible": false,
-        "focus": false,
         "transparent": false,
         "decorations": false,
         "shadow": false,

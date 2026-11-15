@@ -14,8 +14,10 @@ import useFileStore from '@store/useFileStore';
 
 import useNotificationStore from '@store/useNotificationStore';
 import useScriptStore from '@store/useScriptStore';
-import { renameFile } from '@utils/tauriApi';
+import { isSafUri, renameFile, showInExplorer } from '@utils/tauriApi';
 import { useFileManager } from '@hooks/useFileManager';
+import { useEditorContextMenu } from '@hooks/useEditorContextMenu';
+import EditorContextMenu from '@components/editor/EditorContextMenu';
 
 import { moveDiskBaseline } from '@/services/localFileGuard';
 import { beginReaderTabDetachWatch, buildDragPreview, cancelReaderTabDetachWatch, detachMarkdownTab } from '@/services/readerWindows';
@@ -36,7 +38,7 @@ import { installTabStripDrag } from './tabStripDrag';
  *
  * @returns {JSX.Element} 标签栏界面。
  */
-function TabBar({ onRequestCloseTab }) {
+function TabBar({ onRequestCloseTab, onRequestCloseTabs }) {
   const { t } = useTranslation();
   const tabs = useEditorStore((s) => s.tabRenderList);
   const activeTabId = useEditorStore((s) => s.activeTabId);
@@ -54,7 +56,8 @@ function TabBar({ onRequestCloseTab }) {
   const autoSave = useConfigStore((s) => s.autoSave);
 
   const currentDir = useFileStore((s) => s.currentDir);
-  const { loadDirectory, createNewTab } = useFileManager();
+  const { loadDirectory, createNewTab, openFileDialog } = useFileManager();
+  const { menu, openMenu, closeMenu } = useEditorContextMenu(tabs);
   const scrollRef = useRef(null);
   const dragRef = useRef(null);
   const previousTabsRef = useRef(new Set(tabs.map((tab) => tab.id)));
@@ -141,7 +144,7 @@ function TabBar({ onRequestCloseTab }) {
    * @param {MouseEvent} e 双击事件对象。
    */
   const startRename = useCallback((tab, e) => {
-    e.stopPropagation();
+    e?.stopPropagation();
     setRenamingTabId(tab.id);
     setRenameValue(tab.name);
     requestAnimationFrame(() => {
@@ -149,6 +152,26 @@ function TabBar({ onRequestCloseTab }) {
       renameInputRef.current?.select();
     });
   }, []);
+
+  const openTabMenu = (event, tab, fromNewButton = false) => {
+    const index = tabs.indexOf(tab);
+    const close = (key, targets) => ({ key, label: t(`tabbar.menu.${key}`), disabled: !targets.length,
+      run: () => onRequestCloseTabs(targets.map(({ id }) => id)) });
+    const creation = fromNewButton ? [
+      { key: 'new', label: t('tabbar.newTab'), run: createNewTab },
+      { key: 'open', label: t('tabbar.menu.openFile'), run: openFileDialog },
+      { key: 'creation-separator', separator: true },
+    ] : [];
+    openMenu(event, [...creation,
+      close('close', [tab]), close('closeOthers', tabs.filter(({ id }) => id !== tab.id)),
+      close('closeLeft', tabs.slice(0, index)), close('closeRight', tabs.slice(index + 1)), close('closeAll', tabs),
+      { key: 'separator', separator: true },
+      { key: 'rename', label: t('tabbar.menu.rename'), run: () => startRename(tab) },
+      { key: 'copyPath', label: t('editor.menu.copyPath'), disabled: !tab.path, run: () => navigator.clipboard.writeText(tab.path) },
+      { key: 'reveal', label: t('sidebar.explorer.openInExplorer'), disabled: !window.__TAURI_INTERNALS__ || !tab.path || isSafUri(tab.path),
+        run: () => showInExplorer(tab.path) },
+    ], 'tab');
+  };
 
   /**
    * 提交标签重命名；对已落盘文件会同步更新磁盘路径与同步映射。
@@ -210,6 +233,7 @@ function TabBar({ onRequestCloseTab }) {
 
   return (
     <div className="tabbar">
+      <EditorContextMenu menu={menu} onClose={closeMenu} />
       <div className="tabbar__actions tabbar__actions--left">
         <Tooltip title={t('tabbar.scrollLeft')} placement="bottom" mouseEnterDelay={0.3}>
           <button onClick={scrollLeft} type="button">
@@ -231,6 +255,7 @@ function TabBar({ onRequestCloseTab }) {
               draggable={false}
               className={cn('tabbar__tab', activeTabId === tab.id && 'tabbar__tab--active', isRenaming && 'tabbar__tab--renaming', draggedId === tab.id && 'tabbar__tab--dragging', dropTarget?.id === tab.id && (dropTarget.after ? 'tabbar__tab--drop-after' : 'tabbar__tab--drop-before'))}
               onClick={() => !isRenaming && setActiveTab(tab.id)}
+              onContextMenu={(event) => { if (!isRenaming) openTabMenu(event, tab); }}
 
             >
               <span className="tabbar__tab-icon">
@@ -280,7 +305,8 @@ function TabBar({ onRequestCloseTab }) {
           );
         })}
         {tabs.length > 0 && <Tooltip title={t('tabbar.newTab')} placement="bottom" mouseEnterDelay={0.3}>
-          <button className="tabbar__new-tab" aria-label={t('tabbar.newTab')} onClick={createNewTab} type="button">
+          <button className="tabbar__new-tab" aria-label={t('tabbar.newTab')} onClick={createNewTab} type="button"
+            onContextMenu={(event) => { if (activeTab) openTabMenu(event, activeTab, true); }}>
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
               <line x1="12" y1="5" x2="12" y2="19" />
               <line x1="5" y1="12" x2="19" y2="12" />

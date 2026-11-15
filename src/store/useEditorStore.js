@@ -125,7 +125,7 @@ const useEditorStore = create(
       /**
        * 创建未命名标签，初始内容只落在内存缓冲中，等待首次保存拿到真实路径。
        */
-      createUntitledTab: () => {
+      createUntitledTab: (file = null) => {
         flushEditorBuffer(get().activeTabId);
         const { tabs } = get();
         const sequence = untitledCounter++;
@@ -133,17 +133,19 @@ const useEditorStore = create(
         let index = 1;
         let name = untitledFileName();
         while (tabs.some((tab) => tab.name === name)) name = untitledFileName(++index);
+        name = file?.name || name;
+        const content = file?.content || '';
         const newTab = {
           id,
           name,
           path: '',
-          ext: 'md',
-          content: '',
-          encoding: 'UTF-8',
-          lineEnding: 'LF',
-          modified: false,
+          ext: file ? name.split('.').slice(1).pop() || '' : 'md',
+          content,
+          encoding: file?.encoding || 'UTF-8',
+          lineEnding: file?.lineEnding || 'LF',
+          modified: Boolean(file),
         };
-        setBuffer(id, '');
+        setBuffer(id, content);
         set({
           tabs: [...tabs, newTab],
           tabRenderList: [...get().tabRenderList, toTabMeta(newTab)],
