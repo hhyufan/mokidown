@@ -78,3 +78,60 @@ test('scrollbar drags do not resize the sidebar or split editor; thin dividers s
   await page.keyboard.press('ArrowLeft');
   await expect(split).toHaveAttribute('aria-orientation', 'vertical');
 });
+
+test('Monaco and the split preview fill their panes through drag, viewport and mode changes', async ({ page }) => {
+  test.setTimeout(90000);
+  await page.goto('/');
+  await expect(page.locator('.editor-content__welcome')).toBeVisible({ timeout: 45000 });
+  await page.evaluate(async () => {
+    const { default: store } = await import('/src/store/useEditorStore.js');
+    store.getState().openFile({
+      path: '/resize.md', name: 'resize.md',
+      content: '# Resize preview\n\n' + 'Words that wrap as the viewport changes. '.repeat(80),
+    });
+    store.getState().setSidebarVisible(false);
+    store.getState().setViewMode('split');
+  });
+  const divider = page.getByRole('separator', { name: /split|分屏/i });
+  await expect(page.locator('.md-preview h1')).toHaveText(/Resize preview/);
+  const container = page.locator('.monaco-editor-container');
+  const verifyPanes = async () => {
+    await expect.poll(() => page.evaluate(() => {
+      const workspace = document.querySelector('.editor-content__workspace--split');
+      const pane = workspace.querySelector('.monaco-editor-container');
+      const widget = pane.querySelector('.monaco-editor');
+      const preview = workspace.querySelector('.editor-content__preview');
+      const track = workspace.querySelector('.editor-content__split-divider');
+      const vertical = workspace.classList.contains('editor-content__workspace--mobile-split');
+      const axis = vertical ? 'height' : 'width';
+      const length = (element) => element.getBoundingClientRect()[axis];
+      return [
+        Math.abs(pane.clientWidth - widget.clientWidth),
+        Math.abs(pane.clientHeight - widget.clientHeight),
+        Math.abs(length(workspace) - length(pane) - length(preview) - length(track)),
+      ].every((difference) => difference <= 1);
+    })).toBe(true);
+  };
+  await verifyPanes();
+  await container.evaluate((node) => { window.resizeMonaco = node.querySelector('.monaco-editor'); });
+  const box = await divider.boundingBox();
+  await page.mouse.move(box.x + box.width / 2, box.y + 40);
+  await page.mouse.down();
+  await page.mouse.move(box.x + 80, box.y + 40);
+  await verifyPanes();
+  await page.mouse.move(box.x - 60, box.y + 40);
+  await page.mouse.up();
+  await verifyPanes();
+
+  for (const width of [900, 1350, 650, 1050]) {
+    await page.setViewportSize({ width, height: 680 });
+    await expect(divider).toHaveAttribute('aria-orientation', width <= 768 ? 'horizontal' : 'vertical');
+    await verifyPanes();
+  }
+  await page.evaluate(async () => {
+    const { default: store } = await import('/src/store/useEditorStore.js');
+    store.getState().setViewMode('edit');
+  });
+  await expect(divider).toHaveCount(0);
+  expect(await container.evaluate((node) => node.querySelector('.monaco-editor') === window.resizeMonaco)).toBe(true);
+});

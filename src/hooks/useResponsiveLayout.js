@@ -37,7 +37,15 @@ export function useResponsiveLayout() {
     const mq = window.matchMedia?.(`(max-width: ${MOBILE_BREAKPOINT}px)`);
     const orientationMq = window.matchMedia?.('(orientation: portrait)');
     // 所有订阅源共用一个刷新函数，确保派生状态保持一致。
-    const update = () => setSnapshot(getSnapshot());
+    const update = () => {
+      const next = getSnapshot();
+      setSnapshot((previous) => (
+        previous.isAndroid === next.isAndroid
+        && previous.isMobileLayout === next.isMobileLayout
+        && previous.isPortrait === next.isPortrait
+        && previous.isTouchLike === next.isTouchLike ? previous : next
+      ));
+    };
 
     window.addEventListener('resize', update);
     mq?.addEventListener?.('change', update);

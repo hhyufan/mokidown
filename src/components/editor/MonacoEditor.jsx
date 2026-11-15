@@ -220,7 +220,8 @@ const MonacoEditorComponent = forwardRef(function MonacoEditorComponent({ classN
 
   // Monaco 实例只初始化一次，后续通过 model 与 options 更新内容和表现。
   useLayoutEffect(() => {
-    if (!containerRef.current) return;
+    const container = containerRef.current;
+    if (!container) return;
     const models = modelsRef.current;
 
     const isDark = document.documentElement.dataset.theme === 'dark';
@@ -232,12 +233,11 @@ const MonacoEditorComponent = forwardRef(function MonacoEditorComponent({ classN
     if (tab) modelsRef.current.set(tab.id, { model: initialModel, viewState: initialView, contentRevision: tab.contentRevision ?? 0 });
     currentTabIdRef.current = tab?.id || null;
 
-    const editor = monaco.editor.create(containerRef.current, {
+    const editor = monaco.editor.create(container, {
       // Create the real document once, instead of constructing and immediately
       // disposing a blank Markdown model before attaching the active file.
       model: initialModel,
       theme: initialTheme,
-      automaticLayout: true,
       minimap,
       fontSize,
       fontFamily,
@@ -583,7 +583,22 @@ const MonacoEditorComponent = forwardRef(function MonacoEditorComponent({ classN
       }
     });
 
+    const layout = () => {
+      const width = container.clientWidth;
+      const height = container.clientHeight;
+      const current = editor.getLayoutInfo();
+      if (width > 0 && height > 0 && (current.width !== width || current.height !== height)) {
+        // ResizeObserver runs before paint. layout() also renders the resized viewport.
+        editor.layout({ width, height });
+      }
+    };
+    const resize = typeof ResizeObserver === 'undefined' ? null : new ResizeObserver(layout);
+    resize?.observe(container);
+    if (!resize) window.addEventListener('resize', layout);
+    layout();
     return () => {
+      resize?.disconnect();
+      if (!resize) window.removeEventListener('resize', layout);
       window.removeEventListener('outline:jump', handleOutlineJump);
       window.removeEventListener('editor:jump-to-line', handleSearchJump);
       window.removeEventListener('unhandledrejection', handleUnhandledRejection);

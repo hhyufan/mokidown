@@ -55,6 +55,19 @@ it('preserves double-click restore when the window is maximized', async () => {
   expect(mock.window.unmaximize).toHaveBeenCalledOnce();
 });
 
+it('checks the maximize state once after a burst of native resize events', async () => {
+  const { getByRole } = render(<TitleBar />);
+  await waitFor(() => expect(getByRole('button', { name: 'topbar.maximize' })).toBeTruthy());
+  const [onResize] = mock.window.onResized.mock.calls[0];
+  mock.window.isMaximized.mockResolvedValue(true);
+
+  for (let resize = 0; resize < 10; resize += 1) onResize();
+
+  expect(mock.window.isMaximized).toHaveBeenCalledOnce();
+  await waitFor(() => expect(getByRole('button', { name: 'topbar.unmaximize' })).toBeTruthy());
+  expect(mock.window.isMaximized).toHaveBeenCalledTimes(2);
+});
+
 it('does not start desktop window operations in the mobile layout', () => {
   mock.desktop = false;
   const { container } = render(<TitleBar />);
