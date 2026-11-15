@@ -31,7 +31,7 @@ import ExplorerNavigation from './ExplorerNavigation';
 import useExplorerSearch from '@hooks/useExplorerSearch';
 import { locateDirectoryEntry } from '@utils/tauriApi';
 import ExplorerMatchName from './ExplorerMatchName';
-import { ensureDirectoryRange, getIndexedFile } from '@/services/workspaceFiles';
+import { ensureDirectoryRange, getIndexedFile, isMovedExplorerEntry } from '@/services/workspaceFiles';
 import './file-tree.scss';
 
 function FileRowTooltip({ defer, children, ...props }) {
@@ -448,7 +448,7 @@ function FileTree() {
         renderRow={(index, style, { deferDetails }) => {
           const file = renamingEntry?.index === index ? renamingEntry.file
             : directoryIndex ? getIndexedFile(directoryIndex, index) : sortedFiles[index];
-          if (!file) return null;
+          if (!file || isMovedExplorerEntry(directoryIndex?.movedPaths, file.path)) return null;
           const isCurrent = activeTabId === file.path;
           const selectedPath = search.open && search.query.trim() && searchPath ? searchPath : activeTabId;
           const isActive = !isCreatingFile && selectedPath === file.path;
@@ -460,7 +460,9 @@ function FileTree() {
               role="listitem"
               tabIndex={0}
               data-path={file.path}
-              data-reader-path={!file.is_dir && renamingPath !== file.path ? file.path : undefined}
+              data-reader-path={renamingPath !== file.path ? file.path : undefined}
+              data-reader-directory={file.is_dir ? 'true' : undefined}
+              data-drop-directory={file.is_dir ? file.path : undefined}
               data-reader-name={file.name}
               data-directory-path={currentDir}
               aria-current={isCurrent ? 'true' : undefined}

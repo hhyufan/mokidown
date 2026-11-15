@@ -1,6 +1,6 @@
 // 使用指针事件，避免 Windows WebView 的原生文件拖放接管 HTML drag/drop。
 export function installTabStripDrag(container, { onDragChange, onDropTarget, onReorder, onDetach, onDragCancel,
-  selector = '[data-tab-id]', getId = (element) => element.dataset.tabId, onGhost, nativeTracking = false }) {
+  selector = '[data-tab-id]', getId = (element) => element.dataset.tabId, canDrag, onGhost, onMove, onRelease, nativeTracking = false }) {
   let gesture = null;
   let frame = null;
   let ghost = null;
@@ -72,7 +72,8 @@ export function installTabStripDrag(container, { onDragChange, onDropTarget, onR
     // 拖出标签栏时浮层提示「释放即新建阅读窗口」，与窗口内换位区分开。
     if (!nativeTracking) ghost?.classList.toggle('tabbar__tab-ghost--out', Boolean(onDetach) && !gesture.target);
     onDropTarget(gesture.target);
-    frame = requestAnimationFrame(tick);
+    onMove?.(gesture);
+    if (gesture?.dragging) frame = requestAnimationFrame(tick);
   };
   const finish = (commit, forceDetach = false, nativeDone = false) => {
     if (!gesture) return;
@@ -84,7 +85,8 @@ export function installTabStripDrag(container, { onDragChange, onDropTarget, onR
     if (!current.dragging) return;
     suppressClick = true;
     if (!commit && !nativeDone) onDragCancel?.(current.id);
-    if (commit && !forceDetach && current.target) onReorder(current.id, current.target.id, current.target.after);
+    if (commit && onRelease?.(current)) { /* handled by the file drop target */ }
+    else if (commit && !forceDetach && current.target) onReorder(current.id, current.target.id, current.target.after);
     else if (commit && onDetach) onDetach(current.id, { screenX: current.screenX, screenY: current.screenY });
     onDragChange(null);
     onDropTarget(null);
@@ -96,7 +98,7 @@ export function installTabStripDrag(container, { onDragChange, onDropTarget, onR
     if (!target) return;
     if (target.closest('input, button, .tabbar__tab-close, .tabbar__tab--renaming, .sidebar__recent-del')) return;
     const tab = target.closest(selector);
-    if (!tab || !container.contains(tab)) return;
+    if (!tab || !container.contains(tab) || canDrag?.(tab) === false) return;
     const box = tab.getBoundingClientRect();
     gesture = { id: getId(tab), source: tab, pointerId: event.pointerId, startX: event.clientX, startY: event.clientY,
       x: event.clientX, y: event.clientY, screenX: event.screenX, screenY: event.screenY, dragging: false,
@@ -109,6 +111,7 @@ export function installTabStripDrag(container, { onDragChange, onDropTarget, onR
     gesture.y = event.clientY;
     gesture.screenX = event.screenX;
     gesture.screenY = event.screenY;
+    gesture.ctrlKey = event.ctrlKey;
     if (!gesture.dragging && Math.hypot(gesture.x - gesture.startX, gesture.y - gesture.startY) >= 6) {
       gesture.dragging = true;
       container.setPointerCapture?.(event.pointerId);
@@ -116,7 +119,7 @@ export function installTabStripDrag(container, { onDragChange, onDropTarget, onR
       onDragChange(gesture.id);
       tick();
     }
-    if (gesture.dragging) {
+    if (gesture?.dragging) {
       event.preventDefault();
       placeGhost();
       gesture.target = locate();
@@ -130,6 +133,7 @@ export function installTabStripDrag(container, { onDragChange, onDropTarget, onR
       gesture.y = event.clientY;
       gesture.screenX = event.screenX;
       gesture.screenY = event.screenY;
+      gesture.ctrlKey = event.ctrlKey;
       gesture.target = locate();
       event.preventDefault();
     }
