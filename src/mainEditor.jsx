@@ -12,9 +12,11 @@ import NativeTitleTooltips from '@components/ui/NativeTitleTooltips';
 import RuntimeLogHost from '@components/overlays/RuntimeLogDialog';
 import RuntimeErrorBoundary from '@components/overlays/RuntimeErrorBoundary';
 import { installRuntimeLogging } from '@/services/runtimeLogs';
+import { installTauriEventCleanupGuard } from '@utils/tauriEventCleanup';
 import '@styles/prism-theme.scss';
 import '@styles/antd-overrides.scss';
 
+installTauriEventCleanupGuard();
 installWebThemeBridge();
 const stopRuntimeLogging = installRuntimeLogging();
 if (import.meta.hot) import.meta.hot.dispose(stopRuntimeLogging);
