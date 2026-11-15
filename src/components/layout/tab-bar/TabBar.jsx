@@ -14,7 +14,7 @@ import useFileStore from '@store/useFileStore';
 
 import useNotificationStore from '@store/useNotificationStore';
 import useScriptStore from '@store/useScriptStore';
-import { isSafUri, renameFile, showInExplorer } from '@utils/tauriApi';
+import { renameFile } from '@utils/tauriApi';
 import { useFileManager } from '@hooks/useFileManager';
 import { useEditorContextMenu } from '@hooks/useEditorContextMenu';
 import EditorContextMenu from '@components/editor/EditorContextMenu';
@@ -154,7 +154,6 @@ function TabBar({ onRequestCloseTab, onRequestCloseTabs }) {
   }, []);
 
   const openTabMenu = (event, tab, fromNewButton = false) => {
-    const index = tabs.indexOf(tab);
     const close = (key, targets) => ({ key, label: t(`tabbar.menu.${key}`), disabled: !targets.length,
       run: () => onRequestCloseTabs(targets.map(({ id }) => id)) });
     const creation = fromNewButton ? [
@@ -164,12 +163,7 @@ function TabBar({ onRequestCloseTab, onRequestCloseTabs }) {
     ] : [];
     openMenu(event, [...creation,
       close('close', [tab]), close('closeOthers', tabs.filter(({ id }) => id !== tab.id)),
-      close('closeLeft', tabs.slice(0, index)), close('closeRight', tabs.slice(index + 1)), close('closeAll', tabs),
-      { key: 'separator', separator: true },
-      { key: 'rename', label: t('tabbar.menu.rename'), run: () => startRename(tab) },
-      { key: 'copyPath', label: t('editor.menu.copyPath'), disabled: !tab.path, run: () => navigator.clipboard.writeText(tab.path) },
-      { key: 'reveal', label: t('sidebar.explorer.openInExplorer'), disabled: !window.__TAURI_INTERNALS__ || !tab.path || isSafUri(tab.path),
-        run: () => showInExplorer(tab.path) },
+      close('closeAll', tabs),
     ], 'tab');
   };
 
