@@ -85,10 +85,10 @@ export function reportRuntimeLog({ level = 'error', source = 'WebView', message,
   const now = Date.now();
   if (announce && level === 'error' && now - lastNotification >= repeatWindow) {
     lastNotification = now;
-    useNotificationStore.getState().notify('error', i18n.t('runtimeLogs.reported'), '', 6000, {
+    queueMicrotask(() => useNotificationStore.getState().notify('error', i18n.t('runtimeLogs.reported'), '', 6000, {
       label: i18n.t('runtimeLogs.view'),
       run: useRuntimeLogStore.getState().show,
-    });
+    }));
   }
 }
 

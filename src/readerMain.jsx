@@ -23,6 +23,7 @@ import ThemedConfigProvider from '@/antd/ThemedConfigProvider';
 import RuntimeLogHost from '@components/overlays/RuntimeLogDialog';
 import RuntimeErrorBoundary from '@components/overlays/RuntimeErrorBoundary';
 import { installRuntimeLogging } from '@/services/runtimeLogs';
+import { installTauriEventCleanupGuard } from '@utils/tauriEventCleanup';
 import { readFileContent } from '@utils/tauriApi';
 import useNotificationStore from '@store/useNotificationStore';
 import TaskList from '@components/overlays/TaskList';
@@ -31,6 +32,7 @@ import './assets/styles/index.scss';
 import './reader.scss';
 import './assets/styles/antd-overrides.scss';
 
+installTauriEventCleanupGuard();
 const stopRuntimeLogging = installRuntimeLogging();
 if (import.meta.hot) import.meta.hot.dispose(stopRuntimeLogging);
 
