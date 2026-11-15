@@ -61,6 +61,7 @@ const useConfigStore = create(
       autoSave: true,
       workspacePath: '',
       associatedOpenMode: 'editor',
+      externalFileDrag: 'explorer',
 
       hotkeys: { ...DEFAULT_HOTKEYS },
       configUpdatedAt: 0,

@@ -288,6 +288,17 @@ function SettingsModal({ open: openProp, onClose }) {
                     ]}
                   />
                 </SettingRow>
+                {Boolean(window.__TAURI_INTERNALS__ && /Windows/i.test(navigator.userAgent)) && <SettingRow
+                  label={t('settings.general.externalFileDrag')}
+                  desc={t('settings.general.externalFileDragDesc')}
+                >
+                  <Select aria-label={t('settings.general.externalFileDrag')} style={{ width: 200 }}
+                    value={config.externalFileDrag} onChange={(value) => handleChange('externalFileDrag', value)}
+                    options={[
+                      { value: 'reader', label: t('settings.general.openDragWindow') },
+                      { value: 'explorer', label: t('settings.general.dragToExplorer') },
+                    ]} />
+                </SettingRow>}
                 <SettingRow
                   label={t('settings.general.startup')}
                   desc={t('settings.general.startupDesc')}
