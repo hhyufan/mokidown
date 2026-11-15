@@ -249,7 +249,8 @@ test('tree editing preserves rendered code, typography and independent jump meta
   })).toBe('`Updated process` >java++');
 });
 
-test('sidebar tabs animate file-type changes, hide unsupported outline and share the mgtree icon', async ({ page }) => {
+test('sidebar width stays fixed when file-type changes hide Outline and Knowledge tree', async ({ page }) => {
+  test.setTimeout(60000);
   await openDocument(page, 'preview');
   const list = page.getByRole('tablist');
   const knowledge = list.getByRole('tab', { name: /Knowledge tree|知识树/ });
@@ -265,6 +266,8 @@ test('sidebar tabs animate file-type changes, hide unsupported outline and share
     return shapes.length > 0 && shapes.every((shape) => getComputedStyle(shape).fill === color);
   })).toBe(true);
   await list.getByRole('tab', { name: /Outline|大纲/ }).click();
+  const sidebar = page.locator('.sidebar');
+  const width = (await sidebar.boundingBox()).width;
   await page.evaluate(() => {
     window.treeTrial.store.getState().openFile({ path: 'C:/notes/main.java', name: 'main.java', content: 'class Main {}' });
   });
@@ -273,13 +276,11 @@ test('sidebar tabs animate file-type changes, hide unsupported outline and share
   await expect(list.getByRole('tab', { name: /Files|文件/ })).toHaveAttribute('aria-selected', 'true');
   const hidden = page.locator('.sidebar__tab-slot--hidden');
   await expect(hidden).toHaveCount(2);
-  expect(await hidden.first().evaluate((element) => getComputedStyle(element).transitionProperty)).toContain('flex-grow');
-  await expect.poll(() => hidden.first().evaluate((element) => element.getBoundingClientRect().width)).toBeLessThan(1);
-  const codeMinimum = await page.evaluate(() => window.treeTrial.store.getState().sidebarMinWidth);
+  expect((await sidebar.boundingBox()).width).toBe(width);
   await page.evaluate(() => window.treeTrial.store.getState().setActiveTab('C:/notes/lesson.md'));
   await expect(list.getByRole('tab', { name: /Outline|大纲/ })).toBeVisible();
   await expect(knowledge).toBeVisible();
-  await expect.poll(() => page.evaluate(() => window.treeTrial.store.getState().sidebarMinWidth)).toBeGreaterThan(codeMinimum);
+  expect((await sidebar.boundingBox()).width).toBe(width);
   const divider = page.getByRole('separator', { name: /调整侧栏|Resize sidebar/ });
   await divider.focus();
   await page.keyboard.press('Home');
@@ -294,8 +295,45 @@ test('sidebar tabs animate file-type changes, hide unsupported outline and share
   await expect.poll(() => list.getByRole('tab').evaluateAll((buttons) => buttons.every((button) => {
     return button.lastElementChild.scrollWidth <= button.lastElementChild.clientWidth + 1;
   }))).toBe(true);
+  await list.getByRole('tab', { name: '文件' }).click();
+  await expect.poll(() => sidebar.locator('.sidebar__view > .sidebar__toolbar').evaluate(({ clientWidth, scrollWidth }) => (
+    scrollWidth <= clientWidth + 1
+  ))).toBe(true);
+  await expect.poll(() => list.evaluate(({ clientWidth, scrollWidth }) => scrollWidth <= clientWidth + 1)).toBe(true);
+  await divider.focus();
+  await page.keyboard.press('End');
+  await expect.poll(() => page.locator('.app__main').evaluate((element) => element.clientWidth)).toBeGreaterThanOrEqual(360);
   await page.emulateMedia({ reducedMotion: 'reduce' });
   expect(await page.locator('.sidebar__tab-slot').first().evaluate((element) => getComputedStyle(element).transitionDuration)).toBe('0s');
+});
+
+test('keeps the selected Knowledge tree tab mounted while another Markdown tree loads', async ({ page }) => {
+  await openDocument(page, 'edit');
+  const sidebar = page.locator('.sidebar');
+  const knowledge = sidebar.getByRole('tab', { name: /Knowledge tree|知识树/ });
+  await knowledge.click();
+  await expect(sidebar).toContainText('Learning map');
+  const width = (await sidebar.boundingBox()).width;
+  await page.evaluate(() => {
+    const originalInvoke = window.__TAURI_INTERNALS__.invoke;
+    const pending = new Promise((resolve) => {
+      window.finishCompanionRead = () => resolve({ success: true, content: 'New document tree' });
+    });
+    window.__TAURI_INTERNALS__.invoke = (command, args) => (
+      command === 'read_file_content' && args.path.replace(/\\/g, '/') === 'C:/notes/next.mgtree'
+        ? pending : originalInvoke(command, args)
+    );
+    window.knowledgeTab = document.querySelector('.sidebar__tab--active');
+    window.treeTrial.store.getState().openFile({ path: 'C:/notes/next.md', name: 'next.md', content: '# Next' });
+  });
+  await expect(page.locator('.tabbar__tab--active')).toContainText('next.md');
+  await expect(knowledge).toHaveAttribute('aria-selected', 'true');
+  await expect(sidebar.getByText('Learning map')).toHaveCount(0);
+  expect((await sidebar.boundingBox()).width).toBe(width);
+  await page.evaluate(() => window.finishCompanionRead());
+  await expect(sidebar).toContainText('New document tree');
+  expect(await knowledge.evaluate((element) => element === window.knowledgeTab)).toBe(true);
+  expect((await sidebar.boundingBox()).width).toBe(width);
 });
 
 test('visual jump settings edit all reference modes without exposing title source', async ({ page }) => {

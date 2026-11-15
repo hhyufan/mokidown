@@ -1,5 +1,52 @@
 import { expect, test } from '@playwright/test';
 
+test('menu, keyboard and close button use the same exit animation', async ({ page }) => {
+  test.setTimeout(60000);
+  await page.addInitScript(() => {
+    const animate = Element.prototype.animate;
+    window.tabExits = [];
+    Element.prototype.animate = function (frames, options) {
+      if (this.classList.contains('tabbar__tab-exit')) {
+        window.tabExits.push({ name: this.textContent, frames, options });
+      }
+      return animate.call(this, frames, options);
+    };
+  });
+  await page.goto('/');
+  await expect(page.locator('.editor-content__welcome')).toBeVisible({ timeout: 30000 });
+  await page.evaluate(async () => {
+    const { default: store } = await import('/src/store/useEditorStore.js');
+    for (const name of ['menu.txt', 'button.md', 'key.txt']) {
+      store.getState().openFile({ path: '/' + name, name, content: 'Text' });
+    }
+  });
+  const tabs = page.locator('.tabbar [data-tab-id]');
+  const buttonTab = tabs.filter({ hasText: 'button.md' });
+  const keyTab = tabs.filter({ hasText: 'key.txt' });
+  await expect(buttonTab).toBeVisible();
+  await buttonTab.click();
+  const width = (await page.locator('.tabbar__tabs').boundingBox()).width;
+  const buttonWidth = (await buttonTab.boundingBox()).width;
+  await keyTab.click();
+  expect((await page.locator('.tabbar__tabs').boundingBox()).width).toBe(width);
+  expect((await buttonTab.boundingBox()).width).toBe(buttonWidth);
+
+  await tabs.filter({ hasText: 'menu.txt' }).click({ button: 'right' });
+  await page.getByRole('menuitem', { name: /Close current|关闭当前/i }).click();
+  await expect(tabs).toHaveCount(2);
+  await buttonTab.locator('.tabbar__tab-close').click();
+  await expect(tabs).toHaveCount(1);
+  await page.keyboard.press('Control+w');
+  await expect(tabs).toHaveCount(0);
+
+  const exits = await page.evaluate(() => window.tabExits);
+  expect(exits.map(({ name }) => name)).toEqual(['menu.txt', 'button.md', 'key.txt']);
+  expect(exits[0].frames).toEqual(exits[1].frames);
+  expect(exits[1].frames).toEqual(exits[2].frames);
+  expect(exits[0].options).toEqual(exits[2].options);
+  await expect(page.locator('.tabbar__tab-exit')).toHaveCount(0);
+});
+
 test('the new-tab menu closes tabs and asks before discarding a dirty document', async ({ page }) => {
   test.setTimeout(60000);
   await page.goto('/');
@@ -12,7 +59,7 @@ test('the new-tab menu closes tabs and asks before discarding a dirty document',
   const sheet = page.locator('.tabbar__new-tab');
   const tabs = page.locator('.tabbar [data-tab-id]');
   await sheet.click({ button: 'right' });
-  await page.getByRole('menuitem', { name: /Close All Tabs|关闭所有标签页/ }).click();
+  await page.getByRole('menuitem', { name: /Close all|关闭所有/i }).click();
   const prompt = page.getByRole('dialog');
   await expect(prompt.getByText('draft.txt')).toBeVisible();
   await expect(tabs).toHaveCount(2);

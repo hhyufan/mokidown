@@ -46,8 +46,15 @@
 .editor-content__workspace {
   flex: 1;
   display: flex;
+  min-height: 0;
   overflow: hidden;
   position: relative;
+
+  &--split {
+    display: grid;
+    grid-template-columns: minmax(0, var(--split-ratio, 50%)) resize-handle.$track-size minmax(0, 1fr);
+    grid-template-rows: minmax(0, 1fr);
+  }
 }
 
 .editor-content__run {
@@ -79,9 +86,7 @@
   min-width: 0;
 
   &--half {
-    flex: 0 0 var(--split-ratio, 50%);
-    max-width: var(--split-ratio, 50%);
-    min-width: 0;
+    min-height: 0;
   }
 }
 
@@ -90,7 +95,7 @@
   min-width: 0;
 
   &--half {
-    flex: 1;
+    min-height: 0;
     min-width: 0;
   }
 }
@@ -177,27 +182,8 @@
   }
 
   .editor-content__workspace--mobile-split {
-    flex-direction: column;
-    // 整个工作区是 flex 父容器；下面的子元素通过 --split-ratio
-    // 获取各自尺寸，因此拖动分隔条时会实时重新分配
-    // 编辑器 / 预览区的高度。
-    overflow: hidden;
-  }
-
-  .editor-content__workspace--mobile-split .editor-content__editor--half {
-    flex: 0 0 var(--split-ratio, 50%);
-    max-width: none;
-    max-height: var(--split-ratio, 50%);
-    min-height: 0;
-    width: 100%;
-  }
-
-  .editor-content__workspace--mobile-split .editor-content__preview--half {
-    flex: 1;
-    max-width: none;
-    min-height: 0;
-    width: 100%;
-    overflow-y: auto;
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: minmax(0, var(--split-ratio, 50%)) 14px minmax(0, 1fr);
   }
 
   .editor-content__workspace--mobile-split .editor-content__split-divider {

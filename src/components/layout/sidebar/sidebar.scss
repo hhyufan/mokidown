@@ -56,8 +56,11 @@
   border-bottom: 1px solid var(--border);
 }
 
-.sidebar__tabs {
+.sidebar__tabs,
+.sidebar__tabs-measure {
   display: flex;
+  overflow-x: auto;
+  scrollbar-width: none;
   margin: 8px 12px 10px;
   padding: 5px;
   position: relative;
@@ -70,7 +73,26 @@
   box-shadow: none;
 }
 
-.sidebar__tab {
+.sidebar__size-probe {
+  position: absolute;
+  width: 0;
+  height: 0;
+  overflow: hidden;
+  visibility: hidden;
+  pointer-events: none;
+}
+
+// Measure all navigation and file controls even when the active document hides some of them.
+.sidebar__size-probe-content {
+  display: grid;
+  width: max-content;
+
+  .sidebar__tab-measure-button { width: auto; }
+  [data-measure-label]::after { content: attr(data-measure-label); }
+}
+
+.sidebar__tab,
+.sidebar__tab-measure-button {
   width: 100%;
   min-width: 0;
   height: 32px;
@@ -124,12 +146,8 @@
 
 .sidebar__tab-slot {
   flex: 1 1 0;
-  min-width: 0;
-  overflow: hidden;
-  opacity: 1;
-  transform: translateY(0);
-  transition: flex-grow 240ms cubic-bezier(0.2, 0.8, 0.2, 1), opacity 180ms ease, transform 240ms ease;
-  &--hidden { flex-grow: 0; opacity: 0; transform: translateY(5px); pointer-events: none; }
+  min-width: max-content;
+  &--hidden { display: none; }
 }
 
 // Keep the mgtree glyph, but follow the same idle/hover/active colors as the
@@ -156,7 +174,6 @@
   // 但不会亮到接近纯白。
   background: var(--surface);
   box-shadow: 0 1px 2px rgba(0, 0, 0, 0.08);
-  transition: transform 0.24s cubic-bezier(0.2, 0.8, 0.2, 1), width 0.24s cubic-bezier(0.2, 0.8, 0.2, 1);
   z-index: 0;
   pointer-events: none;
 }
@@ -172,7 +189,6 @@
 .sidebar__content--enter { animation: sidebar-content-enter 180ms ease-out both; }
 @keyframes sidebar-content-enter { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: translateY(0); } }
 @media (prefers-reduced-motion: reduce) {
-  .sidebar__tab-slot, .sidebar__tab-slider { transition: none; }
   .sidebar__content--enter { animation: none; }
 }
 
@@ -216,6 +232,7 @@
   display: inline-flex;
   align-items: center;
   gap: 4px;
+  white-space: nowrap;
 }
 .sidebar__mode-toggle {
   display: inline-flex;
@@ -234,6 +251,7 @@
 }
 
 .stb {
+  flex-shrink: 0;
   width: 28px;
   height: 28px;
   border-radius: var(--radius-sm);
@@ -498,8 +516,6 @@
 }
 
 @media (max-width: 768px) {
-  .sidebar__tabs { overflow-x: auto; }
-  .sidebar__tab-slot:not(.sidebar__tab-slot--hidden) { min-width: var(--tab-natural-width, 0px); }
   .sidebar {
     position: fixed;
     inset: 0 auto 0 0;
