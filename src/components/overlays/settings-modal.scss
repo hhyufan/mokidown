@@ -33,7 +33,7 @@
   justify-content: space-between;
   padding: 14px 20px;
   border-bottom: 1px solid var(--border);
-  background: transparent;
+  background: color-mix(in srgb, var(--bg) 55%, transparent);
 
   h2 {
     font-size: 14px;

@@ -8,7 +8,8 @@
   .ant-modal-header {
     margin: 0;
     padding: 14px 48px 14px 20px;
-    background: transparent;
+    // 比正文深一档即可，不用整块 --bg 灰底，也不要分割线。
+    background: color-mix(in srgb, var(--bg) 55%, transparent);
     border-bottom: 1px solid var(--border);
   }
 
@@ -20,7 +21,7 @@
     margin: 0;
     padding: 12px 20px;
     background: transparent;
-    border-top: 1px solid var(--border);
+    border-top: none;
     display: flex;
     flex-wrap: wrap;
     justify-content: flex-end;
