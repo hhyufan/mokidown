@@ -597,6 +597,7 @@ pub async fn begin_reader_tab_detach_watch(
     window: WebviewWindow,
     document: ReaderDocument,
     preview: Option<DragPreview>,
+    shell_drop: Option<bool>,
 ) -> Result<(), String> {
     if window.label() != "main" {
         return Ok(());
@@ -615,6 +616,11 @@ pub async fn begin_reader_tab_detach_watch(
         let origin = window.outer_position().map_err(|error| error.to_string())?;
         let size = window.outer_size().map_err(|error| error.to_string())?;
         let scale = window.scale_factor().map_err(|error| error.to_string())?;
+        let shell_handle = if shell_drop.unwrap_or_default() {
+            Some(window.hwnd().map_err(|error| error.to_string())?.0 as isize)
+        } else {
+            None
+        };
         let label = window.label().to_string();
         let cancelled = Arc::new(AtomicBool::new(false));
         let preview_label = "drag-preview".to_string();
@@ -625,7 +631,7 @@ pub async fn begin_reader_tab_detach_watch(
             .unwrap_or_default();
         let offset_x = preview.as_ref().map_or(0.0, |preview| preview.offset_x) * scale;
         let offset_y = preview.as_ref().map_or(0.0, |preview| preview.offset_y) * scale;
-        let warm_preview = preview.clone();
+        let warm_preview = if shell_handle.is_none() { preview.clone() } else { None };
         let warm_document = document.clone();
         if let Some(previous) = app
             .state::<ReaderState>()
@@ -689,11 +695,14 @@ pub async fn begin_reader_tab_detach_watch(
             .name("reader-tab-detach".into())
             .spawn(move || {
                 let mut document = document;
+                let file_drag = document.keep_source;
                 let started = Instant::now();
                 let mut visible = false;
                 let mut preview_failed = false;
                 let mut previous_position = None;
                 let mut handover = false;
+                let mut shell_started = false;
+                let mut outside = false;
                 loop {
                     if monitor_flag.load(Ordering::Acquire)
                         || started.elapsed() > Duration::from_secs(120)
@@ -714,7 +723,7 @@ pub async fn begin_reader_tab_detach_watch(
                     let top = i64::from(origin.y);
                     let right = left + i64::from(size.width);
                     let bottom = top + i64::from(size.height);
-                    let outside = i64::from(cursor.x) < left
+                    outside = i64::from(cursor.x) < left
                         || i64::from(cursor.x) >= right
                         || i64::from(cursor.y) < top
                         || i64::from(cursor.y) >= bottom;
@@ -768,8 +777,28 @@ pub async fn begin_reader_tab_detach_watch(
                             visible = should_show && !preview_failed;
                         }
                     }
+                    if button_down && outside && !shell_started {
+                        if let Some(handle) = shell_handle {
+                            shell_started = true;
+                            let _ = monitor_app.emit_to("main", "reader:native-drag-end", &token);
+                            let shell_app = monitor_app.clone();
+                            let path = document.path.clone();
+                            if let Err(error) = monitor_app.run_on_main_thread(move || {
+                                let result = crate::file_drop::shell_drag(handle, std::path::Path::new(&path));
+                                let (moved, error) = match result {
+                                    Ok(moved) => (moved, None),
+                                    Err(error) => (false, Some(error)),
+                                };
+                                let _ = shell_app.emit_to("main", "reader:shell-file-drag-result",
+                                    serde_json::json!({ "path": path, "moved": moved, "error": error }));
+                            }) {
+                                let _ = monitor_app.emit_to("main", "reader:shell-file-drag-result",
+                                    serde_json::json!({ "error": error.to_string() }));
+                            }
+                        }
+                    }
                     if !button_down {
-                        if outside {
+                        if outside && shell_handle.is_none() {
                             if visible {
                                 if let Some((preview, _)) = monitor_app.state::<ReaderState>().previews.lock().unwrap().get(&preview_label) {
                                     document.opening = Some(ReaderOpening {
@@ -807,7 +836,10 @@ pub async fn begin_reader_tab_detach_watch(
                     if let Some(preview_window) = preview_window { let _ = preview_window.hide(); }
                 }
                 if !handover { discard_prepared_reader(&monitor_app, &token); }
-                let _ = monitor_app.emit_to("main", "reader:native-drag-end", &token);
+                // In-window file drops are committed by the WebView's pointer-up.
+                if !shell_started && (!file_drag || outside || monitor_flag.load(Ordering::Acquire)) {
+                    let _ = monitor_app.emit_to("main", "reader:native-drag-end", &token);
+                }
                 let mut watchers = state.detach_watchers.lock().unwrap();
                 if watchers
                     .get(&cleanup_label)
@@ -886,7 +918,7 @@ pub async fn begin_reader_tab_detach_watch(
 
     #[cfg(not(windows))]
     {
-        let _ = (app, document, preview);
+        let _ = (app, document, preview, shell_drop);
     }
 
     Ok(())
