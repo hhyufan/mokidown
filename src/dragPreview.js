@@ -1,11 +1,13 @@
 import { invoke } from '@utils/tauriInvoke';
 import { listen } from '@tauri-apps/api/event';
 import { createDragPreviewElement } from './services/dragPreviewElement';
+import { installTauriEventCleanupGuard } from '@utils/tauriEventCleanup';
 import './dragPreview.scss';
 
 export { createDragPreviewElement };
 
 export async function mountDragPreview() {
+  installTauriEventCleanupGuard();
   let currentToken = null;
   const render = async (preview) => {
     if (!preview || preview.token === currentToken) return;
