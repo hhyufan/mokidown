@@ -110,7 +110,7 @@ function App({ skipCliArgs = false }) {
   const setSidebarVisible = useEditorStore((s) => s.setSidebarVisible);
   const sidebarVisible = useEditorStore((s) => s.sidebarVisible);
   const toggleEditPreview = useEditorStore((s) => s.toggleEditPreview);
-  const closeTab = useEditorStore((s) => s.closeTab);
+  const closeTabs = useEditorStore((s) => s.closeTabs);
   const tabs = useEditorStore((s) => s.tabRenderList);
   const activeTabId = useEditorStore((s) => s.activeTabId);
 
@@ -200,7 +200,7 @@ function App({ skipCliArgs = false }) {
   /**
    * 请求关闭标签；关闭自动保存时，脏标签必须先由用户确认。
    *
-   * @param {string} tabId 目标标签 id。
+   * @param {string[]} tabIds 目标标签 id。
    */
   const requestTabsClose = useCallback((tabIds) => {
     const editor = useEditorStore.getState();
@@ -212,8 +212,8 @@ function App({ skipCliArgs = false }) {
       openUnsavedClosePrompt(dirty, targets.map(({ id }) => id));
       return;
     }
-    targets.forEach(({ id }) => closeTab(id));
-  }, [autoSave, closeTab, openUnsavedClosePrompt]);
+    closeTabs(targets.map(({ id }) => id));
+  }, [autoSave, closeTabs, openUnsavedClosePrompt]);
   const requestTabClose = useCallback((tabId) => requestTabsClose([tabId]), [requestTabsClose]);
 
   useEffect(() => {
@@ -454,12 +454,15 @@ function App({ skipCliArgs = false }) {
         if (!isDesktopWindow) return;
         fullscreenController.toggle().catch(console.error);
       },
+      closeTab: () => requestTabsClose([activeTabId]),
+      closeOtherTabs: () => requestTabsClose(tabs.filter(({ id }) => id !== activeTabId).map(({ id }) => id)),
+      closeAllTabs: () => requestTabsClose(tabs.map(({ id }) => id)),
     };
     const handler = handlers[actionId];
     if (!handler) return false;
     handler();
     return true;
-  }, [isDesktopWindow, saveCurrentFile, openFileDialog, toggleSidebar, toggleEditPreview]);
+  }, [isDesktopWindow, saveCurrentFile, openFileDialog, toggleSidebar, toggleEditPreview, requestTabsClose, activeTabId, tabs]);
 
   /**
    * 处理应用级快捷键。
@@ -642,7 +645,7 @@ function App({ skipCliArgs = false }) {
     setUnsavedPromptSaving(false);
 
     if (pendingCloseTabIds) {
-      pendingCloseTabIds.forEach((id) => closeTab(savedCloseTabIds.current.get(id) || id));
+      closeTabs(pendingCloseTabIds.map((id) => savedCloseTabIds.current.get(id) || id));
       setPendingCloseTabIds(null);
       setUnsavedPromptOpen(false);
       await flushRecoverySnapshot().catch(console.error);
@@ -657,7 +660,7 @@ function App({ skipCliArgs = false }) {
     }
     allowWindowCloseRef.current = true;
     appWindow.close();
-  }, [closeTab, isDesktopWindow, pendingCloseTabIds, promptedUnsavedTabs, saveTab, selectedUnsavedTabIds]);
+  }, [closeTabs, isDesktopWindow, pendingCloseTabIds, promptedUnsavedTabs, saveTab, selectedUnsavedTabIds]);
 
   /**
    * 放弃未保存修改并关闭目标标签或窗口。
@@ -666,7 +669,7 @@ function App({ skipCliArgs = false }) {
    */
   const handleDiscardAndContinueClose = useCallback(async () => {
     if (pendingCloseTabIds) {
-      pendingCloseTabIds.forEach((id) => closeTab(savedCloseTabIds.current.get(id) || id));
+      closeTabs(pendingCloseTabIds.map((id) => savedCloseTabIds.current.get(id) || id));
       setPendingCloseTabIds(null);
       setUnsavedPromptOpen(false);
       await flushRecoverySnapshot().catch(console.error);
@@ -681,7 +684,7 @@ function App({ skipCliArgs = false }) {
     }
     allowWindowCloseRef.current = true;
     appWindow.close();
-  }, [closeTab, isDesktopWindow, pendingCloseTabIds]);
+  }, [closeTabs, isDesktopWindow, pendingCloseTabIds]);
 
   const handleCancelUnsavedClose = useCallback(() => {
     setPendingCloseTabIds(null);

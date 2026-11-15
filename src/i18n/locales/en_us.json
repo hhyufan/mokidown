@@ -946,5 +946,9 @@
   "unsaved.noDiskFile": "This document has not been saved to disk",
   "unsaved.noDiskContent": "No disk content available",
   "unsaved.recoveredContent": "Recovered draft",
-  "settings.nav.renderer": "Renderer"
+  "settings.nav.renderer": "Renderer",
+  "settings.shortcuts.group.tabs": "Tabs",
+  "settings.shortcuts.action.closeTab": "Close current tab",
+  "settings.shortcuts.action.closeOtherTabs": "Close other tabs",
+  "settings.shortcuts.action.closeAllTabs": "Close all tabs"
 }

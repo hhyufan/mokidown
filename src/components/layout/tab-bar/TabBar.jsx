@@ -17,6 +17,8 @@ import useScriptStore from '@store/useScriptStore';
 import { renameFile } from '@utils/tauriApi';
 import { useFileManager } from '@hooks/useFileManager';
 import { useEditorContextMenu } from '@hooks/useEditorContextMenu';
+import { useHotkeys } from '@hooks/useHotkeys';
+import { formatKeybinding } from '@utils/keybinding';
 import EditorContextMenu from '@components/editor/EditorContextMenu';
 
 import { moveDiskBaseline } from '@/services/localFileGuard';
@@ -30,6 +32,27 @@ import '@/assets/styles/rename-input.scss';
 import { installTabStripWheel } from './tabStripWheel';
 import { installTabStripDrag } from './tabStripDrag';
 
+const TAB_MOTION = { duration: 180, easing: 'cubic-bezier(.2,.75,.25,1)' };
+
+function animateTabExit(layer, tab, scrollLeft) {
+  if (!layer || !tab.element.animate) return;
+  const left = tab.left - scrollLeft;
+  if (left >= layer.clientWidth || left + tab.width <= 0) return;
+  const ghost = tab.element.cloneNode(true);
+  ghost.removeAttribute('data-tab-id');
+  ghost.classList.add('tabbar__tab-exit');
+  ghost.querySelector('input')?.remove();
+  Object.assign(ghost.style, {
+    left: `${left}px`, top: `${tab.top}px`, width: `${tab.width}px`, height: `${tab.height}px`,
+  });
+  layer.appendChild(ghost);
+  const animation = ghost.animate([
+    { opacity: 1, transform: 'translateY(0)' },
+    { opacity: 0, transform: 'translateY(5px)' },
+  ], { ...TAB_MOTION, duration: 140 });
+  void animation.finished.then(() => ghost.remove(), () => ghost.remove());
+}
+
 /**
  * 顶部标签栏。
  *
@@ -40,6 +63,7 @@ import { installTabStripDrag } from './tabStripDrag';
  */
 function TabBar({ onRequestCloseTab, onRequestCloseTabs }) {
   const { t } = useTranslation();
+  const { keybindingOf } = useHotkeys();
   const tabs = useEditorStore((s) => s.tabRenderList);
   const activeTabId = useEditorStore((s) => s.activeTabId);
   const setActiveTab = useEditorStore((s) => s.setActiveTab);
@@ -59,8 +83,9 @@ function TabBar({ onRequestCloseTab, onRequestCloseTabs }) {
   const { loadDirectory, createNewTab, openFileDialog } = useFileManager();
   const { menu, openMenu, closeMenu } = useEditorContextMenu(tabs);
   const scrollRef = useRef(null);
+  const exitLayerRef = useRef(null);
+  const scrollLeftRef = useRef(0);
   const dragRef = useRef(null);
-  const previousTabsRef = useRef(new Set(tabs.map((tab) => tab.id)));
   const previousActiveRef = useRef(null);
   const positionsRef = useRef(new Map());
   const [draggedId, setDraggedId] = useState(null);
@@ -97,30 +122,44 @@ function TabBar({ onRequestCloseTab, onRequestCloseTabs }) {
     if (!container) return;
     const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
     const elements = [...container.querySelectorAll('[data-tab-id]')];
-    const added = elements.some((element) => !previousTabsRef.current.has(element.dataset.tabId));
-    const positions = new Map();
-    for (const element of elements) {
-      const id = element.dataset.tabId;
-      const previous = positionsRef.current.get(id);
-      positions.set(id, element.offsetLeft);
-      if (!reducedMotion && element.animate) {
-        if (!previousTabsRef.current.has(id)) element.animate([{ opacity: 0, transform: 'translateX(12px)' }, { opacity: 1, transform: 'translateX(0)' }], { duration: 180, easing: 'ease-out' });
-        else if (previous != null && previous !== element.offsetLeft) element.animate([{ transform: `translateX(${previous - element.offsetLeft}px)` }, { transform: 'translateX(0)' }], { duration: 180, easing: 'ease-out' });
+    const previous = positionsRef.current;
+    const lastScrollLeft = scrollLeftRef.current;
+    const scrollLeft = container.scrollLeft;
+    const positions = new Map(elements.map((element) => [element.dataset.tabId, {
+      element, left: element.offsetLeft, top: element.offsetTop, width: element.offsetWidth, height: element.offsetHeight,
+    }]));
+    const added = [...positions.keys()].some((id) => !previous.has(id));
+    const removed = [...previous.keys()].some((id) => !positions.has(id));
+    const orderChanged = added || removed || [...previous.keys()].some((id, index) => id !== elements[index]?.dataset.tabId);
+    if (orderChanged && !reducedMotion) {
+      for (const [id, tab] of previous) {
+        if (!positions.has(id)) animateTabExit(exitLayerRef.current, tab, lastScrollLeft);
       }
+      for (const [id, tab] of positions) {
+        const before = previous.get(id);
+        if (!before) {
+          tab.animation = tab.element.animate?.([{ opacity: 0, transform: 'translateX(12px)' }, { opacity: 1, transform: 'translateX(0)' }], TAB_MOTION);
+        } else {
+          const delta = before.left - lastScrollLeft - (tab.left - scrollLeft);
+          before.animation?.cancel();
+          if (delta) tab.animation = tab.element.animate?.([{ transform: `translateX(${delta}px)` }, { transform: 'translateX(0)' }], TAB_MOTION);
+        }
+      }
+    } else {
+      for (const [id, tab] of positions) tab.animation = previous.get(id)?.animation;
     }
     positionsRef.current = positions;
-    previousTabsRef.current = new Set(tabs.map((tab) => tab.id));
+    scrollLeftRef.current = scrollLeft;
     const activeChanged = previousActiveRef.current !== activeTabId;
     previousActiveRef.current = activeTabId;
     if (dragRef.current) return;
     const behavior = reducedMotion ? 'auto' : 'smooth';
-    if (added) container.scrollTo({ left: container.scrollWidth, behavior });
-    else if (activeChanged) {
-      const active = elements.find((element) => element.dataset.tabId === activeTabId);
+    if (activeChanged || added || removed) {
+      const active = positions.get(activeTabId);
       if (active) {
-        const box = active.getBoundingClientRect(), viewport = container.getBoundingClientRect();
-        if (box.left < viewport.left) container.scrollBy({ left: box.left - viewport.left, behavior });
-        else if (box.right > viewport.right) container.scrollBy({ left: box.right - viewport.right, behavior });
+        const right = active.left + active.width;
+        if (active.left < scrollLeft) container.scrollTo({ left: active.left, behavior });
+        else if (right > scrollLeft + container.clientWidth) container.scrollTo({ left: right - container.clientWidth, behavior });
       }
     }
   }, [tabs, activeTabId]);
@@ -136,6 +175,8 @@ function TabBar({ onRequestCloseTab, onRequestCloseTabs }) {
     () => /^(md|markdown|mdx)$/i.test(activeTab?.ext || ''),
     [activeTab],
   );
+  const canSplit = isMarkdown || activeTab?.ext?.toLowerCase() === 'mgtree';
+  const canShowConsole = consoleAvailable(viewMode, activeTab);
 
   /**
    * 进入标签重命名模式，并在下一帧自动聚焦输入框。
@@ -154,16 +195,20 @@ function TabBar({ onRequestCloseTab, onRequestCloseTabs }) {
   }, []);
 
   const openTabMenu = (event, tab, fromNewButton = false) => {
-    const close = (key, targets) => ({ key, label: t(`tabbar.menu.${key}`), disabled: !targets.length,
-      run: () => onRequestCloseTabs(targets.map(({ id }) => id)) });
+    const shortcutOf = (actionId) => {
+      const keybinding = keybindingOf(actionId);
+      return keybinding ? formatKeybinding(keybinding, /Mac|iPod|iPhone|iPad/.test(navigator.platform)) : undefined;
+    };
+    const close = (key, targets, actionId) => ({ key, label: t(`tabbar.menu.${key}`), shortcut: shortcutOf(actionId),
+      disabled: !targets.length, run: () => onRequestCloseTabs(targets.map(({ id }) => id)) });
     const creation = fromNewButton ? [
       { key: 'new', label: t('tabbar.newTab'), run: createNewTab },
       { key: 'open', label: t('tabbar.menu.openFile'), run: openFileDialog },
       { key: 'creation-separator', separator: true },
     ] : [];
     openMenu(event, [...creation,
-      close('close', [tab]), close('closeOthers', tabs.filter(({ id }) => id !== tab.id)),
-      close('closeAll', tabs),
+      close('close', [tab], 'closeTab'), close('closeOthers', tabs.filter(({ id }) => id !== tab.id), 'closeOtherTabs'),
+      close('closeAll', tabs, 'closeAllTabs'),
     ], 'tab');
   };
 
@@ -238,7 +283,8 @@ function TabBar({ onRequestCloseTab, onRequestCloseTabs }) {
         </Tooltip>
       </div>
 
-      <div className="tabbar__tabs" ref={scrollRef}>
+      <div className="tabbar__strip">
+      <div className="tabbar__tabs" ref={scrollRef} onScroll={(event) => { scrollLeftRef.current = event.currentTarget.scrollLeft; }}>
         {tabs.map((tab) => {
           const isRenaming = renamingTabId === tab.id;
           
@@ -308,6 +354,8 @@ function TabBar({ onRequestCloseTab, onRequestCloseTabs }) {
           </button>
         </Tooltip>}
       </div>
+      <div className="tabbar__exits" ref={exitLayerRef} aria-hidden="true" inert="" />
+      </div>
 
       <div className="tabbar__actions">
         <Tooltip title={t('tabbar.scrollRight')} placement="bottom" mouseEnterDelay={0.3}>
@@ -318,10 +366,10 @@ function TabBar({ onRequestCloseTab, onRequestCloseTabs }) {
           </button>
         </Tooltip>
         {/* Markdown 文件专属工具栏开关。 */}
-        {isMarkdown && (
+        {tabs.some((tab) => /^(md|markdown|mdx)$/i.test(tab.ext || '')) && (
           <Tooltip title={t('tabbar.toggleToolbar')} placement="bottom" mouseEnterDelay={0.3}>
             <button
-              className={cn('tabbar__action-btn', toolbarVisible && 'tabbar__action-btn--active')}
+              className={cn('tabbar__action-btn', toolbarVisible && 'tabbar__action-btn--active', !isMarkdown && 'tabbar__action-btn--hidden')}
               onClick={toggleToolbar}
               type="button"
             >
@@ -336,10 +384,10 @@ function TabBar({ onRequestCloseTab, onRequestCloseTabs }) {
         {}
         
         {/* Markdown 和树文件的源码 / 渲染分栏。 */}
-        {(isMarkdown || activeTab?.ext?.toLowerCase() === 'mgtree') && (
+        {tabs.some((tab) => /^(md|markdown|mdx|mgtree)$/i.test(tab.ext || '')) && (
           <Tooltip title={t('tabbar.splitView')} placement="bottom" mouseEnterDelay={0.3}>
             <button
-              className={cn('tabbar__action-btn', viewMode === 'split' && 'tabbar__action-btn--active')}
+              className={cn('tabbar__action-btn', viewMode === 'split' && 'tabbar__action-btn--active', !canSplit && 'tabbar__action-btn--hidden')}
               onClick={toggleSplit}
               type="button"
             >
@@ -351,10 +399,10 @@ function TabBar({ onRequestCloseTab, onRequestCloseTabs }) {
           </Tooltip>
         )}
         {/* 输出与问题控制台：仅在存在代码编辑器且语言受 LSP 支持或可运行时提供入口。 */}
-        {consoleAvailable(viewMode, activeTab) && (
+        {(canShowConsole || tabs.some((tab) => consoleAvailable(viewMode, tab))) && (
           <Tooltip title={t('tabbar.console')} placement="bottom" mouseEnterDelay={0.3}>
             <button
-              className={cn('tabbar__action-btn', consoleOpen && 'tabbar__action-btn--active')}
+              className={cn('tabbar__action-btn', consoleOpen && 'tabbar__action-btn--active', !canShowConsole && 'tabbar__action-btn--hidden')}
               onClick={() => toggleConsole(!consoleOpen)}
               aria-label={t('tabbar.console')}
               type="button"
