@@ -29,6 +29,7 @@ mod script_runner;
 mod search;
 mod startup;
 mod startup_gate;
+mod file_drop;
 mod text_file;
 
 /// 返回给前端的轻量级文件系统条目元数据，
@@ -1830,6 +1831,7 @@ pub fn run() {
             directory_index::locate_directory_entry,
             directory_index::close_directory_index,
             rename_file,
+            file_drop::transfer_dropped_entry,
             delete_file,
             start_file_watching,
             stop_file_watching,

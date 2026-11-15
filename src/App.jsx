@@ -7,7 +7,7 @@
 import { lazy, Suspense, useEffect, useState, useCallback, useMemo, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
 import { listen } from '@tauri-apps/api/event';
-import { appWindow, getCliArgs, onFileChanged, onOpenPaths, historyCapture, isSafUri, startFileWatching } from '@utils/tauriApi';
+import { appWindow, getCliArgs, onFileChanged, onOpenPaths, historyCapture, isSafUri, isWebPath, startFileWatching } from '@utils/tauriApi';
 import { isImeComposing } from '@utils/keyboard';
 import { rememberDiskBaseline } from '@/services/localFileGuard';
 import { prepareReaderDragPreview, receiveReaderDocument } from '@/services/readerWindows';
@@ -16,7 +16,7 @@ import { invoke } from '@utils/tauriInvoke';
 import { createFileChangeObserver, restoreExternalDisk, setLocalFileComposing } from '@/services/localFileOperations';
 import useThemeStore from '@store/useThemeStore';
 import useEditorStore from '@store/useEditorStore';
-import { getBuffer } from '@utils/editorBuffer';
+import { flushEditorBuffer, getBuffer } from '@utils/editorBuffer';
 
 import useFileStore from '@store/useFileStore';
 import useConfigStore from '@store/useConfigStore';
@@ -24,6 +24,7 @@ import useLspStore from '@store/useLspStore';
 import ExtensionHost from '@components/overlays/ExtensionHost';
 import { useFileManager } from '@hooks/useFileManager';
 import { useWorkspaceDirectory } from '@hooks/useWorkspaceDirectory';
+import { hideMovedExplorerEntry } from '@/services/workspaceFiles';
 import { useResponsiveLayout } from '@hooks/useResponsiveLayout';
 import { useViewportInsets } from '@hooks/useViewportInsets';
 import { useBackgroundImage } from '@hooks/useBackgroundImage';
@@ -75,6 +76,7 @@ const SettingsModal = lazy(() => import('@components/overlays/SettingsModal'));
 
 const UnsavedChangesModal = lazy(() => import('@components/overlays/UnsavedChangesModal'));
 const RecoveryModal = lazy(() => import('@components/overlays/RecoveryModal'));
+const FileDropConflict = lazy(() => import('@components/overlays/FileDropConflict'));
 
 const ASSOCIATED_MARKDOWN_EXTENSIONS = new Set(['md', 'markdown', 'mdown', 'mdwn', 'mkd', 'mkdn']);
 const fullscreenController = createFullscreenController(appWindow);
@@ -97,7 +99,6 @@ function isAssociatedMarkdownPath(path) {
  * 并渲染编辑器主布局与顶层模态层。
  */
 function App({ skipCliArgs = false }) {
-  useEffect(() => installReaderFileDrag(document.body), []);
   useEffect(() => {
     void prepareReaderDragPreview().catch((error) => console.error('[reader] Could not prepare drag preview:', error));
   }, []);
@@ -130,16 +131,17 @@ function App({ skipCliArgs = false }) {
 
   const [unsavedPromptOpen, setUnsavedPromptOpen] = useState(false);
   const [unsavedPromptSaving, setUnsavedPromptSaving] = useState(false);
-  const [pendingCloseTabId, setPendingCloseTabId] = useState(null);
+  const [pendingCloseTabIds, setPendingCloseTabIds] = useState(null);
+  const savedCloseTabIds = useRef(new Map());
   const [recoveryDrafts, setRecoveryDrafts] = useState([]);
   const externalConflict = useEditorStore((s) => {
     const path = s.tabRenderList.find((tab) => tab.id === s.activeTabId)?.path;
     return s.externalFileConflicts.get(path);
   });
   const [selectedUnsavedTabIds, setSelectedUnsavedTabIds] = useState([]);
-  const [isDragOver, setIsDragOver] = useState(false);
-  const [dragTarget, setDragTarget] = useState(null);
-  const [dragOverlayRect, setDragOverlayRect] = useState(null);
+  const [fileDrop, setFileDrop] = useState(null);
+  const [dropConflict, setDropConflict] = useState(null);
+  const transferQueue = useRef(Promise.resolve());
   // Native handover emits only after the real editor window is shown.
   const [crtBoot, setCrtBoot] = useState(false);
   const finishWorkspaceEntry = useCallback(() => setCrtBoot(false), []);
@@ -152,7 +154,6 @@ function App({ skipCliArgs = false }) {
     return () => { disposed = true; subscription.then((unlisten) => unlisten()).catch(() => {}); };
   }, []);
   const lastDragPositionRef = useRef(null);
-  const lastDropAtRef = useRef(0);
   const allowWindowCloseRef = useRef(false);
   const cliArgsOpenedRef = useRef(false);
   const { isMobileLayout, isAndroid, isPortrait } = useResponsiveLayout();
@@ -168,6 +169,7 @@ function App({ skipCliArgs = false }) {
     loadFilesOnly,
     openDroppedPathsInEditor,
     moveDroppedPathsToExplorer,
+    openDroppedBrowserFiles,
   } = useFileManager();
   // 应用级快捷键的匹配入口：键位来自注册表，可在「设置 → 快捷键」中改绑。
   const { matchAction: matchHotkey } = useHotkeys();
@@ -176,21 +178,22 @@ function App({ skipCliArgs = false }) {
     [autoSave, tabs],
   );
   const promptedUnsavedTabs = useMemo(
-    () => pendingCloseTabId
-      ? unsavedTabs.filter((tab) => tab.id === pendingCloseTabId)
+    () => pendingCloseTabIds
+      ? tabs.filter((tab) => pendingCloseTabIds.includes(tab.id) && tab.modified && (!autoSave || !tab.path))
       : unsavedTabs,
-    [pendingCloseTabId, unsavedTabs],
+    [autoSave, pendingCloseTabIds, tabs, unsavedTabs],
   );
 
   /**
    * 打开未保存变更确认弹窗，并预选当前待处理标签。
    *
    * @param {Array<object>} [pendingTabs=unsavedTabs] 需要参与关闭确认的未保存标签集合。
-   * @param {string|null} [closeTabId=null] 仅关闭单个标签时的目标 id；null 表示关闭窗口。
+   * @param {string[]|null} [tabIds=null] 待关闭标签；null 表示关闭窗口。
    */
-  const openUnsavedClosePrompt = useCallback((pendingTabs = unsavedTabs, closeTabId = null) => {
+  const openUnsavedClosePrompt = useCallback((pendingTabs = unsavedTabs, tabIds = null) => {
+    savedCloseTabIds.current.clear();
     setSelectedUnsavedTabIds(pendingTabs.map((tab) => tab.id));
-    setPendingCloseTabId(closeTabId);
+    setPendingCloseTabIds(tabIds);
     setUnsavedPromptOpen(true);
   }, [unsavedTabs]);
 
@@ -199,15 +202,19 @@ function App({ skipCliArgs = false }) {
    *
    * @param {string} tabId 目标标签 id。
    */
-  const requestTabClose = useCallback((tabId) => {
-    const tab = useEditorStore.getState().tabRenderList.find((item) => item.id === tabId);
-    if (!tab) return;
-    if (!autoSave && tab.modified) {
-      openUnsavedClosePrompt([tab], tabId);
+  const requestTabsClose = useCallback((tabIds) => {
+    const editor = useEditorStore.getState();
+    if (tabIds.includes(editor.activeTabId)) flushEditorBuffer(editor.activeTabId);
+    const targets = useEditorStore.getState().tabRenderList.filter((item) => tabIds.includes(item.id));
+    if (!targets.length) return;
+    const dirty = targets.filter((tab) => tab.modified && (!autoSave || !tab.path));
+    if (dirty.length) {
+      openUnsavedClosePrompt(dirty, targets.map(({ id }) => id));
       return;
     }
-    closeTab(tabId);
+    targets.forEach(({ id }) => closeTab(id));
   }, [autoSave, closeTab, openUnsavedClosePrompt]);
+  const requestTabClose = useCallback((tabId) => requestTabsClose([tabId]), [requestTabsClose]);
 
   useEffect(() => {
     initTheme();
@@ -368,6 +375,15 @@ function App({ skipCliArgs = false }) {
     if (!window.__TAURI_INTERNALS__ || isAndroid) return undefined;
     const previews = ['reader:native-drag-end', 'reader:native-preview-failed'].map((name) =>
       listen(name, (event) => window.dispatchEvent(new CustomEvent(name, { detail: event.payload }))));
+    const shellDrop = listen('reader:shell-file-drag-result', ({ payload }) => {
+      if (payload.error) {
+        useNotificationStore.getState().notify('error', t('drag.failed'), payload.error);
+      } else if (payload.moved) {
+        hideMovedExplorerEntry(payload.path);
+        const directory = useFileStore.getState().currentDir;
+        if (directory) void loadFilesOnly(directory);
+      }
+    });
     const subscription = listen('reader:tab-detach-drop', async (event) => {
       const { document, x, y } = event.payload || {};
       if (!document) return;
@@ -387,9 +403,9 @@ function App({ skipCliArgs = false }) {
       }
     });
     return () => {
-      [subscription, ...previews].forEach((subscription) => { void subscription.then((stop) => stop()).catch(() => {}); });
+      [subscription, shellDrop, ...previews].forEach((subscription) => { void subscription.then((stop) => stop()).catch(() => {}); });
     };
-  }, [isAndroid]);
+  }, [isAndroid, loadFilesOnly, t]);
 
   /**
    * 处理运行中的关联打开请求。
@@ -614,7 +630,6 @@ function App({ skipCliArgs = false }) {
   const handleSaveAndContinueClose = useCallback(async () => {
     const selectedIds = new Set(selectedUnsavedTabIds);
     const tabsToSave = promptedUnsavedTabs.filter((tab) => selectedIds.has(tab.id));
-    let savedCloseTabId = pendingCloseTabId;
     setUnsavedPromptSaving(true);
     for (const tab of tabsToSave) {
       const result = await saveTab(tab.id);
@@ -622,13 +637,13 @@ function App({ skipCliArgs = false }) {
         setUnsavedPromptSaving(false);
         return;
       }
-      if (tab.id === pendingCloseTabId) savedCloseTabId = result.tabId || tab.id;
+      savedCloseTabIds.current.set(tab.id, result.tabId || tab.id);
     }
     setUnsavedPromptSaving(false);
 
-    if (pendingCloseTabId) {
-      closeTab(savedCloseTabId || pendingCloseTabId);
-      setPendingCloseTabId(null);
+    if (pendingCloseTabIds) {
+      pendingCloseTabIds.forEach((id) => closeTab(savedCloseTabIds.current.get(id) || id));
+      setPendingCloseTabIds(null);
       setUnsavedPromptOpen(false);
       await flushRecoverySnapshot().catch(console.error);
       return;
@@ -642,7 +657,7 @@ function App({ skipCliArgs = false }) {
     }
     allowWindowCloseRef.current = true;
     appWindow.close();
-  }, [closeTab, isDesktopWindow, pendingCloseTabId, promptedUnsavedTabs, saveTab, selectedUnsavedTabIds]);
+  }, [closeTab, isDesktopWindow, pendingCloseTabIds, promptedUnsavedTabs, saveTab, selectedUnsavedTabIds]);
 
   /**
    * 放弃未保存修改并关闭目标标签或窗口。
@@ -650,9 +665,9 @@ function App({ skipCliArgs = false }) {
    * @returns {void}
    */
   const handleDiscardAndContinueClose = useCallback(async () => {
-    if (pendingCloseTabId) {
-      closeTab(pendingCloseTabId);
-      setPendingCloseTabId(null);
+    if (pendingCloseTabIds) {
+      pendingCloseTabIds.forEach((id) => closeTab(savedCloseTabIds.current.get(id) || id));
+      setPendingCloseTabIds(null);
       setUnsavedPromptOpen(false);
       await flushRecoverySnapshot().catch(console.error);
       return;
@@ -666,10 +681,10 @@ function App({ skipCliArgs = false }) {
     }
     allowWindowCloseRef.current = true;
     appWindow.close();
-  }, [closeTab, isDesktopWindow, pendingCloseTabId]);
+  }, [closeTab, isDesktopWindow, pendingCloseTabIds]);
 
   const handleCancelUnsavedClose = useCallback(() => {
-    setPendingCloseTabId(null);
+    setPendingCloseTabIds(null);
     setUnsavedPromptOpen(false);
   }, []);
 
@@ -688,201 +703,102 @@ function App({ skipCliArgs = false }) {
     });
   }, []);
 
-  /**
-   * 根据拖拽坐标判断当前命中的投放区域，并返回对应高亮矩形。
-   *
-   * @param {{x?: number, y?: number}|null} position 当前拖拽坐标。
-   * @returns {{target: 'explorer'|'editor', rect: DOMRect}|null} 命中的投放区域与高亮矩形。
-   */
-  const getDropRegion = useCallback((position) => {
+  const getDropRegion = useCallback((position, physical = false) => {
     if (!position) return null;
-    const rawX = position.x ?? 0;
-    const rawY = position.y ?? 0;
-    const scale = window.devicePixelRatio || 1;
-    // Tauri 原生拖拽事件在高 DPI 屏幕上可能给出物理像素，而浏览器命中测试
-    // 依赖 CSS 像素，因此这里在必要时做一次兜底换算。
-    const x = rawX > window.innerWidth && scale > 1 ? rawX / scale : rawX;
-    const y = rawY > window.innerHeight && scale > 1 ? rawY / scale : rawY;
-    const target = document.elementFromPoint(x, y);
-    const explorer = target?.closest('.file-tree');
+    const scale = physical ? window.devicePixelRatio || 1 : 1;
+    const hit = document.elementFromPoint(position.x / scale, position.y / scale);
+    const explorer = hit?.closest('.file-tree');
     if (explorer) {
-      const rect = explorer.getBoundingClientRect();
-      return { target: 'explorer', rect };
+      const folder = hit.closest('[data-drop-directory]');
+      const directory = folder?.dataset.dropDirectory || useFileStore.getState().currentDir;
+      if (!directory || isSafUri(directory) || isWebPath(directory)) return null;
+      return { kind: 'explorer', directory, rect: (folder || explorer).getBoundingClientRect() };
     }
-
-    const editor = target?.closest('.editor-content');
-    if (editor) {
-      const rect = editor.getBoundingClientRect();
-      return { target: 'editor', rect };
-    }
-
-    return null;
+    const editor = hit?.closest('.editor-content, .tabbar');
+    return editor ? { kind: 'editor', rect: editor.getBoundingClientRect() } : null;
   }, []);
 
+  const showDropRegion = useCallback((region) => {
+    setFileDrop((previous) => previous?.kind === region?.kind && previous?.directory === region?.directory
+      && ['x', 'y', 'width', 'height'].every((key) => previous?.rect[key] === region?.rect[key]) ? previous : region);
+  }, []);
+  const resolveDropConflict = useCallback((source, path) => new Promise((resolve) => {
+    setDropConflict({ source, path, resolve });
+  }), []);
+  const finishDropConflict = (name) => {
+    dropConflict?.resolve(name);
+    setDropConflict(null);
+  };
+  const handleFileDrop = useCallback((paths, region, effect) => {
+    showDropRegion(null);
+    if (!paths.length || !region) return;
+    if (region.kind === 'editor') {
+      void openDroppedPathsInEditor(paths);
+    } else {
+      transferQueue.current = transferQueue.current.catch(console.error).then(() => moveDroppedPathsToExplorer(paths, {
+        directory: region.directory, effect, resolveConflict: resolveDropConflict,
+      }));
+    }
+  }, [moveDroppedPathsToExplorer, openDroppedPathsInEditor, resolveDropConflict, showDropRegion]);
+
   useEffect(() => {
-    if (isMobileLayout || isAndroid) return undefined;
-
-    let disposed = false;
-    const unlisteners = [];
-
-    /**
-     * 收集异步注册成功后的解绑函数，统一放到卸载阶段回收。
-     *
-     * @param {Promise<Function>} promise Tauri 事件监听注册 Promise。
-     */
-    const register = (promise) => {
-      promise
-        .then((handler) => {
-          if (disposed) {
-            handler();
-          } else {
-            unlisteners.push(handler);
-          }
-        })
-        .catch(console.error);
-    };
-
-    /**
-     * 根据最近一次拖拽事件刷新覆盖层高亮与命中区域状态。
-     *
-     * @param {{position?: {x?: number, y?: number}}} [payload={}] 拖拽事件负载。
-     */
-    const updateDragState = (payload = {}) => {
-      const position = payload.position || lastDragPositionRef.current;
-      if (position) {
-        lastDragPositionRef.current = position;
-        const region = getDropRegion(position);
-        setDragTarget(region?.target || null);
-        setDragOverlayRect(region?.rect || null);
-      }
-      setIsDragOver(true);
-    };
-
-    // 拖拽监听不会影响首屏展示，因此延迟到空闲期再注册，避免一批 Tauri IPC
-    // `listen` 调用抢占首屏交互时间。
-    const idle = window.requestIdleCallback || ((cb) => setTimeout(cb, 1));
-    let cancelled = false;
-    const idleHandle = idle(() => {
-      if (cancelled || disposed) return;
-      registerListeners();
+    if (isAndroid) return;
+    const stopInternal = installReaderFileDrag(document.body, {
+      onMove: (gesture) => showDropRegion(getDropRegion(gesture)),
+      onRelease: (gesture) => handleFileDrop([gesture.id], getDropRegion(gesture), gesture.ctrlKey ? 'copy' : null),
+      onEnd: () => showDropRegion(null),
+      onError: (error) => useNotificationStore.getState().notify('error', t('drag.failed'), String(error)),
     });
-
-    /**
-     * 注册桌面端与浏览器两条拖拽事件通路，并将结果汇聚到统一投放逻辑。
-     */
-    function registerListeners() {
-    // Tauri 原生窗口拖拽事件负责桌面端文件拖入；浏览器事件分支兜底 H5
-    // 与部分 WebView 场景，两条通路最终都汇聚到同一套区域判定逻辑。
+    const clear = () => { lastDragPositionRef.current = null; showDropRegion(null); };
     if (window.__TAURI_INTERNALS__) {
-    register(listen('tauri://drag-enter', (event) => {
-      updateDragState(event.payload);
-    }));
-
-    register(listen('tauri://drag-over', (event) => {
-      updateDragState(event.payload);
-    }));
-
-    register(listen('tauri://drag-leave', () => {
-      setIsDragOver(false);
-      setDragTarget(null);
-      setDragOverlayRect(null);
-      lastDragPositionRef.current = null;
-    }));
-
-    register(listen('tauri://drag-drop', async (event) => {
-      setIsDragOver(false);
-      setDragTarget(null);
-      setDragOverlayRect(null);
-      const payload = event.payload || {};
-      if (!payload.paths?.length) return;
-      const now = Date.now();
-      if (now - lastDropAtRef.current < 300) return;
-      lastDropAtRef.current = now;
-
-      const region = getDropRegion(payload.position || lastDragPositionRef.current);
-      lastDragPositionRef.current = null;
-      if (region?.target === 'explorer') {
-        await moveDroppedPathsToExplorer(payload.paths);
-      } else if (region?.target === 'editor') {
-        await openDroppedPathsInEditor(payload.paths);
-      }
-    }));
+      const update = ({ payload }) => {
+        lastDragPositionRef.current = payload.position;
+        showDropRegion(getDropRegion(payload.position, true));
+      };
+      const listeners = [listen('tauri://drag-enter', update), listen('tauri://drag-over', update),
+        listen('tauri://drag-leave', clear), listen('tauri://drag-drop', ({ payload }) => {
+          const region = getDropRegion(payload.position || lastDragPositionRef.current, true);
+          clear();
+          handleFileDrop(payload.paths || [], region);
+        })];
+      return () => {
+        stopInternal?.();
+        listeners.forEach((subscription) => void subscription.then((unlisten) => unlisten()).catch(console.error));
+      };
     }
-
-    if (typeof window !== 'undefined') {
-      const handleDragOver = (event) => {
-        event.preventDefault();
-        updateDragState({ position: { x: event.clientX, y: event.clientY } });
-      };
-      const handleDrop = async (event) => {
-        event.preventDefault();
-        setIsDragOver(false);
-        const files = Array.from(event.dataTransfer?.files || []);
-        const paths = files.map((file) => file.path).filter(Boolean);
-        if (!paths.length) return;
-        const now = Date.now();
-        if (now - lastDropAtRef.current < 300) return;
-        lastDropAtRef.current = now;
-
-        setDragTarget(null);
-        setDragOverlayRect(null);
-        const region = getDropRegion({ x: event.clientX, y: event.clientY });
-        if (region?.target === 'explorer') {
-          await moveDroppedPathsToExplorer(paths);
-        } else if (region?.target === 'editor') {
-          await openDroppedPathsInEditor(paths);
-        }
-      };
-      const handleDragLeave = (event) => {
-        if (event.clientX <= 0 || event.clientY <= 0) {
-          setIsDragOver(false);
-          setDragTarget(null);
-          setDragOverlayRect(null);
-          lastDragPositionRef.current = null;
-        }
-      };
-
-      window.addEventListener('dragover', handleDragOver);
-      window.addEventListener('drop', handleDrop);
-      window.addEventListener('dragleave', handleDragLeave);
-      unlisteners.push(() => {
-        window.removeEventListener('dragover', handleDragOver);
-        window.removeEventListener('drop', handleDrop);
-        window.removeEventListener('dragleave', handleDragLeave);
-      });
-    }
-    } // end registerListeners
-
-    return () => {
-      cancelled = true;
-      disposed = true;
-      if (window.cancelIdleCallback && typeof idleHandle === 'number') {
-        window.cancelIdleCallback(idleHandle);
-      }
-      unlisteners.forEach((handler) => handler());
+    const over = (event) => {
+      if (!event.dataTransfer?.types.includes('Files')) return;
+      event.preventDefault();
+      const region = getDropRegion({ x: event.clientX, y: event.clientY });
+      event.dataTransfer.dropEffect = region?.kind === 'editor' ? 'copy' : 'none';
+      showDropRegion(region?.kind === 'editor' ? region : null);
     };
-  }, [
-    getDropRegion,
-    isAndroid,
-    isMobileLayout,
-    moveDroppedPathsToExplorer,
-    openDroppedPathsInEditor,
-  ]);
-
-  const dragOverlayTitle = dragTarget === 'explorer'
-    ? t('drag.explorerTitle')
-    : t('drag.editorTitle');
-  const dragOverlayHint = dragTarget === 'explorer'
-    ? t('drag.explorerHint')
-    : t('drag.editorHint');
-
+    const drop = (event) => {
+      clear();
+      const files = Array.from(event.dataTransfer?.files || []);
+      if (!files.length) return;
+      event.preventDefault();
+      if (getDropRegion({ x: event.clientX, y: event.clientY })?.kind !== 'editor') return;
+      void openDroppedBrowserFiles(files);
+    };
+    const leave = (event) => {
+      if (event.clientX <= 0 || event.clientY <= 0 || event.clientX >= innerWidth || event.clientY >= innerHeight) clear();
+    };
+    window.addEventListener('dragover', over);
+    window.addEventListener('drop', drop);
+    window.addEventListener('dragleave', leave);
+    return () => {
+      window.removeEventListener('dragover', over);
+      window.removeEventListener('drop', drop);
+      window.removeEventListener('dragleave', leave);
+    };
+  }, [getDropRegion, handleFileDrop, isAndroid, openDroppedBrowserFiles, showDropRegion, t]);
   return (
     <>
       <div
         className={cn(
           'app',
           hasBackground && 'app--background',
-          isDragOver && 'app--drag-over',
           isMobileLayout && 'app--mobile',
           isAndroid && 'app--android',
           isPortrait && 'app--portrait',
@@ -906,7 +822,7 @@ function App({ skipCliArgs = false }) {
             onCloseSearch={closeSearch}
             onRequestClose={requestWindowClose}
           />
-          <TabBar onRequestCloseTab={requestTabClose} />
+          <TabBar onRequestCloseTab={requestTabClose} onRequestCloseTabs={requestTabsClose} />
           
           {externalConflict && (
             <ExternalFileConflictNotice
@@ -921,29 +837,11 @@ function App({ skipCliArgs = false }) {
           <OutputConsole />
           <Footer />
         </div>
-        {isDragOver && dragTarget && dragOverlayRect && (
-          <div
-            className={`drag-overlay drag-overlay--${dragTarget}`}
-            style={{
-              left: dragOverlayRect.left,
-              top: dragOverlayRect.top,
-              width: dragOverlayRect.width,
-              height: dragOverlayRect.height,
-            }}
-          >
-            <div className="drag-overlay__content">
-              <svg className="drag-overlay__icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6">
-                <path d="M12 3v12" />
-                <path d="m7 10 5 5 5-5" />
-                <path d="M5 19h14" />
-              </svg>
-              <div className="drag-overlay__title">{dragOverlayTitle}</div>
-              <div className="drag-overlay__hint">{dragOverlayHint}</div>
-            </div>
-          </div>
-        )}
+        {fileDrop && <div className={`drag-overlay drag-overlay--${fileDrop.kind}`} aria-hidden="true"
+          style={{ left: fileDrop.rect.left, top: fileDrop.rect.top, width: fileDrop.rect.width, height: fileDrop.rect.height }} />}
       </div>
       <Suspense fallback={null}>
+        {dropConflict && <FileDropConflict key={dropConflict.path} {...dropConflict} resolve={finishDropConflict} />}
         <ExtensionHost />
         {settingsOpen && <SettingsModal open={settingsOpen} onClose={() => setSettingsOpen(false)} />}
         

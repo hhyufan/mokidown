@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import useFileStore from '@store/useFileStore';
 import { openDirectoryIndex, closeDirectoryIndex, readDirectoryPage, getDirectoryContents } from '@utils/tauriApi';
-import { DIRECTORY_CACHE_PAGES, ensureDirectoryRange, getIndexedFile, loadWorkspaceFiles } from './workspaceFiles';
+import { DIRECTORY_CACHE_PAGES, ensureDirectoryRange, getIndexedFile, hideMovedExplorerEntry, isMovedExplorerEntry, loadWorkspaceFiles } from './workspaceFiles';
 
 vi.mock('@utils/tauriApi', () => ({
   isSafUri: (path) => path.startsWith('content:'),
@@ -44,6 +44,19 @@ it('keeps a ten-million-entry listing as a snapshot, fetching only visible pages
   expect(getIndexedFile(index, 20 * 256).name).toBe(`note${20 * 256}.md`);
   expect(getIndexedFile(index, 0)).toBeUndefined();
   expect(readDirectoryPage.mock.calls.every((args) => args[2] === 256)).toBe(true);
+});
+
+it('hides a moved path and its descendants until the new snapshot is ready', async () => {
+  await loadWorkspaceFiles('/notes', { navigate: true });
+  const original = useFileStore.getState().directoryIndex;
+  hideMovedExplorerEntry('C:\\Notes\\moved');
+  const pending = useFileStore.getState().directoryIndex;
+  expect(isMovedExplorerEntry(pending.movedPaths, 'c:/Notes/moved/child.md')).toBe(true);
+  expect(isMovedExplorerEntry(pending.movedPaths, 'C:/Notes/moved-other.md')).toBe(false);
+  expect(pending.pages).toBe(original.pages);
+  expect(pending.total).toBe(original.total);
+  await loadWorkspaceFiles('/notes');
+  expect(useFileStore.getState().directoryIndex.movedPaths).toBeUndefined();
 });
 
 it('coalesces fast scrolling to the latest viewport while one page is in flight', async () => {
