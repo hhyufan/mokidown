@@ -9,7 +9,7 @@
   border-radius: var(--radius-sm);
   box-shadow: var(--shadow-lg);
   padding: 4px 0;
-  min-width: 200px;
+  min-width: 140px;
   font-size: 13px;
   font-family: var(--font-app);
   user-select: none;
@@ -31,7 +31,7 @@
     align-items: center;
     justify-content: space-between;
     padding: 5px 14px;
-    gap: 28px;
+    gap: 18px;
     cursor: pointer;
     color: var(--text);
     transition: background 0.1s;

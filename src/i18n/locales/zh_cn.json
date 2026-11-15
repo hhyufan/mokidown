@@ -946,5 +946,9 @@
   "unsaved.noDiskFile": "此文档尚未保存到磁盘",
   "unsaved.noDiskContent": "无可用的磁盘内容",
   "unsaved.recoveredContent": "待恢复内容",
-  "settings.nav.renderer": "渲染器"
+  "settings.nav.renderer": "渲染器",
+  "settings.shortcuts.group.tabs": "标签页",
+  "settings.shortcuts.action.closeTab": "关闭当前标签",
+  "settings.shortcuts.action.closeOtherTabs": "关闭其他标签",
+  "settings.shortcuts.action.closeAllTabs": "关闭所有标签"
 }
