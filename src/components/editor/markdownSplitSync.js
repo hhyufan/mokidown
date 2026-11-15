@@ -114,6 +114,7 @@ function interpolate(anchors, value, from) {
 
 export function bindMarkdownScroll(editor, preview) {
   let frame = 0;
+  let resizeTimer = null;
   let direction = 0;
   let anchors;
   let expectedPreview;
@@ -140,7 +141,7 @@ export function bindMarkdownScroll(editor, preview) {
   };
 
   const schedule = () => {
-    if (frame) return;
+    if (frame || resizeTimer !== null) return;
     frame = requestAnimationFrame(() => {
       frame = 0;
       if (preview.querySelector('.knowledge-tree-target')) return;
@@ -158,6 +159,13 @@ export function bindMarkdownScroll(editor, preview) {
     });
   };
   const invalidate = () => { anchors = undefined; schedule(); };
+  const invalidateGeometry = () => {
+    anchors = undefined;
+    if (frame) { cancelAnimationFrame(frame); frame = 0; }
+    clearTimeout(resizeTimer);
+    // Measuring all Markdown blocks on every drag frame competes with painting the panes.
+    resizeTimer = setTimeout(() => { resizeTimer = null; schedule(); }, 80);
+  };
   const handlePreview = () => {
     if (expectedPreview === preview.scrollTop) { expectedPreview = undefined; return; }
     direction = 1;
@@ -169,7 +177,7 @@ export function bindMarkdownScroll(editor, preview) {
     if (event.scrollTopChanged) direction = 0;
     schedule();
   });
-  const layout = editor.onDidLayoutChange(invalidate);
+  const layout = editor.onDidLayoutChange(invalidateGeometry);
   const hidden = editor.onDidChangeHiddenAreas(invalidate);
   const content = editor.onDidChangeModelContent(invalidate);
   const reobserve = () => {
@@ -177,7 +185,7 @@ export function bindMarkdownScroll(editor, preview) {
     geometryObserver?.observe(preview);
     for (const block of preview.querySelectorAll(':scope > .md-preview__source-block')) geometryObserver?.observe(block);
   };
-  if (typeof ResizeObserver === 'function') geometryObserver = new ResizeObserver(invalidate);
+  if (typeof ResizeObserver === 'function') geometryObserver = new ResizeObserver(invalidateGeometry);
   const mutations = new MutationObserver((records) => {
     if (records.some((record) => record.type === 'childList' && record.target === preview)) reobserve();
     invalidate();
@@ -188,6 +196,7 @@ export function bindMarkdownScroll(editor, preview) {
   schedule();
   return () => {
     if (frame) cancelAnimationFrame(frame);
+    clearTimeout(resizeTimer);
     preview.removeEventListener('scroll', handlePreview);
     mutations.disconnect();
     geometryObserver?.disconnect();

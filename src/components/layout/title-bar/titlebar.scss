@@ -66,6 +66,7 @@
 
 .titlebar__search {
   flex: 0 1 380px;
+  min-width: 0;
   height: 36px;
   border-radius: 18px;
   border: 1px solid var(--border);
@@ -95,6 +96,7 @@
 
 .titlebar__actions {
   display: flex;
+  flex: 0 0 auto;
   gap: 4px;
   -webkit-app-region: no-drag;
 }
