@@ -100,12 +100,14 @@ export async function beginReaderTabDetachWatch(id, preview) {
   return true;
 }
 
-export async function beginReaderFileDetachWatch(path, name, preview) {
+export async function beginReaderFileDetachWatch(path, name, preview, shellDrop = false) {
   if (!window.__TAURI_INTERNALS__) return false;
   const store = useEditorStore.getState();
-  const existing = store.tabs.find((tab) => tab.path === path);
+  const existing = !shellDrop && store.tabs.find((tab) => tab.path === path);
   const document = existing ? getMarkdownDocument(existing.id, true)?.document : { id: path, path, name };
-  await watchCommand('begin_reader_tab_detach_watch', { document: { ...document, keepSource: true }, preview });
+  await watchCommand('begin_reader_tab_detach_watch', {
+    document: { ...document, keepSource: true }, preview, ...(shellDrop ? { shellDrop } : {}),
+  });
   return true;
 }
 
