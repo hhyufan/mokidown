@@ -4,7 +4,7 @@
  * 该文件负责在 Monaco、Markdown 所见即所得和只读预览之间切换，并集中
  * 处理排版缩放、分栏拖拽与自动保存触发等工作区级交互。
  */
-import { Component, Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { Component, Suspense, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Tooltip } from 'antd';
 import useEditorStore from '@store/useEditorStore';
@@ -241,7 +241,7 @@ function EditorContent() {
   const historyDiff = useHistoryStore((s) => s.diff);
   const monacoRef = useRef(null);
   const containerRef = useRef(null);
-  const isDragging = useRef(false);
+  const stopSplitDrag = useRef(null);
   const [splitRatio, setSplitRatio] = useState(() => useEditorStore.getState().splitRatio);
   const [previewSyncHandle, setPreviewSyncHandle] = useState(null);
   const [splitEditor, setSplitEditor] = useState(null);
@@ -256,6 +256,7 @@ function EditorContent() {
   const isMarkdown = /\.(md|markdown|mdx)$/i.test(activeTabMeta?.name || '');
   const isTree = activeTabMeta?.ext?.toLowerCase() === 'mgtree';
   const hasPreview = isMarkdown || isTree;
+  const isSplit = viewMode === 'split' && hasPreview;
   const handleTreeSourceChange = useCallback((content) => {
     const editor = monacoRef.current?.getEditor?.();
     const model = editor?.getModel();
@@ -300,16 +301,24 @@ function EditorContent() {
    */
   const handleDividerPointerDown = useCallback((e) => {
     if (e.button !== undefined && e.button !== 0) return;
+    const workspace = containerRef.current;
+    if (!workspace || stopSplitDrag.current) return;
     e.preventDefault();
     e.stopPropagation();
 
     const dividerEl = e.currentTarget;
     dividerEl.dataset.resizing = 'true';
-    const vertical = isMobileLayout; // column layout when true → drag vertically
-    isDragging.current = true;
+    const vertical = isMobileLayout;
+    const workspaceBox = workspace.getBoundingClientRect();
+    const dividerBox = dividerEl.getBoundingClientRect();
+    const grabOffset = vertical ? e.clientY - dividerBox.top : e.clientX - dividerBox.left;
+    let frame = 0;
     let finalRatio = useEditorStore.getState().splitRatio;
-    document.body.style.cursor = vertical ? 'row-resize' : 'col-resize';
-    document.body.style.userSelect = 'none';
+    const bodyStyle = document.body.style;
+    const previousCursor = bodyStyle.cursor;
+    const previousUserSelect = bodyStyle.userSelect;
+    bodyStyle.cursor = vertical ? 'row-resize' : 'col-resize';
+    bodyStyle.userSelect = 'none';
     try {
       dividerEl.setPointerCapture(e.pointerId);
     } catch (_) {
@@ -317,24 +326,32 @@ function EditorContent() {
       // 拖拽仍可继续，只是手指移出原始目标后的稳定性会差一些。
     }
 
+    const paint = () => {
+      frame = 0;
+      workspace.style.setProperty('--split-ratio', `${finalRatio * 100}%`);
+      dividerEl.setAttribute('aria-valuenow', Math.round(finalRatio * 100));
+    };
     const onPointerMove = (moveEvt) => {
-      if (!isDragging.current || !containerRef.current) return;
       if (moveEvt.pointerId !== e.pointerId) return;
-      const rect = containerRef.current.getBoundingClientRect();
       const ratio = vertical
-        ? (moveEvt.clientY - rect.top) / rect.height
-        : (moveEvt.clientX - rect.left) / rect.width;
+        ? (moveEvt.clientY - workspaceBox.top - grabOffset) / workspaceBox.height
+        : (moveEvt.clientX - workspaceBox.left - grabOffset) / workspaceBox.width;
       finalRatio = Math.max(0.15, Math.min(0.85, ratio));
-      setSplitRatio(finalRatio);
+      if (!frame) frame = requestAnimationFrame(paint);
     };
 
     const stop = (endEvt) => {
       if (endEvt && endEvt.pointerId !== e.pointerId) return;
-      isDragging.current = false;
+      if (stopSplitDrag.current !== stop) return;
+      stopSplitDrag.current = null;
+      if (endEvt?.type === 'pointerup') onPointerMove(endEvt);
+      if (frame) cancelAnimationFrame(frame);
+      paint();
       delete dividerEl.dataset.resizing;
+      setSplitRatio(finalRatio);
       useEditorStore.getState().setSplitRatio(finalRatio);
-      document.body.style.cursor = '';
-      document.body.style.userSelect = '';
+      bodyStyle.cursor = previousCursor;
+      bodyStyle.userSelect = previousUserSelect;
       try {
         dividerEl.releasePointerCapture(e.pointerId);
       } catch (_) {
@@ -343,12 +360,16 @@ function EditorContent() {
       dividerEl.removeEventListener('pointermove', onPointerMove);
       dividerEl.removeEventListener('pointerup', stop);
       dividerEl.removeEventListener('pointercancel', stop);
+      dividerEl.removeEventListener('lostpointercapture', stop);
     };
 
     dividerEl.addEventListener('pointermove', onPointerMove);
     dividerEl.addEventListener('pointerup', stop);
     dividerEl.addEventListener('pointercancel', stop);
+    dividerEl.addEventListener('lostpointercapture', stop);
+    stopSplitDrag.current = stop;
   }, [isMobileLayout]);
+  useLayoutEffect(() => () => { stopSplitDrag.current?.(); }, [isSplit, isMobileLayout]);
 
   useEffect(() => {
     const container = containerRef.current;
@@ -497,14 +518,15 @@ function EditorContent() {
   return (
     <main className={`editor-content ${isMobileLayout ? 'editor-content--mobile' : ''}`}>
       <div
-        className={`editor-content__workspace ${viewMode === 'split' && isMobileLayout ? 'editor-content__workspace--mobile-split' : ''}`}
+        className={`editor-content__workspace${isSplit ? ' editor-content__workspace--split' : ''}${isSplit && isMobileLayout ? ' editor-content__workspace--mobile-split' : ''}`}
         ref={containerRef}
-        style={viewMode === 'split' ? { '--split-ratio': `${splitRatio * 100}%` } : undefined}
+        style={isSplit ? { '--split-ratio': `${splitRatio * 100}%` } : undefined}
       >
-        {viewMode === 'edit' && (
+        {(viewMode !== 'preview' || !hasPreview) && (
           <MonacoEditor
             ref={monacoRef}
-            className="editor-content__editor"
+            className={`editor-content__editor${isSplit ? ' editor-content__editor--half' : ''}`}
+            onEditorReady={setSplitEditor}
             onAutoSave={triggerAutoSave}
             appHotkeyHandlers={appHotkeyHandlers}
           />
@@ -528,15 +550,8 @@ function EditorContent() {
             </Suspense>
           </RendererErrorBoundary>
         )}
-        {viewMode === 'split' && hasPreview && (
+        {isSplit && (
           <>
-            <MonacoEditor
-              ref={monacoRef}
-              className="editor-content__editor editor-content__editor--half"
-              onEditorReady={setSplitEditor}
-              onAutoSave={triggerAutoSave}
-              appHotkeyHandlers={appHotkeyHandlers}
-            />
             <Tooltip title={t('editor.splitDivider')} placement="top" mouseEnterDelay={0.5}>
               <div
                 className="editor-content__split-divider"
@@ -576,15 +591,6 @@ function EditorContent() {
             </RendererErrorBoundary>
           </>
         )}
-        {!hasPreview && viewMode !== 'edit' && (
-          <MonacoEditor
-            ref={monacoRef}
-            className="editor-content__editor"
-            onAutoSave={triggerAutoSave}
-            appHotkeyHandlers={appHotkeyHandlers}
-          />
-        )}
-
         {!isTree && <div className="editor-content__fade" />}
         <FloatingRunButton />
       </div>

@@ -5,10 +5,13 @@ import { readFileContent } from '@utils/tauriApi';
 import { resolveMarkdownAssetPath } from '@utils/markdownAssets';
 import { companionTreePaths, markdownFences, treeReference } from '@utils/knowledgeTree';
 
-export function useKnowledgeTrees(documentPath, source, enabled = true, includeCompanion = true) {
+const EMPTY_TREES = [];
+const MAX_CACHED_DOCUMENTS = 16;
+
+export function useKnowledgeTreesState(documentPath, source, enabled = true, includeCompanion = true) {
   const tabs = useEditorStore((s) => s.tabs);
   const [revision, setRevision] = useState(0);
-  const [loaded, setLoaded] = useState({ key: '', trees: [] });
+  const [loaded, setLoaded] = useState(() => new Map());
   useEffect(() => {
     if (!enabled) return undefined;
     const refresh = () => setRevision((n) => n + 1);
@@ -30,6 +33,7 @@ export function useKnowledgeTrees(documentPath, source, enabled = true, includeC
   const key = JSON.stringify(descriptors);
   const request = useMemo(() => JSON.parse(key), [key]);
   useEffect(() => {
+    if (!request.length) return undefined;
     let cancelled = false;
     async function load() {
       const trees = [];
@@ -57,10 +61,24 @@ export function useKnowledgeTrees(documentPath, source, enabled = true, includeC
           if (entry.path && !entry.explicit) companionFound = true;
         } catch { /* Missing companion files are expected. */ }
       }
-      if (!cancelled) setLoaded({ key, trees });
+      if (!cancelled) setLoaded((previous) => {
+        const cached = previous.get(key);
+        if (cached?.length === trees.length && cached.every((tree, index) => (
+          tree.key === trees[index].key && tree.path === trees[index].path && tree.source === trees[index].source
+        ))) return previous;
+        const next = new Map(previous);
+        next.delete(key);
+        next.set(key, trees);
+        if (next.size > MAX_CACHED_DOCUMENTS) next.delete(next.keys().next().value);
+        return next;
+      });
     }
     load();
     return () => { cancelled = true; };
   }, [request, key, tabs, revision]);
-  return loaded.key === key ? loaded.trees : [];
+  return { trees: loaded.get(key) ?? EMPTY_TREES, pending: request.length > 0 && !loaded.has(key) };
+}
+
+export function useKnowledgeTrees(documentPath, source, enabled, includeCompanion) {
+  return useKnowledgeTreesState(documentPath, source, enabled, includeCompanion).trees;
 }

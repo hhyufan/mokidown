@@ -58,10 +58,13 @@ const useEditorStore = create(
       sidebarWidth: 280,
       sidebarMinWidth: 220,
       setSidebarMinWidth: (width) => set((s) => {
-        const minimum = Math.max(220, Math.ceil(Number(width) || 220));
+        const minimum = Math.max(220, Math.ceil(width));
         return s.sidebarMinWidth === minimum ? s : { sidebarMinWidth: minimum };
       }),
-      setSidebarWidth: (width) => set((s) => ({ sidebarWidth: Math.max(s.sidebarMinWidth, Math.min(Math.max(640, s.sidebarMinWidth), Number(width) || 280)) })),
+      setSidebarWidth: (width) => set((s) => {
+        const next = Number(width);
+        return { sidebarWidth: Math.max(s.sidebarMinWidth, Math.min(Math.max(640, s.sidebarMinWidth), Number.isFinite(next) ? next : 280)) };
+      }),
       knowledgeJump: null,
       requestKnowledgeJump: (language, index) => set((s) => ({
         knowledgeJump: { tabId: s.activeTabId, language, index, nonce: Date.now() },
@@ -289,26 +292,28 @@ const useEditorStore = create(
       setCharacterCount: (count) => set({ characterCount: count }),
 
       /** ??????????????????????? */
-      closeTab: (tabId) => {
-        // 退出文档时，若内容相对上一次快照有变化，捕获终态——它同时是
-        // 下次进入该文档时的“初始状态”。清理 buffer 前必须读取正文。
-        const closing = get().tabs.find((t) => t.id === tabId);
-        if (closing && closing.path && !/^[a-z][a-z\d+.-]*:\/\//i.test(closing.path) && !closing.path.startsWith('content://')) {
-          historyCapture(closing.path, getBuffer(tabId, closing.content || '')).catch(() => {});
+      closeTab: (tabId) => get().closeTabs([tabId]),
+      closeTabs: (tabIds) => {
+        const { tabs, tabRenderList, activeTabId, externalFileConflicts } = get();
+        const requested = new Set(tabIds);
+        const closing = tabs.filter((tab) => requested.has(tab.id));
+        if (!closing.length) return;
+        const conflicts = new Map(externalFileConflicts);
+        for (const { id, path, content } of closing) {
+          // Take the final history snapshot before releasing the document buffer.
+          if (path && !/^[a-z][a-z\d+.-]*:\/\//i.test(path)) {
+            historyCapture(path, getBuffer(id, content || '')).catch(() => {});
+          }
+          clearBuffer(id);
+          clearMarkdownUndo(id);
+          conflicts.delete(path);
         }
-        clearBuffer(tabId);
-        clearMarkdownUndo(tabId);
-        get().clearExternalFileConflict(closing?.path);
-        const { tabs, activeTabId } = get();
-        const filtered = tabs.filter((t) => t.id !== tabId);
-        let nextActive = activeTabId;
-        if (activeTabId === tabId) {
-          nextActive = filtered.length > 0 ? filtered[filtered.length - 1].id : null;
-        }
+        const remaining = tabs.filter((tab) => !requested.has(tab.id));
         set({
-          tabs: filtered,
-          tabRenderList: get().tabRenderList.filter((t) => t.id !== tabId),
-          activeTabId: nextActive,
+          tabs: remaining,
+          tabRenderList: tabRenderList.filter((tab) => !requested.has(tab.id)),
+          activeTabId: requested.has(activeTabId) ? remaining.at(-1)?.id ?? null : activeTabId,
+          externalFileConflicts: conflicts,
         });
       },
 
