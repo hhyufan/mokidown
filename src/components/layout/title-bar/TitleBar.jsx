@@ -41,11 +41,25 @@ function TitleBar({ searchOpen, onOpenSearch, onCloseSearch, onRequestClose }) {
     // 最大化状态只能从原生窗口层读取；监听 resize 可兼容双击标题栏、
     // 系统快捷键和窗口控制按钮等多种切换入口。
     if (!isDesktopWindow) return undefined;
-    appWindow.isMaximized().then(setIsMaximized);
+    let active = true;
+    let timer;
+    const refresh = () => {
+      appWindow.isMaximized().then((maximized) => {
+        if (active) setIsMaximized(maximized);
+      }).catch(() => {});
+    };
+    refresh();
     const unlisten = appWindow.onResized(() => {
-      appWindow.isMaximized().then(setIsMaximized);
+      if (!active) return;
+      // Live resizing does not need to query the native window on every size event.
+      clearTimeout(timer);
+      timer = setTimeout(refresh, 80);
     });
-    return () => { unlisten.then((fn) => fn()); };
+    return () => {
+      active = false;
+      clearTimeout(timer);
+      unlisten.then((fn) => fn()).catch(() => {});
+    };
   }, [isDesktopWindow]);
 
   useEffect(() => {

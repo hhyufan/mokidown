@@ -28,6 +28,9 @@ export function useBackgroundSurfaces({ enabled, imageUrl, opacity, workspaceSel
     };
     set(root, '--moki-background-image', `url(${JSON.stringify(imageUrl)})`);
     const sync = () => {
+      // The workspace wallpaper already covers the viewport in CSS. Coordinates
+      // are only needed for popups that copy a slice of it.
+      if (!popups.size) return;
       // Read every rectangle before writing any style to avoid repeated forced
       // layout. Workspace geometry stays cached while only a popup moves.
       const rect = workspaceDirty ? workspace.getBoundingClientRect() : null;
@@ -142,18 +145,31 @@ export function useBackgroundSurfaces({ enabled, imageUrl, opacity, workspaceSel
       workspaceDirty ||= workspaceMoved;
       schedule();
     };
-    const viewportResize = () => { workspaceDirty = true; schedule(); };
     document.addEventListener('scroll', scroll, true);
-    window.addEventListener('resize', viewportResize);
-    image.onload = () => { workspaceDirty = true; sync(); };
+    image.onload = () => {
+      if (workspaceSelector === '.app' && image.naturalWidth && image.naturalHeight) {
+        // Keep the wallpaper's raster dimensions stable during viewport changes.
+        // Use at most one screen's longest edge for the composited base layer.
+        const longestEdge = Math.max(image.naturalWidth, image.naturalHeight);
+        const screenEdge = Math.max(window.screen.width, window.screen.height) || longestEdge;
+        const scale = Math.min(1, screenEdge / longestEdge);
+        set(workspace, '--moki-wallpaper-width', `${image.naturalWidth * scale}px`);
+        set(workspace, '--moki-wallpaper-height', `${image.naturalHeight * scale}px`);
+      }
+      workspaceDirty = true;
+      sync();
+    };
     image.src = imageUrl;
     sync();
     return () => {
       observer.disconnect(); positionObserver.disconnect(); resize.disconnect(); image.onload = null;
       if (frame !== null) cancelAnimationFrame(frame);
       document.removeEventListener('scroll', scroll, true);
-      window.removeEventListener('resize', viewportResize);
       for (const name of ['image', 'size', 'x', 'y']) root.style.removeProperty(`--moki-background-${name}`);
+      if (workspaceSelector === '.app') {
+        workspace.style.removeProperty('--moki-wallpaper-width');
+        workspace.style.removeProperty('--moki-wallpaper-height');
+      }
       for (const popup of popups) {
         popup.style.removeProperty('--moki-popup-x'); popup.style.removeProperty('--moki-popup-y');
       }
