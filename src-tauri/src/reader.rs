@@ -1127,7 +1127,9 @@ fn ensure_main(app: &AppHandle) -> Result<WebviewWindow, String> {
     .build()
     .map_err(|e| e.to_string())?;
     #[cfg(windows)]
-    crate::style_window_frame(&main);
+    {
+        crate::style_window_frame(&main);
+    }
     Ok(main)
 }
 
