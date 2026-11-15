@@ -37,7 +37,7 @@
 
   * [x] fix(android): Android 安装包缺少前端 assets，启动一直停在启动图。
 
-* [ ] **新功能（feat）9/15**
+* [ ] **新功能（feat）9/15、**
   * [x] feat(editor): 实现 LaTeX 公式编辑器（已委托 77）。
 
   * [ ] feat(editor): HTML 代码块实时预览（分屏渲染、编辑热刷新、预览端口设置）。
@@ -68,7 +68,7 @@
 
   * [x] feat(android): Android 一键构建脚本（注入 MSVC/NDK，解决 msvcrt.lib 缺失）。
 
-* [ ] **体验优化（opt）11/12**
+* [x] **体验优化（opt）12/12**
   * [x] opt(explorer): 前进/后退/上一级、项目上一级与打开选中的方向键快捷键。
 
   * [x] opt(explorer): 项目搜索上一处/下一处的方向键切换。
@@ -87,7 +87,7 @@
 
   * [x] opt(markdown): 无序列表嵌套改用空心圆区分层级。
 
-  * [ ] opt(editor): 重做脚注引用动画。
+  * [x] opt(editor): 重做脚注引用动画。
 
   * [x] opt(files): 外部修改冲突提示过于频繁、打断编辑，参考开源编辑器改为低打扰策略。
 
