@@ -104,6 +104,29 @@ export const HOTKEY_ACTIONS = [
     label: 'settings.shortcuts.action.commandPalette',
     defaultKeybinding: 'F1',
   },
+  {
+    id: 'closeTab',
+    scope: 'app',
+    group: 'tabs',
+    label: 'settings.shortcuts.action.closeTab',
+    defaultKeybinding: 'Ctrl+KeyW',
+  },
+  {
+    id: 'closeOtherTabs',
+    scope: 'app',
+    group: 'tabs',
+    label: 'settings.shortcuts.action.closeOtherTabs',
+    defaultKeybinding: '',
+    essential: true,
+  },
+  {
+    id: 'closeAllTabs',
+    scope: 'app',
+    group: 'tabs',
+    label: 'settings.shortcuts.action.closeAllTabs',
+    defaultKeybinding: '',
+    essential: true,
+  },
 ];
 
 /** 按 id 索引的动作表。 */
@@ -115,7 +138,7 @@ export const DEFAULT_HOTKEYS = Object.freeze(
 );
 
 /** 设置界面中分组的展示顺序。 */
-export const HOTKEY_GROUP_ORDER = ['file', 'navigation', 'window', 'editor'];
+export const HOTKEY_GROUP_ORDER = ['file', 'navigation', 'tabs', 'window', 'editor'];
 
 /**
  * 合并用户配置与默认值，补齐缺失或无效的条目。
