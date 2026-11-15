@@ -13,8 +13,9 @@ export default function FileDropConflict({ source, path, resolve }) {
     return dot > 0 ? `${original.slice(0, dot)} (2)${original.slice(dot)}` : `${original} (2)`;
   });
   const sourceName = source.split(/[\\/]/).pop();
-  const dot = sourceName.lastIndexOf('.');
-  const extension = dot > 0 ? sourceName.slice(dot + 1) : '';
+  const iconName = name.trim() || sourceName;
+  const dot = iconName.lastIndexOf('.');
+  const extension = dot > 0 ? iconName.slice(dot + 1) : '';
   const valid = name.trim() && !/[\\/:*?"<>|]/.test(name) && !/[. ]$/.test(name)
     && Array.from(name).every((character) => character.charCodeAt(0) >= 32);
   const submit = () => { if (valid) resolve(name.trim()); };
@@ -23,7 +24,7 @@ export default function FileDropConflict({ source, path, resolve }) {
     onOk={submit} onCancel={() => resolve(null)} okButtonProps={{ disabled: !valid }}>
     <p className="file-drop-conflict__hint">{t('drag.conflictDetails')}</p>
     <div className="file-drop-conflict__row">
-      <FileTypeIcon fileName={sourceName} extension={extension} size={18} />
+      <FileTypeIcon fileName={iconName} extension={extension} size={18} />
       <Input className="file-drop-conflict__input" autoFocus value={name} aria-label={t('drag.newName')}
         onChange={(event) => setName(event.target.value)}
         onPressEnter={(event) => { if (!event.nativeEvent.isComposing) submit(); }} />
