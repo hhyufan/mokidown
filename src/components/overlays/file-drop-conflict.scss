@@ -1,0 +1,19 @@
+.file-drop-conflict {
+  .file-drop-conflict__hint {
+    margin: 0 0 12px;
+    color: var(--text-sec);
+    line-height: 1.6;
+  }
+
+  .file-drop-conflict__row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+
+    .file-drop-conflict__input {
+      flex: 1;
+      min-width: 0;
+      max-width: 300px;
+    }
+  }
+}
