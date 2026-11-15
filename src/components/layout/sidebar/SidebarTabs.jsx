@@ -7,36 +7,29 @@ export default function SidebarTabs({ items, activeId, onChange, onMinWidthChang
   const { t } = useTranslation();
   const listRef = useRef(null);
   const sliderRef = useRef(null);
+  const sizeProbe = useRef(null);
   const buttons = useRef(new Map());
-  const measurementKey = JSON.stringify(items.map(({ id, label, visible }) => [id, label, visible]));
+  const position = useRef(null);
+  const animation = useRef(null);
+  const visibleIds = items.filter((item) => item.visible).map((item) => item.id).join(' ');
 
   useLayoutEffect(() => {
-    const list = listRef.current;
-    if (!list || !onMinWidthChange) return undefined;
-    const visible = [...buttons.current.values()].filter((button) => !button.disabled);
+    const probe = sizeProbe.current;
+    const sidebar = probe?.closest('.sidebar');
+    if (!probe || !sidebar) return undefined;
     const measure = () => {
-      let naturalWidth = 0;
-      for (const button of visible) {
-        const style = getComputedStyle(button);
-        const label = button.lastElementChild;
-        const icon = button.firstElementChild;
-        const width = label.scrollWidth + icon.getBoundingClientRect().width
-          + (parseFloat(style.columnGap) || 0) + parseFloat(style.paddingLeft) + parseFloat(style.paddingRight);
-        naturalWidth = Math.max(naturalWidth, Math.ceil(width) + 2);
-        button.parentElement.style.setProperty('--tab-natural-width', `${Math.ceil(width) + 2}px`);
-      }
-      const style = getComputedStyle(list);
-      const spacing = ['marginLeft', 'marginRight', 'paddingLeft', 'paddingRight'].reduce((total, key) => total + (parseFloat(style[key]) || 0), 0);
-      onMinWidthChange(naturalWidth * visible.length + spacing + 1);
+      const style = getComputedStyle(sidebar);
+      const insets = ['paddingLeft', 'paddingRight', 'borderLeftWidth', 'borderRightWidth']
+        .reduce((total, key) => total + (parseFloat(style[key]) || 0), 0);
+      const width = probe.getBoundingClientRect().width;
+      if (width) onMinWidthChange(width + insets);
     };
     measure();
-    let stopped = false;
-    document.fonts?.ready.then(() => { if (!stopped) measure(); });
-    document.fonts?.addEventListener('loadingdone', measure);
-    const observer = typeof ResizeObserver === 'undefined' ? null : new ResizeObserver(measure);
-    visible.forEach((button) => observer?.observe(button.lastElementChild));
-    return () => { stopped = true; observer?.disconnect(); document.fonts?.removeEventListener('loadingdone', measure); };
-  }, [measurementKey, onMinWidthChange]);
+    if (typeof ResizeObserver === 'undefined') return undefined;
+    const observer = new ResizeObserver(measure);
+    observer.observe(probe);
+    return () => observer.disconnect();
+  }, [onMinWidthChange]);
 
   useLayoutEffect(() => {
     const list = listRef.current;
@@ -46,18 +39,37 @@ export default function SidebarTabs({ items, activeId, onChange, onMinWidthChang
     const update = () => {
       const container = list.getBoundingClientRect();
       const target = active.getBoundingClientRect();
-      slider.style.width = `${target.width}px`;
-      slider.style.transform = `translateX(${target.left - container.left + list.scrollLeft - 5}px)`;
+      const next = { id: activeId, left: target.left - container.left + list.scrollLeft - slider.offsetLeft, width: target.width };
+      if (next.width <= 0) return;
+      const previous = position.current;
+      if (previous?.id === next.id && previous.left === next.left && previous.width === next.width) return;
+      const switched = previous && previous.id !== next.id;
+      const before = switched ? getComputedStyle(slider) : null;
+      const start = before && { transform: before.transform, width: before.width };
+      animation.current?.cancel();
+      position.current = next;
+      slider.style.width = `${next.width}px`;
+      slider.style.transform = `translateX(${next.left}px)`;
+      if (start && !window.matchMedia?.('(prefers-reduced-motion: reduce)').matches) {
+        animation.current = slider.animate?.([start, { transform: slider.style.transform, width: slider.style.width }],
+          { duration: 240, easing: 'cubic-bezier(.2,.8,.2,1)' });
+      }
+      if (switched && list.scrollWidth > list.clientWidth) {
+        if (target.left < container.left) list.scrollLeft += target.left - container.left;
+        else if (target.right > container.right) list.scrollLeft += target.right - container.right;
+      }
     };
     update();
     if (typeof ResizeObserver === 'undefined') return undefined;
     const observer = new ResizeObserver(update);
     observer.observe(list);
-    observer.observe(active);
+    buttons.current.forEach((button) => { if (!button.disabled) observer.observe(button); });
     return () => observer.disconnect();
-  }, [activeId]);
+  }, [activeId, visibleIds]);
+  useLayoutEffect(() => () => animation.current?.cancel(), []);
 
-  return <div ref={listRef} className="sidebar__tabs" role="tablist" aria-label={t('sidebar.tabs')}>
+  return <>
+  <div ref={listRef} className="sidebar__tabs" role="tablist" aria-label={t('sidebar.tabs')}>
     <div ref={sliderRef} className="sidebar__tab-slider" aria-hidden="true" />
     {items.map((item) => <div key={item.id}
       className={cn('sidebar__tab-slot', !item.visible && 'sidebar__tab-slot--hidden')}
@@ -70,5 +82,29 @@ export default function SidebarTabs({ items, activeId, onChange, onMinWidthChang
         <Icon id={item.id} /><span>{item.label}</span>
       </button></Tooltip>
     </div>)}
-  </div>;
+  </div>
+  <div className="sidebar__size-probe" aria-hidden="true">
+    <div className="sidebar__size-probe-content" ref={sizeProbe}>
+      <div className="sidebar__tabs-measure">
+        {items.map(({ id, label }) => (
+          <span className="sidebar__tab-measure-button" key={id}><Icon id={id} /><span data-measure-label={label} /></span>
+        ))}
+      </div>
+      {['sidebar.explorer.title', 'sidebar.project.title'].map((label) => (
+        <div className="sidebar__toolbar" key={label}>
+          <span className="sidebar__toolbar-label sidebar__explorer-heading"><span data-measure-label={t(label)} /><span className="sidebar__mode-toggle" /></span>
+          <span className="stb" /><span className="stb" /><span className="stb" />
+          <span className="stb-sep" /><span className="stb" />
+        </div>
+      ))}
+      <div className="file-tree__nav file-tree__nav--project">
+        <span className="file-tree__nav-btn" /><span className="file-tree__nav-btn" /><span className="file-tree__nav-btn" />
+        <span className="file-tree__nav-sep" />
+        <span className="file-tree__nav-btn" /><span className="file-tree__nav-btn" />
+        <span className="file-tree__nav-sep" />
+        <span className="file-tree__nav-btn" /><span className="file-tree__nav-btn" /><span className="file-tree__nav-btn" />
+      </div>
+    </div>
+  </div>
+  </>;
 }

@@ -4,7 +4,7 @@
  * 该文件组织 Explorer、Outline、Recent 三种侧边栏视图，以及底部主题、
  * 用户和设置等全局入口，是编辑器左侧工作流的主装配层。
  */
-import { useState, useRef, useCallback, useMemo, useEffect } from 'react';
+import { useState, useRef, useCallback, useMemo, useEffect, useLayoutEffect } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Dropdown, Tooltip, Button, Tag } from 'antd';
 import useEditorStore from '@store/useEditorStore';
@@ -19,7 +19,7 @@ import OutlineView from './outline/OutlineView';
 import SidebarResizer from './SidebarResizer';
 import SidebarTabs from './SidebarTabs';
 import KnowledgeTree from '@components/editor/KnowledgeTree';
-import { useKnowledgeTrees } from '@hooks/useKnowledgeTrees';
+import { useKnowledgeTreesState } from '@hooks/useKnowledgeTrees';
 import { useOpenTreeEditor } from '@hooks/useOpenTreeEditor';
 import { useEditorBufferContent } from '@hooks/useEditorBufferContent';
 import Timeline from '@components/history/Timeline';
@@ -330,16 +330,21 @@ function SidebarTabIcon({ id }) {
  */
 function Sidebar({ onOpenSettings }) {
   const { t } = useTranslation();
-  const { sidebarVisible, sidebarView, setSidebarView } = useEditorStore();
+  const sidebarVisible = useEditorStore((s) => s.sidebarVisible);
+  const sidebarView = useEditorStore((s) => s.sidebarView);
+  const setSidebarView = useEditorStore((s) => s.setSidebarView);
   const activeTab = useEditorStore((s) => s.tabs.find((tab) => tab.id === s.activeTabId));
   const sidebarWidth = useEditorStore((s) => s.sidebarWidth);
   const sidebarMinWidth = useEditorStore((s) => s.sidebarMinWidth);
   const setSidebarMinWidth = useEditorStore((s) => s.setSidebarMinWidth);
   const source = useEditorBufferContent(activeTab?.id, activeTab?.content || '');
   const isMarkdown = /\.(md|markdown|mdx)$/i.test(activeTab?.name || '');
-  const trees = useKnowledgeTrees(activeTab?.path || '', source, isMarkdown);
+  const { trees, pending } = useKnowledgeTreesState(activeTab?.path || '', source, isMarkdown);
+  const lastKnowledgeVisible = useRef(false);
+  const knowledgeVisible = isMarkdown && (trees.length > 0 || (pending && lastKnowledgeVisible.current));
+  useLayoutEffect(() => { lastKnowledgeVisible.current = knowledgeVisible; }, [knowledgeVisible]);
   const openTreeEditor = useOpenTreeEditor();
-  const effectiveView = sidebarView === 'knowledge' && !trees.length ? (isMarkdown ? 'outline' : 'explorer')
+  const effectiveView = sidebarView === 'knowledge' && !knowledgeVisible ? (isMarkdown ? 'outline' : 'explorer')
     : sidebarView === 'outline' && !isMarkdown ? 'explorer' : sidebarView;
   const { toggleTheme } = useThemeStore();
 
@@ -362,7 +367,7 @@ function Sidebar({ onOpenSettings }) {
   const tabs = [
     { id: 'explorer', label: t('sidebar.tab.explorer'), visible: true },
     { id: 'outline', label: t('sidebar.tab.outline'), visible: isMarkdown },
-    { id: 'knowledge', label: t('knowledgeTree.title'), visible: trees.length > 0 },
+    { id: 'knowledge', label: t('knowledgeTree.title'), visible: knowledgeVisible },
     { id: 'recent', label: t('sidebar.tab.recent'), visible: true },
   ];
 
@@ -401,7 +406,8 @@ function Sidebar({ onOpenSettings }) {
         <AppMark size={20} variant="wordmark" className="sidebar__wordmark" />
       </div>
 
-      <SidebarTabs items={tabs} activeId={effectiveView} onChange={setSidebarView} onMinWidthChange={setSidebarMinWidth} renderIcon={SidebarTabIcon} />
+      <SidebarTabs items={tabs} activeId={effectiveView} onChange={setSidebarView}
+        onMinWidthChange={setSidebarMinWidth} renderIcon={SidebarTabIcon} />
 
       <div key={effectiveView} className="sidebar__content sidebar__content--enter">
         {effectiveView === 'knowledge' && <div className="knowledge-tree__list">
