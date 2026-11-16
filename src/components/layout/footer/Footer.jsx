@@ -91,12 +91,18 @@ function Footer() {
   const [openDropdown, setOpenDropdown] = useState(null);
   const bcScrollRef = useRef(null);
   const bcThumbRef = useRef(null);
+  const bcOverflowRef = useRef(false);
 
   // 底部路径面包屑的横向滚动与自定义滚动条同步。
   const updateBcScrollbar = useCallback(() => {
     const el = bcScrollRef.current;
     const thumb = bcThumbRef.current;
     if (!el || !thumb) return;
+    // 空间足够时居中；溢出时退到 flex-start，并回到最左侧，保证盘符可见。
+    const overflow = el.scrollWidth > el.clientWidth + 1;
+    el.classList.toggle('footer__breadcrumb-path--overflow', overflow);
+    if (overflow && !bcOverflowRef.current) el.scrollLeft = 0;
+    bcOverflowRef.current = overflow;
     const ratio = el.clientWidth / el.scrollWidth;
     if (ratio >= 1) {
       thumb.style.display = 'none';
