@@ -295,12 +295,13 @@
 @media (max-width: 768px) {
   .tabbar {
     height: 48px;
-    align-items: center;
+    // 标签底部平贴标签栏，直接衔接编辑器，不再垂直居中留出空隙。
+    align-items: flex-end;
     overflow: hidden;
   }
 
   .tabbar__tabs {
-    align-items: center;
+    align-items: flex-end;
     padding: 0 2px;
   }
 
@@ -310,8 +311,9 @@
     height: 38px;
     max-width: 180px;
     padding: 0 12px;
-    border-radius: var(--radius-sm);
-    border-bottom: 1px solid transparent;
+    // 与宽屏一致：只保留顶部圆角，底部平贴标签栏，避免底部圆角被裁出白边。
+    border-radius: var(--radius-sm) var(--radius-sm) 0 0;
+    border-bottom: none;
 
     &--active::after,
     &--renaming::after {
