@@ -82,8 +82,11 @@
   }
 }
 @media (max-width: 768px) {
-  // 抽屉覆盖正文时保留实色，避免两层内容重叠。
-  .app--background .sidebar { background: var(--sidebar); }
+  // 抽屉侧栏同样使用玻璃底，让壁纸背景透出；不再强制整块实色。
+  .app--background .sidebar {
+    background: color-mix(in srgb, var(--sidebar) 78%, transparent);
+    backdrop-filter: blur(18px) saturate(1.1);
+  }
 }
 
 .drag-overlay {
@@ -120,8 +123,8 @@
     z-index: 30;
     display: block;
     border: 0;
-    background: rgba(0, 0, 0, 0.36);
-    backdrop-filter: blur(2px);
+    background: rgba(0, 0, 0, 0.16);
+    backdrop-filter: blur(1px);
   }
 
   .app--mobile .drag-overlay {
