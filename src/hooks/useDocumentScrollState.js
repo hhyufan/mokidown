@@ -9,6 +9,11 @@ export function useDocumentScrollState(ref, tabId, surface, ready = true) {
     if (!element || !tabId || !ready) return undefined;
     const saved = getDocumentViewState(tabId, surface);
     let restoring = Boolean(saved && (saved.top > 0 || saved.left > 0));
+    let offset = saved;
+    const readOffset = () => {
+      if (!restoring && element.clientHeight) offset = { top: element.scrollTop, left: element.scrollLeft };
+      return offset;
+    };
     const apply = () => {
       if (!restoring) return;
       element.scrollTop = saved.top;
@@ -21,9 +26,12 @@ export function useDocumentScrollState(ref, tabId, surface, ready = true) {
     const observer = new MutationObserver(apply);
     if (restoring) observer.observe(element, { childList: true, subtree: true });
     const cancelRestore = () => { restoring = false; observer.disconnect(); };
-    const save = () => { if (!restoring) requestDocumentViewStateSave(); };
-    const stopView = registerDocumentViewState(surface, () => tabId, () =>
-      restoring ? saved : { top: element.scrollTop, left: element.scrollLeft });
+    const save = () => {
+      if (restoring || !element.clientHeight) return;
+      readOffset();
+      requestDocumentViewStateSave();
+    };
+    const stopView = registerDocumentViewState(surface, () => tabId, readOffset);
     element.addEventListener('scroll', save, { passive: true });
     element.addEventListener('wheel', cancelRestore, { passive: true });
     element.addEventListener('pointerdown', cancelRestore);
