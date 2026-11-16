@@ -12,6 +12,7 @@ import { useRuntimeLogStore } from '@/services/runtimeLogs';
 import { getDirectoryContents, isSafUri, safDisplayName } from '@utils/tauriApi';
 import { isWebDemo, notifyWebDemo } from '@utils/webDemo';
 import { splitPath, buildFullPath } from '@utils/pathUtils';
+import { beginWindowDrag, isWindowDragExcluded } from '@utils/windowDrag';
 
 import FileTypeIcon from '@components/ui/FileTypeIcon';
 import TaskStatusIndicator from '@components/ui/TaskStatusIndicator';
@@ -211,7 +212,7 @@ function Footer() {
   }, [directoryContents, handleFileItemClick, t]);
 
   return (
-    <footer className="footer">
+    <footer className="footer" onMouseDown={(event) => { if (!isWindowDragExcluded(event.target)) beginWindowDrag(event); }}>
       <div className="footer__left">
         <Tooltip title={t('topbar.toggleSidebar')} placement="top" mouseEnterDelay={0.3}>
         <button type="button" className="footer__toggle-sidebar" aria-label={t('topbar.toggleSidebar')} onClick={toggleSidebar}>

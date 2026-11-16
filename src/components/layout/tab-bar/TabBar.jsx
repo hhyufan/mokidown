@@ -31,6 +31,7 @@ import './tabbar.scss';
 import '@/assets/styles/rename-input.scss';
 import { installTabStripWheel } from './tabStripWheel';
 import { installTabStripDrag } from './tabStripDrag';
+import { beginWindowDrag, isWindowDragExcluded } from '@utils/windowDrag';
 
 const TAB_MOTION = { duration: 180, easing: 'cubic-bezier(.2,.75,.25,1)' };
 
@@ -271,7 +272,7 @@ function TabBar({ onRequestCloseTab, onRequestCloseTabs }) {
   }, []);
 
   return (
-    <div className="tabbar">
+    <div className="tabbar" onMouseDown={(event) => { if (!isWindowDragExcluded(event.target)) beginWindowDrag(event); }}>
       <EditorContextMenu menu={menu} onClose={closeMenu} />
       <div className="tabbar__actions tabbar__actions--left">
         <Tooltip title={t('tabbar.scrollLeft')} placement="bottom" mouseEnterDelay={0.3}>
