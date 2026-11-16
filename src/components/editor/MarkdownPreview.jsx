@@ -21,6 +21,7 @@ import {
 import { useTranslation } from 'react-i18next';
 import { rehypeMarkdownSections } from './markdownSections';
 import { clearFoldAnimations, updateFoldControl } from './markdownFoldControl';
+import { observeFoldDrawers } from './markdownFoldDrawer';
 import { useEditorBufferContent } from '@hooks/useEditorBufferContent';
 import { useDocumentScrollState } from '@hooks/useDocumentScrollState';
 import { useMarkdownAnalysis } from '@hooks/useMarkdownAnalysis';
@@ -320,7 +321,7 @@ const cancelIdle =
  * @param {object} props 组件属性。
  * @returns {JSX.Element} Markdown 预览面板。
  */
-const MarkdownPreview = forwardRef(function MarkdownPreview({ className, foldedRanges = noFolds, onToggleFold }, ref) {
+const MarkdownPreview = forwardRef(function MarkdownPreview({ className, foldedRanges = noFolds, onToggleFold, visible = true, onReady }, ref) {
   const { t } = useTranslation();
   const footnoteOrigins = useRef(new WeakMap());
   const activeTabId = useEditorStore((s) => s.activeTabId);
@@ -366,6 +367,9 @@ const MarkdownPreview = forwardRef(function MarkdownPreview({ className, foldedR
   const [localFolds, setLocalFolds] = useState({ tabId: null, lines: new Set() });
   const localLines = localFolds.tabId === activeTabId ? localFolds.lines : null;
   const foldAnimations = useRef(new Map());
+  useLayoutEffect(() => {
+    if (containerRef.current) return observeFoldDrawers(containerRef.current);
+  }, [activeTabId]);
   useEffect(() => {
     const pending = foldAnimations.current;
     return () => clearFoldAnimations(pending);
@@ -405,7 +409,7 @@ const MarkdownPreview = forwardRef(function MarkdownPreview({ className, foldedR
     }));
   }, []);
   const jumpToCode = useCodeBlockNavigation(activeTabId, resolveCodeTarget, !isAnalyzing && content === processedContent, beforeCodeJump);
-  useDocumentScrollState(containerRef, activeTabId, 'preview', !isAnalyzing && content === processedContent);
+  useDocumentScrollState(containerRef, activeTabId, 'preview', visible && !isAnalyzing && content === processedContent);
 
   // Prism 的代码块配色随应用样式表一起打包（见 `@styles/prism-theme.scss`），
   // 这里不再在运行时插入/移除 `<link id="prism-theme">`：那个元素此前由本组件和
@@ -681,6 +685,9 @@ const MarkdownPreview = forwardRef(function MarkdownPreview({ className, foldedR
   }), [activeTabId, activeTab?.name, documentPath, foldControl, handleLinkClick, jumpToCode]);
 
   const isStale = isAnalyzing || content !== processedContent;
+  useLayoutEffect(() => {
+    if (!isStale) onReady?.();
+  }, [isStale, onReady]);
   const fontSize = previewZoomSync ? editorFontSize : (previewFontSize || editorFontSize);
   const lineHeight = previewZoomSync ? editorLineHeight : (previewLineHeight || editorLineHeight);
 
@@ -709,4 +716,4 @@ const MarkdownPreview = forwardRef(function MarkdownPreview({ className, foldedR
   );
 });
 
-export default MarkdownPreview;
+export default memo(MarkdownPreview);
