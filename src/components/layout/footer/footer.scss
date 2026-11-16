@@ -102,7 +102,7 @@
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
-    text-align: left;
+    text-align: center;
   }
 }
 
@@ -114,8 +114,13 @@
   max-width: 100%;
   scrollbar-width: none;
   -ms-overflow-style: none;
-  justify-content: flex-start;
+  justify-content: center;
   &::-webkit-scrollbar { display: none; }
+
+  // 溢出时居中会把左侧裁掉，改为从左侧开始。
+  &--overflow {
+    justify-content: flex-start;
+  }
 }
 
 // 页脚面包屑的自定义横向滚动条
