@@ -9,6 +9,7 @@ import { useTranslation } from 'react-i18next';
 import { listen } from '@tauri-apps/api/event';
 import { appWindow, getCliArgs, onFileChanged, onOpenPaths, historyCapture, isSafUri, isWebPath, startFileWatching } from '@utils/tauriApi';
 import { isImeComposing } from '@utils/keyboard';
+import { beginWindowDrag, isWindowDragExcluded } from '@utils/windowDrag';
 import { rememberDiskBaseline } from '@/services/localFileGuard';
 import { prepareReaderDragPreview, receiveReaderDocument } from '@/services/readerWindows';
 import { installReaderFileDrag } from '@/services/readerFileDrag';
@@ -796,9 +797,16 @@ function App({ skipCliArgs = false }) {
       window.removeEventListener('dragleave', leave);
     };
   }, [getDropRegion, handleFileDrop, isAndroid, openDroppedBrowserFiles, showDropRegion, t]);
+  const handleAppMouseDown = (event) => {
+    if (!isDesktopWindow || event.button !== 0 || event.defaultPrevented) return;
+    if (isWindowDragExcluded(event.target)) return;
+    beginWindowDrag(event);
+  };
+
   return (
     <>
       <div
+        onMouseDown={handleAppMouseDown}
         className={cn(
           'app',
           hasBackground && 'app--background',

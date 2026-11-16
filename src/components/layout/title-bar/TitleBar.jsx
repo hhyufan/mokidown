@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Tooltip } from 'antd';
 import { appWindow } from '@utils/tauriApi';
+import { beginWindowDrag, isWindowDragExcluded } from '@utils/windowDrag';
 import useEditorStore from '@store/useEditorStore';
 import { useResponsiveLayout } from '@hooks/useResponsiveLayout';
 import SearchDropdown from './SearchDropdown';
@@ -87,17 +88,13 @@ function TitleBar({ searchOpen, onOpenSearch, onCloseSearch, onRequestClose }) {
 
   // A native CSS drag region handles right-clicks before the WebView can cancel
   // its system menu. Start only left-button drags through Tauri instead.
-  const handleDragMouseDown = (event) => {
-    if (!isDesktopWindow || event.button !== 0) return;
-    event.preventDefault();
-    const action = event.detail === 2
-      ? (isMaximized ? appWindow.unmaximize() : appWindow.maximize())
-      : appWindow.startDragging();
-    action.catch(() => {});
+  const handleHeaderMouseDown = (event) => {
+    if (!isDesktopWindow || isWindowDragExcluded(event.target)) return;
+    beginWindowDrag(event, { maximized: isMaximized });
   };
 
   return (
-    <header className={`titlebar ${!isDesktopWindow ? 'titlebar--mobile' : ''}`}>
+    <header className={`titlebar ${!isDesktopWindow ? 'titlebar--mobile' : ''}`} onMouseDown={handleHeaderMouseDown}>
       <TbBtn title={t('topbar.toggleSidebar')} onClick={toggleSidebar}>
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
           <rect x="3" y="3" width="18" height="18" rx="2" />
@@ -107,7 +104,7 @@ function TitleBar({ searchOpen, onOpenSearch, onCloseSearch, onRequestClose }) {
 
       <SearchDropdown open={searchOpen} onOpen={onOpenSearch} onClose={onCloseSearch} />
 
-      <div className="titlebar__drag" onMouseDown={handleDragMouseDown} onContextMenu={(event) => event.preventDefault()} />
+      <div className="titlebar__drag" onContextMenu={(event) => event.preventDefault()} />
 
       {isDesktopWindow && (
         <div className="titlebar__actions">
