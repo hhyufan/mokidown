@@ -17,6 +17,7 @@ use std::time::{SystemTime, UNIX_EPOCH};
 use tauri::{AppHandle, Emitter, Manager};
 mod directory_index;
 mod extensions;
+mod file_drop;
 mod hotkeys;
 mod language_plugins;
 mod lsp;
@@ -29,8 +30,8 @@ mod script_runner;
 mod search;
 mod startup;
 mod startup_gate;
-mod file_drop;
 mod text_file;
+mod webview_defaults;
 
 /// 返回给前端的轻量级文件系统条目元数据，
 /// 用于资源管理器界面展示文件和目录。
@@ -1723,6 +1724,8 @@ pub fn run() {
 
     #[allow(unused_mut)]
     let mut builder = tauri::Builder::default()
+        .enable_macos_default_menu(false)
+        .plugin(webview_defaults::plugin())
         .manage(startup::StartupState::default())
         .manage(reader::ReaderState::default())
         .plugin(tauri_plugin_fs::init())
