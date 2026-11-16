@@ -54,6 +54,57 @@ function foldGeometry(button) {
   });
 }
 
+for (const [mode, harness] of [['Milkdown', 'milkdown-flow'], ['split preview', 'preview']]) {
+test(`${mode} task drawers keep the branch connected during motion`, async ({ page }) => {
+  const source = '- [ ] Parent\n  - [ ] Child one\n  - [x] Child two\n\nAfter';
+  await page.goto(`/tests/${harness}-harness.html?content=${encodeURIComponent(source)}`);
+  await page.addStyleTag({ content: '.md-preview { --border: #ff00ff; background: white; }' });
+  const item = page.locator('.md-preview .md-preview__foldable-item').first();
+  await expect(item.locator(':scope > ul')).toBeVisible();
+  const childList = await item.locator(':scope > ul').elementHandle();
+  const exercise = async () => {
+    await item.locator('button.md-preview__fold').first().evaluate((control) => control.click());
+    const motion = await childList.evaluateHandle((list) => list.getAnimations().find(
+      (animation) => animation.effect.getKeyframes().some((frame) => frame.height),
+    ));
+    const result = await motion.evaluate((animation) => {
+      animation.pause();
+      const frames = animation.effect.getKeyframes();
+      animation.currentTime = 100;
+      const list = animation.effect.target;
+      const box = list.getBoundingClientRect();
+      const checkbox = list.parentElement.querySelector('.md-preview__task-checkbox').getBoundingClientRect();
+      const y = Math.ceil(checkbox.bottom) + 1;
+      return {
+        start: parseFloat(frames[0].height), end: parseFloat(frames.at(-1).height), middle: box.height,
+        clip: { x: Math.floor(box.left) - 1, y, width: 4, height: Math.floor(box.top) - y + 2 },
+      };
+    });
+    expect(result.middle).toBeGreaterThan(Math.min(result.start, result.end));
+    expect(result.middle).toBeLessThan(Math.max(result.start, result.end));
+    expect(result.clip.height).toBeGreaterThan(2);
+    const screenshot = await page.screenshot({ clip: result.clip, scale: 'css' });
+    const continuous = await page.evaluate(async (base64) => {
+      const image = await createImageBitmap(await (await fetch(`data:image/png;base64,${base64}`)).blob());
+      const context = new OffscreenCanvas(image.width, image.height).getContext('2d');
+      context.drawImage(image, 0, 0);
+      const { data } = context.getImageData(0, 0, image.width, image.height);
+      return Array.from({ length: image.height }, (_, y) => (
+        Array.from({ length: image.width }, (_, x) => data[(y * image.width + x) * 4 + 1]).some((green) => green < 180)
+      )).every(Boolean);
+    }, screenshot.toString('base64'));
+    expect(continuous).toBe(true);
+    await motion.evaluate((animation) => animation.finish());
+    await motion.dispose();
+  };
+  await exercise();
+  await expect(item.locator(':scope > ul')).toBeHidden();
+  await exercise();
+  await expect(item.locator(':scope > ul')).toBeVisible();
+  if (mode === 'Milkdown') expect(await page.evaluate(() => window.trial.dirty())).toBe(false);
+});
+}
+
 function expectHeadingArrows(first, second) {
   for (const arrow of [first, second]) {
     expect(Math.abs(arrow.height - arrow.lineHeight)).toBeLessThan(.1);
