@@ -17,7 +17,10 @@ vi.mock('@utils/tauriApi', () => ({ openExternal: vi.fn(async () => {}) }));
 vi.mock('@hooks/useFileManager', () => ({ useFileManager: () => ({ triggerAutoSave: vi.fn() }) }));
 vi.mock('@hooks/useResponsiveLayout', () => ({ useResponsiveLayout: () => ({ isMobileLayout: false }) }));
 vi.mock('@components/editor/LazyMonacoEditor', () => ({ default: React.forwardRef(({ className }, _ref) => <div data-testid="source" className={className}>source</div>) }));
-vi.mock('@components/editor/MarkdownPreview', () => ({ default: React.forwardRef(({ className }, _ref) => <div className={className}><a href="https://example.com/doc">preview link</a><a href="next.md">local link</a></div>) }));
+vi.mock('@components/editor/MarkdownPreview', () => ({ default: React.forwardRef(({ className, onReady }, _ref) => {
+  React.useLayoutEffect(() => { onReady?.(); }, [onReady]);
+  return <div className={className}><a href="https://example.com/doc">preview link</a><a href="next.md">local link</a></div>;
+}) }));
 vi.mock('@components/editor/MilkdownMarkdownEditor', () => ({ default: React.forwardRef(({ className }, _ref) => <div className={className}><a href="https://example.com/doc"><span>editable link</span></a></div>) }));
 vi.mock('@components/editor/FloatingToolbar', () => ({ default: () => null }));
 vi.mock('@components/editor/FloatingRunButton', () => ({ default: () => null }));

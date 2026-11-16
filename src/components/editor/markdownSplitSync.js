@@ -140,23 +140,23 @@ export function bindMarkdownScroll(editor, preview) {
     return result;
   };
 
+  const sync = () => {
+    frame = 0;
+    if (preview.querySelector('.knowledge-tree-target')) return;
+    anchors ||= measure();
+    const ends = anchors.at(-1);
+    if (!ends[0] || !ends[1]) return;
+    if (direction === 0) {
+      preview.scrollTop = interpolate(anchors, editor.getScrollTop(), 0);
+      expectedPreview = preview.scrollTop;
+    } else {
+      writingEditor = true;
+      editor.setScrollTop(interpolate(anchors, preview.scrollTop, 1));
+      writingEditor = false;
+    }
+  };
   const schedule = () => {
-    if (frame || resizeTimer !== null) return;
-    frame = requestAnimationFrame(() => {
-      frame = 0;
-      if (preview.querySelector('.knowledge-tree-target')) return;
-      anchors ||= measure();
-      const ends = anchors.at(-1);
-      if (!ends[0] || !ends[1]) return;
-      if (direction === 0) {
-        preview.scrollTop = interpolate(anchors, editor.getScrollTop(), 0);
-        expectedPreview = preview.scrollTop;
-      } else {
-        writingEditor = true;
-        editor.setScrollTop(interpolate(anchors, preview.scrollTop, 1));
-        writingEditor = false;
-      }
-    });
+    if (!frame && resizeTimer === null) frame = requestAnimationFrame(sync);
   };
   const invalidate = () => { anchors = undefined; schedule(); };
   const invalidateGeometry = () => {
@@ -168,12 +168,13 @@ export function bindMarkdownScroll(editor, preview) {
   };
   const handlePreview = () => {
     if (expectedPreview === preview.scrollTop) { expectedPreview = undefined; return; }
+    if (resizeTimer !== null) return;
     direction = 1;
     schedule();
   };
   const editorScroll = editor.onDidScrollChange((event) => {
     if (event.scrollHeightChanged) anchors = undefined;
-    if (writingEditor) return;
+    if (writingEditor || resizeTimer !== null) return;
     if (event.scrollTopChanged) direction = 0;
     schedule();
   });
@@ -193,7 +194,7 @@ export function bindMarkdownScroll(editor, preview) {
   mutations.observe(preview, { childList: true, subtree: true, attributes: true, attributeFilter: ['hidden'] });
   reobserve();
   preview.addEventListener('scroll', handlePreview, { passive: true });
-  schedule();
+  sync();
   return () => {
     if (frame) cancelAnimationFrame(frame);
     clearTimeout(resizeTimer);
