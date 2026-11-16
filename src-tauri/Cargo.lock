@@ -2483,6 +2483,7 @@ dependencies = [
  "tauri-plugin-updater",
  "tempfile",
  "thiserror 1.0.69",
+ "webview2-com",
  "windows",
  "windows-sys 0.52.0",
  "zip",
