@@ -4,6 +4,7 @@
  */
 
 @use './background-surfaces';
+@use './background-popup' as background-popup;
 
 .app {
   display: flex;
@@ -82,10 +83,10 @@
   }
 }
 @media (max-width: 768px) {
-  // 抽屉侧栏同样使用玻璃底，让壁纸背景透出；不再强制整块实色。
+  // 抽屉侧栏套用下拉/tooltip 的壁纸底：重绘壁纸而不是让 backdrop-filter
+  // 采样下层正文，避免文字透进侧栏。
   .app--background .sidebar {
-    background: color-mix(in srgb, var(--sidebar) 78%, transparent);
-    backdrop-filter: blur(18px) saturate(1.1);
+    @include background-popup.image-surface;
   }
 }
 
