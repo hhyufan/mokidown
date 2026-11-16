@@ -65,8 +65,9 @@ class RendererErrorBoundary extends Component {
  *
  * @returns {JSX.Element} 带有重新加载操作的错误提示。
  */
-function RendererLoadError() {
+function RendererLoadError({ onReady }) {
   const { t } = useTranslation();
+  useLayoutEffect(() => { onReady?.(); }, [onReady]);
   return (
     <div className="editor-content__renderer-error" role="alert">
       <strong>{t('editor.rendererLoadFailed')}</strong>
@@ -256,7 +257,23 @@ function EditorContent() {
   const isMarkdown = /\.(md|markdown|mdx)$/i.test(activeTabMeta?.name || '');
   const isTree = activeTabMeta?.ext?.toLowerCase() === 'mgtree';
   const hasPreview = isMarkdown || isTree;
-  const isSplit = viewMode === 'split' && hasPreview;
+  const splitRequested = viewMode === 'split' && hasPreview;
+  const [splitPreviewMounted, setSplitPreviewMounted] = useState(false);
+  const [markdownPreviewReady, setMarkdownPreviewReady] = useState(false);
+  const lastSingleMode = useRef('edit');
+  // Leave the current pane full size until the split preview has real content.
+  const isSplit = splitRequested && (!isMarkdown || markdownPreviewReady);
+  const showMilkdown = isMarkdown && (viewMode === 'preview'
+    || (splitRequested && !isSplit && lastSingleMode.current === 'preview'));
+  const markMarkdownPreviewReady = useCallback(() => setMarkdownPreviewReady(true), []);
+  const attachPreview = useCallback((handle) => {
+    setPreviewSyncHandle(handle);
+    if (!handle) setMarkdownPreviewReady(false);
+  }, []);
+  useLayoutEffect(() => {
+    if (splitRequested && isMarkdown) setSplitPreviewMounted(true);
+    if (viewMode !== 'split') lastSingleMode.current = viewMode;
+  }, [isMarkdown, splitRequested, viewMode]);
   const handleTreeSourceChange = useCallback((content) => {
     const editor = monacoRef.current?.getEditor?.();
     const model = editor?.getModel();
@@ -487,15 +504,15 @@ function EditorContent() {
   }, [activeTabId, hasPreview, setConfig, viewMode]);
 
   useEffect(() => {
-    if (viewMode !== 'split' || !isMarkdown || !splitEditor) return;
+    if (!isMarkdown || !splitEditor) return;
     return bindMarkdownFolding(splitEditor, setFoldedRanges);
-  }, [isMarkdown, splitEditor, viewMode]);
+  }, [isMarkdown, splitEditor]);
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     const preview = previewSyncHandle?.getScrollContainer();
-    if (viewMode !== 'split' || !isMarkdown || !splitEditor || !preview) return;
+    if (!isSplit || !isMarkdown || !splitEditor || !preview) return;
     return bindMarkdownScroll(splitEditor, preview);
-  }, [activeTabId, isMarkdown, previewSyncHandle, splitEditor, viewMode]);
+  }, [activeTabId, isMarkdown, isSplit, previewSyncHandle, splitEditor]);
   if (!activeTabMeta) {
     return (
       <main className={`editor-content ${isMobileLayout ? 'editor-content--mobile' : ''}`}>
@@ -518,11 +535,11 @@ function EditorContent() {
   return (
     <main className={`editor-content ${isMobileLayout ? 'editor-content--mobile' : ''}`}>
       <div
-        className={`editor-content__workspace${isSplit ? ' editor-content__workspace--split' : ''}${isSplit && isMobileLayout ? ' editor-content__workspace--mobile-split' : ''}`}
+        className={`editor-content__workspace${isSplit ? ' editor-content__workspace--split' : ''}`}
         ref={containerRef}
         style={isSplit ? { '--split-ratio': `${splitRatio * 100}%` } : undefined}
       >
-        {(viewMode !== 'preview' || !hasPreview) && (
+        {!showMilkdown && (viewMode !== 'preview' || !hasPreview) && (
           <MonacoEditor
             ref={monacoRef}
             className={`editor-content__editor${isSplit ? ' editor-content__editor--half' : ''}`}
@@ -531,7 +548,7 @@ function EditorContent() {
             appHotkeyHandlers={appHotkeyHandlers}
           />
         )}
-        {viewMode === 'preview' && isMarkdown && (
+        {showMilkdown && (
           <RendererErrorBoundary fallback={<RendererLoadError />}>
             <Suspense fallback={<PreviewFallback />}>
               <MilkdownMarkdownEditor
@@ -550,8 +567,8 @@ function EditorContent() {
             </Suspense>
           </RendererErrorBoundary>
         )}
-        {isSplit && (
-          <>
+        {(splitRequested || (splitPreviewMounted && isMarkdown)) && (
+          <div className="editor-content__split-surfaces" hidden={!isSplit}>
             <Tooltip title={t('editor.splitDivider')} placement="top" mouseEnterDelay={0.5}>
               <div
                 className="editor-content__split-divider"
@@ -574,7 +591,7 @@ function EditorContent() {
                 onPointerDown={handleDividerPointerDown}
               />
             </Tooltip>
-            <RendererErrorBoundary fallback={<RendererLoadError />}>
+            <RendererErrorBoundary fallback={<RendererLoadError onReady={isMarkdown ? markMarkdownPreviewReady : undefined} />}>
               <Suspense fallback={<PreviewFallback />}>
                 {isTree ? <TreeEditor
                   key={activeTabId}
@@ -582,14 +599,16 @@ function EditorContent() {
                   onAutoSave={triggerAutoSave}
                   onSourceChange={handleTreeSourceChange}
                 /> : <MarkdownPreview
-                  ref={setPreviewSyncHandle}
+                  ref={attachPreview}
+                  visible={isSplit}
+                  onReady={markMarkdownPreviewReady}
                   foldedRanges={foldedRanges}
                   onToggleFold={togglePreviewFold}
                   className="editor-content__preview editor-content__preview--half"
                 />}
               </Suspense>
             </RendererErrorBoundary>
-          </>
+          </div>
         )}
         {!isTree && <div className="editor-content__fade" />}
         <FloatingRunButton />

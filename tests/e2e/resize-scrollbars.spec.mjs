@@ -83,6 +83,12 @@ test('Monaco and the split preview fill their panes through drag, viewport and m
   test.setTimeout(90000);
   await page.goto('/');
   await expect(page.locator('.editor-content__welcome')).toBeVisible({ timeout: 45000 });
+  let releasePreview;
+  const previewGate = new Promise((resolve) => { releasePreview = resolve; });
+  await page.route('**/src/components/editor/MarkdownPreview.jsx*', async (route) => {
+    await previewGate;
+    await route.continue();
+  });
   await page.evaluate(async () => {
     const { default: store } = await import('/src/store/useEditorStore.js');
     store.getState().openFile({
@@ -93,8 +99,14 @@ test('Monaco and the split preview fill their panes through drag, viewport and m
     store.getState().setViewMode('split');
   });
   const divider = page.getByRole('separator', { name: /split|分屏/i });
-  await expect(page.locator('.md-preview h1')).toHaveText(/Resize preview/);
   const container = page.locator('.monaco-editor-container');
+  try {
+    await expect(container.locator('.view-lines')).toContainText('Resize preview');
+    await expect(page.locator('.editor-content__workspace--split')).toHaveCount(0);
+  } finally {
+    releasePreview();
+  }
+  await expect(page.locator('.md-preview h1')).toHaveText(/Resize preview/);
   const verifyPanes = async () => {
     await expect.poll(() => page.evaluate(() => {
       const workspace = document.querySelector('.editor-content__workspace--split');
@@ -102,7 +114,7 @@ test('Monaco and the split preview fill their panes through drag, viewport and m
       const widget = pane.querySelector('.monaco-editor');
       const preview = workspace.querySelector('.editor-content__preview');
       const track = workspace.querySelector('.editor-content__split-divider');
-      const vertical = workspace.classList.contains('editor-content__workspace--mobile-split');
+      const vertical = getComputedStyle(workspace).gridTemplateRows.split(' ').length === 3;
       const axis = vertical ? 'height' : 'width';
       const length = (element) => element.getBoundingClientRect()[axis];
       return [
@@ -114,6 +126,7 @@ test('Monaco and the split preview fill their panes through drag, viewport and m
   };
   await verifyPanes();
   await container.evaluate((node) => { window.resizeMonaco = node.querySelector('.monaco-editor'); });
+  await page.locator('.editor-content__preview--half').evaluate((node) => { window.resizePreview = node; });
   const box = await divider.boundingBox();
   await page.mouse.move(box.x + box.width / 2, box.y + 40);
   await page.mouse.down();
@@ -132,6 +145,11 @@ test('Monaco and the split preview fill their panes through drag, viewport and m
     const { default: store } = await import('/src/store/useEditorStore.js');
     store.getState().setViewMode('edit');
   });
-  await expect(divider).toHaveCount(0);
+  await expect(divider).toBeHidden();
   expect(await container.evaluate((node) => node.querySelector('.monaco-editor') === window.resizeMonaco)).toBe(true);
+  await page.evaluate(async () => {
+    (await import('/src/store/useEditorStore.js')).default.getState().setViewMode('split');
+  });
+  await verifyPanes();
+  expect(await page.locator('.editor-content__preview--half').evaluate((node) => node === window.resizePreview)).toBe(true);
 });
