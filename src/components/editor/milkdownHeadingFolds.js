@@ -5,6 +5,7 @@ import i18n from '@/i18n';
 import useConfigStore from '@store/useConfigStore';
 import { headingSections } from './markdownSections';
 import { clearFoldAnimations, updateFoldControl } from './markdownFoldControl';
+import { observeFoldDrawers } from './markdownFoldDrawer';
 
 const key = new PluginKey('moki-markdown-folds');
 const isList = (node) => node.type.name === 'ordered_list' || node.type.name === 'bullet_list';
@@ -136,6 +137,7 @@ export const createMilkdownHeadingFoldsPlugin = (options = {}) => new Plugin({
   view(view) {
     const pending = new Map();
     updateControls(view, pending);
+    const stopDrawers = observeFoldDrawers(view.dom);
     const unsubscribe = useConfigStore.subscribe((next, previous) => {
       if (next.markdownFolding !== previous.markdownFolding) {
         view.dispatch(view.state.tr.setMeta(key, true).setMeta('addToHistory', false));
@@ -154,6 +156,7 @@ export const createMilkdownHeadingFoldsPlugin = (options = {}) => new Plugin({
         }
       }
     }, destroy() {
+      stopDrawers();
       unsubscribe();
       clearFoldAnimations(pending);
     } };
