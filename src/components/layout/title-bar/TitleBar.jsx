@@ -34,6 +34,7 @@ function TitleBar({ searchOpen, onOpenSearch, onCloseSearch, onRequestClose }) {
   const { t } = useTranslation();
   const toggleSidebar = useEditorStore((state) => state.toggleSidebar);
   const [isMaximized, setIsMaximized] = useState(false);
+  const [isFullscreen, setIsFullscreen] = useState(false);
   const [isPinned, setIsPinned] = useState(false);
   const { isMobileLayout, isAndroid } = useResponsiveLayout();
   const isDesktopWindow = !isMobileLayout && !isAndroid;
@@ -48,6 +49,9 @@ function TitleBar({ searchOpen, onOpenSearch, onCloseSearch, onRequestClose }) {
       appWindow.isMaximized().then((maximized) => {
         if (active) setIsMaximized(maximized);
       }).catch(() => {});
+      appWindow.isFullscreen?.()?.then?.((fullscreen) => {
+        if (active) setIsFullscreen(Boolean(fullscreen));
+      })?.catch?.(() => {});
     };
     refresh();
     const unlisten = appWindow.onResized(() => {
@@ -93,6 +97,15 @@ function TitleBar({ searchOpen, onOpenSearch, onCloseSearch, onRequestClose }) {
     beginWindowDrag(event, { maximized: isMaximized });
   };
 
+  // 全屏时“还原”必须退出全屏，而不是 unmaximize（否则仍停留在全屏）。
+  const toggleMaximize = () => {
+    if (!isDesktopWindow) return;
+    const action = isFullscreen
+      ? appWindow.setFullscreen(false)
+      : isMaximized ? appWindow.unmaximize() : appWindow.maximize();
+    action?.catch?.(() => {});
+  };
+
   return (
     <header className={`titlebar ${!isDesktopWindow ? 'titlebar--mobile' : ''}`} onMouseDown={handleHeaderMouseDown}>
       <TbBtn title={t('topbar.toggleSidebar')} onClick={toggleSidebar}>
@@ -121,8 +134,8 @@ function TitleBar({ searchOpen, onOpenSearch, onCloseSearch, onRequestClose }) {
             </svg>
           </TbBtn>
           <TbBtn
-            title={isMaximized ? t('topbar.unmaximize') : t('topbar.maximize')}
-            onClick={() => (isMaximized ? appWindow.unmaximize() : appWindow.maximize())}
+            title={isFullscreen || isMaximized ? t('topbar.unmaximize') : t('topbar.maximize')}
+            onClick={toggleMaximize}
           >
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
               <rect x="3" y="3" width="18" height="18" rx="2" />
