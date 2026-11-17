@@ -9,7 +9,7 @@ import { sendToPlugin } from '@utils/pluginBus';
 import { useFileManager } from '@hooks/useFileManager';
 import useTasks from '@hooks/useTasks';
 import { useRuntimeLogStore } from '@/services/runtimeLogs';
-import { getDirectoryContents, isSafUri, safDisplayName } from '@utils/tauriApi';
+import { getDirectoryContents, isSafUri, openExternal, safDisplayName } from '@utils/tauriApi';
 import { isWebDemo, notifyWebDemo } from '@utils/webDemo';
 import { splitPath, buildFullPath } from '@utils/pathUtils';
 import { beginWindowDrag, isWindowDragExcluded } from '@utils/windowDrag';
@@ -21,7 +21,7 @@ import usePathContextMenu from '@hooks/usePathContextMenu';
 import EditorContextMenu from '@components/editor/EditorContextMenu';
 import './footer.scss';
 
-const PREVIEW_EXT = /^(md|markdown|mdx|mgtree)$/i;
+const PREVIEW_EXT = /^(md|markdown|mdx|mgtree|html?|xhtml)$/i;
 
 function EyeIcon() {
   return (
@@ -84,7 +84,7 @@ function Footer() {
   );
   const pathContext = usePathContextMenu(activeTab?.path);
 
-  const showModeToggle = activeTab && PREVIEW_EXT.test(activeTab.ext) && viewMode !== 'split';
+  const showModeToggle = activeTab && !activeTab.builtin && PREVIEW_EXT.test(activeTab.ext) && viewMode !== 'split';
 
   const [pathSegments, setPathSegments] = useState([]);
   const [directoryContents, setDirectoryContents] = useState({});
@@ -195,6 +195,17 @@ function Footer() {
     }
   }, [openFileFromPath]);
 
+  // 网页标签的底部面包屑：右键复制链接或交给浏览器打开。
+  const webLinkMenuItems = useMemo(() => [
+    { key: 'copy', label: t('web.copyLink') },
+    { key: 'browser', label: t('web.openInBrowser') },
+  ], [t]);
+  const handleWebLinkMenu = useCallback(({ key }) => {
+    if (!activeTab?.url) return;
+    if (key === 'copy') void navigator.clipboard?.writeText(activeTab.url).catch(() => {});
+    else void openExternal(activeTab.url).catch(() => {});
+  }, [activeTab?.url]);
+
   const renderDropdown = useCallback((index) => () => {
     const items = directoryContents[index];
     return (
@@ -262,7 +273,23 @@ function Footer() {
               className="footer__breadcrumb-path"
               ref={bcScrollRef}
             >
-              {pathSegments.map((segment, index) => {
+              {activeTab?.builtin === 'web' ? (
+                <span className="footer__breadcrumb-item">
+                  <Dropdown
+                    trigger={['contextMenu']}
+                    placement="topLeft"
+                    menu={{ items: webLinkMenuItems, onClick: handleWebLinkMenu }}
+                  >
+                    <span
+                      className="footer__breadcrumb-segment footer__breadcrumb-segment--web"
+                      title={activeTab.url}
+                      onClick={() => { void navigator.clipboard?.writeText(activeTab.url).catch(() => {}); }}
+                    >
+                      {activeTab.url}
+                    </span>
+                  </Dropdown>
+                </span>
+              ) : pathSegments.map((segment, index) => {
                 const isOpen = openDropdown === index && !!directoryContents[index];
                 return (
                   <span key={index} className="footer__breadcrumb-item">
