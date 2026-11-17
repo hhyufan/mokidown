@@ -746,7 +746,7 @@ export function useFileManager() {
     const activeId = useEditorStore.getState().activeTabId;
     flushEditorBuffer(tabId || activeId);
     const tab = getLiveTabById(tabId || activeId);
-    if (!tab) return { ok: false };
+    if (!tab || tab.builtin) return { ok: false };
 
     if (!tab.path) {
 
@@ -795,7 +795,7 @@ export function useFileManager() {
   const saveAsDialog = useCallback(async () => {
     flushEditorBuffer(useEditorStore.getState().activeTabId);
     const tab = useEditorStore.getState().getActiveTab();
-    if (!tab) return;
+    if (!tab || tab.builtin) return;
 
     try {
       // Android 没有统一可用的原生另存为对话框，因此回退到应用私有 Documents

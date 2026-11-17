@@ -56,6 +56,25 @@
   &__settings { flex: 1 1 auto; min-height: 0; overflow-y: auto; align-content: start; display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 2px 18px; padding: 8px 14px; border-bottom: 1px solid var(--border-light); label { display: flex; align-items: center; gap: 10px; margin: 4px 0; > span { width: 68px; } } input { flex: 1; background: var(--surface); color: var(--text); padding: 5px 8px; border: 1px solid var(--border); border-radius: 5px; &:focus { border-color: var(--accent); } } }
 }
 
+.integrated-terminal {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-height: 0;
+  &[hidden] { display: none; }
+  &__host { flex: 1; min-height: 0; padding: 6px 12px 0; font-family: var(--font-editor); }
+  .xterm .xterm-viewport { background-color: transparent; }
+  .xterm .composition-view { background: var(--surface); color: var(--text); }
+  &__tools {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 2px 8px;
+    border-top: 1px solid var(--border-light);
+    > span { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--text-sec); }
+  }
+}
+
 .problems {
   display: flex; flex-direction: column; flex: 1; min-height: 0; background: var(--surface);
   &__toolbar { display: flex; gap: 12px; align-items: center; flex-shrink: 0; padding: 6px 12px; border-bottom: 1px solid var(--border-light);

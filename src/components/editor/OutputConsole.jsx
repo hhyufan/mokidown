@@ -1,19 +1,30 @@
 import * as React from 'react';
-import { useEffect, useRef, useState } from 'react';
+import { Suspense, useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Tooltip } from 'antd';
 import { open } from '@tauri-apps/plugin-dialog';
 import useEditorStore from '@store/useEditorStore';
+import useFileStore from '@store/useFileStore';
 import useScriptStore, { isScriptRunning } from '@store/useScriptStore';
 import { getScriptLanguage, scriptRunner } from '@/services/scriptRunner';
 import { isImeComposing } from '@utils/keyboard';
-import { consoleAvailable } from '@utils/consoleSupport';
+import { consoleAvailable, outputToolsAvailable, terminalSupported } from '@utils/consoleSupport';
+import { lazyWithRetry } from '@utils/lazyWithRetry';
 import useProblemsStore, { selectFileProblems } from '@store/useProblemsStore';
 import ProblemsPanel, { ProblemIcon } from './ProblemsPanel';
 import './output-console.scss';
 
 // 语言名（JavaScript/Python/C#/Java/Kotlin）在中英文界面里写法一致，保持模块级常量。
 const LABELS = { javascript: 'JavaScript', python: 'Python', csharp: 'C#', java: 'Java', kotlin: 'Kotlin', rust: 'Rust' };
+const TerminalPane = lazyWithRetry(() => import('./TerminalPane'));
+
+function terminalDirectory(folder, filePath = '') {
+  const separator = Math.max(filePath.lastIndexOf('/'), filePath.lastIndexOf('\\'));
+  const path = folder || filePath.slice(0, separator + 1);
+  if (!path) return null;
+  const trimmed = path.replace(/[\\/]+$/, '');
+  return trimmed && !/^[a-z]:$/i.test(trimmed) ? trimmed : path;
+}
 
 function Icon({ type }) {
   return <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" aria-hidden="true">
@@ -22,7 +33,8 @@ function Icon({ type }) {
         type === 'copy' ? <><rect x="8" y="8" width="12" height="12" rx="2" /><path d="M16 8V4H4v12h4" /></> :
           type === 'send' ? <><path d="m22 2-7 20-4-9-9-4Z" /><path d="M22 2 11 13" /></> :
             type === 'runtime' ? <><path d="M4 7h9m4 0h3M4 17h3m4 0h9" /><circle cx="15" cy="7" r="2" /><circle cx="9" cy="17" r="2" /></> :
-          <><path d="m5 7 5 5-5 5M13 17h6" /></>}
+          type === 'terminal' ? <path d="m5 7 5 5-5 5M13 17h6" /> :
+            <><rect x="3" y="5" width="18" height="14" rx="2" /><path d="M7 9h10M7 13h8" /></>}
   </svg>;
 }
 
@@ -32,11 +44,23 @@ export default function OutputConsole() {
   const RUNTIME_HINTS = { csharp: t('console.runtimeHint.csharp'), java: t('console.runtimeHint.java'), kotlin: t('console.runtimeHint.kotlin'), rust: t('console.runtimeHint.rust') };
   const state = useScriptStore();
   const problemsState = useProblemsStore();
-  const isOutput = state.toolTab === 'output';
+  const terminalEnabled = terminalSupported();
   const tabs = useEditorStore((s) => s.tabRenderList);
   const activeId = useEditorStore((s) => s.activeTabId);
   const viewMode = useEditorStore((s) => s.viewMode);
+  const folder = useFileStore((s) => s.currentDir);
   const active = tabs.find((tab) => tab.id === activeId);
+  const outputEnabled = outputToolsAvailable(viewMode, active);
+  const visible = state.open && (terminalEnabled || outputEnabled);
+  const tool = terminalEnabled && !outputEnabled ? 'terminal' :
+    state.toolTab === 'terminal' && !terminalEnabled ? 'output' : state.toolTab;
+  const isOutput = tool === 'output';
+  const isTerminal = tool === 'terminal';
+  const directory = terminalDirectory(folder, active?.path || '');
+  const [terminalDirectories, setTerminalDirectories] = useState([]);
+  const showTerminal = visible && isTerminal;
+  const directories = showTerminal && !terminalDirectories.includes(directory)
+    ? [...terminalDirectories, directory] : terminalDirectories;
   const problemCount = selectFileProblems(problemsState, active).length;
   const canRun = Boolean(getScriptLanguage(active?.name));
   const running = isScriptRunning(state.status);
@@ -49,6 +73,9 @@ export default function OutputConsole() {
   const followOutput = useRef(true);
   const resize = useRef(null);
   const inputComposing = useRef(false);
+  useEffect(() => {
+    if (showTerminal) setTerminalDirectories((opened) => opened.includes(directory) ? opened : [...opened, directory]);
+  }, [directory, showTerminal]);
   useEffect(() => {
     for (const document of Object.values(useProblemsStore.getState().documents)) {
       if (document.tabId && !document.filePath && !tabs.some((tab) => tab.id === document.tabId)) {
@@ -79,7 +106,7 @@ export default function OutputConsole() {
         event.preventDefault(); event.stopPropagation();
         const editor = useEditorStore.getState();
         const activeTab = editor.tabRenderList.find((tab) => tab.id === editor.activeTabId);
-        if (consoleAvailable(editor.viewMode, activeTab)) useScriptStore.getState().setToolTab('problems');
+        if (outputToolsAvailable(editor.viewMode, activeTab)) useScriptStore.getState().setToolTab('problems');
       }
     };
     window.addEventListener('keydown', shortcut, true);
@@ -88,9 +115,9 @@ export default function OutputConsole() {
   // 控制台不再常驻编辑器底部：关闭时整块面板（含折叠工具条）都隐藏，
   // 需要时通过标签栏按钮或 Ctrl+J / Ctrl+Shift+M 呼出。组件保持挂载，
   // 以便快捷键和问题文档清理逻辑在收起状态下继续生效。
-  if (!state.open || !consoleAvailable(viewMode, active)) return null;
+  if (!visible && !terminalDirectories.length) return null;
   const selectTool = (tab) => {
-    if (state.toolTab === tab) state.setOpen(false);
+    if (tool === tab) state.setOpen(false);
     else state.setToolTab(tab);
   };
 
@@ -124,7 +151,7 @@ export default function OutputConsole() {
     } catch (error) { state.append('stderr', `${t('console.copyFailed', { error: error?.message || error })}\n`); }
   };
   return <React.Fragment>
-    <section className="output-console" aria-label={t('console.aria.label')} style={{ height: state.height }}>
+    <section className="output-console" aria-label={t('console.aria.label')} style={{ height: state.height, display: visible ? undefined : 'none' }}>
       <div className="output-console__resize" role="separator" aria-label={t('console.aria.resize')}
         aria-orientation="horizontal" aria-valuemin={140} aria-valuemax={600} aria-valuenow={state.height} tabIndex={0}
         onKeyDown={(event) => {
@@ -143,10 +170,12 @@ export default function OutputConsole() {
         onPointerUp={() => { resize.current = null; }} onPointerCancel={() => { resize.current = null; }} />
       <header className="output-console__header">
         <div className="output-console__tabs" role="tablist" aria-label={t('console.aria.tools')}>
-          <button type="button" role="tab" id="output-tab" aria-controls="output-panel" aria-selected={isOutput}
+          {terminalEnabled && <button type="button" role="tab" id="terminal-tab" aria-controls="terminal-panel" aria-selected={isTerminal}
+            onClick={() => selectTool('terminal')}><Icon type="terminal" /><span>{t('terminal.title')}</span></button>}
+          {outputEnabled && <><button type="button" role="tab" id="output-tab" aria-controls="output-panel" aria-selected={isOutput}
             onClick={() => selectTool('output')}><Icon type="console" /><span>{t('console.title')}</span></button>
-          <button type="button" role="tab" id="problems-tab" aria-controls="problems-panel" aria-selected={!isOutput}
-            onClick={() => selectTool('problems')}><ProblemIcon severity={2} /><span>{t('problems.title')}</span><span className="output-console__badge">{problemCount}</span></button>
+          <button type="button" role="tab" id="problems-tab" aria-controls="problems-panel" aria-selected={tool === 'problems'}
+            onClick={() => selectTool('problems')}><ProblemIcon severity={2} /><span>{t('problems.title')}</span><span className="output-console__badge">{problemCount}</span></button></>}
         </div>
         <div className="output-console__actions">
           {isOutput && <>
@@ -172,7 +201,10 @@ export default function OutputConsole() {
           </Tooltip>
         </div>
       </header>
-      {!isOutput && <ProblemsPanel />}
+      {terminalEnabled && directories.length > 0 && <Suspense fallback={null}>
+        {directories.map((cwd) => <TerminalPane key={cwd ?? 'home'} directory={cwd} active={showTerminal && cwd === directory} />)}
+      </Suspense>}
+      {visible && tool === 'problems' && <ProblemsPanel />}
       {isOutput && settingsOpen && <div className="output-console__settings" id="output-panel" role="tabpanel" aria-labelledby="output-tab">
         {Object.entries(LABELS).map(([language, label]) => <label key={language}>
           <span>{label}</span><input aria-label={t('console.runtimePath', { language: label })} value={state.runtimePaths[language] || ''}

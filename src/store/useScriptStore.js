@@ -4,7 +4,7 @@ import { persist } from 'zustand/middleware';
 const OUTPUT_LIMIT = 256 * 1024;
 const useScriptStore = create(persist((set, get) => ({
   open: false,
-  toolTab: 'output',
+  toolTab: 'terminal',
   height: 240,
   runtimePaths: { javascript: '', python: '', csharp: '', java: '', kotlin: '', rust: '' },
   runId: null,

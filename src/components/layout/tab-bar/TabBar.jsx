@@ -23,7 +23,7 @@ import EditorContextMenu from '@components/editor/EditorContextMenu';
 
 import { moveDiskBaseline } from '@/services/localFileGuard';
 import { beginReaderTabDetachWatch, buildDragPreview, cancelReaderTabDetachWatch, detachMarkdownTab } from '@/services/readerWindows';
-import { consoleAvailable } from '@utils/consoleSupport';
+import { consoleAvailable, outputToolsAvailable, terminalSupported } from '@utils/consoleSupport';
 import { cn } from '@utils/classNames';
 import { isImeComposing } from '@utils/keyboard';
 import FileTypeIcon from '@components/ui/FileTypeIcon';
@@ -178,6 +178,8 @@ function TabBar({ onRequestCloseTab, onRequestCloseTabs }) {
   );
   const canSplit = isMarkdown || activeTab?.ext?.toLowerCase() === 'mgtree';
   const canShowConsole = consoleAvailable(viewMode, activeTab);
+  const terminalEnabled = terminalSupported();
+  const consoleLabel = t(terminalEnabled ? 'terminal.title' : 'tabbar.console');
 
   /**
    * 进入标签重命名模式，并在下一帧自动聚焦输入框。
@@ -186,6 +188,7 @@ function TabBar({ onRequestCloseTab, onRequestCloseTabs }) {
    * @param {MouseEvent} e 双击事件对象。
    */
   const startRename = useCallback((tab, e) => {
+    if (tab.builtin) return;
     e?.stopPropagation();
     setRenamingTabId(tab.id);
     setRenameValue(tab.name);
@@ -366,12 +369,13 @@ function TabBar({ onRequestCloseTab, onRequestCloseTabs }) {
             </svg>
           </button>
         </Tooltip>
-        {/* Markdown 文件专属工具栏开关。 */}
-        {tabs.some((tab) => /^(md|markdown|mdx)$/i.test(tab.ext || '')) && (
+        {isMarkdown && (
           <Tooltip title={t('tabbar.toggleToolbar')} placement="bottom" mouseEnterDelay={0.3}>
             <button
-              className={cn('tabbar__action-btn', toolbarVisible && 'tabbar__action-btn--active', !isMarkdown && 'tabbar__action-btn--hidden')}
+              className={cn('tabbar__action-btn', toolbarVisible && 'tabbar__action-btn--active')}
               onClick={toggleToolbar}
+              aria-label={t('tabbar.toggleToolbar')}
+              aria-pressed={toolbarVisible}
               type="button"
             >
               <svg viewBox="0 0 24 24" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
@@ -382,14 +386,13 @@ function TabBar({ onRequestCloseTab, onRequestCloseTabs }) {
             </button>
           </Tooltip>
         )}
-        {}
-        
-        {/* Markdown 和树文件的源码 / 渲染分栏。 */}
-        {tabs.some((tab) => /^(md|markdown|mdx|mgtree)$/i.test(tab.ext || '')) && (
+        {canSplit && (
           <Tooltip title={t('tabbar.splitView')} placement="bottom" mouseEnterDelay={0.3}>
             <button
-              className={cn('tabbar__action-btn', viewMode === 'split' && 'tabbar__action-btn--active', !canSplit && 'tabbar__action-btn--hidden')}
+              className={cn('tabbar__action-btn', viewMode === 'split' && 'tabbar__action-btn--active')}
               onClick={toggleSplit}
+              aria-label={t('tabbar.splitView')}
+              aria-pressed={viewMode === 'split'}
               type="button"
             >
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
@@ -399,13 +402,17 @@ function TabBar({ onRequestCloseTab, onRequestCloseTabs }) {
             </button>
           </Tooltip>
         )}
-        {/* 输出与问题控制台：仅在存在代码编辑器且语言受 LSP 支持或可运行时提供入口。 */}
-        {(canShowConsole || tabs.some((tab) => consoleAvailable(viewMode, tab))) && (
-          <Tooltip title={t('tabbar.console')} placement="bottom" mouseEnterDelay={0.3}>
+        {canShowConsole && (
+          <Tooltip title={consoleLabel} placement="bottom" mouseEnterDelay={0.3}>
             <button
-              className={cn('tabbar__action-btn', consoleOpen && 'tabbar__action-btn--active', !canShowConsole && 'tabbar__action-btn--hidden')}
-              onClick={() => toggleConsole(!consoleOpen)}
-              aria-label={t('tabbar.console')}
+              className={cn('tabbar__action-btn', consoleOpen && 'tabbar__action-btn--active')}
+              onClick={() => {
+                if (!terminalEnabled) { toggleConsole(!consoleOpen); return; }
+                const panel = useScriptStore.getState();
+                if (panel.open && (panel.toolTab === 'terminal' || !outputToolsAvailable(viewMode, activeTab))) panel.setOpen(false);
+                else panel.setToolTab('terminal');
+              }}
+              aria-label={consoleLabel}
               type="button"
             >
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">

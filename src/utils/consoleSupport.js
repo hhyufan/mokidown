@@ -1,13 +1,8 @@
-/**
- * 输出控制台（输出 / 问题面板）的可用性判断。
- *
- * 控制台只在「当前视图存在代码编辑器」且「文件语言受 LSP 支持或可运行」时渲染：
- * 纯预览模式下的 Milkdown 或树编辑器独占场景没有代码编辑器；纯文本等既没有
- * 语言服务也不能运行的文件同样没有输出可看，这两种情况都要隐藏入口和面板。
- */
+/** Availability of the desktop terminal and the editor's output tools. */
 import useLspStore, { availablePlugins } from '@store/useLspStore';
 import { getScriptLanguage } from '@/services/scriptRunner';
 import { getFileLanguage } from '@utils/fileLanguage';
+import { isAndroidRuntime } from '@utils/platform';
 
 // Markdown 在预览模式下由 Milkdown 独占渲染，没有 Monaco 代码编辑器。
 const MARKDOWN_RE = /\.(md|markdown|mdx)$/i;
@@ -51,6 +46,7 @@ export function supportsConsoleForTab(tab) {
  * @returns {boolean} 视图中是否存在代码编辑器。
  */
 export function hasCodeEditor(viewMode, tab) {
+  if (tab?.builtin) return false;
   if (viewMode !== 'preview') return true;
   if (!tab) return false;
   if (MARKDOWN_RE.test(tab.name || '')) return false;
@@ -65,5 +61,14 @@ export function hasCodeEditor(viewMode, tab) {
  * @returns {boolean} 是否展示控制台入口与面板。
  */
 export function consoleAvailable(viewMode, tab) {
+  return terminalSupported() || outputToolsAvailable(viewMode, tab);
+}
+
+export function outputToolsAvailable(viewMode, tab) {
   return hasCodeEditor(viewMode, tab) && supportsConsoleForTab(tab);
+}
+
+export function terminalSupported() {
+  return typeof window !== 'undefined' && Boolean(window.__TAURI_INTERNALS__) && !window.AndroidBridge
+    && !isAndroidRuntime() && !/iPhone|iPad|iPod/i.test(navigator.userAgent);
 }

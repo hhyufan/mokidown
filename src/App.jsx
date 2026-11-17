@@ -483,6 +483,7 @@ function App({ skipCliArgs = false }) {
     // 「设置 → 快捷键」正在录入键位时挂起全局快捷键，避免改绑 Ctrl+S 时真的保存。
     if (isCapturingShortcut()) return;
 
+    if (e.target?.closest?.('.integrated-terminal .xterm')) return;
     if (handleScriptShortcut(e)) return;
 
     const action = matchHotkey(e, 'app');

@@ -19,6 +19,7 @@ import { captureDocumentViewState, renameDocumentViewState } from '@utils/docume
 import { untitledFileName } from '@utils/untitledFileName';
 
 let untitledCounter = 1;
+const pluginDocsTabId = 'mokidown:plugin-docs';
 
 /**
  * 编辑器主 store。
@@ -36,6 +37,7 @@ function toTabMeta(tab) {
     name: tab.name,
     path: tab.path,
     ext: tab.ext,
+    builtin: tab.builtin,
     modified: !!tab.modified,
     encoding: tab.encoding || 'UTF-8',
     lineEnding: tab.lineEnding || 'LF',
@@ -121,6 +123,18 @@ const useEditorStore = create(
           tabRenderList: [...get().tabRenderList, toTabMeta(newTab)],
           activeTabId: newTab.id,
         });
+      },
+
+      openPluginDocs: (name) => {
+        const { tabs, tabRenderList, activeTabId } = get();
+        if (activeTabId === pluginDocsTabId) return;
+        flushEditorBuffer(activeTabId);
+        if (tabs.some((tab) => tab.id === pluginDocsTabId)) {
+          set({ activeTabId: pluginDocsTabId });
+          return;
+        }
+        const tab = { id: pluginDocsTabId, name, ext: 'html', builtin: 'pluginDocs', modified: false };
+        set({ tabs: [...tabs, tab], tabRenderList: [...tabRenderList, toTabMeta(tab)], activeTabId: tab.id });
       },
 
       
