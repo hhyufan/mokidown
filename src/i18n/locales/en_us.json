@@ -972,5 +972,6 @@
   "terminal.link.splitOpen": "Open in split",
   "terminal.link.openTab": "Open in new tab",
   "terminal.link.copy": "Copy link",
-  "terminal.link.browser": "Open in browser"
+  "terminal.link.browser": "Open in browser",
+  "web.closeSplit": "Close split"
 }

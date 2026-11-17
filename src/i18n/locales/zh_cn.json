@@ -972,5 +972,6 @@
   "terminal.link.splitOpen": "分屏打开",
   "terminal.link.openTab": "新标签页打开",
   "terminal.link.copy": "复制链接",
-  "terminal.link.browser": "浏览器打开"
+  "terminal.link.browser": "浏览器打开",
+  "web.closeSplit": "关闭分屏"
 }
