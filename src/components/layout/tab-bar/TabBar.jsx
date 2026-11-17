@@ -176,7 +176,7 @@ function TabBar({ onRequestCloseTab, onRequestCloseTabs }) {
     () => /^(md|markdown|mdx)$/i.test(activeTab?.ext || ''),
     [activeTab],
   );
-  const canSplit = isMarkdown || activeTab?.ext?.toLowerCase() === 'mgtree';
+  const canSplit = !activeTab?.builtin && /^(md|markdown|mdx|mgtree|html?|xhtml)$/i.test(activeTab?.ext || '');
   const canShowConsole = consoleAvailable(viewMode, activeTab);
   const terminalEnabled = terminalSupported();
   const consoleLabel = t(terminalEnabled ? 'terminal.title' : 'tabbar.console');
@@ -303,8 +303,9 @@ function TabBar({ onRequestCloseTab, onRequestCloseTabs }) {
 
             >
               <span className="tabbar__tab-icon">
-                <FileTypeIcon extension={tab.ext} fileName={tab.name} size={16} />
-                
+                {tab.builtin === 'web'
+                  ? <WebTabIcon tab={tab} />
+                  : <FileTypeIcon extension={tab.ext} fileName={tab.name} size={16} />}
               </span>
 
               <span className="tabbar__tab-label">
@@ -424,6 +425,14 @@ function TabBar({ onRequestCloseTab, onRequestCloseTabs }) {
       </div>
     </div>
   );
+}
+
+// 网页标签优先显示站点 favicon，取不到时回退到 HTML 文件图标。
+function WebTabIcon({ tab }) {
+  const [failed, setFailed] = useState(false);
+  if (!tab.favicon || failed) return <FileTypeIcon extension="html" fileName={tab.name} size={16} />;
+  return <img className="tabbar__tab-favicon" src={tab.favicon} alt="" width={16} height={16}
+    draggable={false} onError={() => setFailed(true)} />;
 }
 
 export default TabBar;
