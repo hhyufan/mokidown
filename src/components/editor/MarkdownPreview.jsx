@@ -86,6 +86,8 @@ import { findCodeBlock } from '@utils/knowledgeTree';
 import { useCodeBlockNavigation } from '@hooks/useCodeBlockNavigation';
 import './markdown-preview.scss';
 import { observePreviewBlockSelection } from './previewBlockSelection';
+import { observeTaskListStrikes } from './taskListStrike';
+import { observeTaskListCheckboxes } from './taskListCheckboxMotion';
 
 /**
  * 将标题文本归一化为可复用的锚点标识。
@@ -368,7 +370,11 @@ const MarkdownPreview = forwardRef(function MarkdownPreview({ className, foldedR
   const localLines = localFolds.tabId === activeTabId ? localFolds.lines : null;
   const foldAnimations = useRef(new Map());
   useLayoutEffect(() => {
-    if (containerRef.current) return observeFoldDrawers(containerRef.current);
+    if (!containerRef.current) return;
+    const stopDrawers = observeFoldDrawers(containerRef.current);
+    const stopStrikes = observeTaskListStrikes(containerRef.current);
+    const stopCheckboxes = observeTaskListCheckboxes(containerRef.current);
+    return () => { stopDrawers(); stopStrikes(); stopCheckboxes(); };
   }, [activeTabId]);
   useEffect(() => {
     const pending = foldAnimations.current;
@@ -667,6 +673,11 @@ const MarkdownPreview = forwardRef(function MarkdownPreview({ className, foldedR
     ),
     input: ({ type, checked, ...props }) => {
       if (type === 'checkbox') {
+        if (props.className === 'md-preview__task-checkbox') {
+          return <button type="button" disabled role="checkbox" className={props.className} aria-checked={props['aria-checked']}>
+            <svg className="md-preview__task-strike" aria-hidden="true" />
+          </button>;
+        }
         return <input type="checkbox" checked={checked} readOnly {...props} />;
       }
       return <input type={type} {...props} />;
