@@ -387,7 +387,7 @@ function TabBar({ onRequestCloseTab, onRequestCloseTabs }) {
           </Tooltip>
         )}
         {canSplit && (
-          <Tooltip title={t('tabbar.splitView')} placement="bottom" mouseEnterDelay={0.3}>
+          <Tooltip title={t('tabbar.splitView')} placement="bottomRight" mouseEnterDelay={0.3}>
             <button
               className={cn('tabbar__action-btn', viewMode === 'split' && 'tabbar__action-btn--active')}
               onClick={toggleSplit}
@@ -403,7 +403,7 @@ function TabBar({ onRequestCloseTab, onRequestCloseTabs }) {
           </Tooltip>
         )}
         {canShowConsole && (
-          <Tooltip title={consoleLabel} placement="bottom" mouseEnterDelay={0.3}>
+          <Tooltip title={consoleLabel} placement="bottomRight" mouseEnterDelay={0.3}>
             <button
               className={cn('tabbar__action-btn', consoleOpen && 'tabbar__action-btn--active')}
               onClick={() => {
