@@ -973,5 +973,6 @@
   "terminal.link.openTab": "新标签页打开",
   "terminal.link.copy": "复制链接",
   "terminal.link.browser": "浏览器打开",
-  "web.closeSplit": "关闭分屏"
+  "web.closeSplit": "关闭分屏",
+  "terminal.link.openTabSwitch": "新标签页打开并切换"
 }

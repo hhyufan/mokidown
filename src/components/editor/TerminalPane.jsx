@@ -80,41 +80,43 @@ export default function TerminalPane({ active, directory }) {
     const openLinkMenu = (anchor, url) => {
       removeLinkMenu();
       const menu = host.ownerDocument.createElement('div');
-      menu.className = 'terminal-link-menu';
-      const bodyBackground = getComputedStyle(host.ownerDocument.body).backgroundColor;
-      const fallback = host.ownerDocument.documentElement.dataset.theme === 'dark' ? '#262626' : '#ffffff';
-      const opaque = bodyBackground && !/rgba?\(.*,\s*0(\.\d+)?\)/.test(bodyBackground) && bodyBackground !== 'transparent';
-      const surface = opaque ? bodyBackground : fallback;
-      menu.style.cssText = [
-        'position: fixed',
-        'z-index: 4000',
-        'display: flex',
-        'flex-direction: column',
-        'min-width: 150px',
-        'padding: 4px',
-        'border: 1px solid var(--border)',
-        'border-radius: 6px',
-        `background: ${surface}`,
-        'box-shadow: 0 8px 24px rgba(0, 0, 0, 0.25)',
-      ].join(';');
-      menu.style.left = `${Math.min(anchor.clientX, window.innerWidth - 180)}px`;
-      menu.style.top = `${Math.min(anchor.clientY, window.innerHeight - 150)}px`;
+      menu.className = 'monaco-context-menu terminal-link-menu';
+      menu.setAttribute('role', 'menu');
+      menu.style.left = `${Math.min(anchor.clientX, window.innerWidth - 230)}px`;
+      menu.style.top = `${Math.min(anchor.clientY, window.innerHeight - 210)}px`;
       const store = useEditorStore.getState();
-      const items = [
-        { label: t('terminal.link.splitOpen'), run: () => store.openWebSplit(url) },
-        { label: t('terminal.link.openTab'), run: () => store.openWebTab(url, { activate: false }) },
+      const entries = [
+        { label: t('terminal.link.splitOpen'), shortcut: 'Ctrl+Alt+右键', run: () => store.openWebSplit(url) },
+        { label: t('terminal.link.openTab'), shortcut: 'Ctrl+右键', run: () => store.openWebTab(url, { activate: false }) },
+        { label: t('terminal.link.openTabSwitch'), shortcut: 'Ctrl+Shift+右键', run: () => store.openWebTab(url, { activate: true }) },
+        { separator: true },
         { label: t('terminal.link.copy'), run: () => { void navigator.clipboard?.writeText(url).catch(() => {}); } },
         { label: t('terminal.link.browser'), run: () => { void openExternal(url).catch(() => {}); } },
       ];
-      for (const item of items) {
+      for (const entry of entries) {
+        if (entry.separator) {
+          const separator = host.ownerDocument.createElement('div');
+          separator.className = 'monaco-context-menu__sep';
+          separator.setAttribute('role', 'separator');
+          menu.append(separator);
+          continue;
+        }
         const button = host.ownerDocument.createElement('button');
         button.type = 'button';
-        button.textContent = item.label;
-        button.style.cssText = 'display:flex;align-items:center;padding:6px 10px;border:0;border-radius:4px;background:none;color:var(--text);font:12px var(--font-app);text-align:start;cursor:pointer';
-        button.addEventListener('mouseenter', () => { button.style.background = 'var(--hover)'; });
-        button.addEventListener('mouseleave', () => { button.style.background = 'none'; });
+        button.setAttribute('role', 'menuitem');
+        button.className = 'monaco-context-menu__item';
+        const label = host.ownerDocument.createElement('span');
+        label.className = 'monaco-context-menu__label';
+        label.textContent = entry.label;
+        button.append(label);
+        if (entry.shortcut) {
+          const shortcut = host.ownerDocument.createElement('span');
+          shortcut.className = 'monaco-context-menu__shortcut';
+          shortcut.textContent = entry.shortcut;
+          button.append(shortcut);
+        }
         button.addEventListener('mousedown', (event) => event.preventDefault());
-        button.addEventListener('click', () => { removeLinkMenu(); cleanup(); item.run(); });
+        button.addEventListener('click', () => { removeLinkMenu(); cleanup(); entry.run(); });
         menu.append(button);
       }
       host.ownerDocument.body.append(menu);
@@ -133,6 +135,10 @@ export default function TerminalPane({ active, directory }) {
       event.preventDefault();
       const url = hoveredLink;
       const store = useEditorStore.getState();
+      if (event.ctrlKey && event.altKey) {
+        store.openWebSplit(url);
+        return;
+      }
       if (event.ctrlKey && event.shiftKey) {
         store.openWebTab(url, { activate: true });
         return;
