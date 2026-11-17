@@ -5,8 +5,8 @@ import { useLayoutEffect } from 'react';
 // 任务列表面板同理：它与面包屑下拉保持一致。条目上的关闭按钮在标题行里、
 // 背景透明，不压线，所以不需要对位底图。
 // 两套 toast 也走同一套重绘壁纸（叠加一层淡白），因此同样需要这里的坐标。
-const POPUPS = '.knowledge-tree__header, .footer__dropdown, .sort-dropdown, .search-dropdown__panel,  .search-dropdown__scope-menu, .titlebar__search .ant-select-dropdown, .moki-tree-jump-popup .ant-popover-inner, .ant-select-dropdown, .ant-dropdown-menu, .ant-picker-panel-container, .ft, .ft__heading-panel, .ft__table-panel, .ant-modal-content, .editor-content__run, .monaco-context-menu, .moki-tree__chevron, .task-panel, .milkdown-media-tools, .milkdown-media-preview-editor, .notif';
-const POSITIONERS = '.ant-dropdown, .ant-picker-dropdown, .moki-tree-jump-popup';
+const POPUPS = '.knowledge-tree__header, .footer__dropdown, .sort-dropdown, .search-dropdown__panel,  .search-dropdown__scope-menu, .titlebar__search .ant-select-dropdown, .moki-tree-jump-popup .ant-popover-inner, .ant-select-dropdown, .ant-dropdown-menu, .ant-picker-panel-container, .ft, .ft__heading-panel, .ft__table-panel, .ant-modal-content, .editor-content__run, .monaco-context-menu, .moki-tree__chevron, .task-panel, .milkdown-media-tools, .milkdown-media-preview-editor, .notif, .ant-tooltip-inner, .md-preview__task-checkbox';
+const POSITIONERS = '.ant-dropdown, .ant-picker-dropdown, .moki-tree-jump-popup, .ant-tooltip';
 
 // Portal popups need the same image, cover dimensions and viewport coordinates
 // as the workspace. Explicit coordinates also work inside transformed antd
@@ -18,6 +18,7 @@ export function useBackgroundSurfaces({ enabled, imageUrl, opacity, workspaceSel
     const workspace = document.querySelector(workspaceSelector);
     if (!workspace) return undefined;
     const popups = new Set();
+    const taskRows = new Map();
     const positions = new Set();
     const writtenStyles = new WeakMap();
     const image = new Image();
@@ -99,6 +100,13 @@ export function useBackgroundSurfaces({ enabled, imageUrl, opacity, workspaceSel
         if (!popups.has(popup)) {
           popups.add(popup);
           resize.observe(popup);
+          if (popup.matches('.md-preview__task-checkbox')) {
+            const row = popup.closest('li');
+            if (row) {
+              taskRows.set(popup, row);
+              resize.observe(row);
+            }
+          }
           observePosition(popup);
           // Ant Design positions a portal wrapper rather than its inner card.
           for (let parent = popup.parentElement; parent && parent !== document.body; parent = parent.parentElement) {
@@ -115,7 +123,15 @@ export function useBackgroundSurfaces({ enabled, imageUrl, opacity, workspaceSel
       }
       let removed = false;
       for (const popup of popups) {
-        if (!popup.isConnected) { popups.delete(popup); resize.unobserve(popup); removed = true; }
+        if (popup.isConnected) continue;
+        popups.delete(popup);
+        resize.unobserve(popup);
+        const row = taskRows.get(popup);
+        if (row) {
+          taskRows.delete(popup);
+          if (!row.isConnected || !row.querySelector('.md-preview__task-checkbox')) resize.unobserve(row);
+        }
+        removed = true;
       }
       if (removed) {
         positionObserver.disconnect();

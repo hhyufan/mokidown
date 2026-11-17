@@ -159,13 +159,7 @@ export default function ThemedConfigProvider({ children }) {
             colorIcon: tokens.colorTextSecondary,
           },
           Tooltip: {
-            // 背景模式下提示要透出底图：它同样出自令牌，改 CSS 变量无效。
-            // 留 55% 表面色保证文字可读，其余透掉。
-            colorBgSpotlight: hasBackground
-              ? `color-mix(in srgb, ${readCssVar('--surface', '#ffffff')} 55%, transparent)`
-              : theme === 'dark'
-              ? readCssVar('--surface', '#1e1e1e')
-              : '#ffffff',
+            colorBgSpotlight: readCssVar('--surface', theme === 'dark' ? '#1e1e1e' : '#ffffff'),
             colorTextLightSolid: theme === 'dark'
               ? readCssVar('--text', '#f5f5f7')
               : readCssVar('--text', '#2c2c2e'),
