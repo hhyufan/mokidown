@@ -3,9 +3,16 @@
   display: flex;
   flex-direction: column;
   flex: 0 0 auto;
-  min-height: 140px;
+  min-height: 0;
   max-height: 65vh;
+  overflow: hidden;
   border-top: 1px solid var(--border);
+  transition: height 220ms cubic-bezier(0.4, 0, 0.2, 1), border-color 220ms ease;
+
+  &[data-open='false'] {
+    border-top-color: transparent;
+    pointer-events: none;
+  }
   background: var(--sidebar);
   color: var(--text);
   font: 12px var(--font-app);
