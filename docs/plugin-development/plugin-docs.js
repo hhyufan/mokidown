@@ -2,7 +2,11 @@
   const root = document.documentElement;
   const themeButton = document.getElementById('theme-toggle');
   const setTheme = (theme) => { root.dataset.theme = theme; themeButton.setAttribute('aria-pressed', String(theme === 'dark')); };
-  setTheme(root.dataset.theme);
+  let initialTheme = new URLSearchParams(location.search).get('theme');
+  if (!initialTheme) {
+    try { initialTheme = localStorage.getItem('mokidown-home-theme'); } catch { /* Storage is optional. */ }
+  }
+  setTheme(initialTheme || (matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light'));
   themeButton.addEventListener('click', () => {
     const theme = root.dataset.theme === 'dark' ? 'light' : 'dark'; setTheme(theme);
     try { localStorage.setItem('mokidown-home-theme', theme); } catch { /* The document also works when browser storage is unavailable. */ }

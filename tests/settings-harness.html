@@ -18,10 +18,22 @@
       await i18n.changeLanguage('zh');
 
       const root = createRoot(document.getElementById('root'));
+      const showDocs = new URLSearchParams(location.search).has('plugin-docs');
+      const EditorContent = showDocs ? (await import('/src/components/layout/content/EditorContent.jsx')).default : null;
+      const editorStore = showDocs ? (await import('/src/store/useEditorStore.js')).default : null;
+      function DocsHarness() {
+        const [open, setOpen] = React.useState(true);
+        return React.createElement(React.Fragment, null,
+          React.createElement('button', { onClick: () => setOpen(true) }, 'Open settings'),
+          React.createElement(EditorContent),
+          React.createElement(SettingsModal, { open, onClose: () => setOpen(false) }));
+      }
       window.trial = {
         render() {
-          root.render(React.createElement(SettingsModal, { open: true, onClose: () => {} }));
+          root.render(showDocs ? React.createElement(DocsHarness)
+            : React.createElement(SettingsModal, { open: true, onClose: () => {} }));
         },
+        docsTabs: () => editorStore?.getState().tabs.filter((tab) => tab.builtin === 'pluginDocs'),
         resetHotkeys: () => useConfigStore.getState().resetHotkeys(),
         hotkeys: () => useConfigStore.getState().hotkeys,
       };
