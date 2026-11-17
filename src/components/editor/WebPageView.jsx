@@ -11,7 +11,7 @@ import './web-page.scss';
  * @param {string} [props.className] 额外样式类。
  * @returns {JSX.Element} 网页视图。
  */
-export default function WebPageView({ url, className = '' }) {
+export default function WebPageView({ url, className = '', onClose }) {
   const { t } = useTranslation();
   return (
     <div className={`web-page ${className}`}>
@@ -24,6 +24,11 @@ export default function WebPageView({ url, className = '' }) {
         >
           {t('web.openInBrowser')}
         </button>
+        {onClose && (
+          <button type="button" className="web-page__action" aria-label={t('web.closeSplit')} onClick={onClose}>
+            {t('web.closeSplit')}
+          </button>
+        )}
       </div>
       <iframe
         className="web-page__frame"

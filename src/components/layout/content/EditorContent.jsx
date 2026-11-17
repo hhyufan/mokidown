@@ -670,6 +670,7 @@ function EditorContent() {
             <WebPageView
               className="editor-content__preview editor-content__preview--half"
               url={webSplitUrl}
+              onClose={() => useEditorStore.getState().closeWebSplit()}
             />
           </div>
         )}
