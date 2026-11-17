@@ -818,6 +818,9 @@
     background: var(--md-code-bg);
     color: var(--text);
     border: 1px solid var(--border-light);
+    // 源码态也排在容器中线上，与预览气泡、渲染态公式同一条中线，
+    // 光标离开时正文不会从行左跳到行中。
+    text-align: center;
 
     &::before {
       content: attr(data-math-label);
@@ -832,6 +835,45 @@
   }
 
   .md-preview__math--block[data-value=''] { min-height: 1.5em; }
+
+  // ── 公式源码态的实时预览气泡 ──────────────────────────────────────────
+  .moki-math-preview {
+    font-family: var(--font-editor);
+    color: var(--text);
+    background: var(--surface);
+    border: 1px solid transparent;
+    border-radius: var(--radius-sm);
+    pointer-events: none;
+    user-select: none;
+
+    // KaTeX displayMode 自身就是居中的，这里只收掉它的外边距；
+    // 不能再强制左对齐，否则退出源码态时公式会从行中跳到行左。
+    .katex-display { margin: 0; }
+  }
+
+  .moki-math-preview--block {
+    display: block;
+    // 只留出与上一块的距离；与下方源码块的间距由源码块自身的上边距折叠得出。
+    margin: 1em 0 0;
+    padding: 8px 14px;
+    text-align: center;
+    // 气泡压在公式之上的那 1px 边框 + 8px 内边距正好是退出源码态时公式要落回的距离，
+    // 所以整体上移这么多：预览的字与收尾后的字落在同一批像素上，退出没有位移感。
+    // 用 transform 而不是负边距，是为了不牵动源码块与后续内容的排版位置。
+    transform: translateY(calc(-8px - 1px));
+  }
+
+  .moki-math-preview--inline {
+    position: absolute;
+    inset-inline-start: 0;
+    bottom: 100%;
+    z-index: 3;
+    margin-bottom: 6px;
+    padding: 4px 8px;
+  }
+
+  // 行内预览浮在段落上方，需要段落自身作为定位参照。
+  p:has(.moki-math-preview--inline) { position: relative; }
 
   .milkdown-code-block {
     position: relative;
@@ -1454,4 +1496,46 @@ html[data-theme='dark'] .md-preview {
   overflow-x: clip;
   overflow-y: visible;
   overflow-clip-margin: 14px;
+}
+
+// ── 公式源码态的符号补全列表 ────────────────────────────────────────────
+// 与代码块语言菜单一样渲染在 body 上，所以写在 .milkdown-editor 作用域之外。
+.moki-math-completion {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  width: max-content;
+  max-width: min(280px, calc(100vw - 16px));
+  padding: 4px;
+  overflow-y: auto;
+  background: var(--surface);
+  border: 1px solid var(--border-light);
+  border-radius: var(--radius-sm);
+  box-shadow: var(--shadow);
+}
+
+.moki-math-completion__item {
+  display: grid;
+  grid-template-columns: 22px 1fr;
+  align-items: center;
+  gap: 8px;
+  padding: 3px 8px;
+  color: var(--text);
+  font: 400 13px/1.5 var(--font-editor);
+  background: transparent;
+  border-radius: 4px;
+  cursor: pointer;
+
+  &:hover,
+  &--active { background: var(--hover); }
+}
+
+.moki-math-completion__symbol {
+  font-size: 15px;
+  text-align: center;
+}
+
+.moki-math-completion__code {
+  color: var(--text-dim);
+  font-variant-ligatures: none;
 }

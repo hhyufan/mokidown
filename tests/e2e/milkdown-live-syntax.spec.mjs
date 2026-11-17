@@ -67,6 +67,211 @@ test('draft delimiters are muted, completed formatting is solid, and clicking it
   await expect(editor.locator('.moki-markdown-marker:visible')).toHaveCount(0);
 });
 
+test('block formula preview keeps the last good render while the source is unparseable', async ({ page }) => {
+  const editor = await openEditor(page);
+  await editor.click();
+  await page.keyboard.type('Trailing paragraph');
+  await page.keyboard.press('Enter');
+  await page.keyboard.type('$$ ');
+  const source = editor.locator('.md-preview__math-source--block');
+  await expect(source).toBeVisible();
+  const bubble = editor.locator('.moki-math-preview--block');
+  // 还没成功渲染过的中间态（`\alph`）不弹气泡，也不报格式错误。
+  await page.keyboard.type('\\alph');
+  await expect(bubble).toHaveCount(0);
+  await page.keyboard.type('a');
+  await expect(bubble.locator('.katex')).toBeVisible();
+  // 气泡浮在源码输入块的正上方，不压住正在输入的正文。
+  const bubbleBox = await bubble.boundingBox();
+  const sourceBox = await source.boundingBox();
+  expect(bubbleBox.y + bubbleBox.height).toBeLessThan(sourceBox.y);
+  await page.keyboard.type('}');
+  expect(await source.textContent()).toBe('\\alpha}');
+  // 语法不成立时沿用上一次成功的样子，位置一动不动，避免输入过程闪成报错。
+  await expect(bubble.locator('.katex')).toBeVisible();
+  expect((await bubble.textContent()).trim()).not.toMatch(/公式格式识别错误|Invalid formula/);
+  await page.keyboard.press('Backspace');
+  // 输入态的源码正文本身也排在容器中线上，而不只是预览气泡居中。
+  const typed = await source.evaluate((node) => {
+    const range = document.createRange();
+    range.selectNodeContents(node.firstChild);
+    const rect = range.getBoundingClientRect();
+    return rect.left + rect.width / 2;
+  });
+  const previewed = await bubble.locator('.katex').boundingBox();
+  await page.keyboard.press('ArrowUp');
+  // 退出源码态后居中位置必须重合，否则公式会从行左跳到行中。
+  const rendered = await editor.locator('.md-preview__math--block .katex').boundingBox();
+  const center = rendered.x + rendered.width / 2;
+  expect(Math.abs(previewed.x + previewed.width / 2 - center)).toBeLessThan(2);
+  expect(Math.abs(typed - center)).toBeLessThan(2);
+  await expect(bubble).toHaveCount(0);
+  expect(await page.evaluate(() => window.trial.markdown())).toContain('$$\n\\alpha\n$$');
+});
+
+test('inline formula shows a preview bubble only while its source is revealed', async ({ page }) => {
+  const editor = await openEditor(page, '$x^2$ Tail');
+  const bubble = editor.locator('.moki-math-preview--inline');
+  const formula = editor.locator('.md-preview__math--inline');
+  await page.evaluate(() => window.trial.selectTextblock(0));
+  await expect(formula).toHaveAttribute('data-moki-math-source', '$x^2$');
+  await expect(formula.locator('.katex')).toBeHidden();
+  await expect(bubble.locator('.katex')).toBeVisible();
+  const bubbleBox = await bubble.boundingBox();
+  const formulaBox = await formula.boundingBox();
+  // 预览气泡浮在公式上方。
+  expect(bubbleBox.y + bubbleBox.height).toBeLessThan(formulaBox.y);
+  await page.keyboard.press('End');
+  await expect(formula).not.toHaveAttribute('data-moki-math-source');
+  await expect(bubble).toHaveCount(0);
+  await expect(formula.locator('.katex')).toBeVisible();
+});
+
+test('double-clicking a rendered formula opens its source untouched', async ({ page }) => {
+  const editor = await openEditor(page, '正文 $x^2$ 结尾\n\n$$\n\\alpha \\beta\n$$\n');
+  await editor.locator('.md-preview__math--block').dblclick();
+  const source = editor.locator('.md-preview__math-source--block');
+  await expect(source).toBeVisible();
+  expect(await source.textContent()).toBe('\\alpha \\beta');
+  expect(await page.evaluate(() => window.trial.state().parent)).toBe('math_source_block');
+  await editor.locator('.md-preview__math--inline').dblclick({ position: { x: 2, y: 5 } });
+  const inline = editor.locator('.md-preview__math-source--inline');
+  await expect(inline).toBeVisible();
+  expect(await inline.textContent()).toBe('$x^2$');
+  // 双击只是揭开源码，一个字符都没少。
+  expect(await page.evaluate(() => window.trial.markdown())).toContain('正文 $x^2$ 结尾');
+  expect(await page.evaluate(() => window.trial.markdown())).toContain('$$\n\\alpha \\beta\n$$');
+});
+
+test('leaving the formula source keeps the formula on the pixels its preview showed', async ({ page }) => {
+  const editor = await openEditor(page, '正文段落\n\n$$\n\\alpha\n$$\n');
+  await editor.locator('.md-preview__math--block').dblclick();
+  const previewed = await editor.locator('.moki-math-preview--block .katex').boundingBox();
+  await page.keyboard.press('ArrowUp');
+  await expect(editor.locator('.moki-math-preview--block')).toHaveCount(0);
+  const rendered = await editor.locator('.md-preview__math--block .katex').boundingBox();
+  // 中心对齐才比左边距可靠：气泡有左右内边距，渲染公式却占满整行。
+  expect(Math.abs(previewed.x + previewed.width / 2 - (rendered.x + rendered.width / 2))).toBeLessThan(1);
+  expect(Math.abs(previewed.y - rendered.y)).toBeLessThan(1);
+  expect(Math.abs(previewed.height - rendered.height)).toBeLessThan(1);
+});
+
+test('a backslash in formula source opens the symbol completion list and typing narrows it', async ({ page }) => {
+  const editor = await openEditor(page);
+  const list = page.locator('.moki-math-completion');
+  const rows = list.getByRole('option');
+  const source = editor.locator('.md-preview__math-source--block');
+  await editor.click();
+  await page.keyboard.type('$$ ');
+  // 列表只在半个控制序列之后出现，光天打字不打扰。
+  await expect(list).toHaveCount(0);
+  await page.keyboard.type('\\');
+  await expect(list).toBeVisible();
+  // 只打了个反斜杠时列全所有常用符号：不认得编码的人也能挑。
+  const total = await rows.count();
+  expect(total).toBeGreaterThan(10);
+  await page.keyboard.type('sqr');
+  await expect(rows).toHaveCount(1);
+  await expect(list).toContainText('\\sqrt{}');
+  const menuBox = await list.boundingBox();
+  const token = await source.evaluate((node) => {
+    const start = node.textContent.lastIndexOf('\\');
+    let seen = 0;
+    for (const child of node.childNodes) {
+      const offset = start - seen;
+      if (offset < child.textContent.length) {
+        const range = document.createRange();
+        range.setStart(child, offset);
+        range.setEnd(child, offset + 1);
+        const rect = range.getBoundingClientRect();
+        return { left: rect.left, bottom: rect.bottom };
+      }
+      seen += child.textContent.length;
+    }
+    throw new Error('backslash not found');
+  });
+  // 列表挂在半个控制序列的正下方，视线跟着打字的位置走。
+  expect(menuBox.y).toBeGreaterThanOrEqual(token.bottom);
+  expect(menuBox.y).toBeLessThanOrEqual(token.bottom + 12);
+  expect(Math.abs(menuBox.x - token.left)).toBeLessThan(2);
+  // 没有选中条目时 Enter 还是编辑器的 Enter；方向键选中之后才轮到补全。
+  await page.keyboard.press('ArrowDown');
+  await page.keyboard.press('Enter');
+  expect(await source.textContent()).toBe('\\sqrt{}');
+  await expect(list).toHaveCount(0);
+  await page.keyboard.type('2');
+  expect(await source.textContent()).toBe('\\sqrt{2}');
+  await page.keyboard.press('ArrowUp');
+  expect(await page.evaluate(() => window.trial.markdown())).toContain('$$\n\\sqrt{2}\n$$');
+  await expect(editor.locator('.md-preview__math--block .katex')).toBeVisible();
+});
+
+test('the completion list separates a macro from the text behind the caret', async ({ page }) => {
+  const editor = await openEditor(page);
+  await editor.click();
+  await page.keyboard.type('$$ e^2');
+  const source = editor.locator('.md-preview__math-source--block');
+  // 光标挪到正文最前，插入的宏与紧跟的字母之间必须留分隔空格，否则 \pi 会吞掉 e。
+  // Home 在这种源码块里不会移动光标，只能用 harness 直接落下选区。
+  await page.evaluate(() => window.trial.selectTextblock(0));
+  const list = page.locator('.moki-math-completion');
+  await expect(list).toHaveCount(0);
+  await page.keyboard.type('\\');
+  await list.getByRole('option', { name: /π/ }).click();
+  // 选中之前的那个 `\` 算进替换范围，不会留下多余的反斜杠。
+  expect(await source.textContent()).toBe('\\pi e^2');
+  await page.keyboard.press('ArrowUp');
+  // 报错的宏会被 KaTeX 原样印成 <mtext>，没有 mtext 才算真的解析成功。
+  const block = editor.locator('.md-preview__math--block');
+  expect(await block.getAttribute('data-value')).toBe('\\pi e^2');
+  await expect(block.locator('mtext')).toHaveCount(0);
+  await expect(block.locator('.katex')).toBeVisible();
+});
+
+test('Escape keeps the completion list away until the next control sequence', async ({ page }) => {
+  const editor = await openEditor(page);
+  const list = page.locator('.moki-math-completion');
+  const source = editor.locator('.md-preview__math-source--block');
+  await editor.click();
+  await page.keyboard.type('$$ \\al');
+  await expect(list).toBeVisible();
+  await page.keyboard.press('Escape');
+  await expect(list).toHaveCount(0);
+  // 同一段编码接着往下打不该再把列表弹回来，否则躲不掉。
+  await page.keyboard.type('pha');
+  await expect(list).toHaveCount(0);
+  expect(await source.textContent()).toBe('\\alpha');
+  // 换到下一段控制序列，列表重新弹出来。
+  await page.keyboard.type(' \\b');
+  await expect(list).toBeVisible();
+  // 编码打全（`\beta`）就自动收：列表开着会拦住方向键，而向上/向下是离开源码态的手势。
+  await page.keyboard.type('eta');
+  await expect(list).toHaveCount(0);
+  await page.keyboard.press('ArrowUp');
+  expect(await page.evaluate(() => window.trial.markdown())).toContain('$$\n\\alpha \\beta\n$$');
+});
+
+test('the completion list follows inline source editing and closes on Escape', async ({ page }) => {
+  const editor = await openEditor(page, '$x^2$ Tail');
+  const list = page.locator('.moki-math-completion');
+  await expect(list).toHaveCount(0);
+  // 光标贴住公式时仍是原子节点，那个位置打不进文字，所以不挂列表。
+  await page.evaluate(() => window.trial.selectTextblock(0));
+  await expect(list).toHaveCount(0);
+  // 选中公式再 Backspace 才进入可编辑的行内源码态。
+  await editor.locator('.md-preview__math--inline').click({ position: { x: 2, y: 5 } });
+  await page.keyboard.press('Backspace');
+  const source = editor.locator('.md-preview__math-source--inline');
+  await expect(source).toBeVisible();
+  await page.keyboard.type('\\');
+  await expect(list).toBeVisible();
+  await list.getByRole('option', { name: /α/ }).click();
+  expect(await source.textContent()).toContain('\\alpha ');
+  await expect(list).toHaveCount(0);
+  const caret = await page.evaluate(() => window.trial.state().selection);
+  expect(caret.head).toBe(caret.anchor);
+});
+
 test('horizontal arrows enter each visible marker character before crossing a line boundary', async ({ page }) => {
   const editor = await openEditor(page, 'Above\n\n**bold**');
   await page.evaluate(() => window.trial.selectTextblock(1));
