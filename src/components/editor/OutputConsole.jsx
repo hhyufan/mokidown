@@ -151,7 +151,7 @@ export default function OutputConsole() {
     } catch (error) { state.append('stderr', `${t('console.copyFailed', { error: error?.message || error })}\n`); }
   };
   return <React.Fragment>
-    <section className="output-console" aria-label={t('console.aria.label')} style={{ height: state.height, display: visible ? undefined : 'none' }}>
+    <section className="output-console" aria-label={t('console.aria.label')} data-open={visible ? 'true' : 'false'} style={{ height: visible ? state.height : 0 }}>
       <div className="output-console__resize" role="separator" aria-label={t('console.aria.resize')}
         aria-orientation="horizontal" aria-valuemin={140} aria-valuemax={600} aria-valuenow={state.height} tabIndex={0}
         onKeyDown={(event) => {
