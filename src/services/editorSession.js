@@ -73,11 +73,12 @@ export function flushEditorSession() {
   // Startup must not replace yesterday's session with a temporary empty store.
   if (!restored) return;
   const { tabs, activeTabId } = useEditorStore.getState();
+  const files = tabs.filter((tab) => !tab.builtin);
   const snapshot = {
-    version: 1, activeTabId,
-    tabs: tabs.map(({ id, name, path, ext, encoding, lineEnding, externalFileId }) =>
+    version: 1, activeTabId: files.some((tab) => tab.id === activeTabId) ? activeTabId : files.at(-1)?.id ?? null,
+    tabs: files.map(({ id, name, path, ext, encoding, lineEnding, externalFileId }) =>
       ({ id, name, path, ext, encoding, lineEnding, externalFileId })),
-    views: snapshotDocumentViewStates(tabs.map((tab) => tab.id)),
+    views: snapshotDocumentViewStates(files.map((tab) => tab.id)),
   };
   try { localStorage.setItem(STORAGE_KEY, JSON.stringify(snapshot)); }
   catch (error) { console.warn('[session] Could not save workspace:', error); }

@@ -1510,6 +1510,9 @@ pub(super) struct ProcessTree(isize);
 impl ProcessTree {
     pub(super) fn attach(child: &Child) -> Result<Self, String> {
         use std::os::windows::io::AsRawHandle;
+        Self::attach_handle(child.as_raw_handle() as isize)
+    }
+    pub(super) fn attach_handle(handle: isize) -> Result<Self, String> {
         use windows_sys::Win32::{Foundation::CloseHandle, System::JobObjects::*};
         unsafe {
             let job = CreateJobObjectW(std::ptr::null(), std::ptr::null());
@@ -1524,7 +1527,7 @@ impl ProcessTree {
                 &limits as *const _ as *const _,
                 std::mem::size_of_val(&limits) as u32,
             ) == 0
-                || AssignProcessToJobObject(job, child.as_raw_handle() as isize) == 0
+                || AssignProcessToJobObject(job, handle) == 0
             {
                 let error = std::io::Error::last_os_error().to_string();
                 CloseHandle(job);
@@ -1553,7 +1556,10 @@ pub(super) struct ProcessTree(u32);
 #[cfg(not(windows))]
 impl ProcessTree {
     pub(super) fn attach(child: &Child) -> Result<Self, String> {
-        Ok(Self(child.id()))
+        Ok(Self::for_process_group(child.id()))
+    }
+    pub(super) fn for_process_group(pid: u32) -> Self {
+        Self(pid)
     }
     pub(super) fn terminate(&self) {
         let _ = command("kill")

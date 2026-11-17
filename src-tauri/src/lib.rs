@@ -30,6 +30,8 @@ mod script_runner;
 mod search;
 mod startup;
 mod startup_gate;
+#[cfg(desktop)]
+mod terminal;
 mod text_file;
 mod webview_defaults;
 
@@ -1798,6 +1800,8 @@ pub fn run() {
                 reader::forget_window(window.app_handle(), window.label());
             }
             if window.label() == "main" && matches!(event, tauri::WindowEvent::Destroyed) {
+                #[cfg(desktop)]
+                terminal::stop_all();
                 script_runner::stop_all();
                 lsp::stop_all();
                 language_plugins::cancel_all();
@@ -1873,6 +1877,14 @@ pub fn run() {
             script_runner::start_script,
             script_runner::stop_script,
             script_runner::write_script_input,
+            #[cfg(desktop)]
+            terminal::terminal_start,
+            #[cfg(desktop)]
+            terminal::terminal_write,
+            #[cfg(desktop)]
+            terminal::terminal_resize,
+            #[cfg(desktop)]
+            terminal::terminal_close,
             lsp::start_lsp,
             lsp::send_lsp,
             lsp::stop_lsp,

@@ -210,3 +210,11 @@
     height: 32px;
   }
 }
+.editor-content__builtin-html {
+  display: block;
+  flex: 1;
+  width: 100%;
+  min-height: 0;
+  border: 0;
+  background: var(--surface);
+}

@@ -10,6 +10,7 @@ import { Tooltip } from 'antd';
 import useEditorStore from '@store/useEditorStore';
 import useConfigStore from '@store/useConfigStore';
 import useHistoryStore from '@store/useHistoryStore';
+import useThemeStore from '@store/useThemeStore';
 import MonacoEditor from '@components/editor/LazyMonacoEditor';
 import FloatingToolbar from '@components/editor/FloatingToolbar';
 import FloatingRunButton from '@components/editor/FloatingRunButton';
@@ -30,6 +31,14 @@ const MilkdownMarkdownEditor = lazyWithRetry(() => import('@components/editor/Mi
 const MarkdownPreview = lazyWithRetry(() => import('@components/editor/MarkdownPreview'));
 const TreeEditor = lazyWithRetry(() => import('@components/editor/TreeEditor'));
 const HistoryDiffView = lazyWithRetry(() => import('@components/history/HistoryDiffView'));
+
+function PluginDocsPage({ title }) {
+  const theme = useThemeStore((state) => state.theme);
+  const url = new URL(`${import.meta.env.BASE_URL}docs/plugins/index.html`, document.baseURI);
+  url.searchParams.set('theme', theme);
+  return <iframe className="editor-content__builtin-html" title={title} src={url.href}
+    sandbox="allow-scripts allow-same-origin allow-downloads" />;
+}
 
 /**
  * Markdown 预览懒加载期间的占位节点。
@@ -519,6 +528,10 @@ function EditorContent() {
         <div className="editor-content__welcome"><WelcomeScreen /></div>
       </main>
     );
+  }
+
+  if (activeTabMeta.builtin === 'pluginDocs') {
+    return <main className="editor-content"><PluginDocsPage title={activeTabMeta.name} /></main>;
   }
 
   // 本地历史对比：用 diff 视图覆盖整个编辑区，关闭后回到正常编辑。

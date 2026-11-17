@@ -279,7 +279,6 @@
 }
 
 .tabbar__action-btn {
-  &--hidden { visibility: hidden; }
   &--active {
     background: var(--accent-bg) !important;
     color: var(--accent) !important;
