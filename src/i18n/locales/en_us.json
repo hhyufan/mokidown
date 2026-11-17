@@ -436,6 +436,12 @@
   "tree.backToTop": "Back to top",
   "console.title": "Output",
   "terminal.title": "Terminal",
+  "htmlPreview.title": "HTML live preview",
+  "htmlPreview.port": "Preview port",
+  "htmlPreview.portHint": "0 automatically selects an available port. Changing this reconnects local previews.",
+  "htmlPreview.refresh": "Refresh",
+  "htmlPreview.address": "Preview address",
+  "htmlPreview.invalidAddress": "Enter a valid URL",
   "terminal.starting": "Starting terminal…",
   "terminal.running": "Local terminal",
   "terminal.stopping": "Stopping terminal…",
@@ -958,5 +964,13 @@
   "settings.shortcuts.group.tabs": "Tabs",
   "settings.shortcuts.action.closeTab": "Close current tab",
   "settings.shortcuts.action.closeOtherTabs": "Close other tabs",
-  "settings.shortcuts.action.closeAllTabs": "Close all tabs"
+  "settings.shortcuts.action.closeAllTabs": "Close all tabs",
+  "web.openInBrowser": "Open in browser",
+  "web.splitOpen": "Open in split",
+  "web.newTab": "Open in new tab",
+  "web.copyLink": "Copy link",
+  "terminal.link.splitOpen": "Open in split",
+  "terminal.link.openTab": "Open in new tab",
+  "terminal.link.copy": "Copy link",
+  "terminal.link.browser": "Open in browser"
 }

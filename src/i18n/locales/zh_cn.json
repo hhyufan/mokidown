@@ -436,6 +436,12 @@
   "tree.backToTop": "返回顶部",
   "console.title": "输出",
   "terminal.title": "终端",
+  "htmlPreview.title": "HTML 实时预览",
+  "htmlPreview.port": "预览端口",
+  "htmlPreview.portHint": "0 表示自动选择可用端口。修改后重新连接本机预览。",
+  "htmlPreview.refresh": "刷新",
+  "htmlPreview.address": "预览地址",
+  "htmlPreview.invalidAddress": "请输入有效的网址",
   "terminal.starting": "正在启动终端…",
   "terminal.running": "本机终端",
   "terminal.stopping": "正在结束终端…",
@@ -958,5 +964,13 @@
   "settings.shortcuts.group.tabs": "标签页",
   "settings.shortcuts.action.closeTab": "关闭当前标签",
   "settings.shortcuts.action.closeOtherTabs": "关闭其他标签",
-  "settings.shortcuts.action.closeAllTabs": "关闭所有标签"
+  "settings.shortcuts.action.closeAllTabs": "关闭所有标签",
+  "web.openInBrowser": "在浏览器打开",
+  "web.splitOpen": "分屏打开",
+  "web.newTab": "新标签页打开",
+  "web.copyLink": "复制链接",
+  "terminal.link.splitOpen": "分屏打开",
+  "terminal.link.openTab": "新标签页打开",
+  "terminal.link.copy": "复制链接",
+  "terminal.link.browser": "浏览器打开"
 }

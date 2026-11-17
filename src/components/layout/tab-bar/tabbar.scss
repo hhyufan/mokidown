@@ -157,6 +157,13 @@
   box-shadow: 0 6px 16px rgba(0, 0, 0, 0.16);
 }
 
+.tabbar__tab-favicon {
+  width: 16px;
+  height: 16px;
+  flex-shrink: 0;
+  object-fit: contain;
+}
+
 .tabbar__tab-icon {
   width: 16px;
   height: 16px;
