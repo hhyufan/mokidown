@@ -6,7 +6,7 @@ function getMarkdownDocument(id, anyText = false) {
   flushEditorBuffer(id);
   const store = useEditorStore.getState();
   const tab = store.tabs.find((item) => item.id === id);
-  if (!tab || (!anyText && !/^(md|markdown|mdown|mdwn|mkd|mkdn|mdx)$/i.test(tab.ext))) return null;
+  if (!tab || tab.builtin || (!anyText && !/^(md|markdown|mdown|mdwn|mkd|mkdn|mdx)$/i.test(tab.ext))) return null;
   return {
     tab,
     document: { id: tab.id, name: tab.name, path: tab.path,

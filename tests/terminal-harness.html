@@ -1,0 +1,49 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><title>Integrated terminal</title></head><body>
+<div id="root"></div>
+<script type="module">
+import React from 'react';
+import { createRoot } from 'react-dom/client';
+import { mockIPC } from '@tauri-apps/api/mocks';
+import OutputConsole from '/src/components/editor/OutputConsole.jsx';
+import editorStore from '/src/store/useEditorStore.js';
+import fileStore from '/src/store/useFileStore.js';
+import scriptStore from '/src/store/useScriptStore.js';
+import themeStore from '/src/store/useThemeStore.js';
+import i18n from '/src/i18n/index.js';
+import '/src/assets/styles/index.scss';
+import '/src/assets/styles/App.scss';
+
+await i18n.changeLanguage('en');
+const commands = [];
+const output = new Map();
+let lastStarted;
+const emit = (text, id = lastStarted) => output.get(id)?.({ kind: 'data', bytes: [...new TextEncoder().encode(text)] });
+mockIPC((command, args) => {
+  if (!command.startsWith('terminal_')) return null;
+  const { events, ...options } = args;
+  commands.push({ command, ...options });
+  if (command === 'terminal_start') {
+    lastStarted = options.id;
+    output.set(lastStarted, (event) => events.onmessage(event));
+    emit('\u001b[6n');
+    emit('ready> ');
+    emit('\u001b[93mnpm\u001b[37m run dev\u001b[0m\r\n');
+  }
+  if (command === 'terminal_close') {
+    output.get(options.id)?.({ kind: 'exit', code: 0 });
+    output.delete(options.id);
+  }
+  return null;
+});
+window.terminalTrial = {
+  commands, emit, theme: themeStore.getState().setTheme,
+  openFolder: (currentDir) => fileStore.setState({ currentDir }),
+  closeFiles: () => editorStore.setState({ tabs: [], tabRenderList: [], activeTabId: null, viewMode: 'preview' }),
+};
+editorStore.getState().openFile({ path: 'C:\\work\\notes.txt', name: 'notes.txt', content: 'plain text' });
+scriptStore.getState().setOpen(true);
+createRoot(document.getElementById('root')).render(React.createElement('div', {
+  className: 'app app--background', style: { display: 'block', background: 'rgb(245, 217, 223)' },
+}, React.createElement(OutputConsole)));
+</script></body></html>
