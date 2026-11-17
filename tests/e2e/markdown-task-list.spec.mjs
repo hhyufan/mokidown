@@ -31,6 +31,7 @@ async function expectAlignedTaskTree(root) {
     const branch = getComputedStyle(child, '::before');
     const branchLeft = childRow.left + parseFloat(branch.left);
     const trunk = getComputedStyle(child, '::after');
+    const fold = child.querySelector(':scope > .md-preview__fold, :scope > p > .md-preview__fold')?.getBoundingClientRect();
     const probe = document.createElement('span');
     probe.style.color = 'var(--border)';
     probe.hidden = true;
@@ -41,8 +42,11 @@ async function expectAlignedTaskTree(root) {
       parentCenterDelta: center(parentBox) - parent.getBoundingClientRect().top - parseFloat(getComputedStyle(parent).lineHeight) / 2,
       branchXDelta: branchLeft - (parentBox.left + parentBox.width / 2),
       branchYDelta: childRow.top + parseFloat(branch.top) - center(childBox),
-      branchEndDelta: branchLeft + parseFloat(branch.width) - childBox.left,
+      branchGap: childBox.left - (branchLeft + parseFloat(branch.width)),
       trunkStartDelta: childRow.top + parseFloat(trunk.top) - center(parentBox),
+      trunkJoinDelta: childRow.top + parseFloat(trunk.top) + parseFloat(trunk.height)
+        - child.nextElementSibling.getBoundingClientRect().top,
+      ...(fold && { foldXDelta: fold.left + fold.width / 2 - (branchLeft + 0.5), foldYDelta: center(fold) - center(childBox) }),
       branchWidth: branch.borderTopWidth,
       trunkWidth: trunk.borderLeftWidth,
       branchColor: branch.borderTopColor,
@@ -50,9 +54,10 @@ async function expectAlignedTaskTree(root) {
       treeColor,
     };
   });
-  const { branchWidth, trunkWidth, branchColor, trunkColor, treeColor, ...deltas } = positions;
+  const { branchWidth, trunkWidth, branchColor, trunkColor, treeColor, branchGap, ...deltas } = positions;
   expect([branchWidth, trunkWidth]).toEqual(['1px', '1px']);
   expect([branchColor, trunkColor]).toEqual([treeColor, treeColor]);
+  expect(branchGap).toBeCloseTo(0, 0);
   for (const delta of Object.values(deltas)) expect(Math.abs(delta)).toBeLessThan(1);
 }
 
@@ -96,6 +101,168 @@ test('WYSIWYG task states cascade through three levels and the setting takes eff
   await expect.poll(states).toEqual(['false', 'false', 'true', 'false', 'false']);
   await setCascade(page, true);
   await expect.poll(states).toEqual(['mixed', 'mixed', 'true', 'false', 'false']);
+});
+
+test('WYSIWYG draws only changed task states and preserves the task rows', async ({ page }) => {
+  await page.goto(`/tests/milkdown-flow-harness.html?content=${encodeURIComponent(markdown)}`);
+  const editor = page.locator('.milkdown-editor');
+  const boxes = editor.getByRole('checkbox');
+  await expect(boxes).toHaveCount(5);
+  const toggle = (index) => editor.evaluate((root, index) => {
+    const rows = [...root.querySelectorAll('li[data-task-state]')];
+    const labels = rows.map((row) => row.querySelector('p'));
+    const buttons = rows.map((row) => row.querySelector('button[role="checkbox"]'));
+    const states = buttons.map((button) => button.getAttribute('aria-checked'));
+    // Resolve the starting styles before toggling, so this also checks the transitions.
+    root.getBoundingClientRect();
+    buttons[index].click();
+    const updated = [...root.querySelectorAll('li[data-task-state]')];
+    return updated.map((row, i) => {
+      const button = row.querySelector('button[role="checkbox"]');
+      const label = row.querySelector('p');
+      const state = button.getAttribute('aria-checked');
+      const line = state === 'mixed' ? '::after' : '::before';
+      const clip = getComputedStyle(button, line).clipPath;
+      return { state, changed: state !== states[i], same: row === rows[i] && label === labels[i] && button === buttons[i], clip };
+    });
+  }, index);
+
+  const completed = await toggle(3);
+  expect(completed.map((row) => row.state)).toEqual(Array(5).fill('true'));
+  expect(completed.every((row) => row.same)).toBe(true);
+  expect(completed.filter((row) => row.changed)).toHaveLength(3);
+  expect(completed[3].clip).not.toBe('inset(0px)');
+  await expect.poll(() => boxes.nth(3).evaluate((box) => getComputedStyle(box, '::before').clipPath)).toBe('inset(0px)');
+
+  const partial = await toggle(2);
+  expect(partial.map((row) => row.state)).toEqual(['mixed', 'mixed', 'false', 'true', 'true']);
+  expect(partial.every((row) => row.same)).toBe(true);
+  expect(partial[0].clip).not.toBe('inset(0px)');
+  await expect.poll(() => boxes.first().evaluate((box) => getComputedStyle(box, '::after').clipPath)).toBe('inset(0px)');
+
+  // The outer parent stays mixed when its already-mixed branch loses the last check.
+  const cleared = await toggle(3);
+  expect(cleared.map((row) => row.state)).toEqual(['mixed', 'false', 'false', 'false', 'true']);
+  expect(cleared.map((row) => row.changed)).toEqual([false, true, false, true, false]);
+  expect(cleared.every((row) => row.same)).toBe(true);
+});
+
+test('checkbox retracts the current mark before drawing the next one on the same translucent fill', async ({ page }) => {
+  const tasks = '- [x] Parent\n  - [x] Child one\n  - [x] Child two';
+  await page.goto(`/tests/milkdown-flow-harness.html?content=${encodeURIComponent(tasks)}`);
+  const boxes = page.locator('.milkdown-editor').getByRole('checkbox');
+  const parent = boxes.first();
+  await expect(parent).toHaveAttribute('data-task-symbol', 'true');
+  const colors = await parent.evaluate(async (button) => {
+    const child = button.closest('li').querySelector(':scope > ul > li button[role=checkbox]');
+    const fill = () => getComputedStyle(button).boxShadow;
+    const frame = () => new Promise((resolve) => requestAnimationFrame(resolve));
+    const transition = () => button.getAnimations({ subtree: true }).find((animation) =>
+      animation.transitionProperty === 'clip-path');
+    const observeChange = async (target) => {
+      target.click();
+      await frame();
+      const outgoing = transition();
+      const duringRetraction = fill();
+      const outgoingPseudo = outgoing?.effect.pseudoElement;
+      const endClip = outgoing?.effect.getKeyframes().at(-1).clipPath;
+      await outgoing?.finished;
+      await frame();
+      const incoming = transition();
+      const incomingPseudo = incoming?.effect.pseudoElement;
+      await incoming?.finished;
+      return { outgoingPseudo, endClip, incomingPseudo, duringRetraction, after: fill() };
+    };
+    const initial = fill();
+    return { initial, dash: await observeChange(child), check: await observeChange(child), clear: await observeChange(button) };
+  });
+  expect(colors.dash).toEqual({ outgoingPseudo: '::before', endClip: 'inset(0px 100% 0px 0px)',
+    incomingPseudo: '::after', duringRetraction: colors.initial, after: colors.initial });
+  expect(colors.check).toMatchObject({ outgoingPseudo: '::after', incomingPseudo: '::before',
+    duringRetraction: colors.initial, after: colors.initial });
+  expect(colors.clear).toMatchObject({ outgoingPseudo: '::before', incomingPseudo: undefined, duringRetraction: colors.initial });
+  expect(colors.initial).toContain('/ 0.56)');
+  expect(colors.clear.after).toContain('/ 0.58)');
+});
+
+test('checkboxes and fold tooltip redraw the wallpaper above an opaque base', async ({ page }) => {
+  await page.goto(`/tests/milkdown-flow-harness.html?wallpaper&content=${encodeURIComponent('- [ ] Parent\n  - [x] Child\n  - [ ] Child two')}`);
+  const fold = page.locator('.milkdown-editor .md-preview__fold').first();
+  const surfaces = () => page.locator('.md-preview__task-checkbox, .ant-tooltip-inner').evaluateAll((elements) =>
+    elements.map((element) => {
+      const css = getComputedStyle(element);
+      const rect = element.getBoundingClientRect();
+      return { base: css.backgroundColor, wallpaper: css.backgroundImage.includes('data:image/svg+xml'),
+        aligned: ['x', 'y'].every((axis) => Math.abs(parseFloat(element.style.getPropertyValue(`--moki-popup-${axis}`)) - rect[axis]) < 1) };
+    }));
+  for (const [theme, color] of [['light', 'rgb(255, 255, 255)'], ['dark', 'rgb(24, 24, 24)']]) {
+    await page.evaluate((theme) => { document.documentElement.dataset.theme = theme; }, theme);
+    await fold.hover();
+    await expect(page.locator('.ant-tooltip-inner')).toHaveCSS('background-color', color);
+    await expect.poll(surfaces).toEqual(Array(4).fill({ base: color, wallpaper: true, aligned: true }));
+    await expect.poll(() => page.locator('.ant-tooltip-arrow').evaluate((arrow) =>
+      getComputedStyle(arrow, '::before').backgroundColor)).toBe(color);
+  }
+});
+
+for (const harness of ['milkdown-flow', 'preview']) {
+  test(`${harness} strikes through an inline code chip on a wrapped task`, async ({ page }) => {
+    await page.setViewportSize({ width: 600, height: 500 });
+    const task = '- [x] ' + '普通文字 `$$` 后面的文字 '.repeat(8);
+    await page.goto(`/tests/${harness}-harness.html?content=${encodeURIComponent(task)}`);
+    await page.addStyleTag({ content: '.md-preview__task-strike { stroke: #ff00ff !important; stroke-width: 2px; }' });
+    const strike = page.locator('.md-preview__task-strike');
+    await expect(strike.locator('path').nth(1)).toBeAttached();
+    const clip = await strike.evaluate((svg) => {
+      const code = svg.closest('li').querySelector('code').getBoundingClientRect();
+      return { x: Math.floor(code.left) - 6, y: Math.floor(code.top),
+        width: Math.ceil(code.width) + 12, height: Math.ceil(code.height) };
+    });
+    const screenshot = await page.screenshot({ clip, scale: 'css' });
+    const continuous = await page.evaluate(async (base64) => {
+      const bitmap = await createImageBitmap(await (await fetch(`data:image/png;base64,${base64}`)).blob());
+      const canvas = new OffscreenCanvas(bitmap.width, bitmap.height).getContext('2d');
+      canvas.drawImage(bitmap, 0, 0);
+      const { data } = canvas.getImageData(0, 0, bitmap.width, bitmap.height);
+      return Array.from({ length: bitmap.height }, (_, y) => y).some((y) =>
+        Array.from({ length: bitmap.width }, (_, x) => (y * bitmap.width + x) * 4).every((i) =>
+          data[i] > 240 && data[i + 1] < 80 && data[i + 2] > 240));
+    }, screenshot.toString('base64'));
+    expect(continuous).toBe(true);
+  });
+}
+
+test('WYSIWYG draws and retracts the task strike through the same path', async ({ page }) => {
+  await page.goto(`/tests/milkdown-flow-harness.html?content=${encodeURIComponent('- [ ] before `code` after')}`);
+  const strike = page.locator('.md-preview__task-strike');
+  await expect(strike).toHaveAttribute('data-drawn', 'false');
+  const result = await strike.evaluate(async (svg) => {
+    const box = svg.parentElement;
+    const text = svg.closest('p');
+    const color = () => getComputedStyle(text).color;
+    const frame = () => new Promise((resolve) => requestAnimationFrame(resolve));
+    const play = async () => {
+      box.click();
+      await frame();
+      await frame();
+      const motion = svg.getAnimations()[0];
+      const steps = motion?.effect.getKeyframes().map((keyframe) => keyframe.strokeDashoffset);
+      const during = color();
+      await motion?.finished;
+      return { steps, during, after: color() };
+    };
+    const normal = color();
+    const forward = await play();
+    const path = svg.firstElementChild;
+    const reverse = await play();
+    return { normal, forward, reverse, samePath: svg.firstElementChild === path };
+  });
+  expect(result.forward.steps).toEqual(['1px', '0px']);
+  expect(result.reverse.steps).toEqual(['0px', '1px']);
+  expect(result.samePath).toBe(true);
+  expect(result.forward.after).not.toBe(result.normal);
+  expect(result.reverse.during).toBe(result.forward.after);
+  expect(result.reverse.after).toBe(result.normal);
 });
 
 test('split preview recognizes no-break task markers and reflects the cascade setting', async ({ page }) => {

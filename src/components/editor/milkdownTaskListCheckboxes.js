@@ -1,4 +1,5 @@
 import { Plugin, PluginKey } from '@milkdown/kit/prose/state';
+import { DOMSerializer } from '@milkdown/kit/prose/model';
 import { Decoration, DecorationSet } from '@milkdown/kit/prose/view';
 import { $prose } from '@milkdown/kit/utils';
 import { splitListItem } from '@milkdown/kit/prose/schema-list';
@@ -7,9 +8,30 @@ import i18n from '@/i18n';
 import useConfigStore from '@store/useConfigStore';
 import { isImeComposing } from '@utils/keyboard';
 import { collectTasks, toggleTaskBranch } from '@utils/taskListTree';
+import { observeTaskListStrikes } from './taskListStrike';
+import { observeTaskListCheckboxes } from './taskListCheckboxMotion';
 
 const taskListKey = new PluginKey('mokiTaskListCheckboxes');
 const cascadeEnabled = () => useConfigStore.getState().markdownTaskCascade !== false;
+
+function listItemView(node, view) {
+  const { dom, contentDOM } = DOMSerializer.renderSpec(view.dom.ownerDocument, node.type.spec.toDOM(node));
+  let current = node;
+  return {
+    dom,
+    contentDOM,
+    update(next) {
+      const checked = next.attrs.checked;
+      // ProseMirror normally replaces a list item when its checked attribute
+      // changes. Reuse the row so descendants keep their DOM and animations.
+      if (typeof checked !== typeof current.attrs.checked
+        || !next.hasMarkup(current.type, { ...current.attrs, checked }, current.marks)) return false;
+      if (checked !== current.attrs.checked) dom.dataset.checked = String(checked);
+      current = next;
+      return true;
+    },
+  };
+}
 
 function documentTasks(doc) {
   return collectTasks({ node: doc, pos: -1 }, ({ node, pos }) => {
@@ -40,23 +62,28 @@ function decorations(doc) {
   const widgets = documentTasks(doc).flatMap((task) => {
     const { node, pos } = task;
     const state = cascade ? task.state : String(task.checked);
+    const from = pos + 2;
     return [
       Decoration.node(pos, pos + node.nodeSize, { 'data-task-state': state }),
-      Decoration.widget(pos + 2, (view, getPos) => {
-        const button = document.createElement('button');
+      Decoration.widget(from, (view, getPos) => {
+        const button = view.dom.ownerDocument.createElement('button');
         button.type = 'button';
         button.className = 'md-preview__task-checkbox';
         button.setAttribute('role', 'checkbox');
         button.setAttribute('aria-checked', state);
         button.setAttribute('aria-label', i18n.t('toolbar.taskList'));
         button.disabled = !view.editable;
+        const strike = view.dom.ownerDocument.createElementNS('http://www.w3.org/2000/svg', 'svg');
+        strike.setAttribute('class', 'md-preview__task-strike');
+        strike.setAttribute('aria-hidden', 'true');
+        button.append(strike);
         button.addEventListener('mousedown', (event) => event.preventDefault());
         button.addEventListener('click', () => {
           const position = getPos();
           if (typeof position === 'number') toggle(view, position - 2);
         });
         return button;
-      }, { key: `moki-task-checkbox-${state}`, side: -1, stopEvent: () => true, ignoreSelection: true }),
+      }, { key: 'moki-task-checkbox', side: -1, stopEvent: () => true, ignoreSelection: true }),
     ];
   });
   return DecorationSet.create(doc, widgets);
@@ -69,14 +96,27 @@ export function milkdownTaskListCheckboxes(marker, convertMarker) {
       init: (_, state) => decorations(state.doc),
       apply: (tr, previous) => tr.docChanged || tr.getMeta(taskListKey) ? decorations(tr.doc) : previous,
     },
-    view: (view) => ({
-      destroy: useConfigStore.subscribe((next, previous) => {
+    view: (view) => {
+      const stopStrikes = observeTaskListStrikes(view.dom);
+      const stopCheckboxes = observeTaskListCheckboxes(view.dom);
+      const unsubscribe = useConfigStore.subscribe((next, previous) => {
         if (next.markdownTaskCascade !== previous.markdownTaskCascade) {
           view.dispatch(view.state.tr.setMeta(taskListKey, true).setMeta('addToHistory', false));
         }
-      }),
-    }),
+      });
+      return {
+        update(updated, previous) {
+          if (taskListKey.getState(updated.state) === taskListKey.getState(previous)) return;
+          for (const button of updated.dom.querySelectorAll('.md-preview__task-checkbox')) {
+            const state = button.closest('li')?.dataset.taskState;
+            if (state && button.getAttribute('aria-checked') !== state) button.setAttribute('aria-checked', state);
+          }
+        },
+        destroy() { stopStrikes(); stopCheckboxes(); unsubscribe(); },
+      };
+    },
     props: {
+      nodeViews: { list_item: listItemView },
       decorations: (state) => taskListKey.getState(state),
       handleDOMEvents: {
         keydown(view, event) {

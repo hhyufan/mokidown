@@ -31,7 +31,9 @@ export function toggleTaskBranch(task, setChecked) {
   }
   visit(task);
   for (let parent = task.parent; parent; parent = parent.parent) {
-    parent.state = taskState(parent);
-    setChecked(parent, parent.state === 'true');
+    const state = taskState(parent);
+    if (state === parent.state) break;
+    parent.state = state;
+    setChecked(parent, state === 'true');
   }
 }
