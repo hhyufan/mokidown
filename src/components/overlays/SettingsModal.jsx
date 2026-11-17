@@ -466,7 +466,7 @@ function SettingsModal({ open: openProp, onClose }) {
               <ShortcutsSettings SettingGroup={SettingGroup} SettingRow={SettingRow} />
             )}
 
-            {activeNav === 'languages' && <LanguageServices />}
+            {activeNav === 'languages' && <LanguageServices onOpenDocs={onClose} />}
 
             {activeNav === 'about' && (
               <div className="settings-section">

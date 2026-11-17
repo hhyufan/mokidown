@@ -54,7 +54,7 @@ function iconName(plugin) {
 }
 
 
-export default function LanguageServices() {
+export default function LanguageServices({ onOpenDocs }) {
   const { t, i18n } = useTranslation();
   const state = useLspStore();
   const extState = useExtensionStore();
@@ -242,7 +242,7 @@ export default function LanguageServices() {
           <p>{t('languageServices.acceleratorHint')}</p>
         </div>
       )}
-      <PluginDeveloperTools desktop={desktop} />
+      <PluginDeveloperTools desktop={desktop} onOpenDocs={onOpenDocs} />
       <div className="language-services__list">
         {filtered.map((plugin) => <article key={plugin.id} className="language-services__card">
           <button className="language-services__summary" type="button" onClick={() => setSelectedId(plugin.id)}>
