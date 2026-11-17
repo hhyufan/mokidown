@@ -5,6 +5,7 @@ import { Terminal } from '@xterm/xterm';
 import { FitAddon } from '@xterm/addon-fit';
 import { WebLinksAddon } from '@xterm/addon-web-links';
 import useThemeStore from '@store/useThemeStore';
+import useEditorStore from '@store/useEditorStore';
 import { openExternal } from '@utils/tauriApi';
 import '@xterm/xterm/css/xterm.css';
 
@@ -56,16 +57,97 @@ export default function TerminalPane({ active, directory }) {
     });
     const fit = new FitAddon();
     term.loadAddon(fit);
-    // 终端输出中的 URL 可点击，交给系统浏览器打开。
-    const links = new WebLinksAddon((event, uri) => {
+    let hoveredLink = null;
+    const openLink = (event, uri) => {
       event.preventDefault?.();
-      void openExternal(uri).catch(() => {});
+      if (!/^https?:\/\//i.test(uri)) return;
+      void openExternal(uri).catch((error) => setStatus((previous) => ({ ...previous, error: String(error?.message || error) })));
+    };
+    // 只让左键触发浏览器打开；右键交给链接菜单。
+    const activateLink = (event, uri) => {
+      if (event.button !== 0) return;
+      openLink(event, uri);
+    };
+    const links = new WebLinksAddon(activateLink, {
+      hover: (event, text) => { hoveredLink = text; },
+      leave: () => { hoveredLink = null; },
     });
+    term.options.linkHandler = { activate: activateLink };
     term.loadAddon(links);
     term.open(host);
 
+    const removeLinkMenu = () => host.ownerDocument.querySelector('.terminal-link-menu')?.remove();
+    const openLinkMenu = (anchor, url) => {
+      removeLinkMenu();
+      const menu = host.ownerDocument.createElement('div');
+      menu.className = 'terminal-link-menu';
+      const bodyBackground = getComputedStyle(host.ownerDocument.body).backgroundColor;
+      const fallback = host.ownerDocument.documentElement.dataset.theme === 'dark' ? '#262626' : '#ffffff';
+      const opaque = bodyBackground && !/rgba?\(.*,\s*0(\.\d+)?\)/.test(bodyBackground) && bodyBackground !== 'transparent';
+      const surface = opaque ? bodyBackground : fallback;
+      menu.style.cssText = [
+        'position: fixed',
+        'z-index: 4000',
+        'display: flex',
+        'flex-direction: column',
+        'min-width: 150px',
+        'padding: 4px',
+        'border: 1px solid var(--border)',
+        'border-radius: 6px',
+        `background: ${surface}`,
+        'box-shadow: 0 8px 24px rgba(0, 0, 0, 0.25)',
+      ].join(';');
+      menu.style.left = `${Math.min(anchor.clientX, window.innerWidth - 180)}px`;
+      menu.style.top = `${Math.min(anchor.clientY, window.innerHeight - 150)}px`;
+      const store = useEditorStore.getState();
+      const items = [
+        { label: t('terminal.link.splitOpen'), run: () => store.openWebSplit(url) },
+        { label: t('terminal.link.openTab'), run: () => store.openWebTab(url, { activate: false }) },
+        { label: t('terminal.link.copy'), run: () => { void navigator.clipboard?.writeText(url).catch(() => {}); } },
+        { label: t('terminal.link.browser'), run: () => { void openExternal(url).catch(() => {}); } },
+      ];
+      for (const item of items) {
+        const button = host.ownerDocument.createElement('button');
+        button.type = 'button';
+        button.textContent = item.label;
+        button.style.cssText = 'display:flex;align-items:center;padding:6px 10px;border:0;border-radius:4px;background:none;color:var(--text);font:12px var(--font-app);text-align:start;cursor:pointer';
+        button.addEventListener('mouseenter', () => { button.style.background = 'var(--hover)'; });
+        button.addEventListener('mouseleave', () => { button.style.background = 'none'; });
+        button.addEventListener('mousedown', (event) => event.preventDefault());
+        button.addEventListener('click', () => { removeLinkMenu(); cleanup(); item.run(); });
+        menu.append(button);
+      }
+      host.ownerDocument.body.append(menu);
+      const close = (event) => { if (!menu.contains(event.target)) { removeLinkMenu(); cleanup(); } };
+      const onKey = (event) => { if (event.key === 'Escape') { removeLinkMenu(); cleanup(); } };
+      const cleanup = () => {
+        host.ownerDocument.removeEventListener('mousedown', close, true);
+        host.ownerDocument.removeEventListener('keydown', onKey, true);
+      };
+      requestAnimationFrame(() => host.ownerDocument.addEventListener('mousedown', close, true));
+      host.ownerDocument.addEventListener('keydown', onKey, true);
+    };
+
+    const onContextMenu = (event) => {
+      if (!hoveredLink) return;
+      event.preventDefault();
+      const url = hoveredLink;
+      const store = useEditorStore.getState();
+      if (event.ctrlKey && event.shiftKey) {
+        store.openWebTab(url, { activate: true });
+        return;
+      }
+      if (event.ctrlKey) {
+        store.openWebTab(url, { activate: false });
+        return;
+      }
+      openLinkMenu(event, url);
+    };
+    host.addEventListener('contextmenu', onContextMenu);
+
     let current;
     let frame = 0;
+    let resizeTimer = 0;
     let disposed = false;
     let started = false;
     const isCurrent = (session) => !disposed && current === session;
@@ -89,7 +171,8 @@ export default function TerminalPane({ active, directory }) {
     };
     const fitToHost = () => {
       if (!host.clientHeight || !host.clientWidth) return;
-      fit.fit();
+      const next = fit.proposeDimensions();
+      if (next && (next.cols !== term.cols || next.rows !== term.rows)) term.resize(next.cols, next.rows);
       if (current) void sendSize(current);
     };
 
@@ -160,6 +243,13 @@ export default function TerminalPane({ active, directory }) {
     });
 
     const schedule = () => {
+      if (host.closest('[data-resizing]')) {
+        if (!resizeTimer) resizeTimer = win.setTimeout(() => {
+          resizeTimer = 0;
+          fitToHost();
+        }, 50);
+        return;
+      }
       if (!frame) frame = win.requestAnimationFrame(() => {
         frame = 0;
         fitToHost();
@@ -167,6 +257,8 @@ export default function TerminalPane({ active, directory }) {
     };
     const resize = new ResizeObserver(schedule);
     resize.observe(host);
+    const panel = host.closest('.output-console');
+    panel?.addEventListener('console:resize-end', schedule);
     engineRef.current = {
       activate() { if (!started) start(); fitToHost(); term.focus(); },
       theme() { term.options.theme = terminalTheme(host); },
@@ -190,13 +282,17 @@ export default function TerminalPane({ active, directory }) {
       disposed = true;
       if (current?.ready) void close(current).catch(() => {});
       if (frame) win.cancelAnimationFrame(frame);
+      win.clearTimeout(resizeTimer);
+      panel?.removeEventListener('console:resize-end', schedule);
       resize.disconnect();
       inputs.dispose();
+      host.removeEventListener('contextmenu', onContextMenu);
+      host.ownerDocument.querySelector('.terminal-link-menu')?.remove();
       links.dispose();
       term.dispose();
       engineRef.current = null;
     };
-  }, [directory]);
+  }, [directory, t]);
 
   useEffect(() => {
     if (!active) return;
