@@ -3,20 +3,17 @@ import { Button, Input, Space } from 'antd';
 import { useTranslation } from 'react-i18next';
 import ChevronIcon from '@components/ui/ChevronIcon';
 import useExtensionStore from '@store/useExtensionStore';
-import useThemeStore from '@store/useThemeStore';
-import AppDialog from './AppDialog';
+import useEditorStore from '@store/useEditorStore';
 import './service-extensions.scss';
 
-export default function PluginDeveloperTools({ desktop }) {
+export default function PluginDeveloperTools({ desktop, onOpenDocs }) {
   const { t } = useTranslation();
   const sources = useExtensionStore((state) => state.developmentSources);
-  const theme = useThemeStore((state) => state.theme);
   const [open, setOpen] = useState(false);
   const [url, setUrl] = useState('http://127.0.0.1:3141/package');
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
-  const [docs, setDocs] = useState(false);
-  return <>
+  return (
     <section className={`service-extensions__developer${open ? ' is-open' : ''}`}>
       <button
         type="button"
@@ -44,12 +41,12 @@ export default function PluginDeveloperTools({ desktop }) {
             <span><strong>{source.id}</strong><small>{source.url}</small>{source.error && <small role="alert">{source.error}</small>}</span>
             <Button onClick={() => useExtensionStore.getState().disconnectDevelopment(source.id)}>{t('extensions.disconnectDevelopment')}</Button>
           </div>)}
-          <Button type="link" onClick={() => setDocs(true)}>{t('extensions.developerDocs')}</Button>
+          <Button type="link" onClick={() => {
+            useEditorStore.getState().openPluginDocs(t('extensions.developerDocs'));
+            onOpenDocs?.();
+          }}>{t('extensions.developerDocs')}</Button>
         </div>
       </div>
     </section>
-    {docs && <AppDialog open onCancel={() => setDocs(false)} title={t('extensions.developerDocs')} footer={null} width={1180} destroyOnHidden>
-      <iframe className="service-extensions__documentation" title={t('extensions.developerDocs')} src={`${new URL('docs/plugins/index.html', document.baseURI).href}?theme=${theme}`} sandbox="allow-scripts allow-same-origin" />
-    </AppDialog>}
-  </>;
+  );
 }
