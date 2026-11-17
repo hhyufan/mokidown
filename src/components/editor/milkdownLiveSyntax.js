@@ -445,26 +445,29 @@ function asteriskWidth(mark) {
 }
 
 
-// 逐字输入闭合星号后，段落文本恰好构成 **内容**（或 __ 内容 __）时，
-// 直接替换为 strong mark；避免依赖刷新时重新解析 Markdown。
-const CLOSED_ASTERISK_PAIR = /^(\*\*|__)([^\s*_~\`](?:[\s\S]*?[^\s*_~\`])?)\1$/;
-
 function completeClosedAsterisk(view, $pos, value) {
   const { state } = view;
   const offset = $pos.parentOffset;
-  if ($pos.parent.childCount !== 1 || !$pos.parent.firstChild?.isText || $pos.parent.firstChild.marks.length) return false;
+  if (value.length !== $pos.parent.content.size) return false;
   const next = value.slice(0, offset) + '*' + value.slice(offset);
-  const match = CLOSED_ASTERISK_PAIR.exec(next);
-  if (!match) return false;
-  const [, delimiter, content] = match;
+  const pair = markdownPairDeletion(next, offset + 1, 'Backspace');
+  if (!pair) return false;
+  const [opening, closing] = pair;
+  const start = opening.from - 1, end = closing.from + 2;
+  if (next.slice(start, opening.to) !== '**' || next.slice(closing.from, end) !== '**'
+    || next[start - 1] === '*' || next[end] === '*' || opening.to >= closing.from) return false;
   const type = state.schema.marks.strong;
   if (!type) return false;
-  const mark = type.create({ marker: delimiter[0] });
-  const from = $pos.before() + 1;
-  const tr = closeHistory(state.tr);
-  tr.insertText('*', $pos.pos);
-  tr.replaceWith(from, from + next.length, state.schema.text(content, mark));
-  tr.setSelection(TextSelection.create(tr.doc, from + content.length)).setStoredMarks([mark]);
+  const mark = type.create({ marker: '*' });
+  const from = $pos.start();
+  const tr = closeHistory(state.tr).insertText('*', $pos.pos);
+  // Remove just the delimiters, leaving existing inline marks and surrounding text intact.
+  tr.delete(from + closing.from, from + end).delete(from + start, from + opening.to);
+  const contentEnd = from + closing.from - 2;
+  tr.addMark(from + start, contentEnd, mark);
+  const opens = offset < opening.to;
+  tr.setSelection(TextSelection.create(tr.doc, opens ? from + start : contentEnd));
+  if (!opens) tr.setStoredMarks(mark.removeFromSet(tr.selection.$from.marks()));
   view.dispatch(tr.scrollIntoView());
   return true;
 }
@@ -483,9 +486,14 @@ function typeAsterisk(view, $pos, value, text) {
       view.dispatch(tr);
       return true;
     }
-    if (completeClosedAsterisk(view, $pos, value)) return true;
-    const edit = markdownAsteriskEdit(value, $pos.parentOffset);
+    const offset = $pos.parentOffset;
+    const edit = markdownAsteriskEdit(value, offset);
     if (!edit) return false;
+    // In front of existing text, or after its last character, the second star
+    // extends the delimiter instead of inserting an empty pair.
+    const left = value[offset - 2] || '', right = value[offset] || '';
+    if (edit.text === '*' && edit.advance === 0 && (/[^\s\p{Ps}\p{Pi}]/u.test(left)
+      || (/\S/u.test(right) && markdownBrackets.get(left) !== right))) return false;
     const tr = closeHistory(state.tr);
     if (edit.text) tr.insertText(edit.text, $pos.pos);
     view.dispatch(tr.setSelection(TextSelection.create(tr.doc, $pos.pos + edit.advance)).scrollIntoView());
@@ -561,6 +569,8 @@ function handleSmartTextInput(view, from, to, text) {
       }
     }
   }
+  if (text === '*' && !(state.storedMarks ?? $pos.marks()).some((mark) => mark.type.spec.code)
+    && !$pos.nodeAfter?.marks.some((mark) => mark.type.spec.code) && completeClosedAsterisk(view, $pos, value)) return true;
   if (markdownPairEnabled(preference, '*') && typeAsterisk(view, $pos, value, text)) return true;
   if (completeInlinePair(view, $pos, value, text)) return true;
   // Explicitly exiting an inline mark takes precedence over DOM mark inheritance.
