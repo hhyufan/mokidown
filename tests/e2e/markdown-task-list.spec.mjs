@@ -232,14 +232,13 @@ for (const harness of ['milkdown-flow', 'preview']) {
   });
 }
 
-test('WYSIWYG draws and retracts the task strike through the same path', async ({ page }) => {
+test('WYSIWYG only grays the glyphs reached by the strike while drawing and retracting', async ({ page }) => {
   await page.goto(`/tests/milkdown-flow-harness.html?content=${encodeURIComponent('- [ ] before `code` after')}`);
   const strike = page.locator('.md-preview__task-strike');
   await expect(strike).toHaveAttribute('data-drawn', 'false');
   const result = await strike.evaluate(async (svg) => {
     const box = svg.parentElement;
-    const text = svg.closest('p');
-    const color = () => getComputedStyle(text).color;
+    const grayText = () => [...CSS.highlights.get('moki-task-struck')].map((range) => range.toString()).join('');
     const frame = () => new Promise((resolve) => requestAnimationFrame(resolve));
     const play = async () => {
       box.click();
@@ -247,22 +246,31 @@ test('WYSIWYG draws and retracts the task strike through the same path', async (
       await frame();
       const motion = svg.getAnimations()[0];
       const steps = motion?.effect.getKeyframes().map((keyframe) => keyframe.strokeDashoffset);
-      const during = color();
+      motion.pause();
+      motion.currentTime = 120;
+      await frame();
+      await frame();
+      const during = grayText();
+      motion.play();
       await motion?.finished;
-      return { steps, during, after: color() };
+      await frame();
+      await frame();
+      return { steps, during, after: grayText() };
     };
-    const normal = color();
     const forward = await play();
     const path = svg.firstElementChild;
     const reverse = await play();
-    return { normal, forward, reverse, samePath: svg.firstElementChild === path };
+    return { forward, reverse, samePath: svg.firstElementChild === path };
   });
   expect(result.forward.steps).toEqual(['1px', '0px']);
   expect(result.reverse.steps).toEqual(['0px', '1px']);
   expect(result.samePath).toBe(true);
-  expect(result.forward.after).not.toBe(result.normal);
-  expect(result.reverse.during).toBe(result.forward.after);
-  expect(result.reverse.after).toBe(result.normal);
+  expect(result.forward.after).toBe('before code after');
+  for (const partial of [result.forward.during, result.reverse.during]) {
+    expect(partial).toMatch(/^b/);
+    expect(partial).not.toContain('after');
+  }
+  expect(result.reverse.after).toBe('');
 });
 
 test('split preview recognizes no-break task markers and reflects the cascade setting', async ({ page }) => {
