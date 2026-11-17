@@ -4,6 +4,10 @@
 @use '../../assets/styles/inline-code' as inline;
 @use '../../assets/styles/fold-control' as fold;
 
+::highlight(moki-task-struck) {
+  color: color-mix(in srgb, var(--text) 55%, var(--moki-background-base));
+}
+
 // Resolve the gutter against the preview font size before headings inherit it.
 @property --md-fold-gutter {
   syntax: '<length>';
@@ -316,11 +320,6 @@
 
     > p:first-of-type { margin-top: 0; }
     > p:last-of-type { margin-bottom: 0; }
-
-    &:has(> .md-preview__task-checkbox > [data-dimmed],
-      > p:first-of-type > .md-preview__task-checkbox > [data-dimmed]) > :is(p:first-of-type, .md-preview__task-label) {
-      color: color-mix(in srgb, var(--text) 55%, transparent);
-    }
   }
 
   .md-preview__task-strike {
