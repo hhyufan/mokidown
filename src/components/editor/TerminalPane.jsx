@@ -3,7 +3,9 @@ import { useTranslation } from 'react-i18next';
 import { Channel, invoke } from '@tauri-apps/api/core';
 import { Terminal } from '@xterm/xterm';
 import { FitAddon } from '@xterm/addon-fit';
+import { WebLinksAddon } from '@xterm/addon-web-links';
 import useThemeStore from '@store/useThemeStore';
+import { openExternal } from '@utils/tauriApi';
 import '@xterm/xterm/css/xterm.css';
 
 const ansi = {
@@ -54,6 +56,12 @@ export default function TerminalPane({ active, directory }) {
     });
     const fit = new FitAddon();
     term.loadAddon(fit);
+    // 终端输出中的 URL 可点击，交给系统浏览器打开。
+    const links = new WebLinksAddon((event, uri) => {
+      event.preventDefault?.();
+      void openExternal(uri).catch(() => {});
+    });
+    term.loadAddon(links);
     term.open(host);
 
     let current;
@@ -184,6 +192,7 @@ export default function TerminalPane({ active, directory }) {
       if (frame) win.cancelAnimationFrame(frame);
       resize.disconnect();
       inputs.dispose();
+      links.dispose();
       term.dispose();
       engineRef.current = null;
     };
