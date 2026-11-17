@@ -38,6 +38,8 @@ function toTabMeta(tab) {
     path: tab.path,
     ext: tab.ext,
     builtin: tab.builtin,
+    url: tab.url,
+    favicon: tab.favicon,
     modified: !!tab.modified,
     encoding: tab.encoding || 'UTF-8',
     lineEnding: tab.lineEnding || 'LF',
@@ -51,6 +53,8 @@ const useEditorStore = create(
       tabs: [],
       tabRenderList: [],
       activeTabId: null,
+      // 右侧分屏打开的网页地址；null 表示没有网页分屏。
+      webSplitUrl: null,
       // 每当代码层主动替换标签内容时递增。
       // MonacoEditor 订阅这个版本号刷新 model，避免直接订阅内容对象引发
       // 过于频繁的快照比较与 React `getSnapshot` 警告。
@@ -136,6 +140,46 @@ const useEditorStore = create(
         const tab = { id: pluginDocsTabId, name, ext: 'html', builtin: 'pluginDocs', modified: false };
         set({ tabs: [...tabs, tab], tabRenderList: [...tabRenderList, toTabMeta(tab)], activeTabId: tab.id });
       },
+
+      /**
+       * 打开网页链接：activate 为 false 时只建标签、不切换。
+       *
+       * @param {string} url 网页地址。
+       * @param {{ activate?: boolean }} [options] 打开选项。
+       * @returns {void}
+       */
+      openWebTab: (url, options = {}) => {
+        const { activate = true } = options;
+        let parsed;
+        try { parsed = new URL(url); } catch { return; }
+        const { tabs, tabRenderList, activeTabId } = get();
+        const id = `web:${parsed.href}`;
+        if (activeTabId !== id) flushEditorBuffer(activeTabId);
+        if (tabs.some((tab) => tab.id === id)) {
+          if (activate) set({ activeTabId: id });
+          return;
+        }
+        const tab = {
+          id,
+          name: parsed.hostname || parsed.href,
+          url: parsed.href,
+          favicon: `${parsed.origin}/favicon.ico`,
+          ext: 'html',
+          builtin: 'web',
+          modified: false,
+        };
+        set({
+          tabs: [...tabs, tab],
+          tabRenderList: [...tabRenderList, toTabMeta(tab)],
+          ...(activate ? { activeTabId: tab.id } : {}),
+        });
+      },
+
+      openWebSplit: (url) => {
+        if (url) set({ webSplitUrl: url });
+      },
+
+      closeWebSplit: () => set({ webSplitUrl: null }),
 
       
 

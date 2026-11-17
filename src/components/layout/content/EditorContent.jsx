@@ -31,6 +31,8 @@ const MilkdownMarkdownEditor = lazyWithRetry(() => import('@components/editor/Mi
 const MarkdownPreview = lazyWithRetry(() => import('@components/editor/MarkdownPreview'));
 const TreeEditor = lazyWithRetry(() => import('@components/editor/TreeEditor'));
 const HistoryDiffView = lazyWithRetry(() => import('@components/history/HistoryDiffView'));
+const HtmlFilePreview = lazyWithRetry(() => import('@components/editor/HtmlFilePreview'));
+import WebPageView from '@components/editor/WebPageView';
 
 function PluginDocsPage({ title }) {
   const theme = useThemeStore((state) => state.theme);
@@ -265,13 +267,18 @@ function EditorContent() {
   );
   const isMarkdown = /\.(md|markdown|mdx)$/i.test(activeTabMeta?.name || '');
   const isTree = activeTabMeta?.ext?.toLowerCase() === 'mgtree';
-  const hasPreview = isMarkdown || isTree;
+  const isHtml = !activeTabMeta?.builtin && /^(html?|xhtml)$/i.test(activeTabMeta?.ext || '');
+  const hasPreview = isMarkdown || isTree || isHtml;
   const splitRequested = viewMode === 'split' && hasPreview;
   const [splitPreviewMounted, setSplitPreviewMounted] = useState(false);
+  const [htmlPreviewMounted, setHtmlPreviewMounted] = useState(false);
   const [markdownPreviewReady, setMarkdownPreviewReady] = useState(false);
   const lastSingleMode = useRef('edit');
+  // 网页分屏：右侧直接展示链接，不依赖 Markdown 预览的就绪状态。
+  const webSplitUrl = useEditorStore((state) => state.webSplitUrl);
+  const isWebSplit = Boolean(webSplitUrl);
   // Leave the current pane full size until the split preview has real content.
-  const isSplit = splitRequested && (!isMarkdown || markdownPreviewReady);
+  const isSplit = isWebSplit || (splitRequested && (!isMarkdown || markdownPreviewReady));
   const showMilkdown = isMarkdown && (viewMode === 'preview'
     || (splitRequested && !isSplit && lastSingleMode.current === 'preview'));
   const markMarkdownPreviewReady = useCallback(() => setMarkdownPreviewReady(true), []);
@@ -283,6 +290,10 @@ function EditorContent() {
     if (splitRequested && isMarkdown) setSplitPreviewMounted(true);
     if (viewMode !== 'split') lastSingleMode.current = viewMode;
   }, [isMarkdown, splitRequested, viewMode]);
+  useLayoutEffect(() => {
+    if (isHtml && viewMode !== 'edit') setHtmlPreviewMounted(true);
+    if (!isHtml) setHtmlPreviewMounted(false);
+  }, [isHtml, viewMode]);
   const handleTreeSourceChange = useCallback((content) => {
     const editor = monacoRef.current?.getEditor?.();
     const model = editor?.getModel();
@@ -534,6 +545,10 @@ function EditorContent() {
     return <main className="editor-content"><PluginDocsPage title={activeTabMeta.name} /></main>;
   }
 
+  if (activeTabMeta.builtin === 'web') {
+    return <main className="editor-content"><WebPageView url={activeTabMeta.url} /></main>;
+  }
+
   // 本地历史对比：用 diff 视图覆盖整个编辑区，关闭后回到正常编辑。
   if (historyDiff && historyDiff.tabId === activeTabId) {
     return (
@@ -580,7 +595,14 @@ function EditorContent() {
             </Suspense>
           </RendererErrorBoundary>
         )}
-        {(splitRequested || (splitPreviewMounted && isMarkdown)) && (
+        {isHtml && (viewMode !== 'edit' || htmlPreviewMounted) && <div
+          className={`editor-content__html-surface${isSplit ? ' editor-content__html-surface--half' : ''}`}
+          hidden={viewMode === 'edit'}>
+          <RendererErrorBoundary fallback={<RendererLoadError />}>
+            <Suspense fallback={<PreviewFallback />}><HtmlFilePreview key={activeTabId} /></Suspense>
+          </RendererErrorBoundary>
+        </div>}
+        {!isWebSplit && (splitRequested || (splitPreviewMounted && isMarkdown)) && (
           <div className="editor-content__split-surfaces" hidden={!isSplit}>
             <Tooltip title={t('editor.splitDivider')} placement="top" mouseEnterDelay={0.5}>
               <div
@@ -606,7 +628,7 @@ function EditorContent() {
             </Tooltip>
             <RendererErrorBoundary fallback={<RendererLoadError onReady={isMarkdown ? markMarkdownPreviewReady : undefined} />}>
               <Suspense fallback={<PreviewFallback />}>
-                {isTree ? <TreeEditor
+                {isHtml ? null : isTree ? <TreeEditor
                   key={activeTabId}
                   className="editor-content__preview editor-content__preview--half"
                   onAutoSave={triggerAutoSave}
@@ -623,7 +645,35 @@ function EditorContent() {
             </RendererErrorBoundary>
           </div>
         )}
-        {!isTree && <div className="editor-content__fade" />}
+        {isWebSplit && (
+          <div className="editor-content__split-surfaces">
+            <div
+              className="editor-content__split-divider"
+              role="separator"
+              tabIndex={0}
+              aria-label={t('editor.splitDivider')}
+              aria-orientation={isMobileLayout ? 'horizontal' : 'vertical'}
+              aria-valuemin={15}
+              aria-valuemax={85}
+              aria-valuenow={Math.round(splitRatio * 100)}
+              onKeyDown={(event) => {
+                const decrease = isMobileLayout ? 'ArrowUp' : 'ArrowLeft';
+                const increase = isMobileLayout ? 'ArrowDown' : 'ArrowRight';
+                if (![decrease, increase, 'Home', 'End'].includes(event.key)) return;
+                event.preventDefault();
+                const value = Math.max(0.15, Math.min(0.85, event.key === 'Home' ? 0.15 : event.key === 'End' ? 0.85 : splitRatio + (event.key === decrease ? -0.02 : 0.02)));
+                setSplitRatio(value);
+                useEditorStore.getState().setSplitRatio(value);
+              }}
+              onPointerDown={handleDividerPointerDown}
+            />
+            <WebPageView
+              className="editor-content__preview editor-content__preview--half"
+              url={webSplitUrl}
+            />
+          </div>
+        )}
+        {!isTree && !isHtml && <div className="editor-content__fade" />}
         <FloatingRunButton />
       </div>
 
