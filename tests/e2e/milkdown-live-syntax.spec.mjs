@@ -228,6 +228,23 @@ test('asterisk completion pairs two strokes and upgrades the third stroke to bol
   await expect(editor.locator('hr')).toHaveCount(1);
 });
 
+for (const order of ['left first', 'right first']) {
+  test(`adding stars around existing text (${order}) renders bold immediately`, async ({ page }) => {
+    const editor = await openEditor(page, '前面 已有文字 后面');
+    const select = (offset) => page.evaluate((offset) => {
+      window.trial.selectTextblock(0);
+      window.trial.dispatch((state) => state.tr.setSelection(state.selection.constructor.create(state.doc, offset + 1)));
+    }, offset);
+    await select(order === 'left first' ? 3 : 7);
+    await page.keyboard.type('**');
+    await expect(editor.locator('p')).toHaveText(order === 'left first' ? '前面 **已有文字 后面' : '前面 已有文字** 后面');
+    await select(order === 'left first' ? 9 : 3);
+    await page.keyboard.type('**');
+    await expect(editor.locator('strong')).toHaveText('已有文字');
+    expect(await page.evaluate(() => window.trial.markdown().trimEnd())).toBe('前面 **已有文字** 后面');
+  });
+}
+
 for (const [source, offset, selector, expected] of [
   ['Before **** after', 9, 'strong', 'Before **中文** after'],
   ['Before __ after', 8, 'em', 'Before _中文_ after'],
