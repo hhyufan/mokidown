@@ -168,6 +168,12 @@ function Footer() {
     if (activeTab?.path && isSafUri(activeTab.path)) return;
     const dirPath = buildFullPath(pathSegments, index);
     if (!dirPath) return;
+    // 最后一段是当前文件名而不是目录，列目录会被 Tauri 拒绝。
+    // 最后一个路径段是当前文件名，不是目录；列目录会被 Tauri 拒绝。
+    if (index === pathSegments.length - 1) {
+      setOpenDropdown(null);
+      return;
+    }
     try {
       const contents = await getDirectoryContents(dirPath);
       const sorted = [...(Array.isArray(contents) ? contents : [])].sort((a, b) => {
