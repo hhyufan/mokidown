@@ -246,9 +246,10 @@ export function useFileManager() {
    */
   const debouncedAutoSave = useMemo(
     () => debounceByKey(async (filePath, tabId, revision) => {
-      if (!useConfigStore.getState().autoSave || !getLiveTabById(tabId)?.modified) return;
+      const live = getLiveTabById(tabId);
+      if (!useConfigStore.getState().autoSave || !live?.modified) return;
       try {
-        await saveExistingFile(filePath, undefined, undefined, tabId, revision);
+        await saveExistingFile(filePath, getBuffer(tabId, live.content ?? ''), undefined, tabId, revision);
       } catch (_) { /* silent */ }
     }, 1000),
     []
