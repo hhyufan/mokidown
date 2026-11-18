@@ -80,7 +80,7 @@ export default function TerminalPane({ active, directory }) {
     const openLinkMenu = (anchor, url) => {
       removeLinkMenu();
       const menu = host.ownerDocument.createElement('div');
-      menu.className = 'monaco-context-menu terminal-link-menu';
+      menu.className = 'monaco-context-menu editor-context-menu terminal-link-menu';
       menu.setAttribute('role', 'menu');
       menu.style.left = `${Math.min(anchor.clientX, window.innerWidth - 230)}px`;
       menu.style.top = `${Math.min(anchor.clientY, window.innerHeight - 210)}px`;
@@ -104,7 +104,7 @@ export default function TerminalPane({ active, directory }) {
         const button = host.ownerDocument.createElement('button');
         button.type = 'button';
         button.setAttribute('role', 'menuitem');
-        button.className = 'monaco-context-menu__item';
+        button.className = 'monaco-context-menu__item editor-context-menu__item';
         const label = host.ownerDocument.createElement('span');
         label.className = 'monaco-context-menu__label';
         label.textContent = entry.label;
