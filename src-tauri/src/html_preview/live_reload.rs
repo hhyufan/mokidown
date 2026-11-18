@@ -70,6 +70,7 @@ pub(super) fn listen(listener: TcpListener, state: Weak<PreviewServer>) {
     });
 }
 
+#[allow(clippy::result_large_err)] // tungstenite 的握手回调固定返回 ErrorResponse。
 fn connection(stream: TcpStream, state: Weak<PreviewServer>) {
     let _ = stream.set_read_timeout(Some(Duration::from_secs(3)));
     let _ = stream.set_write_timeout(Some(Duration::from_secs(1)));
