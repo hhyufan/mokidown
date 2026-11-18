@@ -26,6 +26,13 @@ export default [
       'sites/**',
       'site/**',
       'miaogu-notepad/**',
+      // 独立设计工具与站点截图脚本，各自在 Node/浏览器里跑，不属于应用源码。
+      'design/**',
+      'notes-viewer/**',
+      'site-shots/**',
+      // 本地构建/缓存产物（未纳入仓库），避免本地 `npm run ci` 把缓存算进来。
+      'artifacts/**',
+      'mokidown/**',
       'releases/**',
       '.dbg/**',
       // 本地探测脚本与跑 smoke 用的二进制（marksman.exe）都放在这里，

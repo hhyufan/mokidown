@@ -9,6 +9,8 @@ import { validateKeybinding } from '@utils/keybinding';
 
 it('ships defaults that are all acceptable and conflict-free', () => {
   for (const action of HOTKEY_ACTIONS) {
+    // 空默认表示未绑定，属于合法配置。
+    if (!action.defaultKeybinding) continue;
     const result = validateKeybinding(action.defaultKeybinding);
     // `warning` 表示该组合可能被系统/浏览器接管（无法探测），默认值允许带警告，
     // 但不能是不可用（ok: false）。
