@@ -101,7 +101,6 @@ export default function MarkdownMathCompletionMenu({ request, onClose }) {
             role="option"
             aria-selected={index === active}
             className={`moki-math-completion__item${index === active ? ' moki-math-completion__item--active' : ''}`}
-            title={t('editor.mathSymbolInsert', { symbol: snippet })}
             // 默认行为会把焦点从编辑器拿走，控制序列的起点也就丢了。
             onMouseDown={(event) => event.preventDefault()}
             onMouseEnter={() => setActive(index)}

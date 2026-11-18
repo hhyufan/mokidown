@@ -701,7 +701,6 @@
   "editor.editHtmlHint": "双击编辑 HTML · Ctrl / ⌘ + Enter 完成",
   "editor.mathSourceLabel": "公式",
   "editor.mathCompletionMenu": "公式符号补全",
-  "editor.mathSymbolInsert": "插入 {{symbol}}",
   "editor.editMathHint": "双击公式，或选中后按 Backspace 编辑源码",
   "settings.snapshot.settingsJson": "设置 JSON",
   "settings.snapshot.settingsJsonDesc": "导出当前设置，或从 JSON 文件导入设置。",
