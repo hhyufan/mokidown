@@ -3,6 +3,7 @@ import { createRoot } from 'react-dom/client';
 import CodeBlockExecution from './CodeBlockExecution';
 import { getCodeBlockLanguage } from '@/services/scriptRunner';
 import { codeBlockKey } from '@utils/markdownCodeBlocks';
+import HtmlCodePreview from './HtmlCodePreview';
 
 // Attach controls to opaque code-block node views. Source always comes from the
 // ProseMirror document, never highlighted DOM or previously rendered output.
@@ -20,7 +21,8 @@ export function attachCodeBlockExecutions({ root, getView, documentId, filePath,
     view.state.doc.descendants((node, pos) => {
       if (node.type.name !== 'code_block') return;
       const blockIndex = index++;
-      const language = getCodeBlockLanguage(node.attrs.language);
+      const isHtml = /^(html?|xhtml)$/i.test(node.attrs.language || '');
+      const language = isHtml ? 'html' : getCodeBlockLanguage(node.attrs.language);
       const host = view.nodeDOM(pos);
       if (!language || !(host instanceof HTMLElement) || !root.contains(host)) return false;
       seen.add(host);
@@ -39,7 +41,8 @@ export function attachCodeBlockExecutions({ root, getView, documentId, filePath,
       const blockKey = codeBlockKey(documentId, blockIndex);
       if (mount.source !== source || mount.language !== language || mount.key !== blockKey) {
         Object.assign(mount, { source, language, key: blockKey });
-        mount.react.render(createElement(CodeBlockExecution, { blockKey, language, source, filePath, fileName }));
+        mount.react.render(isHtml ? createElement(HtmlCodePreview, { source, filePath })
+          : createElement(CodeBlockExecution, { blockKey, language, source, filePath, fileName }));
       }
       return false;
     });
