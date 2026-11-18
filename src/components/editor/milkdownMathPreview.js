@@ -145,7 +145,11 @@ export const milkdownMathPreview = $prose(() => {
           // 还没成功渲染过就没有可沿用的预览，等用户写出可解析的东西再出现气泡。
           if (!shown) return;
           decorations.push(Decoration.widget(pos, () => renderPreview(shown, spec, anchorName), {
-            key: `${spec.variant}:${pos}:${shown}`,
+            // 锚点名必须在 key 里：PM 只按 key 决定要不要重建 widget 的 DOM，而锚点是
+            // 写在行内样式上的。双击把「光标贴住渲染态」换成源码态时，变体、位置、正文
+            // 全都没变，key 也就没变，DOM 被原样复用，气泡还指着已经不存在的
+            // --moki-math-revealed，anchor() 整体失效，退回到贴在公式起点的兜底摆法。
+            key: `${spec.variant}:${pos}:${shown}:${anchorName}`,
             side: -1,
             stopEvent: () => true,
             ignoreSelection: true,
