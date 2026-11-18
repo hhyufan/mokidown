@@ -72,6 +72,8 @@ pub(super) fn listen(listener: TcpListener, state: Weak<PreviewServer>) {
 
 #[allow(clippy::result_large_err)] // tungstenite 的握手回调固定返回 ErrorResponse。
 fn connection(stream: TcpStream, state: Weak<PreviewServer>) {
+    // listener 是非阻塞的，accept 出来的 stream 会继承该标志；握手必须改回阻塞读。
+    let _ = stream.set_nonblocking(false);
     let _ = stream.set_read_timeout(Some(Duration::from_secs(3)));
     let _ = stream.set_write_timeout(Some(Duration::from_secs(1)));
     let mut id = String::new();
