@@ -153,12 +153,14 @@ fn decode(bytes: &[u8], partial: bool) -> Result<TextDocument, TextFileError> {
                 return Err(TextFileError::new("invalid-encoding"));
             }
             let mut units: Vec<u16> = body
-                .chunks_exact(2)
+                .as_chunks::<2>()
+                .0
+                .iter()
                 .map(|pair| {
                     if little {
-                        u16::from_le_bytes([pair[0], pair[1]])
+                        u16::from_le_bytes(*pair)
                     } else {
-                        u16::from_be_bytes([pair[0], pair[1]])
+                        u16::from_be_bytes(*pair)
                     }
                 })
                 .collect();

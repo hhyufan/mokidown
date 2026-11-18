@@ -52,7 +52,9 @@
     "test:e2e:production": "playwright test --config tests/playwright.production.config.mjs",
     "check:extensions": "node scripts/check-extension-boundary.mjs",
     "android:build": "node scripts/android.mjs",
-    "android:build:release": "node scripts/android.mjs --release"
+    "android:build:release": "node scripts/android.mjs --release",
+    "ci": "npm run test && npm run lint && npm run format:check && npm run version:sync && npm run build && npm run check:bundle",
+    "ci:full": "npm run ci && npm run installer:build && npm run check:installer-bundle"
   },
   "dependencies": {
     "@ant-design/icons": "^5.2.6",
