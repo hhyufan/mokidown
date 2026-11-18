@@ -26,6 +26,10 @@ export default [
       'sites/**',
       'site/**',
       'miaogu-notepad/**',
+      // 独立设计工具与站点截图脚本，各自在 Node/浏览器里跑，不属于应用源码。
+      'design/**',
+      'notes-viewer/**',
+      'site-shots/**',
       'releases/**',
       '.dbg/**',
       // 本地探测脚本与跑 smoke 用的二进制（marksman.exe）都放在这里，
