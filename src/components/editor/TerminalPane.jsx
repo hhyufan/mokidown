@@ -61,6 +61,9 @@ export default function TerminalPane({ active, directory }) {
     const openLink = (event, uri) => {
       event.preventDefault?.();
       if (!/^https?:\/\//i.test(uri)) return;
+      const store = useEditorStore.getState();
+      if ((event.ctrlKey || event.metaKey) && event.altKey) { store.openWebSplit(uri); return; }
+      if (event.ctrlKey || event.metaKey) { store.openWebTab(uri, { activate: Boolean(event.shiftKey) }); return; }
       void openExternal(uri).catch((error) => setStatus((previous) => ({ ...previous, error: String(error?.message || error) })));
     };
     // 只让左键触发浏览器打开；右键交给链接菜单。
@@ -72,7 +75,11 @@ export default function TerminalPane({ active, directory }) {
       hover: (event, text) => { hoveredLink = text; },
       leave: () => { hoveredLink = null; },
     });
-    term.options.linkHandler = { activate: activateLink };
+    term.options.linkHandler = {
+      activate: activateLink,
+      hover: (_event, text) => { hoveredLink = text; },
+      leave: () => { hoveredLink = null; },
+    };
     term.loadAddon(links);
     term.open(host);
 
@@ -86,9 +93,9 @@ export default function TerminalPane({ active, directory }) {
       menu.style.top = `${Math.min(anchor.clientY, window.innerHeight - 210)}px`;
       const store = useEditorStore.getState();
       const entries = [
-        { label: t('terminal.link.splitOpen'), shortcut: 'Ctrl+Alt+右键', run: () => store.openWebSplit(url) },
-        { label: t('terminal.link.openTab'), shortcut: 'Ctrl+右键', run: () => store.openWebTab(url, { activate: false }) },
-        { label: t('terminal.link.openTabSwitch'), shortcut: 'Ctrl+Shift+右键', run: () => store.openWebTab(url, { activate: true }) },
+        { label: t('terminal.link.splitOpen'), shortcut: 'Ctrl+Alt+Click', run: () => store.openWebSplit(url) },
+        { label: t('terminal.link.openTab'), shortcut: 'Ctrl+Click', run: () => store.openWebTab(url, { activate: false }) },
+        { label: t('terminal.link.openTabSwitch'), shortcut: 'Ctrl+Shift+Click', run: () => store.openWebTab(url, { activate: true }) },
         { separator: true },
         { label: t('terminal.link.copy'), run: () => { void navigator.clipboard?.writeText(url).catch(() => {}); } },
         { label: t('terminal.link.browser'), run: () => { void openExternal(url).catch(() => {}); } },
@@ -133,23 +140,11 @@ export default function TerminalPane({ active, directory }) {
     const onContextMenu = (event) => {
       if (!hoveredLink) return;
       event.preventDefault();
+      event.stopPropagation();
       const url = hoveredLink;
-      const store = useEditorStore.getState();
-      if (event.ctrlKey && event.altKey) {
-        store.openWebSplit(url);
-        return;
-      }
-      if (event.ctrlKey && event.shiftKey) {
-        store.openWebTab(url, { activate: true });
-        return;
-      }
-      if (event.ctrlKey) {
-        store.openWebTab(url, { activate: false });
-        return;
-      }
       openLinkMenu(event, url);
     };
-    host.addEventListener('contextmenu', onContextMenu);
+    host.addEventListener('contextmenu', onContextMenu, true);
 
     let current;
     let frame = 0;
@@ -292,7 +287,7 @@ export default function TerminalPane({ active, directory }) {
       panel?.removeEventListener('console:resize-end', schedule);
       resize.disconnect();
       inputs.dispose();
-      host.removeEventListener('contextmenu', onContextMenu);
+      host.removeEventListener('contextmenu', onContextMenu, true);
       host.ownerDocument.querySelector('.terminal-link-menu')?.remove();
       links.dispose();
       term.dispose();
