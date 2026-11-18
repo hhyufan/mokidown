@@ -184,6 +184,20 @@ test('the inline bubble is centred on the formula it previews', async ({ page })
   await check(revealed, '.md-preview__math--inline');
 });
 
+test('double-clicking into the source keeps the bubble on its own formula', async ({ page }) => {
+  // 双击前气泡指的是渲染态元素的 revealed 锚点，换到源码态后那个锚点已经不存在了。
+  // widget 的 DOM 只在 key 变化时才重建，所以 key 必须带上锚点名，否则行内样式还是
+  // 旧的，anchor() 整体失效，气泡退回兜底摆法贴在公式起点的左下方。
+  const editor = await openEditor(page, '正文段落\n\n文字 $x^2$ 结尾');
+  await editor.locator('.md-preview__math--inline').dblclick({ position: { x: 2, y: 5 } });
+  const slot = editor.locator('.md-preview__math-source--inline');
+  await expect(slot).toBeVisible();
+  const bubble = await editor.locator('.moki-math-preview--inline').boundingBox();
+  const formula = await slot.boundingBox();
+  expect(Math.abs(bubble.x + bubble.width / 2 - (formula.x + formula.width / 2))).toBeLessThan(2);
+  expect(bubble.y + bubble.height).toBeLessThan(formula.y);
+});
+
 test('the inline bubble moves out of the way when it does not fit', async ({ page }) => {
   // 第一行写公式：上方就是编辑区上沿，气泡应当翻到正文下方，尾巴跟着翻到气泡上沿。
   const editor = await openEditor(page);
