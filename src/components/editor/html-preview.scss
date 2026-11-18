@@ -1,0 +1,50 @@
+.html-preview {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+  background: var(--surface);
+  color: var(--text);
+  &__bar {
+    display: flex;
+    align-items: center;
+    flex-shrink: 0;
+    padding: 8px 12px;
+    border-bottom: 1px solid var(--border);
+    font: 12px var(--font-app);
+  }
+  &__address {
+    display: flex;
+    flex: 1;
+    min-width: 0;
+    align-items: center;
+    padding-inline: 14px 4px;
+    border: 1px solid var(--border);
+    border-radius: 999px;
+    background: var(--bg);
+    &:focus-within { border-color: var(--accent); }
+    input { flex: 1; min-width: 0; height: 32px; padding: 0; border: 0; outline: none; color: var(--text); background: transparent; font: inherit; }
+    button {
+      display: grid;
+      place-items: center;
+      width: 27px;
+      height: 27px;
+      flex-shrink: 0;
+      border: 0;
+      border-radius: 50%;
+      background: transparent;
+      color: var(--text-sec);
+      cursor: pointer;
+      transition: background 140ms, color 140ms, transform 140ms;
+      svg { width: 16px; height: 16px; }
+      &:hover { background: var(--hover); color: var(--text); }
+      &:active { transform: rotate(30deg); }
+    }
+  }
+  &__viewport { position: relative; flex: 1; min-height: 0; min-width: 0; overflow: hidden; }
+  &__frame { display: block; position: absolute; inset: 0 auto auto 0; transform-origin: top left; border: 0; background: transparent; }
+  &__error { padding: 8px; color: var(--error); overflow-wrap: anywhere; }
+  &--compact { min-height: 220px; height: 280px; resize: vertical; border-top: 1px solid var(--border); }
+}

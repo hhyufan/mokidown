@@ -14,14 +14,30 @@ mod android_window_shim {
     use tauri::{Manager, Runtime, WebviewWindow, WebviewWindowBuilder};
 
     pub trait DesktopWindow {
-        fn close(&self) -> Result<(), tauri::Error> { Ok(()) }
-        fn show(&self) -> Result<(), tauri::Error> { Ok(()) }
-        fn hide(&self) -> Result<(), tauri::Error> { Ok(()) }
-        fn set_focus(&self) -> Result<(), tauri::Error> { Ok(()) }
-        fn unminimize(&self) -> Result<(), tauri::Error> { Ok(()) }
-        fn set_skip_taskbar(&self, _skip: bool) -> Result<(), tauri::Error> { Ok(()) }
-        fn set_min_size<S>(&self, _size: Option<S>) -> Result<(), tauri::Error> { Ok(()) }
-        fn set_position<P: Into<tauri::Position>>(&self, _position: P) -> Result<(), tauri::Error> { Ok(()) }
+        fn close(&self) -> Result<(), tauri::Error> {
+            Ok(())
+        }
+        fn show(&self) -> Result<(), tauri::Error> {
+            Ok(())
+        }
+        fn hide(&self) -> Result<(), tauri::Error> {
+            Ok(())
+        }
+        fn set_focus(&self) -> Result<(), tauri::Error> {
+            Ok(())
+        }
+        fn unminimize(&self) -> Result<(), tauri::Error> {
+            Ok(())
+        }
+        fn set_skip_taskbar(&self, _skip: bool) -> Result<(), tauri::Error> {
+            Ok(())
+        }
+        fn set_min_size<S>(&self, _size: Option<S>) -> Result<(), tauri::Error> {
+            Ok(())
+        }
+        fn set_position<P: Into<tauri::Position>>(&self, _position: P) -> Result<(), tauri::Error> {
+            Ok(())
+        }
     }
 
     impl<R: Runtime> DesktopWindow for WebviewWindow<R> {}
@@ -40,16 +56,36 @@ mod android_window_shim {
     }
 
     impl<'a, R: Runtime, M: Manager<R>> DialogTitle for WebviewWindowBuilder<'a, R, M> {
-        fn title<T: Into<String>>(self, _title: T) -> Self { self }
-        fn inner_size(self, _width: f64, _height: f64) -> Self { self }
-        fn min_inner_size(self, _width: f64, _height: f64) -> Self { self }
-        fn decorations(self, _value: bool) -> Self { self }
-        fn shadow(self, _value: bool) -> Self { self }
-        fn focused(self, _value: bool) -> Self { self }
-        fn skip_taskbar(self, _value: bool) -> Self { self }
-        fn visible(self, _value: bool) -> Self { self }
-        fn transparent(self, _value: bool) -> Self { self }
-        fn position(self, _x: f64, _y: f64) -> Self { self }
+        fn title<T: Into<String>>(self, _title: T) -> Self {
+            self
+        }
+        fn inner_size(self, _width: f64, _height: f64) -> Self {
+            self
+        }
+        fn min_inner_size(self, _width: f64, _height: f64) -> Self {
+            self
+        }
+        fn decorations(self, _value: bool) -> Self {
+            self
+        }
+        fn shadow(self, _value: bool) -> Self {
+            self
+        }
+        fn focused(self, _value: bool) -> Self {
+            self
+        }
+        fn skip_taskbar(self, _value: bool) -> Self {
+            self
+        }
+        fn visible(self, _value: bool) -> Self {
+            self
+        }
+        fn transparent(self, _value: bool) -> Self {
+            self
+        }
+        fn position(self, _x: f64, _y: f64) -> Self {
+            self
+        }
     }
 }
 
@@ -631,7 +667,11 @@ pub async fn begin_reader_tab_detach_watch(
             .unwrap_or_default();
         let offset_x = preview.as_ref().map_or(0.0, |preview| preview.offset_x) * scale;
         let offset_y = preview.as_ref().map_or(0.0, |preview| preview.offset_y) * scale;
-        let warm_preview = if shell_handle.is_none() { preview.clone() } else { None };
+        let warm_preview = if shell_handle.is_none() {
+            preview.clone()
+        } else {
+            None
+        };
         let warm_document = document.clone();
         if let Some(previous) = app
             .state::<ReaderState>()

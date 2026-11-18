@@ -5,13 +5,22 @@ use webview2_com::Microsoft::Web::WebView2::Win32::{
     ICoreWebView2Settings5, ICoreWebView2Settings6,
 };
 #[cfg(windows)]
-use windows::core::{Interface, Result};
+use windows::core::{Interface, Result, HSTRING};
 
 #[cfg(windows)]
 fn disable_browser_ui(controller: ICoreWebView2Controller) -> Result<()> {
     // Tauri invokes this on the owning UI thread. Editing and clipboard input
     // are still delivered to the application with browser accelerators off.
     unsafe {
+        let bridge = HSTRING::from(include_str!("../../src/utils/previewFrameBridge.js"));
+        controller
+            .CoreWebView2()?
+            .AddScriptToExecuteOnDocumentCreated(
+                &bridge,
+                &webview2_com::AddScriptToExecuteOnDocumentCreatedCompletedHandler::create(
+                    Box::new(|result, _| result),
+                ),
+            )?;
         let settings = controller.CoreWebView2()?.Settings()?;
         settings.SetAreDefaultContextMenusEnabled(false)?;
         settings.SetAreDefaultScriptDialogsEnabled(false)?;

@@ -79,6 +79,7 @@
     "i18next": "^25.4.2",
     "i18next-browser-languagedetector": "^8.2.0",
     "katex": "^0.16.47",
+    "livereload-js": "^4.0.3",
     "material-icon-theme": "^5.40.0",
     "mermaid": "^11.14.0",
     "monaco-editor": "^0.52.2",

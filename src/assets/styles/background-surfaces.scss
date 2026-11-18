@@ -27,6 +27,9 @@ body.moki-has-background,
   }
 
   .titlebar__search,
+  .html-preview__bar,
+  .html-preview__address,
+  .web-page__bar,
   .sidebar__tab-slider,
 
   .editor-content__renderer-error,
@@ -104,6 +107,8 @@ body.moki-has-background,
   }
 
   .output-console__body,
+  .html-preview,
+  .web-page,
   .problems {
     background: color-mix(in srgb, var(--surface) 18%, transparent);
   }
