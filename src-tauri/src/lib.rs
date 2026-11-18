@@ -19,6 +19,7 @@ mod directory_index;
 mod extensions;
 mod file_drop;
 mod hotkeys;
+mod html_preview;
 mod language_plugins;
 mod lsp;
 #[cfg(windows)]
@@ -1800,6 +1801,7 @@ pub fn run() {
                 reader::forget_window(window.app_handle(), window.label());
             }
             if window.label() == "main" && matches!(event, tauri::WindowEvent::Destroyed) {
+                html_preview::stop_all();
                 #[cfg(desktop)]
                 terminal::stop_all();
                 script_runner::stop_all();
@@ -1877,6 +1879,8 @@ pub fn run() {
             script_runner::start_script,
             script_runner::stop_script,
             script_runner::write_script_input,
+            html_preview::html_preview_update,
+            html_preview::html_preview_close,
             #[cfg(desktop)]
             terminal::terminal_start,
             #[cfg(desktop)]

@@ -1,5 +1,7 @@
 import { useTranslation } from 'react-i18next';
+import { useRef } from 'react';
 import { openExternal } from '@utils/tauriApi';
+import usePreviewFrame from '@hooks/usePreviewFrame';
 import './web-page.scss';
 
 /**
@@ -13,6 +15,8 @@ import './web-page.scss';
  */
 export default function WebPageView({ url, className = '', onClose }) {
   const { t } = useTranslation();
+  const frameRef = useRef(null);
+  const syncFrameTheme = usePreviewFrame(frameRef);
   return (
     <div className={`web-page ${className}`}>
       <div className="web-page__bar">
@@ -31,6 +35,8 @@ export default function WebPageView({ url, className = '', onClose }) {
         )}
       </div>
       <iframe
+        ref={frameRef}
+        onLoad={syncFrameTheme}
         className="web-page__frame"
         src={url}
         title={url}
