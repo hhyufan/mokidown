@@ -158,6 +158,7 @@ import { milkdownBlockSelection, milkdownFenceConfirmation, milkdownInlineLinkRu
 import { CODE_FENCE_LANGUAGE_EVENT } from '@utils/markdownCodeFence';
 import MarkdownCodeLanguageMenu from './MarkdownCodeLanguageMenu';
 import { MATH_COMPLETION_EVENT, milkdownMathCompletion } from './milkdownMathCompletion';
+import { milkdownMathInlineFold } from './milkdownMathInlineFold';
 import MarkdownMathCompletionMenu from './MarkdownMathCompletionMenu';
 
 /**
@@ -624,6 +625,26 @@ const mathBlockInputRule = $inputRule(
 );
 
 /**
+ * 行内数学公式编辑态输入规则。
+ *
+ * 与块级的 `$$ ` 对称：不在行首时同样进入源码态，只是建立行内源码节点，
+ * 让符号补全与预览气泡也能用在「新写一个行内公式」上。
+ */
+const mathSourceInlineInputRule = $inputRule(
+  (ctx) => new InputRule(/\$\$\s$/, (state, _match, start, end) => {
+    const $start = state.doc.resolve(start);
+    // 整段只有一个 `$$ ` 时归块级规则管，它不成立才会走到这里。
+    if (!$start.parent.isTextblock || !$start.parentOffset) return null;
+    const sourceType = mathSourceInlineSchema.type(ctx);
+    if (!$start.parent.canReplaceWith($start.index(), $start.indexAfter(), sourceType)) return null;
+    // 触发用的收尾空格不进文档：输入规则接管后，这段事务吃掉整个 `$$ `。
+    const tr = state.tr.replaceWith(start, end, sourceType.create(null, state.schema.text('$')));
+    // 光标停在 `$` 之后，接着打字就是接着写公式正文。
+    return tr.setSelection(TextSelection.create(tr.doc, start + 2)).scrollIntoView();
+  })
+);
+
+/**
  * 数学公式、图片和表格的“渲染态/源码态”切换插件。
  *
  * 负责在删除键命中原子渲染节点时回退到可编辑源码表示，并在源码恢复成合法
@@ -759,7 +780,8 @@ const mathValueEditPlugin = $prose((ctx) => {
           if (node.type === blockSourceType) {
             replaceSource(pos, node, blockType.create({ value: source }));
           } else {
-            const match = /^\$([\s\S]*)\$$/.exec(source);
+            // 正文为空就不是公式：`$$` 折成空原子会留下一个看不见、又吃掉分隔符的节点。
+            const match = /^\$([\s\S]+)\$$/.exec(source);
             if (match) replaceSource(pos, node, inlineType.create({ value: match[1] }));
           }
           return;
@@ -841,7 +863,9 @@ const mathPlugins = [
   tableSourceBlockSchema,
   mathValueEditPlugin,
   mathBlockInputRule,
+  mathSourceInlineInputRule,
   mathInlineInputRule,
+  milkdownMathInlineFold,
   milkdownMathPreview,
   milkdownMathCompletion,
 ].flat();
