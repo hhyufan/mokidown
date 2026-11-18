@@ -20,6 +20,7 @@ const output = new Map();
 let lastStarted;
 const emit = (text, id = lastStarted) => output.get(id)?.({ kind: 'data', bytes: [...new TextEncoder().encode(text)] });
 mockIPC((command, args) => {
+  if (command === 'open_external') { commands.push({ command, ...args }); return null; }
   if (!command.startsWith('terminal_')) return null;
   const { events, ...options } = args;
   commands.push({ command, ...options });

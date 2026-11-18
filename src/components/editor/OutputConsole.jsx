@@ -72,7 +72,28 @@ export default function OutputConsole() {
   const outputRef = useRef(null);
   const followOutput = useRef(true);
   const resize = useRef(null);
+  const panelRef = useRef(null);
+  const resizeFrame = useRef(0);
   const inputComposing = useRef(false);
+  const finishResize = () => {
+    const drag = resize.current;
+    if (!drag) return;
+    resize.current = null;
+    cancelAnimationFrame(resizeFrame.current);
+    resizeFrame.current = 0;
+    const panel = panelRef.current;
+    if (panel) {
+      panel.style.height = `${drag.next}px`;
+      delete panel.dataset.resizing;
+      panel.dispatchEvent(new Event('console:resize-end'));
+    }
+    document.documentElement.classList.remove('moki-console-resizing');
+    useScriptStore.getState().setHeight(drag.next);
+  };
+  useEffect(() => () => {
+    cancelAnimationFrame(resizeFrame.current);
+    document.documentElement.classList.remove('moki-console-resizing');
+  }, []);
   useEffect(() => {
     if (showTerminal) setTerminalDirectories((opened) => opened.includes(directory) ? opened : [...opened, directory]);
   }, [directory, showTerminal]);
@@ -151,7 +172,7 @@ export default function OutputConsole() {
     } catch (error) { state.append('stderr', `${t('console.copyFailed', { error: error?.message || error })}\n`); }
   };
   return <React.Fragment>
-    <section className="output-console" aria-label={t('console.aria.label')} data-open={visible ? 'true' : 'false'} style={{ height: visible ? state.height : 0 }}>
+    <section ref={panelRef} className="output-console" aria-label={t('console.aria.label')} data-open={visible ? 'true' : 'false'} style={{ height: visible ? state.height : 0 }}>
       <div className="output-console__resize" role="separator" aria-label={t('console.aria.resize')}
         aria-orientation="horizontal" aria-valuemin={140} aria-valuemax={600} aria-valuenow={state.height} tabIndex={0}
         onKeyDown={(event) => {
@@ -161,13 +182,24 @@ export default function OutputConsole() {
         }}
         onPointerDown={(event) => {
           if (event.button !== 0) return;
-          resize.current = { y: event.clientY, height: state.height };
+          const panel = panelRef.current;
+          const height = panel.getBoundingClientRect().height;
+          panel.dataset.resizing = '';
+          panel.style.height = `${height}px`;
+          resize.current = { y: event.clientY, height, next: height };
+          document.documentElement.classList.add('moki-console-resizing');
           event.currentTarget.setPointerCapture(event.pointerId); event.preventDefault();
         }}
         onPointerMove={(event) => {
-          if (resize.current) state.setHeight(Math.min(window.innerHeight * 0.65, resize.current.height + resize.current.y - event.clientY));
+          const drag = resize.current;
+          if (!drag) return;
+          drag.next = Math.max(140, Math.min(600, window.innerHeight * 0.65, drag.height + drag.y - event.clientY));
+          if (!resizeFrame.current) resizeFrame.current = requestAnimationFrame(() => {
+            resizeFrame.current = 0;
+            if (resize.current && panelRef.current) panelRef.current.style.height = `${resize.current.next}px`;
+          });
         }}
-        onPointerUp={() => { resize.current = null; }} onPointerCancel={() => { resize.current = null; }} />
+        onPointerUp={finishResize} onPointerCancel={finishResize} onLostPointerCapture={finishResize} />
       <header className="output-console__header">
         <div className="output-console__tabs" role="tablist" aria-label={t('console.aria.tools')}>
           {terminalEnabled && <button type="button" role="tab" id="terminal-tab" aria-controls="terminal-panel" aria-selected={isTerminal}
