@@ -1,4 +1,13 @@
-import { createElement, lazy, Suspense, useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
+import {
+  createElement,
+  lazy,
+  Suspense,
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useRef,
+  useState,
+} from 'react';
 import ReactDOM from 'react-dom/client';
 import { StyleProvider } from '@ant-design/cssinjs';
 import { useTranslation } from 'react-i18next';
@@ -45,17 +54,31 @@ function OpeningTitle({ preview }) {
     const card = createDragPreviewElement(preview);
     // 快照包含计算后的逻辑定位；清除它们，避免覆盖 left/top。
     for (const property of Array.from(card.style)) {
-      if (/^(inset($|-)|top$|right$|bottom$|left$|margin($|-))/.test(property)) card.style.removeProperty(property);
+      if (/^(inset($|-)|top$|right$|bottom$|left$|margin($|-))/.test(property))
+        card.style.removeProperty(property);
     }
     Object.assign(card.style, {
-      position: 'relative', left: '0', top: '0', margin: '0', transform: 'none',
-      width: 'max-content', minWidth: 'max-content', maxWidth: 'none', overflow: 'visible',
-      background: 'transparent', borderColor: 'transparent', boxShadow: 'none',
+      position: 'relative',
+      left: '0',
+      top: '0',
+      margin: '0',
+      transform: 'none',
+      width: 'max-content',
+      minWidth: 'max-content',
+      maxWidth: 'none',
+      overflow: 'visible',
+      background: 'transparent',
+      borderColor: 'transparent',
+      boxShadow: 'none',
     });
     for (const label of card.querySelectorAll('span')) {
       Object.assign(label.style, {
-        width: 'max-content', minWidth: 'max-content', maxWidth: 'none',
-        overflow: 'visible', textOverflow: 'clip', flexShrink: '0',
+        width: 'max-content',
+        minWidth: 'max-content',
+        maxWidth: 'none',
+        overflow: 'visible',
+        textOverflow: 'clip',
+        flexShrink: '0',
       });
     }
     ref.current.replaceChildren(card);
@@ -72,11 +95,19 @@ function ReaderBackground({ enabled, imageUrl, opacity }) {
   return null;
 }
 
-export function ReaderWindow({ document: documentInfo, onNavigate, staged = false, onPrepared, backgroundManaged = false, sharedBackgroundUrl }) {
+export function ReaderWindow({
+  document: documentInfo,
+  onNavigate,
+  staged = false,
+  onPrepared,
+  backgroundManaged = false,
+  sharedBackgroundUrl,
+}) {
   const { t } = useTranslation();
   const [content, setContent] = useState(documentInfo.content || '');
   const [metadata, setMetadata] = useState({
-    encoding: documentInfo.encoding, lineEnding: documentInfo.lineEnding,
+    encoding: documentInfo.encoding,
+    lineEnding: documentInfo.lineEnding,
   });
   const [position, setPosition] = useState({ lineNumber: 1, column: 1 });
   const [loading, setLoading] = useState(documentInfo.content == null);
@@ -102,7 +133,8 @@ export function ReaderWindow({ document: documentInfo, onNavigate, staged = fals
   const native = Boolean(window.__TAURI_INTERNALS__);
   const { url: localBackgroundUrl } = useBackgroundImage();
   const backgroundUrl = backgroundManaged ? sharedBackgroundUrl : localBackgroundUrl;
-  const hasBackground = (!opening || Boolean(prepared)) && config.backgroundEnabled && Boolean(backgroundUrl);
+  const hasBackground =
+    (!opening || Boolean(prepared)) && config.backgroundEnabled && Boolean(backgroundUrl);
   const fontSize = config.previewZoomSync ? config.fontSize : config.previewFontSize;
   const lineHeight = config.previewZoomSync ? config.lineHeight : config.previewLineHeight;
 
@@ -120,9 +152,16 @@ export function ReaderWindow({ document: documentInfo, onNavigate, staged = fals
       activationRevision.current += 1;
       try {
         const geometry = await invoke('reader_ready');
-        if (!cancelled) { setPrepared(geometry); setActivated(true); }
+        if (!cancelled) {
+          setPrepared(geometry);
+          setActivated(true);
+        }
       } catch (failure) {
-        if (!cancelled) { setError(String(failure)); setOpening(false); setCovered(false); }
+        if (!cancelled) {
+          setError(String(failure));
+          setOpening(false);
+          setCovered(false);
+        }
       }
     });
     activationListening.current = subscription;
@@ -144,12 +183,18 @@ export function ReaderWindow({ document: documentInfo, onNavigate, staged = fals
       event.stopPropagation();
       wheelAccumulator += event.deltaY;
       if (resetTimer) clearTimeout(resetTimer);
-      resetTimer = setTimeout(() => { wheelAccumulator = 0; resetTimer = null; }, 250);
+      resetTimer = setTimeout(() => {
+        wheelAccumulator = 0;
+        resetTimer = null;
+      }, 250);
       if (Math.abs(wheelAccumulator) < 24) return;
       const step = wheelAccumulator > 0 ? -1 : 1;
       wheelAccumulator = 0;
       const state = useConfigStore.getState();
-      const update = buildReaderZoomUpdate(isMarkdown ? state : { ...state, previewZoomSync: true }, step);
+      const update = buildReaderZoomUpdate(
+        isMarkdown ? state : { ...state, previewZoomSync: true },
+        step,
+      );
       if (!isMarkdown && !state.previewZoomSync) {
         delete update.previewFontSize;
         delete update.previewLineHeight;
@@ -168,7 +213,10 @@ export function ReaderWindow({ document: documentInfo, onNavigate, staged = fals
     let revision = 0;
     const subscriptions = [];
     const reload = async () => {
-      if (!documentInfo.path || documentInfo.modified) { setLoading(false); return; }
+      if (!documentInfo.path || documentInfo.modified) {
+        setLoading(false);
+        return;
+      }
       const request = ++revision;
       try {
         const result = await readFileContent(documentInfo.path);
@@ -186,22 +234,30 @@ export function ReaderWindow({ document: documentInfo, onNavigate, staged = fals
     if (documentInfo.content == null) void reload();
     if (native && documentInfo.path && !documentInfo.modified) {
       // Shared native watchers remain owned by the process, not a reader closing on another monitor.
-      subscriptions.push(listen('file-changed', (event) => {
-        const path = typeof event.payload === 'string' ? event.payload : event.payload?.path;
-        if (path === documentInfo.path) void reload();
-      }));
+      subscriptions.push(
+        listen('file-changed', (event) => {
+          const path = typeof event.payload === 'string' ? event.payload : event.payload?.path;
+          if (path === documentInfo.path) void reload();
+        }),
+      );
       void invoke('start_file_watching', { filePath: documentInfo.path }).catch(() => {});
       window.addEventListener('focus', reload);
     }
     return () => {
       cancelled = true;
       window.removeEventListener('focus', reload);
-      subscriptions.forEach((subscription) => { void subscription.then((stop) => stop()).catch(() => {}); });
+      subscriptions.forEach((subscription) => {
+        void subscription.then((stop) => stop()).catch(() => {});
+      });
     };
   }, [documentInfo, native]);
 
   useEffect(() => {
-    if (!native || staged) { setOpening(false); setLayoutPrepared(true); return undefined; }
+    if (!native || staged) {
+      setOpening(false);
+      setLayoutPrepared(true);
+      return undefined;
+    }
     const current = getCurrentWindow();
     void current.setTitle(`${documentInfo.name} - MokiDown`).catch(() => {});
     if (current.label === 'main') {
@@ -226,7 +282,10 @@ export function ReaderWindow({ document: documentInfo, onNavigate, staged = fals
         if (geometry.activated) setActivated(true);
         return;
       }
-      if (!signal.aborted) { setOpening(false); setCovered(false); }
+      if (!signal.aborted) {
+        setOpening(false);
+        setCovered(false);
+      }
     })().catch(async (failure) => {
       if (signal.aborted) return;
       setOpening(false);
@@ -243,31 +302,59 @@ export function ReaderWindow({ document: documentInfo, onNavigate, staged = fals
 
   useEffect(() => {
     if (staged) return undefined;
-    if (!activated || !layoutPrepared || loading || opening || (!contentReady && !error) || presented.current) return undefined;
+    if (
+      !activated ||
+      !layoutPrepared ||
+      loading ||
+      opening ||
+      (!contentReady && !error) ||
+      presented.current
+    )
+      return undefined;
     presented.current = true;
     window.__mokiRuntimeLogs?.ready();
     if (!native) return undefined;
     const current = getCurrentWindow();
     if (current.label === 'main') return announceMainWindowReady(Promise.resolve());
     // 正文与底栏已提交到 DOM，原生窗口此时才允许显示。
-    void invoke('reader_present', { focus: true }).then(() => {
-      if (documentInfo.opening) return invoke('close_drag_preview', { token: documentInfo.opening.preview.token });
-      return undefined;
-    }).catch((failure) => setError(String(failure)));
+    void invoke('reader_present', { focus: true })
+      .then(() => {
+        if (documentInfo.opening)
+          return invoke('close_drag_preview', { token: documentInfo.opening.preview.token });
+        return undefined;
+      })
+      .catch((failure) => setError(String(failure)));
     return undefined;
-  }, [activated, layoutPrepared, loading, opening, contentReady, error, native, documentInfo.opening, staged]);
+  }, [
+    activated,
+    layoutPrepared,
+    loading,
+    opening,
+    contentReady,
+    error,
+    native,
+    documentInfo.opening,
+    staged,
+  ]);
 
   useEffect(() => {
     if (!activated || !prepared || loading || !covered || !contentReady) return undefined;
     const controller = new AbortController();
     // Reveal the already-rendered document directly, with no full-size blank cover.
-    void expandReader(rootRef.current, documentInfo.opening.preview, prepared, controller.signal,
-      hasBackground ? backgroundUrl : null)
+    void expandReader(
+      rootRef.current,
+      documentInfo.opening.preview,
+      prepared,
+      controller.signal,
+      hasBackground ? backgroundUrl : null,
+    )
       .catch(async (failure) => {
         if (controller.signal.aborted) return;
         setError(String(failure));
         await invoke('reader_present', { focus: false }).catch(() => {});
-        await invoke('close_drag_preview', { token: documentInfo.opening.preview.token }).catch(() => {});
+        await invoke('close_drag_preview', { token: documentInfo.opening.preview.token }).catch(
+          () => {},
+        );
       })
       .then(() => {
         if (controller.signal.aborted) return;
@@ -277,19 +364,41 @@ export function ReaderWindow({ document: documentInfo, onNavigate, staged = fals
         if (native) void invoke('reader_present', { focus: true }).catch(() => {});
       });
     return () => controller.abort();
-  }, [activated, prepared, loading, covered, isMarkdown, contentReady, hasBackground, backgroundUrl, native, documentInfo.opening]);
+  }, [
+    activated,
+    prepared,
+    loading,
+    covered,
+    isMarkdown,
+    contentReady,
+    hasBackground,
+    backgroundUrl,
+    native,
+    documentInfo.opening,
+  ]);
 
   useEffect(() => {
     if (!native || opening) return undefined;
     const current = getCurrentWindow();
-    const refresh = () => { void current.isMaximized().then(setMaximized).catch(() => {}); };
+    const refresh = () => {
+      void current
+        .isMaximized()
+        .then(setMaximized)
+        .catch(() => {});
+    };
     refresh();
     const subscription = current.onResized(refresh);
-    return () => { void subscription.then((stop) => stop()).catch(() => {}); };
+    return () => {
+      void subscription.then((stop) => stop()).catch(() => {});
+    };
   }, [native, opening]);
 
   const control = async (action) => {
-    try { await action(getCurrentWindow()); } catch (failure) { setError(failure.message || String(failure)); }
+    try {
+      await action(getCurrentWindow());
+    } catch (failure) {
+      setError(failure.message || String(failure));
+    }
   };
   const returnToEditor = async () => {
     setReturning(true);
@@ -301,64 +410,172 @@ export function ReaderWindow({ document: documentInfo, onNavigate, staged = fals
       setError(failure.message || String(failure));
     }
   };
-  const button = (label, onClick, icon, className = '', pressed) => <button type="button" className={`reader__button ${className}`} aria-label={label} aria-pressed={pressed} title={label} onClick={onClick}>{icon}</button>;
-  const svg = (children) => <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">{children}</svg>;
+  const button = (label, onClick, icon, className = '', pressed) => (
+    <button
+      type="button"
+      className={`reader__button ${className}`}
+      aria-label={label}
+      aria-pressed={pressed}
+      onClick={onClick}
+    >
+      {icon}
+    </button>
+  );
+  const svg = (children) => (
+    <svg
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+    >
+      {children}
+    </svg>
+  );
 
   const preview = documentInfo.opening?.preview;
-  return <main ref={rootRef} aria-hidden={staged || undefined} className={`reader${staged ? ' reader--staged' : ''}${hasBackground ? ' reader--background' : ''}${opening ? ' reader--opening' : ''}${covered ? ' reader--covered' : ''}${loading || (!contentReady && !error) ? ' reader--pending' : ''}`}
-    style={{
-      ...(hasBackground ? {
-        '--moki-background-image': `url(${JSON.stringify(backgroundUrl)})`,
-        '--moki-background-opacity': (100 - getBackgroundTransparency(config.backgroundTransparency, theme)) / 100,
-      } : {}),
-      ...(preview ? {
-      '--reader-title-font': preview.appearance.fontFamily,
-      '--reader-title-size': preview.appearance.fontSize,
-      '--reader-title-gap': preview.appearance.gap,
-      '--reader-title-padding': preview.appearance.paddingLeft,
-      '--reader-opening-header': `${preview.height}px`,
-      '--reader-opening-background': preview.background,
-      } : {}),
-    }}>
-    {!backgroundManaged && !staged && <ReaderBackground enabled={hasBackground} imageUrl={backgroundUrl}
-      opacity={(100 - getBackgroundTransparency(config.backgroundTransparency, theme)) / 100} />}
-    <header className="reader__header">
-      <div className="reader__title" onMouseDown={(event) => {
-        if (!native || event.button !== 0) return;
-        event.preventDefault();
-        void control((current) => event.detail === 2 ? (maximized ? current.unmaximize() : current.maximize()) : current.startDragging());
-      }} onContextMenu={(event) => event.preventDefault()}>
-        {preview ? <OpeningTitle preview={preview} /> : <>
-          <FileTypeIcon fileName={documentInfo.name} size={16} />
-          <span className="reader__filename" title={documentInfo.name}>{documentInfo.name}</span>
-        </>}
-        <small>{t('reader.readOnly')}</small>
-      </div>
-      <button type="button" className="reader__home" aria-label={t('reader.returnToEditor')} title={t('reader.returnToEditor')} disabled={returning} onClick={returnToEditor}>
-        {svg(<><path d="m9 10-5 5 5 5" /><path d="M4 15h10a6 6 0 0 0 0-12h-3" /></>)}
-      </button>
-      {native && <div className="reader__controls">
-        {button(pinned ? t('topbar.unpin') : t('topbar.pin'), () => control(async (current) => {
-          await current.setAlwaysOnTop(!pinned); setPinned(!pinned);
-        }), <WindowPinIcon pinned={pinned} />, pinned ? 'is-active' : '', pinned)}
-        {button(t('topbar.minimize'), () => control((current) => current.minimize()), svg(<path d="M5 12h14" />))}
-        {button(maximized ? t('topbar.unmaximize') : t('topbar.maximize'), () => control((current) => maximized ? current.unmaximize() : current.maximize()), svg(<rect x="3" y="3" width="18" height="18" rx="2" />))}
-        {button(t('topbar.close'), () => control((current) => current.close()), svg(<path d="m6 6 12 12M18 6 6 18" />), 'reader__button--close')}
-      </div>}
-    </header>
-    {error && <div className="reader__message" role="alert">{error}</div>}
-    {opening && !prepared ? <div className="reader__opening-space" aria-hidden="true" />
-      : loading ? null
-      : isMarkdown
-        ? <ReadOnlyMarkdown content={content} documentPath={documentInfo.path} dark={dark}
-            fontSize={fontSize || 14} lineHeight={lineHeight || 24} onReady={markContentReady} />
-        : <Suspense fallback={null}>
-          <ReaderSourceEditor document={documentInfo} content={content} dark={dark} config={config}
-            onReady={markContentReady} onPositionChange={setPosition} />
-        </Suspense>}
-    <ReaderFooter document={{ ...documentInfo, ...metadata }} content={content} position={position}
-      onOpenFile={onNavigate} />
-  </main>;
+  return (
+    <main
+      ref={rootRef}
+      aria-hidden={staged || undefined}
+      className={`reader${staged ? ' reader--staged' : ''}${hasBackground ? ' reader--background' : ''}${opening ? ' reader--opening' : ''}${covered ? ' reader--covered' : ''}${loading || (!contentReady && !error) ? ' reader--pending' : ''}`}
+      style={{
+        ...(hasBackground
+          ? {
+              '--moki-background-image': `url(${JSON.stringify(backgroundUrl)})`,
+              '--moki-background-opacity':
+                (100 - getBackgroundTransparency(config.backgroundTransparency, theme)) / 100,
+            }
+          : {}),
+        ...(preview
+          ? {
+              '--reader-title-font': preview.appearance.fontFamily,
+              '--reader-title-size': preview.appearance.fontSize,
+              '--reader-title-gap': preview.appearance.gap,
+              '--reader-title-padding': preview.appearance.paddingLeft,
+              '--reader-opening-header': `${preview.height}px`,
+              '--reader-opening-background': preview.background,
+            }
+          : {}),
+      }}
+    >
+      {!backgroundManaged && !staged && (
+        <ReaderBackground
+          enabled={hasBackground}
+          imageUrl={backgroundUrl}
+          opacity={(100 - getBackgroundTransparency(config.backgroundTransparency, theme)) / 100}
+        />
+      )}
+      <header className="reader__header">
+        <div
+          className="reader__title"
+          onMouseDown={(event) => {
+            if (!native || event.button !== 0) return;
+            event.preventDefault();
+            void control((current) =>
+              event.detail === 2
+                ? maximized
+                  ? current.unmaximize()
+                  : current.maximize()
+                : current.startDragging(),
+            );
+          }}
+          onContextMenu={(event) => event.preventDefault()}
+        >
+          {preview ? (
+            <OpeningTitle preview={preview} />
+          ) : (
+            <>
+              <FileTypeIcon fileName={documentInfo.name} size={16} />
+              <span className="reader__filename">{documentInfo.name}</span>
+            </>
+          )}
+          <small>{t('reader.readOnly')}</small>
+        </div>
+        <button
+          type="button"
+          className="reader__home"
+          aria-label={t('reader.returnToEditor')}
+          disabled={returning}
+          onClick={returnToEditor}
+        >
+          {svg(
+            <>
+              <path d="m9 10-5 5 5 5" />
+              <path d="M4 15h10a6 6 0 0 0 0-12h-3" />
+            </>,
+          )}
+        </button>
+        {native && (
+          <div className="reader__controls">
+            {button(
+              pinned ? t('topbar.unpin') : t('topbar.pin'),
+              () =>
+                control(async (current) => {
+                  await current.setAlwaysOnTop(!pinned);
+                  setPinned(!pinned);
+                }),
+              <WindowPinIcon pinned={pinned} />,
+              pinned ? 'is-active' : '',
+              pinned,
+            )}
+            {button(
+              t('topbar.minimize'),
+              () => control((current) => current.minimize()),
+              svg(<path d="M5 12h14" />),
+            )}
+            {button(
+              maximized ? t('topbar.unmaximize') : t('topbar.maximize'),
+              () => control((current) => (maximized ? current.unmaximize() : current.maximize())),
+              svg(<rect x="3" y="3" width="18" height="18" rx="2" />),
+            )}
+            {button(
+              t('topbar.close'),
+              () => control((current) => current.close()),
+              svg(<path d="m6 6 12 12M18 6 6 18" />),
+              'reader__button--close',
+            )}
+          </div>
+        )}
+      </header>
+      {error && (
+        <div className="reader__message" role="alert">
+          {error}
+        </div>
+      )}
+      {opening && !prepared ? (
+        <div className="reader__opening-space" aria-hidden="true" />
+      ) : loading ? null : isMarkdown ? (
+        <ReadOnlyMarkdown
+          content={content}
+          documentPath={documentInfo.path}
+          dark={dark}
+          fontSize={fontSize || 14}
+          lineHeight={lineHeight || 24}
+          onReady={markContentReady}
+        />
+      ) : (
+        <Suspense fallback={null}>
+          <ReaderSourceEditor
+            document={documentInfo}
+            content={content}
+            dark={dark}
+            config={config}
+            onReady={markContentReady}
+            onPositionChange={setPosition}
+          />
+        </Suspense>
+      )}
+      <ReaderFooter
+        document={{ ...documentInfo, ...metadata }}
+        content={content}
+        position={position}
+        onOpenFile={onNavigate}
+      />
+    </main>
+  );
 }
 
 export function ReaderHost({ document: initialDocument }) {
@@ -373,48 +590,85 @@ export function ReaderHost({ document: initialDocument }) {
   useEffect(() => {
     // WebView 的模块与日志界面已挂载；预热正文仍由独立 ready/present 门禁控制。
     window.__mokiRuntimeLogs?.ready();
-    return () => { navigation.current += 1; };
-  }, []);
-  const navigate = useCallback(async (file) => {
-    const revision = ++navigation.current;
-    const result = await readFileContent(file.path);
-    if (revision !== navigation.current) return;
-    if (!result.success) {
-      useNotificationStore.getState().notify(result.blockedReason ? 'warning' : 'error',
-        t('notification.error'), result.message);
-      return;
-    }
-    const document = {
-      id: file.path, path: file.path, name: file.name, content: result.content || '',
-      encoding: result.encoding, lineEnding: result.line_ending,
+    return () => {
+      navigation.current += 1;
     };
-    await invoke('reader_replace_document', { document });
-    if (revision === navigation.current) setPending({ document, version: ++version.current });
-  }, [t]);
+  }, []);
+  const navigate = useCallback(
+    async (file) => {
+      const revision = ++navigation.current;
+      const result = await readFileContent(file.path);
+      if (revision !== navigation.current) return;
+      if (!result.success) {
+        useNotificationStore
+          .getState()
+          .notify(
+            result.blockedReason ? 'warning' : 'error',
+            t('notification.error'),
+            result.message,
+          );
+        return;
+      }
+      const document = {
+        id: file.path,
+        path: file.path,
+        name: file.name,
+        content: result.content || '',
+        encoding: result.encoding,
+        lineEnding: result.line_ending,
+      };
+      await invoke('reader_replace_document', { document });
+      if (revision === navigation.current) setPending({ document, version: ++version.current });
+    },
+    [t],
+  );
   useEffect(() => {
     if (!window.__TAURI_INTERNALS__) return undefined;
     const controller = new AbortController();
-    void subscribeReaderDocuments((document) => setSession((previous) => {
-      const old = previous.document;
-      if (old.id === document.id && old.path === document.path && old.content === document.content
-        && old.prerender === document.prerender && old.opening?.preview.token === document.opening?.preview.token) return previous;
-      // Reset per-document effects and readiness without reloading the WebView.
-      navigation.current += 1;
-      setPending(null);
-      return { document, version: ++version.current };
-    }), controller.signal).catch(console.error);
+    void subscribeReaderDocuments(
+      (document) =>
+        setSession((previous) => {
+          const old = previous.document;
+          if (
+            old.id === document.id &&
+            old.path === document.path &&
+            old.content === document.content &&
+            old.prerender === document.prerender &&
+            old.opening?.preview.token === document.opening?.preview.token
+          )
+            return previous;
+          // Reset per-document effects and readiness without reloading the WebView.
+          navigation.current += 1;
+          setPending(null);
+          return { document, version: ++version.current };
+        }),
+      controller.signal,
+    ).catch(console.error);
     return () => controller.abort();
   }, []);
-  return <>
-    <ReaderBackground enabled={config.backgroundEnabled && Boolean(backgroundUrl)} imageUrl={backgroundUrl}
-      opacity={(100 - getBackgroundTransparency(config.backgroundTransparency, theme)) / 100} />
-    {[session, pending].filter(Boolean).map((item) =>
-    <ReaderWindow key={item.version} document={item.document} onNavigate={navigate} backgroundManaged sharedBackgroundUrl={backgroundUrl}
-      staged={item !== session} onPrepared={() => {
-        setSession(item);
-        setPending(null);
-      }} />)}
-  </>;
+  return (
+    <>
+      <ReaderBackground
+        enabled={config.backgroundEnabled && Boolean(backgroundUrl)}
+        imageUrl={backgroundUrl}
+        opacity={(100 - getBackgroundTransparency(config.backgroundTransparency, theme)) / 100}
+      />
+      {[session, pending].filter(Boolean).map((item) => (
+        <ReaderWindow
+          key={item.version}
+          document={item.document}
+          onNavigate={navigate}
+          backgroundManaged
+          sharedBackgroundUrl={backgroundUrl}
+          staged={item !== session}
+          onPrepared={() => {
+            setSession(item);
+            setPending(null);
+          }}
+        />
+      ))}
+    </>
+  );
 }
 
 export function mountReader(document) {
@@ -425,6 +679,6 @@ export function mountReader(document) {
         <TaskList reader />
         <RuntimeErrorBoundary root>{createElement(ReaderHost, { document })}</RuntimeErrorBoundary>
       </ThemedConfigProvider>
-    </StyleProvider>
+    </StyleProvider>,
   );
 }

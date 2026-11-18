@@ -19,7 +19,8 @@ export default function HtmlPreview({ source, filePath, title, compact = false, 
   const [liveOverride, setLiveOverride] = useState(null);
   const liveReload = liveOverride ?? globalLiveReload;
   const [menu, setMenu] = useState(null);
-  const desktop = Boolean(window.__TAURI_INTERNALS__) && !window.AndroidBridge && !isAndroidRuntime();
+  const desktop =
+    Boolean(window.__TAURI_INTERNALS__) && !window.AndroidBridge && !isAndroidRuntime();
   const hideBar = desktop && !liveReload;
   const root = useFileStore((state) => state.currentDir);
   // 关闭热更新后走本地 iframe 渲染，不启动本地端口。
@@ -39,12 +40,16 @@ export default function HtmlPreview({ source, filePath, title, compact = false, 
       const doc = frame?.contentDocument;
       if (!doc || doc.__mokiSizingInjected) return;
       doc.__mokiSizingInjected = true;
-      const url = URL.createObjectURL(new Blob([htmlPreviewSizingScript], { type: 'text/javascript' }));
+      const url = URL.createObjectURL(
+        new Blob([htmlPreviewSizingScript], { type: 'text/javascript' }),
+      );
       const script = doc.createElement('script');
       script.src = url;
       script.onload = () => URL.revokeObjectURL(url);
       doc.head.append(script);
-    } catch { /* Cross-origin documents already get the script from the backend. */ }
+    } catch {
+      /* Cross-origin documents already get the script from the backend. */
+    }
   };
   const scaleRef = useRef(1);
   const [contentWidth, setContentWidth] = useState(1280);
@@ -78,8 +83,10 @@ export default function HtmlPreview({ source, filePath, title, compact = false, 
     const element = viewportRef.current;
     const measure = () => {
       const { clientWidth: width, clientHeight: height } = element;
-      if (width && height) setDimensions((previous) => previous.width === width && previous.height === height
-        ? previous : { width, height });
+      if (width && height)
+        setDimensions((previous) =>
+          previous.width === width && previous.height === height ? previous : { width, height },
+        );
     };
     const observer = new ResizeObserver(measure);
     observer.observe(element);
@@ -90,24 +97,44 @@ export default function HtmlPreview({ source, filePath, title, compact = false, 
   useEffect(() => {
     setError('');
     setFrame(null);
-    const session = { id: crypto.randomUUID(), closed: false, pending: false, dirty: false, timer: 0 };
+    const session = {
+      id: crypto.randomUUID(),
+      closed: false,
+      pending: false,
+      dirty: false,
+      timer: 0,
+    };
     sessionRef.current = session;
     const close = () => invoke('html_preview_close', { id: session.id }).catch(() => {});
     session.flush = async () => {
       if (session.closed) return;
-      if (session.pending) { session.dirty = true; return; }
+      if (session.pending) {
+        session.dirty = true;
+        return;
+      }
       const source = latestSource.current || '';
-      if (!native) { setFrame({ html: source }); return; }
+      if (!native) {
+        setFrame({ html: source });
+        return;
+      }
       session.pending = true;
       session.dirty = false;
       try {
         const result = await invoke('html_preview_update', {
-          id: session.id, source, filePath: filePath || null, root: root || null, port: requestedPort,
-          clientScript: session.created ? null : `${previewFrameBridgeScript}\n${htmlPreviewSizingScript}${liveReload ? `\n${liveReloadClient}` : ''}`,
+          id: session.id,
+          source,
+          filePath: filePath || null,
+          root: root || null,
+          port: requestedPort,
+          clientScript: session.created
+            ? null
+            : `${previewFrameBridgeScript}\n${htmlPreviewSizingScript}${liveReload ? `\n${liveReloadClient}` : ''}`,
         });
         if (session.closed) return;
         session.created = true;
-        setFrame((previous) => previous?.url === result.url && previous.revision === result.revision ? previous : result);
+        setFrame((previous) =>
+          previous?.url === result.url && previous.revision === result.revision ? previous : result,
+        );
         setError('');
       } catch (error) {
         if (!session.closed) setError(String(error?.message || error));
@@ -130,7 +157,9 @@ export default function HtmlPreview({ source, filePath, title, compact = false, 
     if (!liveReload) return undefined;
     const session = sessionRef.current;
     clearTimeout(session.timer);
-    session.timer = setTimeout(() => { void session.flush(); }, 140);
+    session.timer = setTimeout(() => {
+      void session.flush();
+    }, 140);
     return () => clearTimeout(session.timer);
   }, [source, liveReload]);
 
@@ -140,14 +169,22 @@ export default function HtmlPreview({ source, filePath, title, compact = false, 
   }, [frame?.url]);
 
   const refreshPreview = () => {
-    if (error || !frame) { setRetry((value) => value + 1); return; }
+    if (error || !frame) {
+      setRetry((value) => value + 1);
+      return;
+    }
     // 关闭热更新时：重新提交当前内容并重载 iframe，让 HTML 与关联资源都取最新。
-    if (!liveReload) { void sessionRef.current?.flush(); return; }
+    if (!liveReload) {
+      void sessionRef.current?.flush();
+      return;
+    }
     setRefresh((value) => value + 1);
   };
   useEffect(() => {
     if (!menu) return undefined;
-    const closeMenu = (event) => { if (!event.target.closest('.html-preview__menu')) setMenu(null); };
+    const closeMenu = (event) => {
+      if (!event.target.closest('.html-preview__menu')) setMenu(null);
+    };
     window.addEventListener('pointerdown', closeMenu, true);
     window.addEventListener('blur', () => setMenu(null));
     return () => {
@@ -159,74 +196,170 @@ export default function HtmlPreview({ source, filePath, title, compact = false, 
   const scale = dimensions.width ? Math.min(1, dimensions.width / width) : 1;
   scaleRef.current = scale;
   const url = navigationUrl || (frame?.url ? `${frame.url}?revision=${frame.revision}` : undefined);
-  return <section className={`html-preview${compact ? ' html-preview--compact' : ''} ${className}`} aria-label={label}
-    onContextMenu={(event) => {
-      event.preventDefault();
-      setMenu({ x: Math.min(event.clientX, window.innerWidth - 220), y: Math.min(event.clientY, window.innerHeight - 120) });
-    }}>
-    {!compact && <header className={`html-preview__bar${hideBar ? ' html-preview__bar--collapsed' : ''}`}>
-      <form className="html-preview__address" onSubmit={(event) => {
+  return (
+    <section
+      className={`html-preview${compact ? ' html-preview--compact' : ''} ${className}`}
+      aria-label={label}
+      onContextMenu={(event) => {
         event.preventDefault();
-        try {
-          const input = address.trim();
-          if (input === 'about:srcdoc' && !frame?.url) { setNavigationUrl(null); return; }
-          const target = input.startsWith('/') && frame?.url ? new URL(input, frame.url)
-            : new URL(/^https?:\/\//i.test(input) ? input : `http://${input}`);
-          if (!['http:', 'https:'].includes(target.protocol)) return;
-          setNavigationUrl(target.href);
-          setAddress(target.href);
-          setError('');
-        } catch { setError(t('htmlPreview.invalidAddress')); }
-      }}>
-        <input aria-label={t('htmlPreview.address')} value={address} onChange={(event) => setAddress(event.target.value)}
-          spellCheck={false} autoComplete="off" onFocus={(event) => event.target.select()} onKeyDown={(event) => {
-            if (isImeComposing(event)) { if (event.key === 'Enter') event.preventDefault(); return; }
-            if (event.key === 'Escape') { setAddress(navigationUrl || frame?.url || 'about:srcdoc'); event.currentTarget.blur(); }
-          }} />
-        <button type="button" aria-label={t('htmlPreview.refresh')} title={t('htmlPreview.refresh')} onClick={() => {
-          refreshPreview();
-        }}><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
-          <polyline points="23 4 23 10 17 10" />
-          <path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10" />
-        </svg></button>
-      </form>
-      {native && (
-        <button
-          type="button"
-          className="html-preview__live-off"
-          aria-label={t('htmlPreview.disableLiveReload')}
-          title={t('htmlPreview.disableLiveReload')}
-          onClick={() => setLiveOverride(false)}
-        >
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
-            <line x1="18" y1="6" x2="6" y2="18" />
-            <line x1="6" y1="6" x2="18" y2="18" />
-          </svg>
-        </button>
+        setMenu({
+          x: Math.min(event.clientX, window.innerWidth - 220),
+          y: Math.min(event.clientY, window.innerHeight - 120),
+        });
+      }}
+    >
+      {!compact && (
+        <header className={`html-preview__bar${hideBar ? ' html-preview__bar--collapsed' : ''}`}>
+          <form
+            className="html-preview__address"
+            onSubmit={(event) => {
+              event.preventDefault();
+              try {
+                const input = address.trim();
+                if (input === 'about:srcdoc' && !frame?.url) {
+                  setNavigationUrl(null);
+                  return;
+                }
+                const target =
+                  input.startsWith('/') && frame?.url
+                    ? new URL(input, frame.url)
+                    : new URL(/^https?:\/\//i.test(input) ? input : `http://${input}`);
+                if (!['http:', 'https:'].includes(target.protocol)) return;
+                setNavigationUrl(target.href);
+                setAddress(target.href);
+                setError('');
+              } catch {
+                setError(t('htmlPreview.invalidAddress'));
+              }
+            }}
+          >
+            <input
+              aria-label={t('htmlPreview.address')}
+              value={address}
+              onChange={(event) => setAddress(event.target.value)}
+              spellCheck={false}
+              autoComplete="off"
+              onFocus={(event) => event.target.select()}
+              onKeyDown={(event) => {
+                if (isImeComposing(event)) {
+                  if (event.key === 'Enter') event.preventDefault();
+                  return;
+                }
+                if (event.key === 'Escape') {
+                  setAddress(navigationUrl || frame?.url || 'about:srcdoc');
+                  event.currentTarget.blur();
+                }
+              }}
+            />
+            <button
+              type="button"
+              aria-label={t('htmlPreview.refresh')}
+              onClick={() => {
+                refreshPreview();
+              }}
+            >
+              <svg
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+                aria-hidden="true"
+              >
+                <polyline points="23 4 23 10 17 10" />
+                <path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10" />
+              </svg>
+            </button>
+          </form>
+          {native && (
+            <button
+              type="button"
+              className="html-preview__live-off"
+              aria-label={t('htmlPreview.disableLiveReload')}
+              onClick={() => setLiveOverride(false)}
+            >
+              <svg
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+                aria-hidden="true"
+              >
+                <line x1="18" y1="6" x2="6" y2="18" />
+                <line x1="6" y1="6" x2="18" y2="18" />
+              </svg>
+            </button>
+          )}
+        </header>
       )}
-    </header>}
-    {error && <div className="html-preview__error" role="alert">{error}</div>}
-    <div className="html-preview__viewport" ref={viewportRef}>
-      {frame && <iframe ref={iframeRef} key={refresh} title={label} className="html-preview__frame" src={url} srcDoc={!native && !navigationUrl ? frame.html : undefined}
-        onLoad={() => { setContentWidth(1280); syncFrameTheme(); injectSizing(iframeRef.current); }}
-        style={{ width: Math.max(1, width), height: Math.max(1, dimensions.height / scale), transform: `scale(${scale})` }}
-        sandbox={url ? 'allow-scripts allow-forms allow-same-origin allow-downloads' : 'allow-scripts allow-forms allow-same-origin'}
-        referrerPolicy="same-origin" />}
-    </div>
-    {menu && (
-      <div className="monaco-context-menu editor-context-menu html-preview__menu" role="menu"
-        style={{ position: 'fixed', left: menu.x, top: menu.y }}
-        onContextMenu={(event) => event.preventDefault()}>
-        <button type="button" role="menuitem" className="monaco-context-menu__item editor-context-menu__item"
-          onClick={() => { setLiveOverride(!liveReload); setMenu(null); }}>
-          <span className="monaco-context-menu__label">{t(liveReload ? 'htmlPreview.disableLiveReload' : 'htmlPreview.enableLiveReload')}</span>
-          <span className="monaco-context-menu__shortcut">{liveReload ? '本地预览' : '热更新'}</span>
-        </button>
-        <button type="button" role="menuitem" className="monaco-context-menu__item editor-context-menu__item"
-          onClick={() => { refreshPreview(); setMenu(null); }}>
-          <span className="monaco-context-menu__label">{t('htmlPreview.refresh')}</span>
-        </button>
+      {error && (
+        <div className="html-preview__error" role="alert">
+          {error}
+        </div>
+      )}
+      <div className="html-preview__viewport" ref={viewportRef}>
+        {frame && (
+          <iframe
+            ref={iframeRef}
+            key={refresh}
+            title={label}
+            className="html-preview__frame"
+            src={url}
+            srcDoc={!native && !navigationUrl ? frame.html : undefined}
+            onLoad={() => {
+              setContentWidth(1280);
+              syncFrameTheme();
+              injectSizing(iframeRef.current);
+            }}
+            style={{
+              width: Math.max(1, width),
+              height: Math.max(1, dimensions.height / scale),
+              transform: `scale(${scale})`,
+            }}
+            sandbox={
+              url
+                ? 'allow-scripts allow-forms allow-same-origin allow-downloads'
+                : 'allow-scripts allow-forms allow-same-origin'
+            }
+            referrerPolicy="same-origin"
+          />
+        )}
       </div>
-    )}
-  </section>;
+      {menu && (
+        <div
+          className="monaco-context-menu editor-context-menu html-preview__menu"
+          role="menu"
+          style={{ position: 'fixed', left: menu.x, top: menu.y }}
+          onContextMenu={(event) => event.preventDefault()}
+        >
+          <button
+            type="button"
+            role="menuitem"
+            className="monaco-context-menu__item editor-context-menu__item"
+            onClick={() => {
+              setLiveOverride(!liveReload);
+              setMenu(null);
+            }}
+          >
+            <span className="monaco-context-menu__label">
+              {t(liveReload ? 'htmlPreview.disableLiveReload' : 'htmlPreview.enableLiveReload')}
+            </span>
+            <span className="monaco-context-menu__shortcut">
+              {liveReload ? '本地预览' : '热更新'}
+            </span>
+          </button>
+          <button
+            type="button"
+            role="menuitem"
+            className="monaco-context-menu__item editor-context-menu__item"
+            onClick={() => {
+              refreshPreview();
+              setMenu(null);
+            }}
+          >
+            <span className="monaco-context-menu__label">{t('htmlPreview.refresh')}</span>
+          </button>
+        </div>
+      )}
+    </section>
+  );
 }
