@@ -152,6 +152,7 @@ const useEditorStore = create(
         const { activate = true } = options;
         let parsed;
         try { parsed = new URL(url); } catch { return; }
+        if (!['http:', 'https:'].includes(parsed.protocol)) return;
         const { tabs, tabRenderList, activeTabId } = get();
         const id = `web:${parsed.href}`;
         if (activeTabId !== id) flushEditorBuffer(activeTabId);
@@ -176,7 +177,11 @@ const useEditorStore = create(
       },
 
       openWebSplit: (url) => {
-        if (url) set({ webSplitUrl: url });
+        let parsed;
+        try { parsed = new URL(url); } catch { return; }
+        if (!['http:', 'https:'].includes(parsed.protocol)) return;
+        if (!get().activeTabId) { get().openWebTab(parsed.href); return; }
+        set({ webSplitUrl: parsed.href });
       },
 
       closeWebSplit: () => set({ webSplitUrl: null }),
