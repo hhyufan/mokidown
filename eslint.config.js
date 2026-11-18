@@ -30,6 +30,9 @@ export default [
       'design/**',
       'notes-viewer/**',
       'site-shots/**',
+      // 本地构建/缓存产物（未纳入仓库），避免本地 `npm run ci` 把缓存算进来。
+      'artifacts/**',
+      'mokidown/**',
       'releases/**',
       '.dbg/**',
       // 本地探测脚本与跑 smoke 用的二进制（marksman.exe）都放在这里，
