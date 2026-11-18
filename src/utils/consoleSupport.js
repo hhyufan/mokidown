@@ -50,6 +50,7 @@ export function hasCodeEditor(viewMode, tab) {
   if (viewMode !== 'preview') return true;
   if (!tab) return false;
   if (MARKDOWN_RE.test(tab.name || '')) return false;
+  if (/\.(html?|xhtml)$/i.test(tab.name || '')) return false;
   return tab.ext?.toLowerCase() !== 'mgtree';
 }
 
