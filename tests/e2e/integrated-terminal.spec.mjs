@@ -75,3 +75,38 @@ test('terminal lets the wallpaper through and follows the editor cursor colors',
       getComputedStyle(element).boxShadow)).toContain(cursor);
   }
 });
+
+test('terminal URL text and OSC 8 links open through the native browser command', async ({ page }) => {
+  await page.goto('/tests/terminal-harness.html');
+  const terminal = page.locator('#terminal-panel');
+  await expect(terminal.getByRole('status')).toHaveText('Local terminal');
+  await page.evaluate(() => window.terminalTrial.emit('\r\nhttp://localhost:5173/test\r\n\x1b]8;;https://example.com/docs\x1b\\Documentation\x1b]8;;\x1b\\\r\n'));
+  for (const [text, url] of [['http://localhost:5173/test', 'http://localhost:5173/test'], ['Documentation', 'https://example.com/docs']]) {
+    const link = terminal.locator('.xterm-rows > div').filter({ hasText: text });
+    await expect(link).toBeVisible();
+    const rect = await link.boundingBox();
+    const point = { x: rect.x + 4, y: rect.y + rect.height / 2 };
+    await page.mouse.move(point.x, point.y);
+    await page.mouse.click(point.x, point.y);
+    await expect.poll(() => page.evaluate(() => window.terminalTrial.commands.filter(({ command }) => command === 'open_external').at(-1)?.url)).toBe(url);
+  }
+});
+
+test('dragging the bottom panel follows the pointer without a height transition or repeated store updates', async ({ page }) => {
+  await page.goto('/tests/terminal-harness.html');
+  await expect(page.locator('#terminal-panel').getByRole('status')).toHaveText('Local terminal');
+  const panel = page.locator('.output-console');
+  const handle = page.getByRole('separator');
+  const rect = await handle.boundingBox();
+  const initial = await panel.evaluate((element) => element.getBoundingClientRect().height);
+  const stored = await page.evaluate(async () => (await import('/src/store/useScriptStore.js')).default.getState().height);
+  await page.mouse.move(rect.x + rect.width / 2, rect.y + 3);
+  await page.mouse.down();
+  await page.mouse.move(rect.x + rect.width / 2, rect.y + 43, { steps: 5 });
+  await expect(panel).toHaveCSS('transition-duration', '0s');
+  await expect.poll(() => panel.evaluate((element) => element.getBoundingClientRect().height)).toBeCloseTo(initial - 40, 0);
+  expect(await page.evaluate(async () => (await import('/src/store/useScriptStore.js')).default.getState().height)).toBe(stored);
+  await page.mouse.up();
+  await expect.poll(() => page.evaluate(async () => (await import('/src/store/useScriptStore.js')).default.getState().height)).toBeCloseTo(initial - 40, 0);
+  await expect(panel).not.toHaveAttribute('data-resizing');
+});
