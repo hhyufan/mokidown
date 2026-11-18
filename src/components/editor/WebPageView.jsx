@@ -20,16 +20,23 @@ export default function WebPageView({ url, className = '', onClose }) {
   return (
     <div className={`web-page ${className}`}>
       <div className="web-page__bar">
-        <span className="web-page__url" title={url}>{url}</span>
+        <span className="web-page__url">{url}</span>
         <button
           type="button"
           className="web-page__action"
-          onClick={() => { void openExternal(url).catch(() => {}); }}
+          onClick={() => {
+            void openExternal(url).catch(() => {});
+          }}
         >
           {t('web.openInBrowser')}
         </button>
         {onClose && (
-          <button type="button" className="web-page__action" aria-label={t('web.closeSplit')} onClick={onClose}>
+          <button
+            type="button"
+            className="web-page__action"
+            aria-label={t('web.closeSplit')}
+            onClick={onClose}
+          >
             {t('web.closeSplit')}
           </button>
         )}
