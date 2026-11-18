@@ -974,5 +974,10 @@
   "terminal.link.copy": "Copy link",
   "terminal.link.browser": "Open in browser",
   "web.closeSplit": "Close split",
-  "terminal.link.openTabSwitch": "Open in new tab and switch"
+  "terminal.link.openTabSwitch": "Open in new tab and switch",
+  "htmlPreview.liveReload": "Live preview",
+  "htmlPreview.liveReloadHint": "When off, renders in a local iframe without a local port or automatic reload.",
+  "htmlPreview.close": "Close preview pane",
+  "htmlPreview.disableLiveReload": "Turn off live reload and use local preview",
+  "htmlPreview.enableLiveReload": "Turn on live reload"
 }
