@@ -62,7 +62,7 @@
 
   * [ ] feat(editor): HTML 文件支持编辑 / 分屏预览 / 纯预览三模式。
 
-  * [ ] feat(editor): 源码模式控制台改为集成终端。
+  * [x] feat(editor): 源码模式控制台改为集成终端。
 
   * [ ] feat(editor): 插件开发文档支持内置以 HTML 打开。
 
