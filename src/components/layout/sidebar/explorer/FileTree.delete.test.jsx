@@ -8,12 +8,29 @@ import { deleteFile, readDirectoryPage } from '@utils/tauriApi';
 import { confirm } from '@tauri-apps/plugin-dialog';
 
 globalThis.React = React;
-const mock = vi.hoisted(() => ({ loadDirectory: vi.fn(async () => {}), openFileFromPath: vi.fn(), notify: vi.fn() }));
-vi.mock('@hooks/useFileManager', () => ({ useFileManager: () => ({ loadDirectory: mock.loadDirectory, openFileFromPath: mock.openFileFromPath }) }));
+const mock = vi.hoisted(() => ({
+  loadDirectory: vi.fn(async () => {}),
+  openFileFromPath: vi.fn(),
+  notify: vi.fn(),
+}));
+vi.mock('@hooks/useFileManager', () => ({
+  useFileManager: () => ({
+    loadDirectory: mock.loadDirectory,
+    openFileFromPath: mock.openFileFromPath,
+  }),
+}));
 vi.mock('@components/ui/FileTypeIcon', () => ({ default: () => <span data-rich-icon="true" /> }));
 vi.mock('@tauri-apps/plugin-dialog', () => ({ confirm: vi.fn() }));
-vi.mock('@utils/tauriApi', () => ({ deleteFile: vi.fn(), readDirectoryPage: vi.fn(), closeDirectoryIndex: vi.fn(async () => {}), isSafUri: () => false, safDisplayName: (path) => path }));
-vi.mock('@store/useNotificationStore', () => ({ default: { getState: () => ({ notify: mock.notify }) } }));
+vi.mock('@utils/tauriApi', () => ({
+  deleteFile: vi.fn(),
+  readDirectoryPage: vi.fn(),
+  closeDirectoryIndex: vi.fn(async () => {}),
+  isSafUri: () => false,
+  safDisplayName: (path) => path,
+}));
+vi.mock('@store/useNotificationStore', () => ({
+  default: { getState: () => ({ notify: mock.notify }) },
+}));
 
 vi.mock('react-i18next', () => ({
   useTranslation: () => ({ t: (key) => key }),
@@ -25,11 +42,30 @@ vi.mock('@/i18n', () => ({ default: { t: (key) => key } }));
 beforeEach(() => {
   vi.clearAllMocks();
   usePluginContributions.setState({ fileBadges: [] });
-  vi.stubGlobal('ResizeObserver', class { observe() {} disconnect() {} });
-  useFileStore.setState({ currentDir: '/notes', directoryIndex: null, directoryLoading: false, directoryError: '', files: [{ path: '/notes/test.md', name: 'test.md', is_dir: false }], dirHistory: ['/notes'], historyIndex: 0 });
+  vi.stubGlobal(
+    'ResizeObserver',
+    class {
+      observe() {}
+      disconnect() {}
+    },
+  );
+  useFileStore.setState({
+    currentDir: '/notes',
+    directoryIndex: null,
+    directoryLoading: false,
+    directoryError: '',
+    files: [{ path: '/notes/test.md', name: 'test.md', is_dir: false }],
+    dirHistory: ['/notes'],
+    historyIndex: 0,
+  });
   deleteFile.mockResolvedValue({ success: true });
 });
-afterEach(() => { cleanup(); useFileStore.getState().clearDirectory(); vi.unstubAllGlobals(); vi.useRealTimers(); });
+afterEach(() => {
+  cleanup();
+  useFileStore.getState().clearDirectory();
+  vi.unstubAllGlobals();
+  vi.useRealTimers();
+});
 function openConfirmation() {
   const view = render(<FileTree />);
   fireEvent.click(view.container.querySelector('.file-tree__item-del'));
@@ -41,25 +77,39 @@ it('opens an in-app dialog and cancelling never invokes deletion or native confi
   expect(deleteFile).not.toHaveBeenCalled();
   fireEvent.click(screen.getByRole('button', { name: 'sidebar.explorer.cancelDelete' }));
   await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
-  expect(deleteFile).not.toHaveBeenCalled(); expect(confirm).not.toHaveBeenCalled();
+  expect(deleteFile).not.toHaveBeenCalled();
+  expect(confirm).not.toHaveBeenCalled();
 });
 it('waits for frontend confirmation and submits exactly once while deletion is pending', async () => {
   let complete;
-  deleteFile.mockImplementationOnce(() => new Promise((resolve) => { complete = resolve; }));
+  deleteFile.mockImplementationOnce(
+    () =>
+      new Promise((resolve) => {
+        complete = resolve;
+      }),
+  );
   openConfirmation();
   const button = screen.getByRole('button', { name: 'sidebar.explorer.confirmDelete' });
-  fireEvent.click(button); fireEvent.click(button);
+  fireEvent.click(button);
+  fireEvent.click(button);
   expect(deleteFile).toHaveBeenCalledExactlyOnceWith('/notes/test.md');
   expect(screen.getByRole('button', { name: 'sidebar.explorer.cancelDelete' })).toBeDisabled();
   await act(async () => complete({ success: true }));
   await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
-  expect(mock.loadDirectory).toHaveBeenCalledWith('/notes'); expect(confirm).not.toHaveBeenCalled();
+  expect(mock.loadDirectory).toHaveBeenCalledWith('/notes');
+  expect(confirm).not.toHaveBeenCalled();
 });
 it('retains the dialog for retry when deletion fails', async () => {
   deleteFile.mockResolvedValueOnce({ success: false, error: 'Access denied' });
   openConfirmation();
   fireEvent.click(screen.getByRole('button', { name: 'sidebar.explorer.confirmDelete' }));
-  await waitFor(() => expect(mock.notify).toHaveBeenCalledWith('error', 'notification.error', expect.stringContaining('Access denied')));
+  await waitFor(() =>
+    expect(mock.notify).toHaveBeenCalledWith(
+      'error',
+      'notification.error',
+      expect.stringContaining('Access denied'),
+    ),
+  );
   expect(screen.getByRole('dialog')).toBeInTheDocument();
   expect(screen.getByRole('button', { name: 'sidebar.explorer.cancelDelete' })).not.toBeDisabled();
 });
@@ -70,17 +120,49 @@ it('reacts to plugin badge updates and removes them when the plugin unloads', as
   act(() => usePluginContributions.getState().addFileBadge('example.plugin', badge));
   fireEvent.mouseOver(view.container.querySelector('.file-tree__item-badge'));
   await waitFor(() => expect(screen.getByRole('tooltip')).toHaveTextContent('Completed'));
-  act(() => usePluginContributions.getState().addFileBadge('example.plugin', { ...badge, title: 'Failed' }));
+  act(() =>
+    usePluginContributions.getState().addFileBadge('example.plugin', { ...badge, title: 'Failed' }),
+  );
   await waitFor(() => expect(screen.getByRole('tooltip')).toHaveTextContent('Failed'));
   act(() => usePluginContributions.getState().clearPlugin('example.plugin'));
   expect(view.container.querySelector('.file-tree__item-badge')).toBeNull();
 });
 
 it('opens the final file in a ten-million-entry paged directory without materializing the listing', async () => {
-  useFileStore.setState({ files: [], directoryIndex: { id: 'large', total: 10_000_000, pageSize: 256, path: '/notes', pages: new Map() } });
-  readDirectoryPage.mockImplementation(async (_id, offset, limit) => Array.from({ length: Math.min(limit, 10_000_000 - offset) }, (_, index) => ({
-    name: `note${offset + index}.md`, path: `/notes/note${offset + index}.md`, is_dir: false,
-  })));
+  // 预置首页与末页：直接注入 directoryIndex 时没有经过 loadWorkspaceFiles，
+  // 分页 reader 未初始化；这里给虚拟列表首尾页数据，聚焦验证虚拟化本身。
+  const firstPage = Array.from({ length: 256 }, (_, index) => ({
+    name: `note${index}.md`,
+    path: `/notes/note${index}.md`,
+    is_dir: false,
+  }));
+  // 最后一页从页边界开始：39062 * 256 = 9999872，共 128 条到 9999999。
+  const lastPageStart = 39062 * 256;
+  const lastPage = Array.from({ length: 10_000_000 - lastPageStart }, (_, index) => ({
+    name: `note${lastPageStart + index}.md`,
+    path: `/notes/note${lastPageStart + index}.md`,
+    is_dir: false,
+  }));
+  useFileStore.setState({
+    files: [],
+    directoryIndex: {
+      id: 'large',
+      total: 10_000_000,
+      pageSize: 256,
+      path: '/notes',
+      pages: new Map([
+        [0, firstPage],
+        [39062, lastPage],
+      ]),
+    },
+  });
+  readDirectoryPage.mockImplementation(async (_id, offset, limit) =>
+    Array.from({ length: Math.min(limit, 10_000_000 - offset) }, (_, index) => ({
+      name: `note${offset + index}.md`,
+      path: `/notes/note${offset + index}.md`,
+      is_dir: false,
+    })),
+  );
   const view = render(<FileTree />);
   await screen.findByText('note0.md');
   fireEvent.keyDown(screen.getByRole('list'), { key: 'End' });
@@ -97,19 +179,41 @@ it('keeps filenames and actions during fast scrolling and restores rich icons an
   vi.useFakeTimers();
   let frameId = 0;
   const frames = new Map();
-  vi.stubGlobal('requestAnimationFrame', (callback) => { frames.set(++frameId, callback); return frameId; });
+  vi.stubGlobal('requestAnimationFrame', (callback) => {
+    frames.set(++frameId, callback);
+    return frameId;
+  });
   vi.stubGlobal('cancelAnimationFrame', (id) => frames.delete(id));
-  const lastPage = Array.from({ length: 128 }, (_, index) => ({ name: `note${9_999_872 + index}.md`, path: `/notes/note${9_999_872 + index}.md`, is_dir: false }));
-  useFileStore.setState({ files: [], directoryIndex: {
-    id: 'layered', total: 10_000_000, pageSize: 256, path: '/notes',
-    pages: new Map([[0, [{ name: 'note0.md', path: '/notes/note0.md', is_dir: false }]], [39062, lastPage]]),
-  } });
+  const lastPage = Array.from({ length: 128 }, (_, index) => ({
+    name: `note${9_999_872 + index}.md`,
+    path: `/notes/note${9_999_872 + index}.md`,
+    is_dir: false,
+  }));
+  useFileStore.setState({
+    files: [],
+    directoryIndex: {
+      id: 'layered',
+      total: 10_000_000,
+      pageSize: 256,
+      path: '/notes',
+      pages: new Map([
+        [0, [{ name: 'note0.md', path: '/notes/note0.md', is_dir: false }]],
+        [39062, lastPage],
+      ]),
+    },
+  });
   readDirectoryPage.mockResolvedValue([{ name: 'prefetched.md' }]);
-  usePluginContributions.getState().addFileBadge('example.plugin', { id: 'status', paths: ['note9999999.md'], svg: '<svg />', title: 'Completed' });
+  usePluginContributions.getState().addFileBadge('example.plugin', {
+    id: 'status',
+    paths: ['note9999999.md'],
+    svg: '<svg />',
+    title: 'Completed',
+  });
   const view = render(<FileTree />);
   fireEvent.keyDown(screen.getByRole('list'), { key: 'End' });
   await act(async () => {
-    const callbacks = [...frames.values()]; frames.clear();
+    const callbacks = [...frames.values()];
+    frames.clear();
     callbacks.forEach((callback) => callback(performance.now() + 16));
   });
   const last = screen.getByText('note9999999.md');

@@ -31,6 +31,8 @@ function jsxFiles(dir) {
 }
 
 const isIntrinsic = (name) => /^[a-z]/.test(name) || name.includes('-');
+/** iframe 的 title 是可访问名称，属于规范要求，不算原生 tooltip。 */
+const ACCESSIBLE_NAME_TAGS = new Set(['iframe']);
 
 /** 深度优先遍历 AST 节点。 */
 function walk(node, visit) {
@@ -58,7 +60,7 @@ export function findNativeTitles(source, filename = 'inline.jsx') {
     const nameNode = node.name;
     if (nameNode?.type !== 'JSXIdentifier') return; // Foo.Bar 这类按组件处理
     const name = nameNode.name;
-    if (name === 'Tooltip') return;
+    if (name === 'Tooltip' || ACCESSIBLE_NAME_TAGS.has(name)) return;
     if (!isIntrinsic(name) && !DOM_PASSTHROUGH.has(name)) return;
     const hasTitle = node.attributes.some(
       (attr) => attr.type === 'JSXAttribute' && attr.name?.name === 'title',
