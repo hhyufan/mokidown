@@ -268,6 +268,7 @@ function EditorContent() {
   const isMarkdown = /\.(md|markdown|mdx)$/i.test(activeTabMeta?.name || '');
   const isTree = activeTabMeta?.ext?.toLowerCase() === 'mgtree';
   const isHtml = !activeTabMeta?.builtin && /^(html?|xhtml)$/i.test(activeTabMeta?.ext || '');
+  const isWebPage = activeTabMeta?.builtin === 'web';
   const hasPreview = isMarkdown || isTree || isHtml;
   const splitRequested = viewMode === 'split' && hasPreview;
   const [splitPreviewMounted, setSplitPreviewMounted] = useState(false);
@@ -545,10 +546,6 @@ function EditorContent() {
     return <main className="editor-content"><PluginDocsPage title={activeTabMeta.name} /></main>;
   }
 
-  if (activeTabMeta.builtin === 'web') {
-    return <main className="editor-content"><WebPageView url={activeTabMeta.url} /></main>;
-  }
-
   // 本地历史对比：用 diff 视图覆盖整个编辑区，关闭后回到正常编辑。
   if (historyDiff && historyDiff.tabId === activeTabId) {
     return (
@@ -567,7 +564,8 @@ function EditorContent() {
         ref={containerRef}
         style={isSplit ? { '--split-ratio': `${splitRatio * 100}%` } : undefined}
       >
-        {!showMilkdown && (viewMode !== 'preview' || !hasPreview) && (
+        {isWebPage && <WebPageView className="editor-content__primary-surface" url={activeTabMeta.url} />}
+        {!isWebPage && !showMilkdown && (viewMode !== 'preview' || !hasPreview) && (
           <MonacoEditor
             ref={monacoRef}
             className={`editor-content__editor${isSplit ? ' editor-content__editor--half' : ''}`}
@@ -596,8 +594,8 @@ function EditorContent() {
           </RendererErrorBoundary>
         )}
         {isHtml && (viewMode !== 'edit' || htmlPreviewMounted) && <div
-          className={`editor-content__html-surface${isSplit ? ' editor-content__html-surface--half' : ''}`}
-          hidden={viewMode === 'edit'}>
+          className={`editor-content__html-surface${isSplit && !isWebSplit ? ' editor-content__html-surface--half' : ''}`}
+          hidden={viewMode === 'edit' || (isWebSplit && viewMode === 'split')}>
           <RendererErrorBoundary fallback={<RendererLoadError />}>
             <Suspense fallback={<PreviewFallback />}><HtmlFilePreview key={activeTabId} /></Suspense>
           </RendererErrorBoundary>
@@ -674,7 +672,7 @@ function EditorContent() {
             />
           </div>
         )}
-        {!isTree && !isHtml && <div className="editor-content__fade" />}
+        {!isTree && !isHtml && !isWebPage && <div className="editor-content__fade" />}
         <FloatingRunButton />
       </div>
 
