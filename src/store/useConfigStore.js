@@ -12,6 +12,8 @@ import { normalizeMarkdownPairSettings } from '@utils/markdownPairs';
 
 const DEVICE_LOCAL_CONFIG_KEYS = new Set([
   'workspacePath',
+  'htmlPreviewPort',
+  'htmlPreviewLiveReload',
   'associatedOpenMode',
   'backgroundImage', 'backgroundImageName', 'backgroundEnabled', 'backgroundTransparency',
   // 键位取决于本机键盘布局与外接键盘，跨设备同步会把别人机器上的手感带过来。
@@ -45,6 +47,8 @@ const useConfigStore = create(
       lineHeight: 24,
       previewLineHeight: 24,
       previewZoomSync: true,
+      htmlPreviewPort: 0,
+      htmlPreviewLiveReload: true,
       markdownTaskCascade: true,
       markdownFolding: true,
       ...normalizeMarkdownPairSettings(),

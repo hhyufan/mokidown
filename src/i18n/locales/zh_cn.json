@@ -974,5 +974,10 @@
   "terminal.link.copy": "复制链接",
   "terminal.link.browser": "浏览器打开",
   "web.closeSplit": "关闭分屏",
-  "terminal.link.openTabSwitch": "新标签页打开并切换"
+  "terminal.link.openTabSwitch": "新标签页打开并切换",
+  "htmlPreview.liveReload": "热更新预览",
+  "htmlPreview.liveReloadHint": "关闭后使用本地 iframe 渲染，不启动本地端口，也不自动刷新。",
+  "htmlPreview.close": "关闭预览栏",
+  "htmlPreview.disableLiveReload": "关闭热更新，改用本地预览",
+  "htmlPreview.enableLiveReload": "开启热更新"
 }

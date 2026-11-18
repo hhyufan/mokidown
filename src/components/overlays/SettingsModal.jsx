@@ -409,6 +409,14 @@ function SettingsModal({ open: openProp, onClose }) {
 
             {activeNav === 'renderer' && (
               <div className="settings-section">
+                <SettingGroup label={t('htmlPreview.title')} />
+                <SettingRow label={t('htmlPreview.liveReload')} desc={t('htmlPreview.liveReloadHint')}>
+                  <Switch checked={config.htmlPreviewLiveReload ?? true} onChange={(v) => handleChange('htmlPreviewLiveReload', v)} />
+                </SettingRow>
+                <SettingRow label={t('htmlPreview.port')} desc={t('htmlPreview.portHint')}>
+                  <InputNumber aria-label={t('htmlPreview.port')} min={0} max={65535} precision={0}
+                    value={config.htmlPreviewPort ?? 0} onChange={(value) => handleChange('htmlPreviewPort', Number(value) || 0)} />
+                </SettingRow>
                 <SettingGroup label={t('settings.group.typography')} />
                 <SettingRow
                   label={t('settings.appearance.previewZoomSync')}
