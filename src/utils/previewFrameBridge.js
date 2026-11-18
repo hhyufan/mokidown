@@ -88,6 +88,11 @@
     queue(root);
   }
   const send = (data) => window.parent.postMessage(data, '*');
+  // iframe 内的右键不会冒泡到父页面，转发坐标给父页面弹出菜单。
+  document.addEventListener('contextmenu', (event) => {
+    event.preventDefault();
+    send({ type: 'mokidown:preview-contextmenu', x: event.clientX, y: event.clientY });
+  }, true);
   const relay = (data) => document.querySelectorAll('iframe').forEach((iframe) => iframe.contentWindow?.postMessage(data, '*'));
   window.addEventListener('message', (event) => {
     if (event.source !== window.parent || event.data?.type !== 'mokidown:preview-theme') return;
