@@ -109,7 +109,8 @@ export const HOTKEY_ACTIONS = [
     scope: 'app',
     group: 'tabs',
     label: 'settings.shortcuts.action.closeTab',
-    defaultKeybinding: 'Ctrl+KeyW',
+    // Ctrl+W 会被浏览器/窗口抢先处理，用 Windows 习惯的 Ctrl+F4。
+    defaultKeybinding: 'Ctrl+F4',
   },
   {
     id: 'closeOtherTabs',

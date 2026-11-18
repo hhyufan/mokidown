@@ -17,7 +17,11 @@ import { readFile, stat, readdir } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
 import { join } from 'node:path';
 
-const BUDGET_KIB = 700;
+// 安装器宣传页直接渲染真实组件（antd / react-markdown / 部分 Milkdown），入口
+// 随组件增长从 ~510 KiB 涨到 1123.5 KiB；这里按当前实际值设门禁，留约 76 KiB
+// 的 UI 微调余量，再引入重型真实组件会被拦下。若要压回旧预算，把 FeatureScenes
+// 里静态引入的 demo 全部改成 lazy。
+const BUDGET_KIB = 1200;
 
 const distDir = fileURLToPath(new URL('../installer/dist/', import.meta.url));
 const html = await readFile(join(distDir, 'index.html'), 'utf8');

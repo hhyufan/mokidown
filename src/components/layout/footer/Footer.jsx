@@ -25,7 +25,14 @@ const PREVIEW_EXT = /^(md|markdown|mdx|mgtree|html?|xhtml)$/i;
 
 function EyeIcon() {
   return (
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="14" height="14">
+    <svg
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      width="14"
+      height="14"
+    >
       <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" />
       <circle cx="12" cy="12" r="3" />
     </svg>
@@ -34,7 +41,14 @@ function EyeIcon() {
 
 function CodeIcon() {
   return (
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="14" height="14">
+    <svg
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      width="14"
+      height="14"
+    >
       <polyline points="16 18 22 12 16 6" />
       <polyline points="8 6 2 12 8 18" />
     </svg>
@@ -84,7 +98,8 @@ function Footer() {
   );
   const pathContext = usePathContextMenu(activeTab?.path);
 
-  const showModeToggle = activeTab && !activeTab.builtin && PREVIEW_EXT.test(activeTab.ext) && viewMode !== 'split';
+  const showModeToggle =
+    activeTab && !activeTab.builtin && PREVIEW_EXT.test(activeTab.ext) && viewMode !== 'split';
 
   const [pathSegments, setPathSegments] = useState([]);
   const [directoryContents, setDirectoryContents] = useState({});
@@ -113,7 +128,10 @@ function Footer() {
     }
   }, []);
 
-  const { onThumbMouseDown: bcOnThumbMouseDown } = useHorizontalDragScroll(bcScrollRef, updateBcScrollbar);
+  const { onThumbMouseDown: bcOnThumbMouseDown } = useHorizontalDragScroll(
+    bcScrollRef,
+    updateBcScrollbar,
+  );
 
   useEffect(() => {
     const el = bcScrollRef.current;
@@ -149,101 +167,128 @@ function Footer() {
 
   useEffect(() => {
     if (activeTab?.path) {
-      setPathSegments(isSafUri(activeTab.path) ? [safDisplayName(activeTab.path)] : splitPath(activeTab.path));
+      setPathSegments(
+        isSafUri(activeTab.path) ? [safDisplayName(activeTab.path)] : splitPath(activeTab.path),
+      );
       setDirectoryContents({});
     } else {
       setPathSegments([]);
     }
   }, [activeTab?.path]);
 
-  const handleSegmentClick = useCallback(async (index) => {
-    if (isWebDemo()) {
-      notifyWebDemo(t('webDemo.browseFolder'));
-      return;
-    }
-    if (openDropdown === index) {
-      setOpenDropdown(null);
-      return;
-    }
-    if (activeTab?.path && isSafUri(activeTab.path)) return;
-    const dirPath = buildFullPath(pathSegments, index);
-    if (!dirPath) return;
-    // 最后一段是当前文件名而不是目录，列目录会被 Tauri 拒绝。
-    // 最后一个路径段是当前文件名，不是目录；列目录会被 Tauri 拒绝。
-    if (index === pathSegments.length - 1) {
-      setOpenDropdown(null);
-      return;
-    }
-    try {
-      const contents = await getDirectoryContents(dirPath);
-      const sorted = [...(Array.isArray(contents) ? contents : [])].sort((a, b) => {
-        if (a.is_dir && !b.is_dir) return -1;
-        if (!a.is_dir && b.is_dir) return 1;
-        return a.name.localeCompare(b.name);
-      });
-      setDirectoryContents((prev) => ({ ...prev, [index]: sorted }));
-      setOpenDropdown(index);
-    } catch (_) {
-      setOpenDropdown(null);
-    }
-  }, [pathSegments, openDropdown, activeTab?.path, t]);
+  const handleSegmentClick = useCallback(
+    async (index) => {
+      if (isWebDemo()) {
+        notifyWebDemo(t('webDemo.browseFolder'));
+        return;
+      }
+      if (openDropdown === index) {
+        setOpenDropdown(null);
+        return;
+      }
+      if (activeTab?.path && isSafUri(activeTab.path)) return;
+      const dirPath = buildFullPath(pathSegments, index);
+      if (!dirPath) return;
+      // 最后一段是当前文件名而不是目录，列目录会被 Tauri 拒绝。
+      // 最后一个路径段是当前文件名，不是目录；列目录会被 Tauri 拒绝。
+      if (index === pathSegments.length - 1) {
+        setOpenDropdown(null);
+        return;
+      }
+      try {
+        const contents = await getDirectoryContents(dirPath);
+        const sorted = [...(Array.isArray(contents) ? contents : [])].sort((a, b) => {
+          if (a.is_dir && !b.is_dir) return -1;
+          if (!a.is_dir && b.is_dir) return 1;
+          return a.name.localeCompare(b.name);
+        });
+        setDirectoryContents((prev) => ({ ...prev, [index]: sorted }));
+        setOpenDropdown(index);
+      } catch (_) {
+        setOpenDropdown(null);
+      }
+    },
+    [pathSegments, openDropdown, activeTab?.path, t],
+  );
 
-  const handleFileItemClick = useCallback(async (item) => {
-    setOpenDropdown(null);
-    if (!item.is_dir) {
-      await openFileFromPath(item.path, item.name);
-    }
-  }, [openFileFromPath]);
+  const handleFileItemClick = useCallback(
+    async (item) => {
+      setOpenDropdown(null);
+      if (!item.is_dir) {
+        await openFileFromPath(item.path, item.name);
+      }
+    },
+    [openFileFromPath],
+  );
 
   // 网页标签的底部面包屑：右键复制链接或交给浏览器打开。
-  const webLinkMenuItems = useMemo(() => [
-    { key: 'copy', label: t('web.copyLink') },
-    { key: 'browser', label: t('web.openInBrowser') },
-  ], [t]);
-  const handleWebLinkMenu = useCallback(({ key }) => {
-    if (!activeTab?.url) return;
-    if (key === 'copy') void navigator.clipboard?.writeText(activeTab.url).catch(() => {});
-    else void openExternal(activeTab.url).catch(() => {});
-  }, [activeTab?.url]);
+  const webLinkMenuItems = useMemo(
+    () => [
+      { key: 'copy', label: t('web.copyLink') },
+      { key: 'browser', label: t('web.openInBrowser') },
+    ],
+    [t],
+  );
+  const handleWebLinkMenu = useCallback(
+    ({ key }) => {
+      if (!activeTab?.url) return;
+      if (key === 'copy') void navigator.clipboard?.writeText(activeTab.url).catch(() => {});
+      else void openExternal(activeTab.url).catch(() => {});
+    },
+    [activeTab?.url],
+  );
 
-  const renderDropdown = useCallback((index) => () => {
-    const items = directoryContents[index];
-    return (
-      <div className="footer__dropdown">
-        {items?.length === 0 ? (
-          <div className="footer__dropdown-empty">{t('footer.emptyDir')}</div>
-        ) : (
-          items?.map((item) => (
-            <div
-              key={item.path}
-              className="footer__dropdown-item"
-              onClick={() => handleFileItemClick(item)}
-            >
-              <span className="footer__dropdown-icon">
-                {item.is_dir ? (
-                  <FileTypeIcon fileName={item.name} isFolder />
-                ) : (
-                  <FileTypeIcon extension={item.ext} fileName={item.name} />
-                )}
-              </span>
-              <span className="footer__dropdown-name">{item.name}</span>
-            </div>
-          ))
-        )}
-      </div>
-    );
-  }, [directoryContents, handleFileItemClick, t]);
+  const renderDropdown = useCallback(
+    (index) => () => {
+      const items = directoryContents[index];
+      return (
+        <div className="footer__dropdown">
+          {items?.length === 0 ? (
+            <div className="footer__dropdown-empty">{t('footer.emptyDir')}</div>
+          ) : (
+            items?.map((item) => (
+              <div
+                key={item.path}
+                className="footer__dropdown-item"
+                onClick={() => handleFileItemClick(item)}
+              >
+                <span className="footer__dropdown-icon">
+                  {item.is_dir ? (
+                    <FileTypeIcon fileName={item.name} isFolder />
+                  ) : (
+                    <FileTypeIcon extension={item.ext} fileName={item.name} />
+                  )}
+                </span>
+                <span className="footer__dropdown-name">{item.name}</span>
+              </div>
+            ))
+          )}
+        </div>
+      );
+    },
+    [directoryContents, handleFileItemClick, t],
+  );
 
   return (
-    <footer className="footer" onMouseDown={(event) => { if (!isWindowDragExcluded(event.target)) beginWindowDrag(event); }}>
+    <footer
+      className="footer"
+      onMouseDown={(event) => {
+        if (!isWindowDragExcluded(event.target)) beginWindowDrag(event);
+      }}
+    >
       <div className="footer__left">
         <Tooltip title={t('topbar.toggleSidebar')} placement="top" mouseEnterDelay={0.3}>
-        <button type="button" className="footer__toggle-sidebar" aria-label={t('topbar.toggleSidebar')} onClick={toggleSidebar}>
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-            <rect x="3" y="3" width="18" height="18" rx="2" />
-            <line x1="9" y1="3" x2="9" y2="21" />
-          </svg>
-        </button>
+          <button
+            type="button"
+            className="footer__toggle-sidebar"
+            aria-label={t('topbar.toggleSidebar')}
+            onClick={toggleSidebar}
+          >
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <rect x="3" y="3" width="18" height="18" rx="2" />
+              <line x1="9" y1="3" x2="9" y2="21" />
+            </svg>
+          </button>
         </Tooltip>
         {showModeToggle && (
           <>
@@ -255,7 +300,9 @@ function Footer() {
             >
               <button
                 className="footer__mode-toggle"
-                aria-label={viewMode === 'edit' ? t('footer.switchToPreview') : t('footer.switchToCode')}
+                aria-label={
+                  viewMode === 'edit' ? t('footer.switchToPreview') : t('footer.switchToCode')
+                }
                 onClick={toggleEditPreview}
                 type="button"
               >
@@ -269,10 +316,7 @@ function Footer() {
       <div className="footer__breadcrumb">
         {pathSegments.length > 0 ? (
           <>
-            <div
-              className="footer__breadcrumb-path"
-              ref={bcScrollRef}
-            >
+            <div className="footer__breadcrumb-path" ref={bcScrollRef}>
               {activeTab?.builtin === 'web' ? (
                 <span className="footer__breadcrumb-item">
                   <Dropdown
@@ -282,52 +326,59 @@ function Footer() {
                   >
                     <span
                       className="footer__breadcrumb-segment footer__breadcrumb-segment--web"
-                      title={activeTab.url}
-                      onClick={() => { void navigator.clipboard?.writeText(activeTab.url).catch(() => {}); }}
+
+                      onClick={() => {
+                        void navigator.clipboard?.writeText(activeTab.url).catch(() => {});
+                      }}
                     >
                       {activeTab.url}
                     </span>
                   </Dropdown>
                 </span>
-              ) : pathSegments.map((segment, index) => {
-                const isOpen = openDropdown === index && !!directoryContents[index];
-                return (
-                  <span key={index} className="footer__breadcrumb-item">
-                    {index > 0 && <ChevronIcon />}
-                    <Tooltip
-                      title={buildFullPath(pathSegments, index)}
-                      placement="top"
-                      mouseEnterDelay={0.5}
-                    >
-                      {/* Tooltip 和 Dropdown 分别绑定原生节点，避免对 Dropdown 调用 findDOMNode。 */}
-                      <span>
-                        <Dropdown
-                          open={isOpen}
-                          trigger={['click']}
-                          placement="topLeft"
-                          arrow={false}
-                          popupRender={renderDropdown(index)}
-                          onOpenChange={(open) => {
-                            if (!open) setOpenDropdown(null);
-                          }}
-                        >
-                          <span
-                            className="footer__breadcrumb-segment"
-                            onClick={() => handleSegmentClick(index)}
-                            onContextMenu={(event) => {
-                              setOpenDropdown(null);
-                              const path = index === pathSegments.length - 1 ? activeTab?.path : buildFullPath(pathSegments, index);
-                              pathContext.onPathMenu(event, path);
+              ) : (
+                pathSegments.map((segment, index) => {
+                  const isOpen = openDropdown === index && !!directoryContents[index];
+                  return (
+                    <span key={index} className="footer__breadcrumb-item">
+                      {index > 0 && <ChevronIcon />}
+                      <Tooltip
+                        title={buildFullPath(pathSegments, index)}
+                        placement="top"
+                        mouseEnterDelay={0.5}
+                      >
+                        {/* Tooltip 和 Dropdown 分别绑定原生节点，避免对 Dropdown 调用 findDOMNode。 */}
+                        <span>
+                          <Dropdown
+                            open={isOpen}
+                            trigger={['click']}
+                            placement="topLeft"
+                            arrow={false}
+                            popupRender={renderDropdown(index)}
+                            onOpenChange={(open) => {
+                              if (!open) setOpenDropdown(null);
                             }}
                           >
-                            {/^[A-Z]:\\$/i.test(segment) ? segment.substring(0, 2) : segment}
-                          </span>
-                        </Dropdown>
-                      </span>
-                    </Tooltip>
-                  </span>
-                );
-              })}
+                            <span
+                              className="footer__breadcrumb-segment"
+                              onClick={() => handleSegmentClick(index)}
+                              onContextMenu={(event) => {
+                                setOpenDropdown(null);
+                                const path =
+                                  index === pathSegments.length - 1
+                                    ? activeTab?.path
+                                    : buildFullPath(pathSegments, index);
+                                pathContext.onPathMenu(event, path);
+                              }}
+                            >
+                              {/^[A-Z]:\\$/i.test(segment) ? segment.substring(0, 2) : segment}
+                            </span>
+                          </Dropdown>
+                        </span>
+                      </Tooltip>
+                    </span>
+                  );
+                })
+              )}
             </div>
             <div className="footer__breadcrumb-scrollbar">
               <div
@@ -350,34 +401,59 @@ function Footer() {
           <TaskStatusIndicator
             stage={activeTask?.stage}
             leaving={activeTask?.leaving}
-            label={activeTask ? `${activeTask.status}${Number.isFinite(activeTask.percent) ? ` ${activeTask.percent}%` : ''}` : t('tasks.title')}
+            label={
+              activeTask
+                ? `${activeTask.status}${Number.isFinite(activeTask.percent) ? ` ${activeTask.percent}%` : ''}`
+                : t('tasks.title')
+            }
             progress={activeTask?.percent}
             expanded={tasksOpen}
-            onClick={() => tasksOpen ? useUpdateStore.getState().dismiss() : useUpdateStore.getState().showTasks()}
+            onClick={() =>
+              tasksOpen
+                ? useUpdateStore.getState().dismiss()
+                : useUpdateStore.getState().showTasks()
+            }
           />
         )}
         {activeTab && (
           <>
-            <span>{t('footer.line')} {cursorPosition.lineNumber}, {t('footer.column')} {cursorPosition.column}</span>
+            <span>
+              {t('footer.line')} {cursorPosition.lineNumber}, {t('footer.column')}{' '}
+              {cursorPosition.column}
+            </span>
             <span className="footer__sep" />
-            <span>{characterCount} {t('footer.chars')}</span>
+            <span>
+              {characterCount} {t('footer.chars')}
+            </span>
             <span className="footer__sep" />
           </>
         )}
         <span>{activeTab?.encoding || 'UTF-8'}</span>
         <span className="footer__sep" />
         <span>{activeTab?.lineEnding || 'LF'}</span>
-        {pluginStatus.some((item) => !item.documentId || item.documentId === activeTabId) && <span className="footer__sep" />}
-        {pluginStatus.filter((item) => !item.documentId || item.documentId === activeTabId).map((item) => (
-          <PluginStatusPill
-            key={`${item.pluginId}:${item.id}`}
-            item={item}
-            onActivate={(action) => {
-              const command = action?.command || item.command;
-              if (command && usePluginContributions.getState().commands[`${item.pluginId}:${command}`]) sendToPlugin(item.pluginId, { type: 'command', id: command, args: action?.args ?? item.args });
-            }}
-          />
-        ))}
+        {pluginStatus.some((item) => !item.documentId || item.documentId === activeTabId) && (
+          <span className="footer__sep" />
+        )}
+        {pluginStatus
+          .filter((item) => !item.documentId || item.documentId === activeTabId)
+          .map((item) => (
+            <PluginStatusPill
+              key={`${item.pluginId}:${item.id}`}
+              item={item}
+              onActivate={(action) => {
+                const command = action?.command || item.command;
+                if (
+                  command &&
+                  usePluginContributions.getState().commands[`${item.pluginId}:${command}`]
+                )
+                  sendToPlugin(item.pluginId, {
+                    type: 'command',
+                    id: command,
+                    args: action?.args ?? item.args,
+                  });
+              }}
+            />
+          ))}
       </div>
     </footer>
   );
