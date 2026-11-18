@@ -147,6 +147,7 @@ import { milkdownMarkdownPaste } from './milkdownMarkdownPaste';
 import { htmlBlockSchema, htmlBlockView, sanitizeMilkdownHtml } from './milkdownHtmlBlock';
 import { configureEditingWhitespace, initialEditingSelection } from './milkdownWhitespace';
 import { configureEditingTables, milkdownTableKeys, milkdownTableView } from './milkdownTables';
+import { milkdownMathPreview } from './milkdownMathPreview';
 import { isAndroidRuntime } from '@utils/platform';
 import MilkdownMediaTools from './MilkdownMediaTools';
 import MilkdownTooltips from './MilkdownTooltips';
@@ -156,6 +157,9 @@ import './markdown-preview.scss';
 import { milkdownBlockSelection, milkdownFenceConfirmation, milkdownInlineLinkRule, milkdownInlineSyntaxSource, milkdownLiveSyntax } from './milkdownLiveSyntax';
 import { CODE_FENCE_LANGUAGE_EVENT } from '@utils/markdownCodeFence';
 import MarkdownCodeLanguageMenu from './MarkdownCodeLanguageMenu';
+import { MATH_COMPLETION_EVENT, milkdownMathCompletion } from './milkdownMathCompletion';
+import { milkdownMathInlineFold } from './milkdownMathInlineFold';
+import MarkdownMathCompletionMenu from './MarkdownMathCompletionMenu';
 
 /**
  * 代码语言到展示名称的映射表。
@@ -621,6 +625,26 @@ const mathBlockInputRule = $inputRule(
 );
 
 /**
+ * 行内数学公式编辑态输入规则。
+ *
+ * 与块级的 `$$ ` 对称：不在行首时同样进入源码态，只是建立行内源码节点，
+ * 让符号补全与预览气泡也能用在「新写一个行内公式」上。
+ */
+const mathSourceInlineInputRule = $inputRule(
+  (ctx) => new InputRule(/\$\$\s$/, (state, _match, start, end) => {
+    const $start = state.doc.resolve(start);
+    // 整段只有一个 `$$ ` 时归块级规则管，它不成立才会走到这里。
+    if (!$start.parent.isTextblock || !$start.parentOffset) return null;
+    const sourceType = mathSourceInlineSchema.type(ctx);
+    if (!$start.parent.canReplaceWith($start.index(), $start.indexAfter(), sourceType)) return null;
+    // 触发用的收尾空格不进文档：输入规则接管后，这段事务吃掉整个 `$$ `。
+    const tr = state.tr.replaceWith(start, end, sourceType.create(null, state.schema.text('$')));
+    // 光标停在 `$` 之后，接着打字就是接着写公式正文。
+    return tr.setSelection(TextSelection.create(tr.doc, start + 2)).scrollIntoView();
+  })
+);
+
+/**
  * 数学公式、图片和表格的“渲染态/源码态”切换插件。
  *
  * 负责在删除键命中原子渲染节点时回退到可编辑源码表示，并在源码恢复成合法
@@ -643,6 +667,7 @@ const mathValueEditPlugin = $prose((ctx) => {
     tableCell: tableCellSchema.type(ctx),
   };
   const isMathNode = (node) => node?.type === inlineType || node?.type === blockType;
+  const mathSourceTypes = { inline: inlineType, inlineSource: inlineSourceType, blockSource: blockSourceType };
   const isEditableRenderedNode = (node) => isMathNode(node) || node?.type === imageType;
   const isSourceNode = (node) => [
     inlineSourceType,
@@ -721,17 +746,8 @@ const mathValueEditPlugin = $prose((ctx) => {
 
   const replaceMathWithSource = (view, pos, node, fromEnd) => {
     const value = node.attrs.value || '';
-    const isInline = node.type === inlineType;
-    if (!isInline && !value) return removeEmptyMathBlock(view, pos, node, fromEnd);
-    const nextValue = deleteOne(value, fromEnd);
-    const source = isInline ? `$${nextValue}$` : nextValue;
-    const schema = view.state.schema;
-    const replacement = (isInline ? inlineSourceType : blockSourceType).create(null, source ? schema.text(source) : null);
-    const tr = view.state.tr
-      .replaceWith(pos, pos + node.nodeSize, replacement)
-      .setMeta(mathSourceEditMeta, true);
-    tr.setSelection(TextSelection.create(tr.doc, pos + 1 + source.length - Number(isInline)));
-    view.dispatch(tr.scrollIntoView());
+    if (node.type === blockType && !value) return removeEmptyMathBlock(view, pos, node, fromEnd);
+    view.dispatch(mathSourceTransaction(view, pos, node, mathSourceTypes, fromEnd, false).scrollIntoView());
     return true;
   };
 
@@ -764,7 +780,8 @@ const mathValueEditPlugin = $prose((ctx) => {
           if (node.type === blockSourceType) {
             replaceSource(pos, node, blockType.create({ value: source }));
           } else {
-            const match = /^\$([\s\S]*)\$$/.exec(source);
+            // 正文为空就不是公式：`$$` 折成空原子会留下一个看不见、又吃掉分隔符的节点。
+            const match = /^\$([\s\S]+)\$$/.exec(source);
             if (match) replaceSource(pos, node, inlineType.create({ value: match[1] }));
           }
           return;
@@ -846,7 +863,11 @@ const mathPlugins = [
   tableSourceBlockSchema,
   mathValueEditPlugin,
   mathBlockInputRule,
+  mathSourceInlineInputRule,
   mathInlineInputRule,
+  milkdownMathInlineFold,
+  milkdownMathPreview,
+  milkdownMathCompletion,
 ].flat();
 
 /**
@@ -1139,6 +1160,32 @@ function isNonEditablePreviewTarget(target) {
 }
 
 /**
+ * 生成把渲染态公式换成源码态节点的事务。
+ *
+ * @param {object} view ProseMirror 编辑器视图。
+ * @param {number} pos 公式节点位置。
+ * @param {object} node 公式节点。
+ * @param {{inline: object, inlineSource: object, blockSource: object}} types 行内渲染态与两种源码态节点类型。
+ * @param {boolean} fromEnd 删除方向，`true` 时去掉正文末尾的字符。
+ * @param {boolean} keepValue 双击进入时原样展开，不删字符。
+ * @returns {object} 换好节点并落好光标的事务。
+ */
+function mathSourceTransaction(view, pos, node, types, fromEnd, keepValue) {
+  const { inline, inlineSource, blockSource } = types;
+  const isInline = node.type === inline;
+  const value = node.attrs.value || '';
+  const nextValue = keepValue ? value : (fromEnd ? value.slice(0, -1) : value.slice(1));
+  const source = isInline ? `$${nextValue}$` : nextValue;
+  const { state } = view;
+  const tr = state.tr
+    .replaceWith(pos, pos + node.nodeSize, (isInline ? inlineSource : blockSource).create(null, source ? state.schema.text(source) : null))
+    .setMeta(mathSourceEditMeta, true);
+  // 行内停在收尾的 `$` 之前，块级停在正文末尾，接着打字就是接着写公式。
+  tr.setSelection(TextSelection.create(tr.doc, pos + 1 + source.length - Number(isInline)));
+  return tr;
+}
+
+/**
  * 创建只读预览区域的事件隔离处理器。
  *
  * @param {() => any} getEditor 用于延迟获取 Milkdown 实例的函数。
@@ -1183,6 +1230,18 @@ function createNonEditablePreviewSelectionHandler(getEditor, readOnly) {
         const pos = resolved?.pos ?? -1;
         const node = resolved?.node ?? null;
         if (!node?.isAtom && !node?.isBlock) return;
+        const { nodes } = view.state.schema;
+        // 双击公式是进入源码态的手势。PM 用 mousedown 序列判定双击，而这条隔离链
+        // 正好把 mousedown 拦掉了，所以双击只能就地在这里换成源码节点。
+        if (event.type === 'dblclick' && (node.type === nodes[mathBlockType] || node.type === nodes[mathInlineType])) {
+          view.dispatch(mathSourceTransaction(view, pos, node, {
+            inline: nodes[mathInlineType],
+            inlineSource: nodes[mathSourceInlineType],
+            blockSource: nodes[mathSourceBlockType],
+          }, false, true).scrollIntoView());
+          view.focus();
+          return;
+        }
         view.dispatch(view.state.tr.setSelection(NodeSelection.create(view.state.doc, pos)).scrollIntoView());
         view.focus();
       } catch {
@@ -1400,6 +1459,15 @@ function MilkdownInner({
     const open = (event) => setCodeLanguageMenu(event.detail);
     root.addEventListener(CODE_FENCE_LANGUAGE_EVENT, open);
     return () => root.removeEventListener(CODE_FENCE_LANGUAGE_EVENT, open);
+  }, [readOnly]);
+  const [mathCompletion, setMathCompletion] = useState(null);
+  const closeMathCompletion = useCallback(() => setMathCompletion(null), []);
+  useEffect(() => {
+    const root = wrapperRef.current;
+    if (!root || readOnly) return undefined;
+    const open = (event) => setMathCompletion(event.detail);
+    root.addEventListener(MATH_COMPLETION_EVENT, open);
+    return () => root.removeEventListener(MATH_COMPLETION_EVENT, open);
   }, [readOnly]);
   const treePreviewId = useRef(0);
   const treePreviewSources = useRef(new Map());
@@ -1978,6 +2046,7 @@ function MilkdownInner({
         ready={!editorInfo.loading} readOnly={readOnly} />
       <EditorContextMenu menu={menu} onClose={closeMenu} />
       <MarkdownCodeLanguageMenu request={codeLanguageMenu} onClose={closeCodeLanguageMenu} />
+      <MarkdownMathCompletionMenu request={mathCompletion} onClose={closeMathCompletion} />
     </div>
   );
 }
