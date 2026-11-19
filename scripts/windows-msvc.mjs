@@ -1,5 +1,6 @@
 import { existsSync, readdirSync } from 'node:fs';
 import path from 'node:path';
+import { homedir } from 'node:os';
 import { spawnSync } from 'node:child_process';
 
 const versionsDescending = (a, b) => b.localeCompare(a, 'en', { numeric: true });
@@ -159,4 +160,22 @@ export function initializeMsvc(args, env = process.env) {
     console.log(`[mokidown] MSVC ${toolchain.version} (${arch}): ${toolchain.installation}`);
   }
   env[`CARGO_TARGET_${cargoTarget.toUpperCase()}_LINKER`] = toolchain.linker;
+}
+
+/** 有些开发机只装了 rustup toolchain 而没有把 cargo 放进 PATH；启动 CLI 前补一次探测。 */
+export function ensureCargoOnPath() {
+  if (process.platform !== 'win32') return;
+  const pathValue = process.env.PATH || '';
+  if (pathValue.split(';').some((dir) => dir && existsSync(path.join(dir, 'cargo.exe')))) return;
+  const candidates = [
+    process.env.RUSTUP_HOME && path.join(process.env.RUSTUP_HOME, 'toolchains', 'stable-x86_64-pc-windows-msvc', 'bin'),
+    path.join(homedir(), '.rustup', 'toolchains', 'stable-x86_64-pc-windows-msvc', 'bin'),
+    'C:\\Env\\rustup\\toolchains\\stable-x86_64-pc-windows-msvc\\bin',
+  ].filter(Boolean);
+  for (const dir of candidates) {
+    if (existsSync(path.join(dir, 'cargo.exe'))) {
+      process.env.PATH = `${dir};${pathValue}`;
+      return;
+    }
+  }
 }
