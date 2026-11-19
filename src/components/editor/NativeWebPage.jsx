@@ -51,6 +51,7 @@ function measureBounds(element, ready, enabled) {
   const ratio = window.devicePixelRatio || 1;
   const x = Math.round(box.left * ratio);
   const y = Math.round(box.top * ratio);
+  const workspace = element.closest('.editor-content__workspace')?.getBoundingClientRect();
   let wallpaper = null;
   if (enabled) {
     const styles = getComputedStyle(document.documentElement);
@@ -67,13 +68,18 @@ function measureBounds(element, ready, enabled) {
     y,
     width: Math.round(box.right * ratio) - x,
     height: Math.round(box.bottom * ratio) - y,
+    client: {
+      width: Math.round(window.innerWidth * ratio),
+      height: Math.round(window.innerHeight * ratio),
+      fillsBottom: Boolean(workspace && Math.abs(box.bottom - workspace.bottom) < 1),
+    },
     wallpaper,
     visible: ready && box.width > 0 && box.height > 0 && element.getClientRects().length > 0
       && !document.hidden && !isCovered(box),
   };
 }
 
-export default function NativeWebPage({ url, onPage }) {
+export default function NativeWebPage({ url, active, onPage }) {
   const { t } = useTranslation();
   const viewport = useRef(null);
   const scheduleLayout = useRef(null);
@@ -97,26 +103,33 @@ export default function NativeWebPage({ url, onPage }) {
     let ready = false;
     let opened = false;
     let applying = false;
+    let layoutPending = false;
     let frame = 0;
     let lastBounds = '';
     let failedNavigation = -1;
+    let presenting = false;
+    let activation = 0;
 
     const update = () => {
       frame = 0;
-      if (!opened || disposed || applying) return;
+      if (!opened || disposed || !presenting) return;
+      if (applying) {
+        layoutPending = true;
+        return;
+      }
+      layoutPending = false;
       const appearanceOptions = appearance.current;
       const bounds = measureBounds(element, ready, appearanceOptions.enabled);
       const key = JSON.stringify({ bounds, appearance: appearanceOptions });
       if (key === lastBounds) return;
       lastBounds = key;
-      element.toggleAttribute('data-native-wallpaper', bounds.visible && appearanceOptions.enabled);
       applying = true;
-      void invoke('native_web_preview_layout', { id, bounds, appearance: appearanceOptions }).catch(fail).finally(() => {
+      void invoke('native_web_preview_layout', { id, bounds, appearance: appearanceOptions, activation }).catch(fail).finally(() => {
         applying = false;
-        schedule();
+        if (layoutPending && !frame) update();
       });
     };
-    const schedule = () => { if (!frame && !disposed) frame = requestAnimationFrame(update); };
+    const schedule = () => { if (!frame && !disposed && presenting) frame = requestAnimationFrame(update); };
     scheduleLayout.current = schedule;
     const fail = (error) => {
       if (disposed || failed) return;
@@ -124,7 +137,6 @@ export default function NativeWebPage({ url, onPage }) {
       clearTimeout(loadTimeout);
       opened = false;
       ready = false;
-      element.removeAttribute('data-native-wallpaper');
       setState({ type: 'error', message: String(error?.message || error) });
       void invoke('native_web_preview_close', { id }).catch(() => {});
     };
@@ -162,8 +174,23 @@ export default function NativeWebPage({ url, onPage }) {
       .then(() => {
         if (!disposed && !failed) { opened = true; schedule(); }
       }, fail);
-    activeSession.current = { id, opening };
-    const resize = new ResizeObserver(schedule);
+    const setActive = (next) => {
+      if (presenting === next) return;
+      presenting = next;
+      activation += 1;
+      lastBounds = '';
+      if (next) {
+        schedule();
+      } else if (opened) {
+        // Hide independently of any geometry update still in flight.
+        void invoke('native_web_preview_hide', { id, activation }).catch(fail);
+      }
+    };
+    activeSession.current = { id, opening, setActive };
+    const resize = new ResizeObserver(() => {
+      if (frame) cancelAnimationFrame(frame);
+      update();
+    });
     resize.observe(element);
     const overlays = new MutationObserver(schedule);
     overlays.observe(document.body, { subtree: true, childList: true, attributes: true,
@@ -184,9 +211,11 @@ export default function NativeWebPage({ url, onPage }) {
       window.removeEventListener('resize', schedule);
       document.removeEventListener('scroll', schedule, true);
       document.removeEventListener('visibilitychange', schedule);
-      void opening.then(() => invoke('native_web_preview_close', { id })).catch(() => {});
+      const close = () => invoke('native_web_preview_close', { id });
+      void (opened ? close() : opening.then(close)).catch(() => {});
     };
   }, [url]);
+  useLayoutEffect(() => { activeSession.current?.setActive(active); }, [url, active]);
   useLayoutEffect(() => { scheduleLayout.current?.(); }, [wallpaperEnabled, transparency]);
   useEffect(() => {
     const session = activeSession.current;

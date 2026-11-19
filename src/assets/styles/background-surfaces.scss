@@ -118,11 +118,6 @@ body.moki-has-background,
     --moki-background-base: #181818;
   }
 
-  .preview-wallpaper[data-native-wallpaper] {
-    --moki-background-wash: transparent;
-    @include background-popup.image-surface;
-  }
-
   .moki-tree { background: transparent; }
   .moki-tree .ant-tree .ant-tree-node-content-wrapper:hover {
     background: var(--moki-glass-hover);
