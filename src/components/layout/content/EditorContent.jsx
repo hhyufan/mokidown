@@ -272,6 +272,14 @@ function EditorContent() {
   const isHtml = !activeTabMeta?.builtin && /^(html?|xhtml)$/i.test(activeTabMeta?.ext || '');
   const isWebPage = activeTabMeta?.builtin === 'web';
   const isPluginDocs = activeTabMeta?.builtin === 'pluginDocs';
+  const webTabs = useMemo(() => new Map(tabs.filter((tab) => tab.builtin === 'web').map((tab) => [tab.id, tab])), [tabs]);
+  const visitedWebTabs = useRef(new Set());
+  useLayoutEffect(() => {
+    for (const id of visitedWebTabs.current) {
+      if (!webTabs.has(id)) visitedWebTabs.current.delete(id);
+    }
+    if (isWebPage) visitedWebTabs.current.add(activeTabId);
+  }, [webTabs, activeTabId, isWebPage]);
   const hasPreview = isMarkdown || isTree || isHtml;
   const splitRequested = viewMode === 'split' && hasPreview;
   const [splitPreviewMounted, setSplitPreviewMounted] = useState(false);
@@ -538,48 +546,40 @@ function EditorContent() {
     if (!isSplit || !isMarkdown || !splitEditor || !preview) return;
     return bindMarkdownScroll(splitEditor, preview);
   }, [activeTabId, isMarkdown, isSplit, previewSyncHandle, splitEditor]);
-  if (!activeTabMeta && !isWebSplit) {
-    return (
-      <main className={`editor-content ${isMobileLayout ? 'editor-content--mobile' : ''}`}>
-        <div className="editor-content__welcome"><WelcomeScreen /></div>
-      </main>
-    );
-  }
-
-  if (isPluginDocs && !isWebSplit) {
-    return <main className="editor-content"><PluginDocsPage title={activeTabMeta.name} /></main>;
-  }
-
-  // 本地历史对比：用 diff 视图覆盖整个编辑区，关闭后回到正常编辑。
-  if (historyDiff && historyDiff.tabId === activeTabId) {
-    return (
-      <main className={`editor-content ${isMobileLayout ? 'editor-content--mobile' : ''}`}>
-        <Suspense fallback={null}>
-          <HistoryDiffView />
-        </Suspense>
-      </main>
-    );
-  }
+  const showHistoryDiff = Boolean(historyDiff && historyDiff.tabId === activeTabId);
+  const showWorkspace = !showHistoryDiff && (isWebSplit || (activeTabMeta && !isPluginDocs));
+  // Keep mounted iframes in the same DOM order when the tab strip is reordered.
+  const mountedWebTabs = new Set(visitedWebTabs.current);
+  if (isWebPage) mountedWebTabs.add(activeTabId);
 
   return (
     <main className={`editor-content ${isMobileLayout ? 'editor-content--mobile' : ''}`}>
+      {showHistoryDiff && <Suspense fallback={null}><HistoryDiffView /></Suspense>}
+      {!showHistoryDiff && !showWorkspace && (isPluginDocs
+        ? <PluginDocsPage title={activeTabMeta.name} />
+        : <div className="editor-content__welcome"><WelcomeScreen /></div>)}
       <div
         className={`editor-content__workspace${isSplit ? ' editor-content__workspace--split' : ''}`}
         ref={containerRef}
+        hidden={!showWorkspace}
         style={isSplit ? { '--split-ratio': `${splitRatio * 100}%` } : undefined}
       >
+        {Array.from(mountedWebTabs, (id) => webTabs.get(id)).filter(Boolean).map((tab) => (
+          <WebPageView
+            key={`${tab.id}:${tab.url}`}
+            active={tab.id === activeTabId && !showHistoryDiff}
+            className="editor-content__primary-surface"
+            url={tab.url}
+            initialLocation={tab.webLocation}
+            moveLabel={t('web.splitOpen')}
+            onMove={(url) => useEditorStore.getState().openWebSplit(url)}
+            onNavigate={(url) => useEditorStore.getState().openWebTab(url, { replaceTabId: tab.id })}
+            onPage={(url, icons) => useEditorStore.getState().setWebTabPage(tab.id, url, icons)}
+          />
+        ))}
+        {showWorkspace && <>
         {!activeTabMeta && <div className="editor-content__welcome editor-content__primary-surface"><WelcomeScreen /></div>}
         {isPluginDocs && <PluginDocsPage title={activeTabMeta.name} />}
-        {isWebPage && <WebPageView
-          key={activeTabMeta.url}
-          className="editor-content__primary-surface"
-          url={activeTabMeta.url}
-          initialLocation={activeTabMeta.webLocation}
-          moveLabel={t('web.splitOpen')}
-          onMove={(url) => useEditorStore.getState().openWebSplit(url)}
-          onNavigate={(url) => useEditorStore.getState().openWebTab(url, { replaceTabId: activeTabId })}
-          onPage={(url, icons) => useEditorStore.getState().setWebTabPage(activeTabId, url, icons)}
-        />}
         {activeTabMeta && !isWebPage && !isPluginDocs && !showMilkdown && (viewMode !== 'preview' || !hasPreview) && (
           <MonacoEditor
             ref={monacoRef}
@@ -693,10 +693,11 @@ function EditorContent() {
         )}
         {!isTree && !isHtml && !isWebPage && <div className="editor-content__fade" />}
         <FloatingRunButton />
+        </>}
       </div>
 
       {/* 浮动工具栏放在工作区外层，避免被内部 `overflow: hidden` 裁切。 */}
-      {isMarkdown && (
+      {!showHistoryDiff && isMarkdown && (
         <FloatingToolbar onInsert={handleToolbarInsert} />
       )}
     </main>

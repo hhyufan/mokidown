@@ -12,6 +12,8 @@
   background: var(--surface);
   overflow: hidden;
 
+  &[hidden] { display: none; }
+
   &__bar {
     display: flex;
     align-items: center;
