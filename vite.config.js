@@ -48,7 +48,7 @@ const assertNoMonacoNls = {
     if (id.includes('monaco-editor-nls-adapter')) {
       this.error(
         'monaco-editor-nls-adapter is no longer part of the Monaco pipeline. ' +
-          'Remove the import instead of reintroducing the NLS source rewriting.'
+          'Remove the import instead of reintroducing the NLS source rewriting.',
       );
     }
     return null;
@@ -86,7 +86,17 @@ const webDemoEntry = (enabled) => ({
 const appVersion = JSON.parse(readFileSync(resolve(__dirname, './package.json'), 'utf-8')).version;
 
 export default defineConfig(async ({ mode }) => ({
-  plugins: [{ name: 'verify-official-plugin-resources', apply: 'build', buildStart: () => checkOfficialPluginResources() }, webDemoEntry(mode === 'demo' || webDemo), stripMonacoBrokenSourcemaps, assertNoMonacoNls, react()],
+  plugins: [
+    {
+      name: 'verify-official-plugin-resources',
+      apply: 'build',
+      buildStart: () => checkOfficialPluginResources(),
+    },
+    webDemoEntry(mode === 'demo' || webDemo),
+    stripMonacoBrokenSourcemaps,
+    assertNoMonacoNls,
+    react(),
+  ],
 
   define: {
     'import.meta.env.VITE_APP_VERSION': JSON.stringify(appVersion),
@@ -178,33 +188,50 @@ export default defineConfig(async ({ mode }) => ({
           if (pkgName === 'axios') return 'axios-vendor';
           // Read-only windows must never download the Milkdown runtime.
           if (pkgName.startsWith('@milkdown/')) return 'milkdown-vendor';
-          if (pkgName === 'react-markdown'
-            || pkgName === 'katex'
-            || pkgName === 'remark-gfm'
-            || pkgName === 'remark-math'
-            || pkgName === 'rehype-raw'
-            || pkgName === 'rehype-highlight'
-            || pkgName === 'rehype-katex'
-            || pkgName === 'rehype-sanitize') return 'markdown-vendor';
+          if (
+            pkgName === 'react-markdown' ||
+            pkgName === 'katex' ||
+            pkgName === 'remark-gfm' ||
+            pkgName === 'remark-math' ||
+            pkgName === 'rehype-raw' ||
+            pkgName === 'rehype-highlight' ||
+            pkgName === 'rehype-katex' ||
+            pkgName === 'rehype-sanitize'
+          )
+            return 'markdown-vendor';
           if (pkgName === 'shiki' || pkgName === '@shikijs/monaco') return 'highlight-vendor';
-          if (pkgName === '@tauri-apps/api'
-            || pkgName === '@tauri-apps/plugin-fs'
-            || pkgName === '@tauri-apps/plugin-dialog'
-            || pkgName === '@tauri-apps/plugin-store') return 'tauri-vendor';
-          if (pkgName === 'react-i18next'
-            || pkgName === 'i18next'
-            || pkgName === 'i18next-browser-languagedetector') return 'i18n-vendor';
-          if (pkgName === 'antd' || pkgName === '@ant-design/icons' || pkgName === '@ant-design/cssinjs') return 'antd-vendor';
+          if (
+            pkgName === '@tauri-apps/api' ||
+            pkgName === '@tauri-apps/plugin-fs' ||
+            pkgName === '@tauri-apps/plugin-dialog' ||
+            pkgName === '@tauri-apps/plugin-store'
+          )
+            return 'tauri-vendor';
+          if (
+            pkgName === 'react-i18next' ||
+            pkgName === 'i18next' ||
+            pkgName === 'i18next-browser-languagedetector'
+          )
+            return 'i18n-vendor';
+          if (
+            pkgName === 'antd' ||
+            pkgName === '@ant-design/icons' ||
+            pkgName === '@ant-design/cssinjs'
+          )
+            return 'antd-vendor';
           // ONLY the real React runtime + things React depends on. Anything
           // else with "react" in its package name (react-i18next,
           // react-markdown, react-html-attributes, react-material-vscode-icons,
           // react-diff-viewer, …) falls through to be handled by the
           // matching rule above or auto-chunked by Rollup.
-          if (pkgName === 'react'
-            || pkgName === 'react-dom'
-            || pkgName === 'scheduler'
-            || pkgName === 'use-sync-external-store'
-            || pkgName === 'object-assign') return 'react-vendor';
+          if (
+            pkgName === 'react' ||
+            pkgName === 'react-dom' ||
+            pkgName === 'scheduler' ||
+            pkgName === 'use-sync-external-store' ||
+            pkgName === 'object-assign'
+          )
+            return 'react-vendor';
           return undefined;
         },
       },

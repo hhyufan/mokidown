@@ -4,7 +4,16 @@
  * 该文件负责在 Monaco、Markdown 所见即所得和只读预览之间切换，并集中
  * 处理排版缩放、分栏拖拽与自动保存触发等工作区级交互。
  */
-import { Component, Suspense, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import {
+  Component,
+  Suspense,
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+} from 'react';
 import { useTranslation } from 'react-i18next';
 import { Tooltip } from 'antd';
 import useEditorStore from '@store/useEditorStore';
@@ -21,13 +30,19 @@ import { lazyWithRetry } from '@utils/lazyWithRetry';
 import { externalLink, openEditorLink } from '@utils/editorLinks';
 import { createAppHotkeyHandlers } from '@utils/hotkeyCommands';
 import { reportReactError } from '@/services/runtimeLogs';
-import { bindMarkdownFolding, bindMarkdownScroll, toggleMonacoSection } from '@components/editor/markdownSplitSync';
+import {
+  bindMarkdownFolding,
+  bindMarkdownScroll,
+  toggleMonacoSection,
+} from '@components/editor/markdownSplitSync';
 import './editor-content.scss';
 import WelcomeScreen from '@components/moki/WelcomeScreen';
 
 // Markdown 相关渲染器保持在懒加载边界之后，确保非 Markdown 文件仍然走
 // 轻量的 Monaco 路径；纯预览模式使用可编辑的所见即所得，分栏预览则只读。
-const MilkdownMarkdownEditor = lazyWithRetry(() => import('@components/editor/MilkdownMarkdownEditor'));
+const MilkdownMarkdownEditor = lazyWithRetry(
+  () => import('@components/editor/MilkdownMarkdownEditor'),
+);
 const MarkdownPreview = lazyWithRetry(() => import('@components/editor/MarkdownPreview'));
 const TreeEditor = lazyWithRetry(() => import('@components/editor/TreeEditor'));
 const HistoryDiffView = lazyWithRetry(() => import('@components/history/HistoryDiffView'));
@@ -40,8 +55,16 @@ function PluginDocsPage({ title }) {
   const { syncFrameTheme } = usePreviewFrame(frameRef, { transparent: false });
   const url = new URL(`${import.meta.env.BASE_URL}docs/plugins/index.html`, document.baseURI);
   url.searchParams.set('theme', theme);
-  return <iframe ref={frameRef} onLoad={syncFrameTheme} className="editor-content__builtin-html" title={title} src={url.href}
-    sandbox="allow-scripts allow-same-origin allow-downloads" />;
+  return (
+    <iframe
+      ref={frameRef}
+      onLoad={syncFrameTheme}
+      className="editor-content__builtin-html"
+      title={title}
+      src={url.href}
+      sandbox="allow-scripts allow-same-origin allow-downloads"
+    />
+  );
 }
 
 /**
@@ -49,9 +72,7 @@ function PluginDocsPage({ title }) {
  *
  * @returns {JSX.Element} 占据预览区尺寸的空白占位元素。
  */
-const PreviewFallback = () => (
-  <div style={{ flex: 1, minHeight: 0 }} />
-);
+const PreviewFallback = () => <div style={{ flex: 1, minHeight: 0 }} />;
 
 /**
  * 将渲染器加载或初始化错误限制在编辑区内部，避免错误继续冒泡到应用根节点。
@@ -80,7 +101,9 @@ class RendererErrorBoundary extends Component {
  */
 function RendererLoadError({ onReady }) {
   const { t } = useTranslation();
-  useLayoutEffect(() => { onReady?.(); }, [onReady]);
+  useLayoutEffect(() => {
+    onReady?.();
+  }, [onReady]);
   return (
     <div className="editor-content__renderer-error" role="alert">
       <strong>{t('editor.rendererLoadFailed')}</strong>
@@ -182,13 +205,13 @@ function buildTypographyUpdate(target, targetFontSize) {
   const typography = computeTypographyForSize(targetFontSize, target);
   return target === ZOOM_AREA_PREVIEW
     ? {
-      previewFontSize: typography.fontSize,
-      previewLineHeight: typography.lineHeight,
-    }
+        previewFontSize: typography.fontSize,
+        previewLineHeight: typography.lineHeight,
+      }
     : {
-      fontSize: typography.fontSize,
-      lineHeight: typography.lineHeight,
-    };
+        fontSize: typography.fontSize,
+        lineHeight: typography.lineHeight,
+      };
 }
 
 /**
@@ -199,7 +222,9 @@ function buildTypographyUpdate(target, targetFontSize) {
  * @returns {object} 下一次缩放应提交的配置更新。
  */
 function getNextTypographyUpdate(target, delta) {
-  const { currentFontSize } = getTypographyState(target === ZOOM_TARGET_BOTH ? ZOOM_AREA_EDITOR : target);
+  const { currentFontSize } = getTypographyState(
+    target === ZOOM_TARGET_BOTH ? ZOOM_AREA_EDITOR : target,
+  );
   return buildTypographyUpdate(target, currentFontSize + delta);
 }
 
@@ -272,7 +297,10 @@ function EditorContent() {
   const isHtml = !activeTabMeta?.builtin && /^(html?|xhtml)$/i.test(activeTabMeta?.ext || '');
   const isWebPage = activeTabMeta?.builtin === 'web';
   const isPluginDocs = activeTabMeta?.builtin === 'pluginDocs';
-  const webTabs = useMemo(() => new Map(tabs.filter((tab) => tab.builtin === 'web').map((tab) => [tab.id, tab])), [tabs]);
+  const webTabs = useMemo(
+    () => new Map(tabs.filter((tab) => tab.builtin === 'web').map((tab) => [tab.id, tab])),
+    [tabs],
+  );
   const visitedWebTabs = useRef(new Set());
   useLayoutEffect(() => {
     for (const id of visitedWebTabs.current) {
@@ -291,8 +319,10 @@ function EditorContent() {
   const isWebSplit = Boolean(webSplitUrl);
   // Leave the current pane full size until the split preview has real content.
   const isSplit = isWebSplit || (splitRequested && (!isMarkdown || markdownPreviewReady));
-  const showMilkdown = isMarkdown && (viewMode === 'preview'
-    || (splitRequested && !isSplit && lastSingleMode.current === 'preview'));
+  const showMilkdown =
+    isMarkdown &&
+    (viewMode === 'preview' ||
+      (splitRequested && !isSplit && lastSingleMode.current === 'preview'));
   const markMarkdownPreviewReady = useCallback(() => setMarkdownPreviewReady(true), []);
   const attachPreview = useCallback((handle) => {
     setPreviewSyncHandle(handle);
@@ -315,7 +345,10 @@ function EditorContent() {
     editor.pushUndoStop();
     return true;
   }, []);
-  const togglePreviewFold = useCallback((line) => toggleMonacoSection(splitEditor, line), [splitEditor]);
+  const togglePreviewFold = useCallback(
+    (line) => toggleMonacoSection(splitEditor, line),
+    [splitEditor],
+  );
 
   /**
    * 响应浮动工具栏插入动作，优先走编辑器原生能力，失败时回退到通用插入。
@@ -348,77 +381,85 @@ function EditorContent() {
    *
    * @param {PointerEvent} e 分隔条上的指针按下事件。
    */
-  const handleDividerPointerDown = useCallback((e) => {
-    if (e.button !== undefined && e.button !== 0) return;
-    const workspace = containerRef.current;
-    if (!workspace || stopSplitDrag.current) return;
-    e.preventDefault();
-    e.stopPropagation();
+  const handleDividerPointerDown = useCallback(
+    (e) => {
+      if (e.button !== undefined && e.button !== 0) return;
+      const workspace = containerRef.current;
+      if (!workspace || stopSplitDrag.current) return;
+      e.preventDefault();
+      e.stopPropagation();
 
-    const dividerEl = e.currentTarget;
-    dividerEl.dataset.resizing = 'true';
-    const vertical = isMobileLayout;
-    const workspaceBox = workspace.getBoundingClientRect();
-    const dividerBox = dividerEl.getBoundingClientRect();
-    const grabOffset = vertical ? e.clientY - dividerBox.top : e.clientX - dividerBox.left;
-    let frame = 0;
-    let finalRatio = useEditorStore.getState().splitRatio;
-    const bodyStyle = document.body.style;
-    const previousCursor = bodyStyle.cursor;
-    const previousUserSelect = bodyStyle.userSelect;
-    bodyStyle.cursor = vertical ? 'row-resize' : 'col-resize';
-    bodyStyle.userSelect = 'none';
-    try {
-      dividerEl.setPointerCapture(e.pointerId);
-    } catch (_) {
-      // 分隔条节点若已脱离文档，`setPointerCapture` 可能抛错；即便失败，
-      // 拖拽仍可继续，只是手指移出原始目标后的稳定性会差一些。
-    }
-
-    const paint = () => {
-      frame = 0;
-      workspace.style.setProperty('--split-ratio', `${finalRatio * 100}%`);
-      dividerEl.setAttribute('aria-valuenow', Math.round(finalRatio * 100));
-    };
-    const onPointerMove = (moveEvt) => {
-      if (moveEvt.pointerId !== e.pointerId) return;
-      const ratio = vertical
-        ? (moveEvt.clientY - workspaceBox.top - grabOffset) / workspaceBox.height
-        : (moveEvt.clientX - workspaceBox.left - grabOffset) / workspaceBox.width;
-      finalRatio = Math.max(0.15, Math.min(0.85, ratio));
-      if (!frame) frame = requestAnimationFrame(paint);
-    };
-
-    const stop = (endEvt) => {
-      if (endEvt && endEvt.pointerId !== e.pointerId) return;
-      if (stopSplitDrag.current !== stop) return;
-      stopSplitDrag.current = null;
-      if (endEvt?.type === 'pointerup') onPointerMove(endEvt);
-      if (frame) cancelAnimationFrame(frame);
-      paint();
-      delete dividerEl.dataset.resizing;
-      setSplitRatio(finalRatio);
-      useEditorStore.getState().setSplitRatio(finalRatio);
-      bodyStyle.cursor = previousCursor;
-      bodyStyle.userSelect = previousUserSelect;
+      const dividerEl = e.currentTarget;
+      dividerEl.dataset.resizing = 'true';
+      const vertical = isMobileLayout;
+      const workspaceBox = workspace.getBoundingClientRect();
+      const dividerBox = dividerEl.getBoundingClientRect();
+      const grabOffset = vertical ? e.clientY - dividerBox.top : e.clientX - dividerBox.left;
+      let frame = 0;
+      let finalRatio = useEditorStore.getState().splitRatio;
+      const bodyStyle = document.body.style;
+      const previousCursor = bodyStyle.cursor;
+      const previousUserSelect = bodyStyle.userSelect;
+      bodyStyle.cursor = vertical ? 'row-resize' : 'col-resize';
+      bodyStyle.userSelect = 'none';
       try {
-        dividerEl.releasePointerCapture(e.pointerId);
+        dividerEl.setPointerCapture(e.pointerId);
       } catch (_) {
-        // 浏览器可能已在 `pointerup` 时自动释放捕获，这里直接忽略即可。
+        // 分隔条节点若已脱离文档，`setPointerCapture` 可能抛错；即便失败，
+        // 拖拽仍可继续，只是手指移出原始目标后的稳定性会差一些。
       }
-      dividerEl.removeEventListener('pointermove', onPointerMove);
-      dividerEl.removeEventListener('pointerup', stop);
-      dividerEl.removeEventListener('pointercancel', stop);
-      dividerEl.removeEventListener('lostpointercapture', stop);
-    };
 
-    dividerEl.addEventListener('pointermove', onPointerMove);
-    dividerEl.addEventListener('pointerup', stop);
-    dividerEl.addEventListener('pointercancel', stop);
-    dividerEl.addEventListener('lostpointercapture', stop);
-    stopSplitDrag.current = stop;
-  }, [isMobileLayout]);
-  useLayoutEffect(() => () => { stopSplitDrag.current?.(); }, [isSplit, isMobileLayout]);
+      const paint = () => {
+        frame = 0;
+        workspace.style.setProperty('--split-ratio', `${finalRatio * 100}%`);
+        dividerEl.setAttribute('aria-valuenow', Math.round(finalRatio * 100));
+      };
+      const onPointerMove = (moveEvt) => {
+        if (moveEvt.pointerId !== e.pointerId) return;
+        const ratio = vertical
+          ? (moveEvt.clientY - workspaceBox.top - grabOffset) / workspaceBox.height
+          : (moveEvt.clientX - workspaceBox.left - grabOffset) / workspaceBox.width;
+        finalRatio = Math.max(0.15, Math.min(0.85, ratio));
+        if (!frame) frame = requestAnimationFrame(paint);
+      };
+
+      const stop = (endEvt) => {
+        if (endEvt && endEvt.pointerId !== e.pointerId) return;
+        if (stopSplitDrag.current !== stop) return;
+        stopSplitDrag.current = null;
+        if (endEvt?.type === 'pointerup') onPointerMove(endEvt);
+        if (frame) cancelAnimationFrame(frame);
+        paint();
+        delete dividerEl.dataset.resizing;
+        setSplitRatio(finalRatio);
+        useEditorStore.getState().setSplitRatio(finalRatio);
+        bodyStyle.cursor = previousCursor;
+        bodyStyle.userSelect = previousUserSelect;
+        try {
+          dividerEl.releasePointerCapture(e.pointerId);
+        } catch (_) {
+          // 浏览器可能已在 `pointerup` 时自动释放捕获，这里直接忽略即可。
+        }
+        dividerEl.removeEventListener('pointermove', onPointerMove);
+        dividerEl.removeEventListener('pointerup', stop);
+        dividerEl.removeEventListener('pointercancel', stop);
+        dividerEl.removeEventListener('lostpointercapture', stop);
+      };
+
+      dividerEl.addEventListener('pointermove', onPointerMove);
+      dividerEl.addEventListener('pointerup', stop);
+      dividerEl.addEventListener('pointercancel', stop);
+      dividerEl.addEventListener('lostpointercapture', stop);
+      stopSplitDrag.current = stop;
+    },
+    [isMobileLayout],
+  );
+  useLayoutEffect(
+    () => () => {
+      stopSplitDrag.current?.();
+    },
+    [isSplit, isMobileLayout],
+  );
 
   useEffect(() => {
     const container = containerRef.current;
@@ -458,7 +499,11 @@ function EditorContent() {
     };
 
     const handleExternalClick = (event) => {
-      if (event.button !== 0 || !(event.ctrlKey || event.metaKey || useConfigStore.getState().openLinksInEditor)) return;
+      if (
+        event.button !== 0 ||
+        !(event.ctrlKey || event.metaKey || useConfigStore.getState().openLinksInEditor)
+      )
+        return;
       const anchor = event.target?.closest?.('a[href]');
       if (anchor?.hasAttribute('download')) return;
       const url = externalLink(anchor?.getAttribute('href'));
@@ -491,7 +536,7 @@ function EditorContent() {
       pinchInitialDistance = distance;
       pinchZoomTarget = resolveZoomTarget(event.target, { viewMode, isMarkdown: hasPreview });
       pinchInitialFontSize = getTypographyState(
-        pinchZoomTarget === ZOOM_TARGET_BOTH ? ZOOM_AREA_EDITOR : pinchZoomTarget
+        pinchZoomTarget === ZOOM_TARGET_BOTH ? ZOOM_AREA_EDITOR : pinchZoomTarget,
       ).currentFontSize;
       pinchLastAppliedSize = pinchInitialFontSize;
     };
@@ -554,152 +599,213 @@ function EditorContent() {
 
   return (
     <main className={`editor-content ${isMobileLayout ? 'editor-content--mobile' : ''}`}>
-      {showHistoryDiff && <Suspense fallback={null}><HistoryDiffView /></Suspense>}
-      {!showHistoryDiff && !showWorkspace && (isPluginDocs
-        ? <PluginDocsPage title={activeTabMeta.name} />
-        : <div className="editor-content__welcome"><WelcomeScreen /></div>)}
+      {showHistoryDiff && (
+        <Suspense fallback={null}>
+          <HistoryDiffView />
+        </Suspense>
+      )}
+      {!showHistoryDiff &&
+        !showWorkspace &&
+        (isPluginDocs ? (
+          <PluginDocsPage title={activeTabMeta.name} />
+        ) : (
+          <div className="editor-content__welcome">
+            <WelcomeScreen />
+          </div>
+        ))}
       <div
         className={`editor-content__workspace${isSplit ? ' editor-content__workspace--split' : ''}`}
         ref={containerRef}
         hidden={!showWorkspace}
         style={isSplit ? { '--split-ratio': `${splitRatio * 100}%` } : undefined}
       >
-        {Array.from(mountedWebTabs, (id) => webTabs.get(id)).filter(Boolean).map((tab) => (
-          <WebPageView
-            key={`${tab.id}:${tab.url}`}
-            active={tab.id === activeTabId && !showHistoryDiff}
-            className="editor-content__primary-surface"
-            url={tab.url}
-            initialLocation={tab.webLocation}
-            moveLabel={t('web.splitOpen')}
-            onMove={(url) => useEditorStore.getState().openWebSplit(url)}
-            onNavigate={(url) => useEditorStore.getState().openWebTab(url, { replaceTabId: tab.id })}
-            onPage={(url, icons) => useEditorStore.getState().setWebTabPage(tab.id, url, icons)}
-          />
-        ))}
-        {showWorkspace && <>
-        {!activeTabMeta && <div className="editor-content__welcome editor-content__primary-surface"><WelcomeScreen /></div>}
-        {isPluginDocs && <PluginDocsPage title={activeTabMeta.name} />}
-        {activeTabMeta && !isWebPage && !isPluginDocs && !showMilkdown && (viewMode !== 'preview' || !hasPreview) && (
-          <MonacoEditor
-            ref={monacoRef}
-            className={`editor-content__editor${isSplit ? ' editor-content__editor--half' : ''}`}
-            onEditorReady={setSplitEditor}
-            onAutoSave={triggerAutoSave}
-            appHotkeyHandlers={appHotkeyHandlers}
-          />
-        )}
-        {showMilkdown && (
-          <RendererErrorBoundary fallback={<RendererLoadError />}>
-            <Suspense fallback={<PreviewFallback />}>
-              <MilkdownMarkdownEditor
-                key={activeTabId}
-                ref={monacoRef}
-                className="editor-content__preview editor-content__editor--milkdown"
-                onAutoSave={triggerAutoSave}
-              />
-            </Suspense>
-          </RendererErrorBoundary>
-        )}
-        {viewMode === 'preview' && isTree && (
-          <RendererErrorBoundary fallback={<RendererLoadError />}>
-            <Suspense fallback={<PreviewFallback />}>
-              <TreeEditor key={activeTabId} className="editor-content__preview" onAutoSave={triggerAutoSave} />
-            </Suspense>
-          </RendererErrorBoundary>
-        )}
-        {isHtml && (viewMode !== 'edit' || htmlPreviewMounted) && <div
-          className={`editor-content__html-surface${isSplit && !isWebSplit ? ' editor-content__html-surface--half' : ''}`}
-          hidden={viewMode === 'edit' || (isWebSplit && viewMode === 'split')}>
-          <RendererErrorBoundary fallback={<RendererLoadError />}>
-            <Suspense fallback={<PreviewFallback />}><HtmlFilePreview key={activeTabId} /></Suspense>
-          </RendererErrorBoundary>
-        </div>}
-        {!isWebSplit && (splitRequested || (splitPreviewMounted && isMarkdown)) && (
-          <div className="editor-content__split-surfaces" hidden={!isSplit}>
-            <Tooltip title={t('editor.splitDivider')} placement="top" mouseEnterDelay={0.5}>
-              <div
-                className="editor-content__split-divider"
-                role="separator"
-                tabIndex={0}
-                aria-label={t('editor.splitDivider')}
-                aria-orientation={isMobileLayout ? 'horizontal' : 'vertical'}
-                aria-valuemin={15}
-                aria-valuemax={85}
-                aria-valuenow={Math.round(splitRatio * 100)}
-                onKeyDown={(event) => {
-                  const decrease = isMobileLayout ? 'ArrowUp' : 'ArrowLeft';
-                  const increase = isMobileLayout ? 'ArrowDown' : 'ArrowRight';
-                  if (![decrease, increase, 'Home', 'End'].includes(event.key)) return;
-                  event.preventDefault();
-                  const value = Math.max(0.15, Math.min(0.85, event.key === 'Home' ? 0.15 : event.key === 'End' ? 0.85 : splitRatio + (event.key === decrease ? -0.02 : 0.02)));
-                  setSplitRatio(value);
-                  useEditorStore.getState().setSplitRatio(value);
-                }}
-                onPointerDown={handleDividerPointerDown}
-              />
-            </Tooltip>
-            <RendererErrorBoundary fallback={<RendererLoadError onReady={isMarkdown ? markMarkdownPreviewReady : undefined} />}>
-              <Suspense fallback={<PreviewFallback />}>
-                {isHtml ? null : isTree ? <TreeEditor
-                  key={activeTabId}
-                  className="editor-content__preview editor-content__preview--half"
-                  onAutoSave={triggerAutoSave}
-                  onSourceChange={handleTreeSourceChange}
-                /> : <MarkdownPreview
-                  ref={attachPreview}
-                  visible={isSplit}
-                  onReady={markMarkdownPreviewReady}
-                  foldedRanges={foldedRanges}
-                  onToggleFold={togglePreviewFold}
-                  className="editor-content__preview editor-content__preview--half"
-                />}
-              </Suspense>
-            </RendererErrorBoundary>
-          </div>
-        )}
-        {isWebSplit && (
-          <div className="editor-content__split-surfaces">
-            <div
-              className="editor-content__split-divider"
-              role="separator"
-              tabIndex={0}
-              aria-label={t('editor.splitDivider')}
-              aria-orientation={isMobileLayout ? 'horizontal' : 'vertical'}
-              aria-valuemin={15}
-              aria-valuemax={85}
-              aria-valuenow={Math.round(splitRatio * 100)}
-              onKeyDown={(event) => {
-                const decrease = isMobileLayout ? 'ArrowUp' : 'ArrowLeft';
-                const increase = isMobileLayout ? 'ArrowDown' : 'ArrowRight';
-                if (![decrease, increase, 'Home', 'End'].includes(event.key)) return;
-                event.preventDefault();
-                const value = Math.max(0.15, Math.min(0.85, event.key === 'Home' ? 0.15 : event.key === 'End' ? 0.85 : splitRatio + (event.key === decrease ? -0.02 : 0.02)));
-                setSplitRatio(value);
-                useEditorStore.getState().setSplitRatio(value);
-              }}
-              onPointerDown={handleDividerPointerDown}
-            />
+        {Array.from(mountedWebTabs, (id) => webTabs.get(id))
+          .filter(Boolean)
+          .map((tab) => (
             <WebPageView
-              key={webSplitUrl}
-              className="editor-content__preview editor-content__preview--half"
-              url={webSplitUrl}
-              moveLabel={t('web.newTab')}
-              onMove={(url) => useEditorStore.getState().openWebTab(url, { fromSplit: true })}
-              onNavigate={(url) => useEditorStore.getState().openWebSplit(url)}
-              onClose={() => useEditorStore.getState().closeWebSplit()}
+              key={`${tab.id}:${tab.url}`}
+              active={tab.id === activeTabId && !showHistoryDiff}
+              className="editor-content__primary-surface"
+              url={tab.url}
+              initialLocation={tab.webLocation}
+              moveLabel={t('web.splitOpen')}
+              onMove={(url) => useEditorStore.getState().openWebSplit(url)}
+              onNavigate={(url) =>
+                useEditorStore.getState().openWebTab(url, { replaceTabId: tab.id })
+              }
+              onPage={(url, icons) => useEditorStore.getState().setWebTabPage(tab.id, url, icons)}
             />
-          </div>
+          ))}
+        {showWorkspace && (
+          <>
+            {!activeTabMeta && (
+              <div className="editor-content__welcome editor-content__primary-surface">
+                <WelcomeScreen />
+              </div>
+            )}
+            {isPluginDocs && <PluginDocsPage title={activeTabMeta.name} />}
+            {activeTabMeta &&
+              !isWebPage &&
+              !isPluginDocs &&
+              !showMilkdown &&
+              (viewMode !== 'preview' || !hasPreview) && (
+                <MonacoEditor
+                  ref={monacoRef}
+                  className={`editor-content__editor${isSplit ? ' editor-content__editor--half' : ''}`}
+                  onEditorReady={setSplitEditor}
+                  onAutoSave={triggerAutoSave}
+                  appHotkeyHandlers={appHotkeyHandlers}
+                />
+              )}
+            {showMilkdown && (
+              <RendererErrorBoundary fallback={<RendererLoadError />}>
+                <Suspense fallback={<PreviewFallback />}>
+                  <MilkdownMarkdownEditor
+                    key={activeTabId}
+                    ref={monacoRef}
+                    className="editor-content__preview editor-content__editor--milkdown"
+                    onAutoSave={triggerAutoSave}
+                  />
+                </Suspense>
+              </RendererErrorBoundary>
+            )}
+            {viewMode === 'preview' && isTree && (
+              <RendererErrorBoundary fallback={<RendererLoadError />}>
+                <Suspense fallback={<PreviewFallback />}>
+                  <TreeEditor
+                    key={activeTabId}
+                    className="editor-content__preview"
+                    onAutoSave={triggerAutoSave}
+                  />
+                </Suspense>
+              </RendererErrorBoundary>
+            )}
+            {isHtml && (viewMode !== 'edit' || htmlPreviewMounted) && (
+              <div
+                className={`editor-content__html-surface${isSplit && !isWebSplit ? ' editor-content__html-surface--half' : ''}`}
+                hidden={viewMode === 'edit' || (isWebSplit && viewMode === 'split')}
+              >
+                <RendererErrorBoundary fallback={<RendererLoadError />}>
+                  <Suspense fallback={<PreviewFallback />}>
+                    <HtmlFilePreview key={activeTabId} />
+                  </Suspense>
+                </RendererErrorBoundary>
+              </div>
+            )}
+            {!isWebSplit && (splitRequested || (splitPreviewMounted && isMarkdown)) && (
+              <div className="editor-content__split-surfaces" hidden={!isSplit}>
+                <Tooltip title={t('editor.splitDivider')} placement="top" mouseEnterDelay={0.5}>
+                  <div
+                    className="editor-content__split-divider"
+                    role="separator"
+                    tabIndex={0}
+                    aria-label={t('editor.splitDivider')}
+                    aria-orientation={isMobileLayout ? 'horizontal' : 'vertical'}
+                    aria-valuemin={15}
+                    aria-valuemax={85}
+                    aria-valuenow={Math.round(splitRatio * 100)}
+                    onKeyDown={(event) => {
+                      const decrease = isMobileLayout ? 'ArrowUp' : 'ArrowLeft';
+                      const increase = isMobileLayout ? 'ArrowDown' : 'ArrowRight';
+                      if (![decrease, increase, 'Home', 'End'].includes(event.key)) return;
+                      event.preventDefault();
+                      const value = Math.max(
+                        0.15,
+                        Math.min(
+                          0.85,
+                          event.key === 'Home'
+                            ? 0.15
+                            : event.key === 'End'
+                              ? 0.85
+                              : splitRatio + (event.key === decrease ? -0.02 : 0.02),
+                        ),
+                      );
+                      setSplitRatio(value);
+                      useEditorStore.getState().setSplitRatio(value);
+                    }}
+                    onPointerDown={handleDividerPointerDown}
+                  />
+                </Tooltip>
+                <RendererErrorBoundary
+                  fallback={
+                    <RendererLoadError
+                      onReady={isMarkdown ? markMarkdownPreviewReady : undefined}
+                    />
+                  }
+                >
+                  <Suspense fallback={<PreviewFallback />}>
+                    {isHtml ? null : isTree ? (
+                      <TreeEditor
+                        key={activeTabId}
+                        className="editor-content__preview editor-content__preview--half"
+                        onAutoSave={triggerAutoSave}
+                        onSourceChange={handleTreeSourceChange}
+                      />
+                    ) : (
+                      <MarkdownPreview
+                        ref={attachPreview}
+                        visible={isSplit}
+                        onReady={markMarkdownPreviewReady}
+                        foldedRanges={foldedRanges}
+                        onToggleFold={togglePreviewFold}
+                        className="editor-content__preview editor-content__preview--half"
+                      />
+                    )}
+                  </Suspense>
+                </RendererErrorBoundary>
+              </div>
+            )}
+            {isWebSplit && (
+              <div className="editor-content__split-surfaces">
+                <div
+                  className="editor-content__split-divider"
+                  role="separator"
+                  tabIndex={0}
+                  aria-label={t('editor.splitDivider')}
+                  aria-orientation={isMobileLayout ? 'horizontal' : 'vertical'}
+                  aria-valuemin={15}
+                  aria-valuemax={85}
+                  aria-valuenow={Math.round(splitRatio * 100)}
+                  onKeyDown={(event) => {
+                    const decrease = isMobileLayout ? 'ArrowUp' : 'ArrowLeft';
+                    const increase = isMobileLayout ? 'ArrowDown' : 'ArrowRight';
+                    if (![decrease, increase, 'Home', 'End'].includes(event.key)) return;
+                    event.preventDefault();
+                    const value = Math.max(
+                      0.15,
+                      Math.min(
+                        0.85,
+                        event.key === 'Home'
+                          ? 0.15
+                          : event.key === 'End'
+                            ? 0.85
+                            : splitRatio + (event.key === decrease ? -0.02 : 0.02),
+                      ),
+                    );
+                    setSplitRatio(value);
+                    useEditorStore.getState().setSplitRatio(value);
+                  }}
+                  onPointerDown={handleDividerPointerDown}
+                />
+                <WebPageView
+                  key={webSplitUrl}
+                  className="editor-content__preview editor-content__preview--half"
+                  url={webSplitUrl}
+                  moveLabel={t('web.newTab')}
+                  onMove={(url) => useEditorStore.getState().openWebTab(url, { fromSplit: true })}
+                  onNavigate={(url) => useEditorStore.getState().openWebSplit(url)}
+                  onClose={() => useEditorStore.getState().closeWebSplit()}
+                />
+              </div>
+            )}
+            {!isTree && !isHtml && !isWebPage && <div className="editor-content__fade" />}
+            <FloatingRunButton />
+          </>
         )}
-        {!isTree && !isHtml && !isWebPage && <div className="editor-content__fade" />}
-        <FloatingRunButton />
-        </>}
       </div>
 
       {/* 浮动工具栏放在工作区外层，避免被内部 `overflow: hidden` 裁切。 */}
-      {!showHistoryDiff && isMarkdown && (
-        <FloatingToolbar onInsert={handleToolbarInsert} />
-      )}
+      {!showHistoryDiff && isMarkdown && <FloatingToolbar onInsert={handleToolbarInsert} />}
     </main>
   );
 }
