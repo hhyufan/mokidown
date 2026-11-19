@@ -152,7 +152,7 @@ import { isAndroidRuntime } from '@utils/platform';
 import MilkdownMediaTools from './MilkdownMediaTools';
 import MilkdownTooltips from './MilkdownTooltips';
 import { milkdownMediaEditor, milkdownMediaImageView } from './milkdownMedia';
-import { openExternal } from '@utils/tauriApi';
+import { openEditorLink } from '@utils/editorLinks';
 import './markdown-preview.scss';
 import { milkdownBlockSelection, milkdownFenceConfirmation, milkdownInlineLinkRule, milkdownInlineSyntaxSource, milkdownLiveSyntax } from './milkdownLiveSyntax';
 import { CODE_FENCE_LANGUAGE_EVENT } from '@utils/markdownCodeFence';
@@ -1870,8 +1870,7 @@ function MilkdownInner({
       if (!target.internal || !target.path) {
         if (/^(https?:|mailto:|tel:|sms:)/i.test(href)) {
           event.preventDefault();
-          if (window.__TAURI_INTERNALS__) void openExternal(href);
-          else window.open(href, '_blank', 'noopener,noreferrer');
+          void openEditorLink(href, { browserFallback: true }).catch((error) => console.error('Unable to open link:', error));
         } else if (/^(javascript:|data:|vbscript:)/i.test(href)) event.preventDefault();
         return;
       }

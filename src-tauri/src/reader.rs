@@ -184,12 +184,12 @@ impl Drop for ReaderBuildPermit<'_> {
     }
 }
 
-fn preference_path(app: &AppHandle) -> Result<std::path::PathBuf, String> {
-    Ok(app
-        .path()
-        .app_config_dir()
-        .map_err(|e| e.to_string())?
-        .join("associated-open-mode.json"))
+fn preference_path(_app: &AppHandle) -> Result<std::path::PathBuf, String> {
+    #[cfg(all(windows, debug_assertions))]
+    let directory = crate::webview_defaults::development_profile("editor");
+    #[cfg(not(all(windows, debug_assertions)))]
+    let directory = _app.path().app_config_dir().map_err(|e| e.to_string())?;
+    Ok(directory.join("associated-open-mode.json"))
 }
 
 pub fn associated_reader_mode(app: &AppHandle) -> bool {
@@ -243,8 +243,11 @@ pub async fn reader_bootstrap(
             .get(window.label())
             .cloned());
     }
-    set_associated_open_mode(app.clone(), mode)?;
-    if editor || !associated_reader_mode(&app) {
+    let open_reader = mode == "reader";
+    if let Err(error) = set_associated_open_mode(app.clone(), mode) {
+        log::warn!("Could not save the file association preference at startup: {error}");
+    }
+    if editor || !open_reader {
         return Ok(None);
     }
     // Keep the primary reader stable across reloads.
@@ -337,7 +340,9 @@ pub fn create_reader(
         if document.opening.is_none() {
             builder = builder.min_inner_size(360.0, 240.0);
         }
-        let window = builder.build().map_err(|e| e.to_string())?;
+        let window = crate::webview_defaults::app_window(builder)
+            .build()
+            .map_err(|e| e.to_string())?;
         #[cfg(windows)]
         crate::style_window_frame(&window);
         Ok::<_, String>(label.clone())
@@ -602,7 +607,7 @@ fn ensure_drag_preview(app: &AppHandle, source: &WebviewWindow) -> Result<Webvie
     }
     let origin = source.outer_position().map_err(|error| error.to_string())?;
     let scale = source.scale_factor().map_err(|error| error.to_string())?;
-    let preview = tauri::WebviewWindowBuilder::new(
+    let builder = tauri::WebviewWindowBuilder::new(
         app,
         "drag-preview",
         WebviewUrl::App("drag-preview.html".into()),
@@ -617,9 +622,10 @@ fn ensure_drag_preview(app: &AppHandle, source: &WebviewWindow) -> Result<Webvie
     .skip_taskbar(true)
     .focused(false)
     .focusable(false)
-    .visible(false)
-    .build()
-    .map_err(|error| error.to_string())?;
+    .visible(false);
+    let preview = crate::webview_defaults::app_window(builder)
+        .build()
+        .map_err(|error| error.to_string())?;
     if let Err(error) = preview.set_ignore_cursor_events(true) {
         let _ = preview.close();
         return Err(error.to_string());
@@ -1154,7 +1160,7 @@ fn ensure_main(app: &AppHandle) -> Result<WebviewWindow, String> {
     if let Some(main) = app.get_webview_window("main") {
         return Ok(main);
     }
-    let main = tauri::WebviewWindowBuilder::new(
+    let builder = tauri::WebviewWindowBuilder::new(
         app,
         "main",
         WebviewUrl::App("index.html?editor=1".into()),
@@ -1163,9 +1169,10 @@ fn ensure_main(app: &AppHandle) -> Result<WebviewWindow, String> {
     .inner_size(1200.0, 800.0)
     .min_inner_size(800.0, 600.0)
     .decorations(false)
-    .shadow(false)
-    .build()
-    .map_err(|e| e.to_string())?;
+    .shadow(false);
+    let main = crate::webview_defaults::app_window(builder)
+        .build()
+        .map_err(|e| e.to_string())?;
     #[cfg(windows)]
     {
         crate::style_window_frame(&main);

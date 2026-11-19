@@ -97,6 +97,7 @@ function Footer() {
     [tabs, activeTabId],
   );
   const pathContext = usePathContextMenu(activeTab?.path);
+  const webUrl = activeTab?.builtin === 'web' ? activeTab.webLocation || activeTab.url : '';
 
   const showModeToggle =
     activeTab && !activeTab.builtin && PREVIEW_EXT.test(activeTab.ext) && viewMode !== 'split';
@@ -118,6 +119,7 @@ function Footer() {
     el.classList.toggle('footer__breadcrumb-path--overflow', overflow);
     if (overflow && !bcOverflowRef.current) el.scrollLeft = 0;
     bcOverflowRef.current = overflow;
+    el.classList.toggle('is-clipped-end', el.scrollWidth - el.clientWidth - el.scrollLeft > 1);
     const ratio = el.clientWidth / el.scrollWidth;
     if (ratio >= 1) {
       thumb.style.display = 'none';
@@ -154,16 +156,16 @@ function Footer() {
       el.removeEventListener('wheel', onWheel);
       ro.disconnect();
     };
-  }, [updateBcScrollbar, pathSegments]);
+  }, [updateBcScrollbar, pathSegments, webUrl]);
 
   useEffect(() => {
     const el = bcScrollRef.current;
     if (!el) return;
     requestAnimationFrame(() => {
-      el.scrollLeft = el.scrollWidth;
+      el.scrollLeft = webUrl ? 0 : el.scrollWidth;
       updateBcScrollbar();
     });
-  }, [pathSegments, updateBcScrollbar]);
+  }, [pathSegments, updateBcScrollbar, webUrl]);
 
   useEffect(() => {
     if (activeTab?.path) {
@@ -231,11 +233,11 @@ function Footer() {
   );
   const handleWebLinkMenu = useCallback(
     ({ key }) => {
-      if (!activeTab?.url) return;
-      if (key === 'copy') void navigator.clipboard?.writeText(activeTab.url).catch(() => {});
-      else void openExternal(activeTab.url).catch(() => {});
+      if (!webUrl) return;
+      if (key === 'copy') void navigator.clipboard?.writeText(webUrl).catch(() => {});
+      else void openExternal(webUrl).catch(() => {});
     },
-    [activeTab?.url],
+    [webUrl],
   );
 
   const renderDropdown = useCallback(
@@ -314,10 +316,10 @@ function Footer() {
       </div>
 
       <div className="footer__breadcrumb">
-        {pathSegments.length > 0 ? (
+        {webUrl || pathSegments.length > 0 ? (
           <>
             <div className="footer__breadcrumb-path" ref={bcScrollRef}>
-              {activeTab?.builtin === 'web' ? (
+              {webUrl ? (
                 <span className="footer__breadcrumb-item">
                   <Dropdown
                     trigger={['contextMenu']}
@@ -328,10 +330,10 @@ function Footer() {
                       className="footer__breadcrumb-segment footer__breadcrumb-segment--web"
 
                       onClick={() => {
-                        void navigator.clipboard?.writeText(activeTab.url).catch(() => {});
+                        void navigator.clipboard?.writeText(webUrl).catch(() => {});
                       }}
                     >
-                      {activeTab.url}
+                      {webUrl}
                     </span>
                   </Dropdown>
                 </span>

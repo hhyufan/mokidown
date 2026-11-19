@@ -27,7 +27,7 @@ vi.mock('@components/editor/FloatingRunButton', () => ({ default: () => null }))
 vi.mock('@components/ui/Toast', () => ({ default: () => null }));
 beforeEach(() => {
   useEditorStore.setState({ tabs: [], tabRenderList: [], activeTabId: null, viewMode: 'edit' });
-  useConfigStore.setState({ fontSize: 14, lineHeight: 24, previewFontSize: 14, previewLineHeight: 24, previewZoomSync: true });
+  useConfigStore.setState({ fontSize: 14, lineHeight: 24, previewFontSize: 14, previewLineHeight: 24, previewZoomSync: true, openLinksInEditor: false });
   vi.clearAllMocks();
 });
 afterEach(cleanup);
@@ -64,6 +64,15 @@ it('updates the visible synced font in WYSIWYG and opens nested Ctrl+click links
   expect(useConfigStore.getState()).toMatchObject({ fontSize: 15, previewFontSize: 15 });
   fireEvent.click(link, { ctrlKey: true });
   expect(openExternal).toHaveBeenCalledWith('https://example.com/doc');
+});
+it('routes Markdown web links to a tab when link takeover is enabled', async () => {
+  useConfigStore.setState({ openLinksInEditor: true });
+  render(<EditorContent />); open('test.md', 'preview');
+  fireEvent.click(await screen.findByText('editable link'));
+  expect(useEditorStore.getState().tabs).toEqual(expect.arrayContaining([
+    expect.objectContaining({ builtin: 'web', url: 'https://example.com/doc' }),
+  ]));
+  expect(openExternal).not.toHaveBeenCalled();
 });
 it('keeps split preview zoom independent and only intercepts external modifier clicks', async () => {
   useConfigStore.setState({ previewZoomSync: false });

@@ -34,6 +34,7 @@ export function getLocalSettingsSnapshot({ includeDeviceLocal = false } = {}) {
     previewZoomSync: config.previewZoomSync,
     markdownTaskCascade: config.markdownTaskCascade !== false,
     markdownFolding: config.markdownFolding !== false,
+    openLinksInEditor: config.openLinksInEditor === true,
     ...normalizeMarkdownPairSettings(config),
     tabSize: config.tabSize,
     wordWrap: config.wordWrap,
@@ -81,6 +82,8 @@ export function applySettingsSnapshot(snapshot = {}, { includeDeviceLocal = true
     markdownTaskCascade: snapshot.markdownTaskCascade === undefined
       ? useConfigStore.getState().markdownTaskCascade !== false : snapshot.markdownTaskCascade !== false,
     markdownFolding: snapshot.markdownFolding ?? useConfigStore.getState().markdownFolding ?? true,
+    openLinksInEditor: typeof snapshot.openLinksInEditor === 'boolean'
+      ? snapshot.openLinksInEditor : useConfigStore.getState().openLinksInEditor === true,
     ...normalizeMarkdownPairSettings(snapshot, useConfigStore.getState()),
     tabSize: snapshot.tabSize ?? 2,
     wordWrap: snapshot.wordWrap ?? true,
