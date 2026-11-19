@@ -1,10 +1,11 @@
 import { createRequire } from 'node:module';
 import { fileURLToPath } from 'node:url';
 import path from 'node:path';
-import { initializeMsvc } from './windows-msvc.mjs';
+import { initializeMsvc, ensureCargoOnPath } from './windows-msvc.mjs';
 const root = fileURLToPath(new URL('..', import.meta.url));
 const args = process.argv.slice(2);
 initializeMsvc(args);
+ensureCargoOnPath();
 process.env.CARGO_TARGET_DIR = path.join(root, 'src-tauri/target/react-installer');
 process.chdir(path.join(root, 'installer'));
 const require = createRequire(import.meta.url);

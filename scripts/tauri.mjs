@@ -3,26 +3,7 @@ import { existsSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { initializeMsvc } from './windows-msvc.mjs';
-
-// 有些开发机只装了 rustup toolchain，没有把 cargo 放进 PATH；
-// tauri CLI 内部 spawn('cargo') 时会报 program not found。这里补一次探测。
-function ensureCargoOnPath() {
-  if (process.platform !== 'win32') return;
-  const pathValue = process.env.PATH || '';
-  if (pathValue.split(';').some((dir) => dir && existsSync(join(dir, 'cargo.exe')))) return;
-  const candidates = [
-    process.env.RUSTUP_HOME && join(process.env.RUSTUP_HOME, 'toolchains', 'stable-x86_64-pc-windows-msvc', 'bin'),
-    join(homedir(), '.rustup', 'toolchains', 'stable-x86_64-pc-windows-msvc', 'bin'),
-    'C:\\Env\\rustup\\toolchains\\stable-x86_64-pc-windows-msvc\\bin',
-  ].filter(Boolean);
-  for (const dir of candidates) {
-    if (existsSync(join(dir, 'cargo.exe'))) {
-      process.env.PATH = `${dir};${pathValue}`;
-      return;
-    }
-  }
-}
+import { initializeMsvc, ensureCargoOnPath } from './windows-msvc.mjs';
 
 const args = process.argv.slice(2);
 
