@@ -1,50 +1,70 @@
 <!doctype html>
-<html lang="en"><head><meta charset="utf-8"><title>Native web preview</title></head><body>
-<div id="root" style="display: flex; height: 90vh"></div>
-<script type="module">
-import React from 'react';
-import { createRoot } from 'react-dom/client';
-import { mockIPC } from '@tauri-apps/api/mocks';
-import WebPageView from '/src/components/editor/WebPageView.jsx';
-import config from '/src/store/useConfigStore.js';
-import editors from '/src/store/useEditorStore.js';
-import i18n from '/src/i18n/index.js';
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>Native web preview</title>
+  </head>
+  <body>
+    <div id="root" style="display: flex; height: 90vh"></div>
+    <script type="module">
+      import React from 'react';
+      import { createRoot } from 'react-dom/client';
+      import { mockIPC } from '@tauri-apps/api/mocks';
+      import WebPageView from '/src/components/editor/WebPageView.jsx';
+      import config from '/src/store/useConfigStore.js';
+      import editors from '/src/store/useEditorStore.js';
+      import i18n from '/src/i18n/index.js';
 
-await i18n.changeLanguage('en');
-Object.defineProperty(navigator, 'userAgent', { value: 'Windows' });
-const commands = [];
-const channels = new Map();
-let delayedLayout;
-mockIPC((command, args) => {
-  if (command.startsWith('native_web_preview_') || command === 'open_external') {
-    const { events, ...options } = args;
-    commands.push({ command, ...options });
-    if (events) channels.set(args.id, events);
-    if (command === 'native_web_preview_close') channels.delete(args.id);
-    if (command === 'native_web_preview_layout' && delayedLayout) return delayedLayout;
-  }
-  return null;
-});
-const root = createRoot(document.querySelector('#root'));
-const render = (active) => root.render(React.createElement(WebPageView, { active, url: 'https://preview.example/' }));
-window.nativePreview = {
-  commands,
-  emit(event) { [...channels.values()].at(-1)?.onmessage(event); },
-  openInEditor(value) { config.setState({ openLinksInEditor: value }); },
-  tabUrls() { return editors.getState().tabs.map((tab) => tab.url); },
-  enableWallpaper() {
-    config.setState({ backgroundEnabled: true, backgroundImage: 'fixture', backgroundTransparency: { light: 46, dark: 76 } });
-  },
-  setActive: render,
-  delayLayout() {
-    delayedLayout = new Promise((resolve) => {
-      window.nativePreview.finishLayout = () => {
-        delayedLayout = null;
-        resolve();
+      await i18n.changeLanguage('en');
+      Object.defineProperty(navigator, 'userAgent', { value: 'Windows' });
+      const commands = [];
+      const channels = new Map();
+      let delayedLayout;
+      mockIPC((command, args) => {
+        if (command.startsWith('native_web_preview_') || command === 'open_external') {
+          const { events, ...options } = args;
+          commands.push({ command, ...options });
+          if (events) channels.set(args.id, events);
+          if (command === 'native_web_preview_close') channels.delete(args.id);
+          if (command === 'native_web_preview_layout' && delayedLayout) return delayedLayout;
+        }
+        return null;
+      });
+      const root = createRoot(document.querySelector('#root'));
+      const render = (active) =>
+        root.render(React.createElement(WebPageView, { active, url: 'https://preview.example/' }));
+      window.nativePreview = {
+        commands,
+        emit(event) {
+          [...channels.values()].at(-1)?.onmessage(event);
+        },
+        openInEditor(value) {
+          config.setState({ openLinksInEditor: value });
+        },
+        tabUrls() {
+          return editors.getState().tabs.map((tab) => tab.url);
+        },
+        enableWallpaper() {
+          config.setState({
+            backgroundEnabled: true,
+            backgroundImage: 'fixture',
+            backgroundTransparency: { light: 46, dark: 76 },
+          });
+        },
+        setActive: render,
+        delayLayout() {
+          delayedLayout = new Promise((resolve) => {
+            window.nativePreview.finishLayout = () => {
+              delayedLayout = null;
+              resolve();
+            };
+          });
+        },
+        unmount() {
+          root.unmount();
+        },
       };
-    });
-  },
-  unmount() { root.unmount(); },
-};
-render(true);
-</script></body></html>
+      render(true);
+    </script>
+  </body>
+</html>

@@ -17,21 +17,38 @@ import './web-page.scss';
  * @param {string} [props.className] 额外样式类。
  * @returns {JSX.Element} 网页视图。
  */
-export default function WebPageView({ url, initialLocation = url, active = true, className = '', moveLabel, onMove, onNavigate, onClose, onPage }) {
+export default function WebPageView({
+  url,
+  initialLocation = url,
+  active = true,
+  className = '',
+  moveLabel,
+  onMove,
+  onNavigate,
+  onClose,
+  onPage,
+}) {
   const { t } = useTranslation();
   const frameRef = useRef(null);
   const [draft, setDraft] = useState(null);
   const [pageUrl, setPageUrl] = useState(initialLocation);
   const [frameSource, setFrameSource] = useState({ url: initialLocation, revision: 0 });
   const [invalid, setInvalid] = useState(false);
-  const useNativeView = Boolean(window.__TAURI_INTERNALS__) && !window.AndroidBridge && /Windows/i.test(navigator.userAgent);
+  const useNativeView =
+    Boolean(window.__TAURI_INTERNALS__) &&
+    !window.AndroidBridge &&
+    /Windows/i.test(navigator.userAgent);
   const syncPage = (location, icons) => {
     setPageUrl(location);
     onPage?.(location, icons);
   };
-  const { syncFrameTheme, wallpaperProps } = usePreviewFrame(frameRef, { onNavigate, onPage: syncPage });
+  const { syncFrameTheme, wallpaperProps } = usePreviewFrame(frameRef, {
+    onNavigate,
+    onPage: syncPage,
+  });
   const address = draft ?? pageUrl;
-  const refresh = () => setFrameSource((previous) => ({ url: pageUrl, revision: previous.revision + 1 }));
+  const refresh = () =>
+    setFrameSource((previous) => ({ url: pageUrl, revision: previous.revision + 1 }));
   const submitAddress = (event) => {
     event.preventDefault();
     const target = parsePreviewAddress(address, pageUrl);
@@ -45,26 +62,71 @@ export default function WebPageView({ url, initialLocation = url, active = true,
     <div className={`web-page ${className}`} hidden={!active}>
       <div className="web-page__bar">
         <form className="preview-address" onSubmit={submitAddress}>
-          <input aria-label={t('htmlPreview.address')} value={address} autoComplete="off" spellCheck={false}
+          <input
+            aria-label={t('htmlPreview.address')}
+            value={address}
+            autoComplete="off"
+            spellCheck={false}
             aria-invalid={invalid || undefined}
             onFocus={(event) => event.currentTarget.select()}
-            onChange={(event) => { setDraft(event.currentTarget.value); setInvalid(false); }}
+            onChange={(event) => {
+              setDraft(event.currentTarget.value);
+              setInvalid(false);
+            }}
             onKeyDown={(event) => {
-              if (isImeComposing(event)) { if (event.key === 'Enter') event.preventDefault(); return; }
-              if (event.key === 'Escape') { setDraft(null); setInvalid(false); event.currentTarget.blur(); }
-            }} />
-          <PreviewAddressButton icon="copy" label={t('web.copyLink')}
-            onClick={() => { void navigator.clipboard?.writeText(address).catch(() => {}); }} />
-          <PreviewAddressButton icon="refresh" label={t('htmlPreview.refresh')}
-            onClick={() => { setDraft(null); setInvalid(false); refresh(); }} />
+              if (isImeComposing(event)) {
+                if (event.key === 'Enter') event.preventDefault();
+                return;
+              }
+              if (event.key === 'Escape') {
+                setDraft(null);
+                setInvalid(false);
+                event.currentTarget.blur();
+              }
+            }}
+          />
+          <PreviewAddressButton
+            icon="copy"
+            label={t('web.copyLink')}
+            onClick={() => {
+              void navigator.clipboard?.writeText(address).catch(() => {});
+            }}
+          />
+          <PreviewAddressButton
+            icon="refresh"
+            label={t('htmlPreview.refresh')}
+            onClick={() => {
+              setDraft(null);
+              setInvalid(false);
+              refresh();
+            }}
+          />
         </form>
         <PreviewAddressButton icon="move" label={moveLabel} onClick={() => onMove(pageUrl)} />
-        <PreviewAddressButton icon="external" label={t('web.openInBrowser')}
-          onClick={() => { void openExternal(pageUrl).catch(() => {}); }} />
-        {onClose && <PreviewAddressButton icon="close" label={t('web.closeSplit')} onClick={onClose} />}
+        <PreviewAddressButton
+          icon="external"
+          label={t('web.openInBrowser')}
+          onClick={() => {
+            void openExternal(pageUrl).catch(() => {});
+          }}
+        />
+        {onClose && (
+          <PreviewAddressButton icon="close" label={t('web.closeSplit')} onClick={onClose} />
+        )}
       </div>
-      {invalid && <div className="web-page__error" role="alert">{t('htmlPreview.invalidAddress')}</div>}
-      {useNativeView ? <NativeWebPage key={frameSource.revision} url={frameSource.url} active={active} onPage={syncPage} /> : (
+      {invalid && (
+        <div className="web-page__error" role="alert">
+          {t('htmlPreview.invalidAddress')}
+        </div>
+      )}
+      {useNativeView ? (
+        <NativeWebPage
+          key={frameSource.revision}
+          url={frameSource.url}
+          active={active}
+          onPage={syncPage}
+        />
+      ) : (
         <div className="web-page__viewport preview-wallpaper" {...wallpaperProps}>
           <iframe
             key={frameSource.revision}

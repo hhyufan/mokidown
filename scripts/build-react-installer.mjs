@@ -6,7 +6,9 @@ import path from 'node:path';
 const root = fileURLToPath(new URL('..', import.meta.url));
 const args = process.argv.slice(2);
 if (args.includes('--reuse-app')) {
-  throw new Error('Reusing an old application can embed stale updater settings. Build the current app instead.');
+  throw new Error(
+    'Reusing an old application can embed stale updater settings. Build the current app instead.',
+  );
 }
 function run(script, args = [], options = {}) {
   const result = spawnSync(process.execPath, [script, ...args], {
@@ -27,9 +29,12 @@ if (certificateThumbprint && !/^[a-f\d]{40}$/i.test(certificateThumbprint)) {
   throw new Error('MOKI_WINDOWS_CERT_THUMBPRINT must be a Windows certificate SHA-1 thumbprint.');
 }
 const bundle = { createUpdaterArtifacts: updaterArtifacts };
-if (certificateThumbprint) bundle.windows = {
-  certificateThumbprint, digestAlgorithm: 'sha256', timestampUrl: 'http://timestamp.digicert.com',
-};
+if (certificateThumbprint)
+  bundle.windows = {
+    certificateThumbprint,
+    digestAlgorithm: 'sha256',
+    timestampUrl: 'http://timestamp.digicert.com',
+  };
 run('scripts/tauri.mjs', [
   'build',
   '--bundles',
@@ -55,15 +60,31 @@ const destination = path.join(output, `MokiDown_${version}_x64-setup.exe`);
 // next to the replacement executable, including when the copy fails.
 await rm(`${destination}.sig`, { force: true });
 await rm(path.join(output, 'latest.json'), { force: true });
-const builtInstaller = path.join(root, 'src-tauri/target/react-installer/release/mokidown-installer.exe');
+const builtInstaller = path.join(
+  root,
+  'src-tauri/target/react-installer/release/mokidown-installer.exe',
+);
 if (certificateThumbprint) {
   const staging = path.join(output, `MokiDown-signing-${process.pid}.exe`);
   try {
     await copyFile(builtInstaller, staging);
-    const result = spawnSync('powershell.exe', ['-NoProfile', '-NonInteractive', '-File', path.join(root, 'scripts/sign-windows-installer.ps1'),
-      '-InstallerPath', staging, '-Thumbprint', certificateThumbprint], { stdio: 'inherit', windowsHide: true });
+    const result = spawnSync(
+      'powershell.exe',
+      [
+        '-NoProfile',
+        '-NonInteractive',
+        '-File',
+        path.join(root, 'scripts/sign-windows-installer.ps1'),
+        '-InstallerPath',
+        staging,
+        '-Thumbprint',
+        certificateThumbprint,
+      ],
+      { stdio: 'inherit', windowsHide: true },
+    );
     if (result.error) throw result.error;
-    if (result.status !== 0) throw new Error('Authenticode signing failed for the branded installer.');
+    if (result.status !== 0)
+      throw new Error('Authenticode signing failed for the branded installer.');
     await rename(staging, destination);
   } finally {
     await rm(staging, { force: true });
@@ -71,7 +92,9 @@ if (certificateThumbprint) {
 } else {
   await copyFile(builtInstaller, destination);
   if (!process.env.CI) {
-    console.warn('The local installer has no Windows code signature. SmartScreen may warn about this build.');
+    console.warn(
+      'The local installer has no Windows code signature. SmartScreen may warn about this build.',
+    );
   }
 }
 console.log(`React installer: ${destination}`);
