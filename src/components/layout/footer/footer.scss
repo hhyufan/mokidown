@@ -84,19 +84,6 @@
   min-width: 0;
   position: relative;
 
-  // 右侧边缘的渐隐效果，用于提示内容还有溢出
-  &::after {
-    content: '';
-    position: absolute;
-    top: 0;
-    right: 0;
-    width: 32px;
-    height: 100%;
-    background: linear-gradient(to right, transparent, var(--sidebar));
-    pointer-events: none;
-    z-index: 1;
-  }
-
   > span {
     cursor: default;
     white-space: nowrap;
@@ -144,6 +131,8 @@
       transition-duration: var(--moki-scrollbar-fade-in);
     }
   }
+
+  &.is-clipped-end { mask-image: linear-gradient(to right, #000 calc(100% - 24px), transparent); }
 }
 
 .footer__breadcrumb-scrollbar-thumb {

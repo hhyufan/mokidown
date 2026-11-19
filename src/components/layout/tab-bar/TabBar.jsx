@@ -429,10 +429,15 @@ function TabBar({ onRequestCloseTab, onRequestCloseTabs }) {
 
 // 网页标签优先显示站点 favicon，取不到时回退到 HTML 文件图标。
 function WebTabIcon({ tab }) {
-  const [failed, setFailed] = useState(false);
-  if (!tab.favicon || failed) return <FileTypeIcon extension="html" fileName={tab.name} size={16} />;
-  return <img className="tabbar__tab-favicon" src={tab.favicon} alt="" width={16} height={16}
-    draggable={false} onError={() => setFailed(true)} />;
+  const urls = tab.faviconUrls || (tab.favicon ? [tab.favicon] : []);
+  return <WebTabFavicon key={JSON.stringify(urls)} urls={urls} name={tab.name} />;
+}
+
+function WebTabFavicon({ urls, name }) {
+  const [index, setIndex] = useState(0);
+  if (!urls[index]) return <FileTypeIcon extension="html" fileName={name} size={16} />;
+  return <img className="tabbar__tab-favicon" src={urls[index]} alt="" width={16} height={16}
+    draggable={false} onError={() => setIndex((value) => value + 1)} />;
 }
 
 export default TabBar;

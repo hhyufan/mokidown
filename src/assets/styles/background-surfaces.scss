@@ -28,7 +28,7 @@ body.moki-has-background,
 
   .titlebar__search,
   .html-preview__bar,
-  .html-preview__address,
+  .preview-address,
   .web-page__bar,
   .sidebar__tab-slider,
 
@@ -101,16 +101,26 @@ body.moki-has-background,
     background: var(--moki-glass-selected);
   }
 
-  .file-tree__breadcrumb-scroll-wrap::after,
-  .footer__breadcrumb::after {
-    background: linear-gradient(to right, transparent, var(--moki-glass-surface));
-  }
-
   .output-console__body,
   .html-preview,
   .web-page,
   .problems {
     background: color-mix(in srgb, var(--surface) 18%, transparent);
+  }
+
+  .preview-wallpaper[data-preview-theme] {
+    --moki-background-base: #fff;
+    --moki-background-wash: color-mix(in srgb, var(--moki-background-base) var(--moki-preview-wash, 80%), transparent);
+    @include background-popup.image-surface;
+  }
+
+  .preview-wallpaper[data-preview-theme='dark'] {
+    --moki-background-base: #181818;
+  }
+
+  .preview-wallpaper[data-native-wallpaper] {
+    --moki-background-wash: transparent;
+    @include background-popup.image-surface;
   }
 
   .moki-tree { background: transparent; }

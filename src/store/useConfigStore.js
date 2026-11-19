@@ -49,6 +49,7 @@ const useConfigStore = create(
       previewZoomSync: true,
       htmlPreviewPort: 0,
       htmlPreviewLiveReload: true,
+      openLinksInEditor: false,
       markdownTaskCascade: true,
       markdownFolding: true,
       ...normalizeMarkdownPairSettings(),
