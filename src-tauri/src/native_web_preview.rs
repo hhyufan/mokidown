@@ -19,7 +19,8 @@ use windows::{
         Foundation::{HWND, RECT},
         UI::WindowsAndMessaging::{
             CreateWindowExW, DestroyWindow, SetWindowPos, HWND_TOP, SWP_HIDEWINDOW, SWP_NOACTIVATE,
-            SWP_SHOWWINDOW, WINDOW_EX_STYLE, WS_CHILD, WS_CLIPCHILDREN, WS_CLIPSIBLINGS,
+            SWP_NOMOVE, SWP_NOSIZE, SWP_NOZORDER, SWP_SHOWWINDOW, WINDOW_EX_STYLE, WS_CHILD,
+            WS_CLIPCHILDREN, WS_CLIPSIBLINGS,
         },
     },
 };
@@ -65,6 +66,14 @@ pub(crate) struct WallpaperPlacement {
 }
 
 #[derive(Clone, Copy, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct ClientBounds {
+    width: i32,
+    height: i32,
+    fills_bottom: bool,
+}
+
+#[derive(Clone, Copy, Deserialize)]
 pub(crate) struct Bounds {
     x: i32,
     y: i32,
@@ -72,6 +81,7 @@ pub(crate) struct Bounds {
     height: i32,
     visible: bool,
     wallpaper: Option<WallpaperPlacement>,
+    client: Option<ClientBounds>,
 }
 
 #[derive(Clone, Copy, Default, Deserialize, PartialEq)]
@@ -98,11 +108,36 @@ impl Appearance {
 }
 
 impl Bounds {
-    fn apply(self, pane: HWND, controller: &ICoreWebView2Controller) -> windows::core::Result<()> {
-        let sized = self.width > 0 && self.height > 0;
-        let visible = self.visible && sized;
+    fn fit_client(self, size: tauri::PhysicalSize<u32>) -> Self {
+        let Some(client) = self.client else { return self; };
+        let fills_right = (i64::from(client.width) - i64::from(self.x) - i64::from(self.width)).abs() <= 2;
+        Self {
+            width: if fills_right { self.width.saturating_add((size.width as i32).saturating_sub(client.width)).max(0) } else { self.width },
+            height: if client.fills_bottom { self.height.saturating_add((size.height as i32).saturating_sub(client.height)).max(0) } else { self.height },
+            ..self
+        }
+    }
+
+    fn is_visible(self) -> bool {
+        self.visible && self.width > 0 && self.height > 0
+    }
+
+    fn apply(
+        self,
+        pane: HWND,
+        controller: &ICoreWebView2Controller,
+        previous: Option<Self>,
+    ) -> windows::core::Result<()> {
+        let moved = previous.is_none_or(|old| (old.x, old.y) != (self.x, self.y));
+        let resized =
+            previous.is_none_or(|old| (old.width, old.height) != (self.width, self.height));
+        let visible = self.is_visible();
+        let visibility_changed = previous.is_none_or(|old| old.is_visible() != visible);
         unsafe {
-            if sized {
+            if !visible && visibility_changed {
+                controller.SetIsVisible(false)?;
+            }
+            if resized && self.width > 0 && self.height > 0 {
                 controller.SetBounds(RECT {
                     left: 0,
                     top: 0,
@@ -110,23 +145,31 @@ impl Bounds {
                     bottom: self.height,
                 })?;
             }
-            controller.SetIsVisible(visible)?;
-            // Raise the preview inside the editor's container, below Tauri's resize border.
-            SetWindowPos(
-                pane,
-                Some(HWND_TOP),
-                self.x,
-                self.y,
-                self.width.max(0),
-                self.height.max(0),
-                SWP_NOACTIVATE
-                    | if visible {
-                        SWP_SHOWWINDOW
-                    } else {
-                        SWP_HIDEWINDOW
-                    },
-            )?;
-            controller.NotifyParentWindowPositionChanged()
+            if moved || resized || visibility_changed {
+                // Raise newly shown previews once. Ordinary resize messages keep their z-order
+                // and do not resend a show notification to the window.
+                let (insert, flags) = match (visibility_changed, visible) {
+                    (true, true) => (Some(HWND_TOP), SWP_SHOWWINDOW),
+                    (true, false) => (None, SWP_NOZORDER | SWP_HIDEWINDOW),
+                    (false, _) => (None, SWP_NOZORDER),
+                };
+                SetWindowPos(
+                    pane,
+                    insert,
+                    self.x,
+                    self.y,
+                    self.width.max(0),
+                    self.height.max(0),
+                    SWP_NOACTIVATE | flags,
+                )?;
+            }
+            if visible && visibility_changed {
+                controller.SetIsVisible(true)?;
+            }
+            if moved {
+                controller.NotifyParentWindowPositionChanged()?;
+            }
+            Ok(())
         }
     }
 }
@@ -163,6 +206,8 @@ struct Session {
     pane: PreviewPane,
     url: String,
     bounds: Bounds,
+    applied_bounds: Option<Bounds>,
+    activation: u64,
     appearance: Appearance,
     wallpaper: Option<Arc<str>>,
     navigation_id: u64,
@@ -171,11 +216,22 @@ struct Session {
     controller: Option<ICoreWebView2Controller>,
 }
 
+impl Session {
+    fn accept_activation(&mut self, activation: u64) -> bool {
+        if activation < self.activation {
+            return false;
+        }
+        self.activation = activation;
+        true
+    }
+}
+
 #[derive(Default)]
 struct Host {
     environment: Option<ICoreWebView2Environment>,
     initializing: bool,
     sessions: HashMap<String, Session>,
+    client_size: Option<tauri::PhysicalSize<u32>>,
 }
 
 thread_local! { static HOST: RefCell<Host> = RefCell::new(Host::default()); }
@@ -198,7 +254,11 @@ fn devtools(
     }
 }
 
-fn update_appearance(id: &str, send_image: bool, ready: Option<u64>) -> windows::core::Result<()> {
+fn update_appearance(
+    id: &str,
+    send_image: bool,
+    install_bridge: bool,
+) -> windows::core::Result<()> {
     let state = HOST.with(|host| {
         let host = host.borrow();
         let session = host.sessions.get(id)?;
@@ -221,7 +281,7 @@ fn update_appearance(id: &str, send_image: bool, ready: Option<u64>) -> windows:
     } else {
         "undefined".into()
     };
-    let bridge = if ready.is_some() {
+    let bridge = if install_bridge {
         include_str!("../../src/utils/previewFrameBridge.js")
     } else {
         ""
@@ -229,7 +289,6 @@ fn update_appearance(id: &str, send_image: bool, ready: Option<u64>) -> windows:
     // A closed shadow tree is created from an isolated world. The page never receives
     // the wallpaper bytes through its own script context, styles, or network.
     let expression = format!("window.__mokiNativePreview = true;\n{bridge}\nwindow.__mokiSetNativePreview?.({settings}, {placement}, {image})");
-    let session = id.to_owned();
     let view = unsafe { controller.CoreWebView2()? };
     devtools(
         &view,
@@ -238,9 +297,6 @@ fn update_appearance(id: &str, send_image: bool, ready: Option<u64>) -> windows:
             "contextId": context, "expression": expression, "awaitPromise": true, "returnByValue": true,
         }),
         move |result| {
-            if let Some(navigation_id) = ready {
-                content_ready(&session, navigation_id);
-            }
             if result.is_none_or(|result| result.get("exceptionDetails").is_some()) {
                 log::debug!("Could not apply the native web preview appearance");
             }
@@ -275,15 +331,13 @@ fn prepare_appearance(
             return;
         }
         let Some(result) = result else {
-            content_ready(&session, navigation_id);
             return;
         };
         let Some(frame_id) = result["frameTree"]["frame"]["id"].as_str() else {
-            content_ready(&session, navigation_id);
             return;
         };
         let target = session.clone();
-        let result = devtools(
+        let _ = devtools(
             &guest,
             "Page.createIsolatedWorld",
             json!({
@@ -303,14 +357,11 @@ fn prepare_appearance(
                     view.script_context = context;
                     context.is_some()
                 });
-                if !installed || update_appearance(&target, true, Some(navigation_id)).is_err() {
-                    content_ready(&target, navigation_id);
+                if installed {
+                    let _ = update_appearance(&target, true, true);
                 }
             },
         );
-        if result.is_err() {
-            content_ready(&session, navigation_id);
-        }
     })
 }
 
@@ -472,9 +523,9 @@ unsafe fn configure(
             if let Some(args) = args {
                 args.NavigationId(&mut navigation_id)?;
             }
-            if !view.is_some_and(|view| prepare_appearance(&view, &session, navigation_id).is_ok())
-            {
-                content_ready(&session, navigation_id);
+            content_ready(&session, navigation_id);
+            if let Some(view) = view {
+                let _ = prepare_appearance(&view, &session, navigation_id);
             }
             Ok(())
         })),
@@ -558,6 +609,7 @@ fn create_controller(environment: &ICoreWebView2Environment, id: String) {
                 let mut host = host.borrow_mut();
                 let session = host.sessions.get_mut(id)?;
                 session.controller = Some(controller.clone());
+                session.applied_bounds = Some(session.bounds);
                 Some((session.url.clone(), session.bounds, session.appearance))
             });
             let Some((url, bounds, appearance)) = opening else {
@@ -569,7 +621,7 @@ fn create_controller(environment: &ICoreWebView2Environment, id: String) {
             let opened = unsafe {
                 configure(id, &controller).and_then(|web| {
                     appearance.apply_background(&controller)?;
-                    bounds.apply(parent, &controller)?;
+                    bounds.apply(parent, &controller, None)?;
                     web.Navigate(&HSTRING::from(url))
                 })
             };
@@ -674,6 +726,8 @@ pub async fn native_web_preview_open(
                         pane,
                         url: url.into(),
                         bounds,
+                        applied_bounds: None,
+                        activation: 0,
                         appearance: appearance.unwrap_or_default(),
                         wallpaper: None,
                         navigation_id: 0,
@@ -699,13 +753,19 @@ pub async fn native_web_preview_layout(
     id: String,
     bounds: Bounds,
     appearance: Option<Appearance>,
+    activation: u64,
 ) -> Result<(), String> {
     editor_only(&webview)?;
+    let (applied, mut completion) = tauri::async_runtime::channel(1);
     webview
         .run_on_main_thread(move || {
             let view = HOST.with(|host| {
                 let mut host = host.borrow_mut();
+                let fitted = host.client_size.map_or(bounds, |size| bounds.fit_client(size));
                 let session = host.sessions.get_mut(&id)?;
+                if !session.accept_activation(activation) {
+                    return None;
+                }
                 let wallpaper_moved = session.bounds.wallpaper != bounds.wallpaper;
                 session.bounds = bounds;
                 let changed = appearance.filter(|next| session.appearance != *next);
@@ -716,24 +776,74 @@ pub async fn native_web_preview_layout(
                     session.pane.0,
                     session.controller.clone()?,
                     changed,
+                    fitted,
+                    session.applied_bounds.replace(fitted),
                     wallpaper_moved,
                 ))
             });
-            if let Some((pane, controller, changed, wallpaper_moved)) = view {
+            if let Some((pane, controller, changed, fitted, previous, wallpaper_moved)) = view {
                 if let Some(value) = changed {
                     if let Err(error) = value.apply_background(&controller) {
                         log::warn!("Could not update web preview appearance: {error}");
                     }
                 }
-                if changed.is_some() || wallpaper_moved {
-                    let _ = update_appearance(&id, false, None);
-                }
-                if let Err(error) = bounds.apply(pane, &controller) {
+                if let Err(error) = fitted.apply(pane, &controller, previous) {
                     fail(&id, error);
+                } else if changed.is_some() || wallpaper_moved {
+                    let _ = update_appearance(&id, false, false);
                 }
             }
+            let _ = applied.try_send(());
         })
+        .map_err(|error| error.to_string())?;
+    completion
+        .recv()
+        .await
+        .ok_or_else(|| "Preview layout was interrupted".into())
+}
+
+#[tauri::command]
+pub fn native_web_preview_hide(
+    webview: Webview,
+    id: String,
+    activation: u64,
+) -> Result<(), String> {
+    editor_only(&webview)?;
+    webview
+        .run_on_main_thread(move || hide(&id, activation))
         .map_err(|error| error.to_string())
+}
+
+fn hide(id: &str, activation: u64) {
+    let view = HOST.with(|host| {
+        let mut host = host.borrow_mut();
+        let session = host.sessions.get_mut(id)?;
+        if !session.accept_activation(activation) {
+            return None;
+        }
+        session.bounds.visible = false;
+        if let Some(bounds) = &mut session.applied_bounds {
+            bounds.visible = false;
+        }
+        Some((session.pane.0, session.controller.clone()?))
+    });
+    if let Some((pane, controller)) = view {
+        let result = unsafe {
+            SetWindowPos(
+                pane,
+                None,
+                0,
+                0,
+                0,
+                0,
+                SWP_HIDEWINDOW | SWP_NOACTIVATE | SWP_NOZORDER | SWP_NOMOVE | SWP_NOSIZE,
+            )
+            .and_then(|()| controller.SetIsVisible(false))
+        };
+        if let Err(error) = result {
+            fail(id, error);
+        }
+    }
 }
 
 #[tauri::command]
@@ -762,7 +872,7 @@ pub async fn native_web_preview_wallpaper(
                 true
             });
             if exists {
-                let _ = update_appearance(&id, true, None);
+                let _ = update_appearance(&id, true, false);
             }
         })
         .map_err(|error| error.to_string())
@@ -774,6 +884,38 @@ pub async fn native_web_preview_close(webview: Webview, id: String) -> Result<()
     webview
         .run_on_main_thread(move || close(&id))
         .map_err(|error| error.to_string())
+}
+
+pub(crate) fn resized(size: tauri::PhysicalSize<u32>) {
+    if size.width == 0 || size.height == 0 {
+        return;
+    }
+    // Win32 receives the new client size before the editor's webview lays out.
+    // Fill the newly exposed edges while the exact DOM bounds are on their way.
+    let views = HOST.with(|host| {
+        let mut host = host.borrow_mut();
+        host.client_size = Some(size);
+        host.sessions
+            .iter_mut()
+            .filter_map(|(id, session)| {
+                let previous = session.applied_bounds?;
+                if !session.bounds.is_visible() {
+                    return None;
+                }
+                let fitted = session.bounds.fit_client(size);
+                if (fitted.width, fitted.height) == (previous.width, previous.height) {
+                    return None;
+                }
+                session.applied_bounds = Some(fitted);
+                Some((id.clone(), session.pane.0, session.controller.clone()?, fitted, previous))
+            })
+            .collect::<Vec<_>>()
+    });
+    for (id, pane, controller, fitted, previous) in views {
+        if let Err(error) = fitted.apply(pane, &controller, Some(previous)) {
+            fail(&id, error);
+        }
+    }
 }
 
 pub(crate) fn moved() {
@@ -855,10 +997,19 @@ mod tests {
         let dc = GetDC(None);
         let mut rect = RECT::default();
         GetWindowRect(parent, &mut rect).unwrap();
-        let left = GetPixel(dc, rect.left + 182, rect.top + 195).0;
+        let left = GetPixel(dc, rect.left + 124, rect.top + 195).0;
         let right = GetPixel(dc, rect.left + 550, rect.top + 195).0;
         let _ = ReleaseDC(None, dc);
         (left, right)
+    }
+
+    fn assert_color(pixel: u32, expected: u32) {
+        for shift in [0, 8, 16] {
+            assert!(
+                ((pixel >> shift) & 255).abs_diff((expected >> shift) & 255) <= 2,
+                "expected COLORREF {expected:06x}, got {pixel:06x}"
+            );
+        }
     }
 
     fn wait_for_navigation(events: &mpsc::Receiver<Value>) -> Value {
@@ -947,6 +1098,8 @@ mod tests {
             id.into(),
             Session {
                 pane,
+                activation: 0,
+                applied_bounds: None,
                 url: base.clone(),
                 appearance: Appearance {
                     enabled: true,
@@ -963,6 +1116,7 @@ mod tests {
                     height: 480,
                     visible: false,
                     wallpaper: placement,
+                    client: None,
                 },
                 events: Channel::new(move |body| {
                     send_event
@@ -979,6 +1133,7 @@ mod tests {
         assert_eq!(ok["success"], true, "{ok}");
         assert_eq!(ok["status"], 200, "{ok}");
         let controller = HOST.with(|host| host.borrow().sessions[id].controller.clone().unwrap());
+        let mut wallpaper_pixels = None;
         unsafe {
             SetWindowPos(
                 covering_editor.0,
@@ -990,16 +1145,16 @@ mod tests {
                 SWP_NOACTIVATE | SWP_SHOWWINDOW,
             )
             .unwrap();
-            Bounds {
+            let shown = Bounds {
                 x: 100,
                 y: 60,
                 width: 500,
                 height: 400,
                 visible: true,
                 wallpaper: placement,
-            }
-            .apply(preview_hwnd, &controller)
-            .unwrap();
+                client: None,
+            };
+            shown.apply(preview_hwnd, &controller, None).unwrap();
             assert_eq!(GetTopWindow(Some(parent)).unwrap(), preview_hwnd);
             let mut background = COREWEBVIEW2_COLOR::default();
             controller
@@ -1019,11 +1174,71 @@ mod tests {
             settings.AreHostObjectsAllowed(&mut allowed).unwrap();
             assert!(!allowed.as_bool());
             if std::env::var_os("MOKI_PREVIEW_PIXEL_PROBE").is_some() {
-                let (left, right) = probe_pixels(parent);
-                println!("Wallpaper pixels (COLORREF): {left:06x}, {right:06x}");
-                assert_eq!(left, 0xff75ff);
-                assert_eq!(right, 0x75ff75);
+                let light = probe_pixels(parent);
+                devtools(
+                    &view,
+                    "Runtime.evaluate",
+                    json!({
+                        "expression": "document.documentElement.dataset.theme = 'dark'",
+                    }),
+                    |_| {},
+                )
+                .unwrap();
+                wallpaper_pixels = Some((light, probe_pixels(parent)));
             }
+            let mut previous = shown;
+            for width in [420, 540, 500] {
+                let resized = Bounds {
+                    x: 600 - width,
+                    width,
+                    ..shown
+                };
+                resized
+                    .apply(preview_hwnd, &controller, Some(previous))
+                    .unwrap();
+                let mut rect = RECT::default();
+                controller.Bounds(&mut rect).unwrap();
+                assert_eq!(rect.right - rect.left, width);
+                GetWindowRect(preview_hwnd, &mut rect).unwrap();
+                assert_eq!(rect.right - rect.left, width);
+                assert_eq!(GetTopWindow(Some(parent)).unwrap(), preview_hwnd);
+                previous = resized;
+            }
+            let navigation_id = HOST.with(|host| host.borrow().sessions[id].navigation_id);
+            HOST.with(|host| {
+                let mut host = host.borrow_mut();
+                let session = host.sessions.get_mut(id).unwrap();
+                session.bounds = Bounds {
+                    client: Some(ClientBounds { width: 600, height: 480, fills_bottom: true }),
+                    ..shown
+                };
+                session.applied_bounds = Some(shown);
+            });
+            resized(tauri::PhysicalSize::new(740, 560));
+            let mut rect = RECT::default();
+            controller.Bounds(&mut rect).unwrap();
+            assert_eq!((rect.right, rect.bottom), (640, 480));
+            resized(tauri::PhysicalSize::new(600, 480));
+            controller.Bounds(&mut rect).unwrap();
+            assert_eq!((rect.right, rect.bottom), (500, 400));
+            hide(id, 2);
+            let mut visible = Default::default();
+            controller.IsVisible(&mut visible).unwrap();
+            assert!(!visible.as_bool());
+            HOST.with(|host| {
+                let mut host = host.borrow_mut();
+                let session = host.sessions.get_mut(id).unwrap();
+                assert!(!session.accept_activation(1));
+                assert!(session.accept_activation(3));
+            });
+            shown.apply(preview_hwnd, &controller, None).unwrap();
+            hide(id, 2);
+            controller.IsVisible(&mut visible).unwrap();
+            assert!(visible.as_bool());
+            let mut title = PWSTR::null();
+            view.DocumentTitle(&mut title).unwrap();
+            assert_eq!(take_pwstr(title), "Isolated top-level page");
+            HOST.with(|host| assert_eq!(host.borrow().sessions[id].navigation_id, navigation_id));
             view.Navigate(&HSTRING::from(format!("{base}/denied")))
                 .unwrap();
         }
@@ -1040,5 +1255,12 @@ mod tests {
             CoUninitialize();
         }
         server_thread.join().unwrap();
+        if let Some(((light_left, light_right), (dark_left, dark_right))) = wallpaper_pixels {
+            println!("Composited pixels (COLORREF) light {light_left:06x}/{light_right:06x}, dark {dark_left:06x}/{dark_right:06x}");
+            assert_color(light_left, 0xff75ff);
+            assert_color(light_right, 0x75ff75);
+            assert_color(dark_left, 0x4f124f);
+            assert_color(dark_right, 0x124f12);
+        }
     }
 }

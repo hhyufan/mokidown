@@ -19,10 +19,26 @@ test('Windows preview synchronizes native bounds, navigation and overlays', asyn
   await expect.poll(async () => (await layout())?.bounds.visible).toBe(true);
   await page.evaluate(() => window.nativePreview.enableWallpaper());
   await expect.poll(async () => (await layout())?.appearance).toEqual({ enabled: true, light: 46, dark: 76 });
-  await expect(viewport).toHaveAttribute('data-native-wallpaper', '');
+  await expect(viewport).not.toHaveAttribute('data-native-wallpaper', '');
   const before = (await layout()).bounds.width;
+  await page.evaluate(() => window.nativePreview.delayLayout());
   await page.setViewportSize({ width: 900, height: 700 });
   await expect.poll(async () => (await layout()).bounds.width).toBeLessThan(before);
+  const x = (await layout()).bounds.x;
+  await page.evaluate(() => {
+    const style = document.documentElement.style;
+    style.setProperty('--moki-background-size', '1200px 800px');
+    style.setProperty('--moki-background-x', '0px');
+    style.setProperty('--moki-background-y', '0px');
+    document.querySelector('#root').style.marginLeft = '120px';
+  });
+  await expect.poll(async () => (await viewport.boundingBox()).x).toBeGreaterThan(x);
+  expect((await layout()).bounds.x).toBe(x);
+  await page.evaluate(() => window.nativePreview.finishLayout());
+  await expect.poll(async () => {
+    const { bounds } = await layout();
+    return bounds.x > x && bounds.wallpaper?.x === -bounds.x;
+  }).toBe(true);
 
   await page.evaluate(() => {
     const popup = document.createElement('div');
@@ -31,11 +47,24 @@ test('Windows preview synchronizes native bounds, navigation and overlays', asyn
     document.body.append(popup);
   });
   await expect.poll(async () => (await layout()).bounds.visible).toBe(false);
-  await expect(viewport).not.toHaveAttribute('data-native-wallpaper', '');
   await page.locator('.ant-modal-mask').evaluate((popup) => popup.remove());
   await expect.poll(async () => (await layout()).bounds.visible).toBe(true);
 
   await emit({ type: 'page', url: 'https://preview.example/next', icons: [] });
+  await expect(page.locator('.preview-address input')).toHaveValue('https://preview.example/next');
+  const shown = await layout();
+  await page.evaluate(() => window.nativePreview.setActive(false));
+  await expect(viewport).toBeHidden();
+  await expect.poll(async () => (await command('hide'))?.activation).toBe(shown.activation + 1);
+  expect((await command('hide')).id).toBe(id);
+  expect(await command('close')).toBeUndefined();
+  await page.evaluate(() => window.nativePreview.setActive(true));
+  await expect(viewport).toBeVisible();
+  await expect.poll(async () => (await layout())?.activation).toBe(shown.activation + 2);
+  expect(await layout()).toMatchObject({ id, bounds: { visible: true } });
+  expect(await page.evaluate(() => window.nativePreview.commands.filter(
+    (entry) => entry.command === 'native_web_preview_open',
+  ))).toHaveLength(1);
   await expect(page.locator('.preview-address input')).toHaveValue('https://preview.example/next');
   await emit({ type: 'popup', url: 'https://preview.example/external' });
   await expect.poll(() => page.evaluate(() => window.nativePreview.commands.findLast(
@@ -252,7 +281,7 @@ test('preview navigation can open editor tabs and uses the page declared CDN ico
   await page.addInitScript({ path: bridge });
   await page.route('https://icons.example/**', (route) => {
     if (route.request().url().endsWith('/missing.ico')) return route.fulfill({ status: 404 });
-    return route.fulfill({ contentType: 'image/svg+xml', body: '<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16"><circle cx="8" cy="8" r="7" fill="teal"/></svg>' });
+    return route.fulfill({ contentType: 'image/svg+xml', body: '<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16"><circle cx="8" cy="8" r="7" fill="white"/></svg>' });
   });
   await page.route('https://navigate.example/**', (route) => {
     const pathname = new URL(route.request().url()).pathname;
@@ -260,7 +289,7 @@ test('preview navigation can open editor tabs and uses the page declared CDN ico
     return route.fulfill({ contentType: 'text/html', body: `<html><head>
       <link rel="icon" href="https://icons.example/missing.ico">
       <link rel="icon" href="//icons.example/declared.svg">
-      </head><body><h1>Preview ${pathname}</h1>
+      </head><body><h1>Preview ${pathname}</h1><input aria-label="Draft">
       <a href="/same-pane">Same pane</a>
       <a href="/new-tab" target="_blank" rel="noopener">New editor tab</a>
       <button onclick="window.open('/script-tab', '_blank')">Script popup</button>
@@ -274,20 +303,52 @@ test('preview navigation can open editor tabs and uses the page declared CDN ico
     config.setState({ openLinksInEditor: true, backgroundEnabled: false });
     (await import('/src/store/useEditorStore.js')).default.getState().openWebTab('https://navigate.example/');
   });
-  const web = page.frameLocator('.web-page__frame');
+  const web = page.locator('.web-page:visible').frameLocator('iframe');
   const breadcrumb = page.locator('.footer__breadcrumb-segment--web');
   const icon = page.locator('.tabbar__tab--active .tabbar__tab-favicon');
   await expect(icon).toHaveAttribute('src', 'https://icons.example/declared.svg');
   await expect.poll(() => icon.evaluate((image) => image.naturalWidth)).toBe(16);
+  const marker = await icon.evaluate((image) => {
+    const style = getComputedStyle(image.parentElement, '::after');
+    const resolved = document.createElement('span');
+    resolved.style.backgroundColor = 'color-mix(in srgb, var(--accent) 78%, transparent)';
+    image.parentElement.append(resolved);
+    const accent = getComputedStyle(resolved).backgroundColor;
+    resolved.remove();
+    return { belowIcon: parseFloat(style.insetBlockStart) > image.height, blue: style.backgroundColor === accent };
+  });
+  expect(marker).toEqual({ belowIcon: true, blue: true });
+  const outlines = await icon.evaluate((image) => {
+    const root = document.documentElement;
+    const previousTheme = root.getAttribute('data-theme');
+    root.dataset.theme = 'light';
+    const light = getComputedStyle(image).filter;
+    root.dataset.theme = 'dark';
+    const dark = getComputedStyle(image).filter;
+    if (previousTheme === null) root.removeAttribute('data-theme');
+    else root.setAttribute('data-theme', previousTheme);
+    return { light, dark };
+  });
+  expect(outlines.light).toContain('drop-shadow');
+  expect(outlines.dark).toContain('drop-shadow');
+  expect(outlines.light).not.toBe(outlines.dark);
   await web.getByRole('link', { name: 'Same pane' }).click();
   await expect(web.getByRole('heading')).toHaveText('Preview /same-pane');
   await expect(breadcrumb).toHaveText('https://navigate.example/same-pane');
   await web.getByRole('button', { name: 'SPA route' }).click();
+  await expect.poll(() => web.locator('html').evaluate(() => location.pathname)).toBe('/spa-route');
   await expect(breadcrumb).toHaveText('https://navigate.example/spa-route');
+  await web.getByRole('textbox', { name: 'Draft' }).fill('Keep my draft');
+  const originalTab = await page.locator('.tabbar__tab--active[data-web-tab]').getAttribute('data-tab-id');
   await web.getByRole('link', { name: 'New editor tab' }).click();
   await expect(breadcrumb).toHaveText('https://navigate.example/new-tab');
   await expect(web.getByRole('heading')).toHaveText('Preview /new-tab');
   await expect(icon).toHaveAttribute('src', 'https://icons.example/declared.svg');
+  await page.evaluate(async () => (await import('/src/store/useEditorStore.js')).default.getState().createUntitledTab());
+  await expect(page.locator('.web-page:visible')).toHaveCount(0);
+  await page.locator(`[data-tab-id="${originalTab}"]`).click();
+  await expect(breadcrumb).toHaveText('https://navigate.example/spa-route');
+  await expect(web.getByRole('textbox', { name: 'Draft' })).toHaveValue('Keep my draft');
   await web.getByRole('button', { name: 'Script popup' }).click();
   await expect(breadcrumb).toHaveText('https://navigate.example/script-tab');
   expect(page.context().pages()).toHaveLength(1);

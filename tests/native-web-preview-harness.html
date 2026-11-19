@@ -14,16 +14,19 @@ await i18n.changeLanguage('en');
 Object.defineProperty(navigator, 'userAgent', { value: 'Windows' });
 const commands = [];
 const channels = new Map();
+let delayedLayout;
 mockIPC((command, args) => {
   if (command.startsWith('native_web_preview_') || command === 'open_external') {
     const { events, ...options } = args;
     commands.push({ command, ...options });
     if (events) channels.set(args.id, events);
     if (command === 'native_web_preview_close') channels.delete(args.id);
+    if (command === 'native_web_preview_layout' && delayedLayout) return delayedLayout;
   }
   return null;
 });
 const root = createRoot(document.querySelector('#root'));
+const render = (active) => root.render(React.createElement(WebPageView, { active, url: 'https://preview.example/' }));
 window.nativePreview = {
   commands,
   emit(event) { [...channels.values()].at(-1)?.onmessage(event); },
@@ -32,7 +35,16 @@ window.nativePreview = {
   enableWallpaper() {
     config.setState({ backgroundEnabled: true, backgroundImage: 'fixture', backgroundTransparency: { light: 46, dark: 76 } });
   },
+  setActive: render,
+  delayLayout() {
+    delayedLayout = new Promise((resolve) => {
+      window.nativePreview.finishLayout = () => {
+        delayedLayout = null;
+        resolve();
+      };
+    });
+  },
   unmount() { root.unmount(); },
 };
-root.render(React.createElement(WebPageView, { url: 'https://preview.example/' }));
+render(true);
 </script></body></html>

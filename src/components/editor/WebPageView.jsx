@@ -13,10 +13,11 @@ import './web-page.scss';
  *
  * @param {object} props 组件属性。
  * @param {string} props.url 网页地址。
+ * @param {boolean} [props.active] 当前是否显示该视图。
  * @param {string} [props.className] 额外样式类。
  * @returns {JSX.Element} 网页视图。
  */
-export default function WebPageView({ url, initialLocation = url, className = '', moveLabel, onMove, onNavigate, onClose, onPage }) {
+export default function WebPageView({ url, initialLocation = url, active = true, className = '', moveLabel, onMove, onNavigate, onClose, onPage }) {
   const { t } = useTranslation();
   const frameRef = useRef(null);
   const [draft, setDraft] = useState(null);
@@ -41,7 +42,7 @@ export default function WebPageView({ url, initialLocation = url, className = ''
     else onNavigate(target.href);
   };
   return (
-    <div className={`web-page ${className}`}>
+    <div className={`web-page ${className}`} hidden={!active}>
       <div className="web-page__bar">
         <form className="preview-address" onSubmit={submitAddress}>
           <input aria-label={t('htmlPreview.address')} value={address} autoComplete="off" spellCheck={false}
@@ -63,7 +64,7 @@ export default function WebPageView({ url, initialLocation = url, className = ''
         {onClose && <PreviewAddressButton icon="close" label={t('web.closeSplit')} onClick={onClose} />}
       </div>
       {invalid && <div className="web-page__error" role="alert">{t('htmlPreview.invalidAddress')}</div>}
-      {useNativeView ? <NativeWebPage key={frameSource.revision} url={frameSource.url} onPage={syncPage} /> : (
+      {useNativeView ? <NativeWebPage key={frameSource.revision} url={frameSource.url} active={active} onPage={syncPage} /> : (
         <div className="web-page__viewport preview-wallpaper" {...wallpaperProps}>
           <iframe
             key={frameSource.revision}

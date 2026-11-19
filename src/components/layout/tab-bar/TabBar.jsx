@@ -296,6 +296,7 @@ function TabBar({ onRequestCloseTab, onRequestCloseTabs }) {
             <div
               key={tab.id}
               data-tab-id={tab.id}
+              data-web-tab={tab.builtin === 'web' || undefined}
               draggable={false}
               className={cn('tabbar__tab', activeTabId === tab.id && 'tabbar__tab--active', isRenaming && 'tabbar__tab--renaming', draggedId === tab.id && 'tabbar__tab--dragging', dropTarget?.id === tab.id && (dropTarget.after ? 'tabbar__tab--drop-after' : 'tabbar__tab--drop-before'))}
               onClick={() => !isRenaming && setActiveTab(tab.id)}
