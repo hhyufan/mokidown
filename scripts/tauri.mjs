@@ -1,7 +1,4 @@
 import { createRequire } from 'node:module';
-import { existsSync } from 'node:fs';
-import { homedir } from 'node:os';
-import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { initializeMsvc, ensureCargoOnPath } from './windows-msvc.mjs';
 
