@@ -37,6 +37,8 @@ mod startup_gate;
 mod terminal;
 mod text_file;
 mod webview_defaults;
+#[cfg(windows)]
+mod windows_external;
 
 /// 返回给前端的轻量级文件系统条目元数据，
 /// 用于资源管理器界面展示文件和目录。
@@ -1535,9 +1537,14 @@ async fn show_main_window(app: AppHandle) -> Result<(), String> {
 async fn open_external(url: String) -> Result<(), String> {
     let allowed =
         url.starts_with("http://") || url.starts_with("https://") || url.starts_with("mailto:");
-    if !allowed {
+    if !allowed || url.contains('\0') {
         return Err("Only http(s) and mailto URLs are allowed".to_string());
     }
+    #[cfg(windows)]
+    return tauri::async_runtime::spawn_blocking(move || windows_external::open(&url))
+        .await
+        .map_err(|error| error.to_string())?;
+    #[cfg(not(windows))]
     open::that(url).map_err(|e| format!("Failed to open URL: {}", e))
 }
 
@@ -1829,8 +1836,12 @@ pub fn run() {
     let builder = builder
         .on_window_event(|window, event| {
             #[cfg(windows)]
-            if window.label() == "main" && matches!(event, tauri::WindowEvent::Moved(_)) {
-                native_web_preview::moved();
+            if window.label() == "main" {
+                match event {
+                    tauri::WindowEvent::Moved(_) => native_web_preview::moved(),
+                    tauri::WindowEvent::Resized(size) => native_web_preview::resized(*size),
+                    _ => {}
+                }
             }
             if matches!(event, tauri::WindowEvent::Destroyed) {
                 reader::forget_window(window.app_handle(), window.label());
@@ -1922,6 +1933,8 @@ pub fn run() {
             native_web_preview::native_web_preview_open,
             #[cfg(windows)]
             native_web_preview::native_web_preview_layout,
+            #[cfg(windows)]
+            native_web_preview::native_web_preview_hide,
             #[cfg(windows)]
             native_web_preview::native_web_preview_wallpaper,
             #[cfg(windows)]
