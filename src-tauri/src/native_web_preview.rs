@@ -109,11 +109,26 @@ impl Appearance {
 
 impl Bounds {
     fn fit_client(self, size: tauri::PhysicalSize<u32>) -> Self {
-        let Some(client) = self.client else { return self; };
-        let fills_right = (i64::from(client.width) - i64::from(self.x) - i64::from(self.width)).abs() <= 2;
+        let Some(client) = self.client else {
+            return self;
+        };
+        let fills_right =
+            (i64::from(client.width) - i64::from(self.x) - i64::from(self.width)).abs() <= 2;
         Self {
-            width: if fills_right { self.width.saturating_add((size.width as i32).saturating_sub(client.width)).max(0) } else { self.width },
-            height: if client.fills_bottom { self.height.saturating_add((size.height as i32).saturating_sub(client.height)).max(0) } else { self.height },
+            width: if fills_right {
+                self.width
+                    .saturating_add((size.width as i32).saturating_sub(client.width))
+                    .max(0)
+            } else {
+                self.width
+            },
+            height: if client.fills_bottom {
+                self.height
+                    .saturating_add((size.height as i32).saturating_sub(client.height))
+                    .max(0)
+            } else {
+                self.height
+            },
             ..self
         }
     }
@@ -761,7 +776,9 @@ pub async fn native_web_preview_layout(
         .run_on_main_thread(move || {
             let view = HOST.with(|host| {
                 let mut host = host.borrow_mut();
-                let fitted = host.client_size.map_or(bounds, |size| bounds.fit_client(size));
+                let fitted = host
+                    .client_size
+                    .map_or(bounds, |size| bounds.fit_client(size));
                 let session = host.sessions.get_mut(&id)?;
                 if !session.accept_activation(activation) {
                     return None;
@@ -907,7 +924,13 @@ pub(crate) fn resized(size: tauri::PhysicalSize<u32>) {
                     return None;
                 }
                 session.applied_bounds = Some(fitted);
-                Some((id.clone(), session.pane.0, session.controller.clone()?, fitted, previous))
+                Some((
+                    id.clone(),
+                    session.pane.0,
+                    session.controller.clone()?,
+                    fitted,
+                    previous,
+                ))
             })
             .collect::<Vec<_>>()
     });
@@ -1209,7 +1232,11 @@ mod tests {
                 let mut host = host.borrow_mut();
                 let session = host.sessions.get_mut(id).unwrap();
                 session.bounds = Bounds {
-                    client: Some(ClientBounds { width: 600, height: 480, fills_bottom: true }),
+                    client: Some(ClientBounds {
+                        width: 600,
+                        height: 480,
+                        fills_bottom: true,
+                    }),
                     ..shown
                 };
                 session.applied_bounds = Some(shown);

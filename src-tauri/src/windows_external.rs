@@ -4,8 +4,8 @@ use windows::{
     Win32::{
         System::{
             Com::{
-                CoCreateInstance, CoInitializeEx, CoUninitialize,
-                CLSCTX_INPROC_SERVER, COINIT_APARTMENTTHREADED, COINIT_DISABLE_OLE1DDE,
+                CoCreateInstance, CoInitializeEx, CoUninitialize, CLSCTX_INPROC_SERVER,
+                COINIT_APARTMENTTHREADED, COINIT_DISABLE_OLE1DDE,
             },
             Variant::VARIANT,
         },
@@ -72,11 +72,15 @@ fn desktop_shell() -> windows::core::Result<IShellDispatch2> {
                 SWFO_NEEDDISPATCH,
             )
             .map_err(shell_error("Find the Explorer desktop"))?;
-        let folder: IShellFolderViewDual = desktop.cast::<IWebBrowser>()
+        let folder: IShellFolderViewDual = desktop
+            .cast::<IWebBrowser>()
             .and_then(|browser| browser.Document())
             .and_then(|document| document.cast())
             .map_err(shell_error("Get Explorer desktop automation"))?;
-        folder.Application().and_then(|application| application.cast()).map_err(shell_error("Get the Explorer URL handler"))
+        folder
+            .Application()
+            .and_then(|application| application.cast())
+            .map_err(shell_error("Get the Explorer URL handler"))
     }
 }
 
