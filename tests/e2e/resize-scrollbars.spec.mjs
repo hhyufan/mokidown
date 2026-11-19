@@ -79,6 +79,29 @@ test('scrollbar drags do not resize the sidebar or split editor; thin dividers s
   await expect(split).toHaveAttribute('aria-orientation', 'vertical');
 });
 
+test('sidebar follows the pointer before saving its width', async ({ page }) => {
+  await page.goto('/');
+  await expect(page.locator('.editor-content__welcome')).toBeVisible({ timeout: 30_000 });
+  const sidebar = page.locator('.sidebar');
+  const resize = page.locator('.sidebar__resizer');
+  const savedWidth = () => page.evaluate(async () => (await import('/src/store/useEditorStore.js')).default.getState().sidebarWidth);
+  await expect(resize).toBeVisible();
+  const handle = await resize.boundingBox();
+  const initial = (await sidebar.boundingBox()).width;
+  const previousSavedWidth = await savedWidth();
+  const x = handle.x + handle.width / 2;
+  const y = handle.y + handle.height / 2;
+  await page.mouse.move(x, y);
+  await page.mouse.down();
+  await page.mouse.move(x + 30, y, { steps: 5 });
+  await expect.poll(async () => (await sidebar.boundingBox()).width).toBeCloseTo(initial + 30, 0);
+  expect(await savedWidth()).toBe(previousSavedWidth);
+  await page.mouse.move(x + 60, y, { steps: 8 });
+  await page.mouse.up();
+  await expect.poll(savedWidth).toBeCloseTo(initial + 60, 0);
+  await expect.poll(async () => (await sidebar.boundingBox()).width).toBeCloseTo(initial + 60, 0);
+});
+
 test('Monaco and the split preview fill their panes through drag, viewport and mode changes', async ({ page }) => {
   test.setTimeout(90000);
   await page.goto('/');

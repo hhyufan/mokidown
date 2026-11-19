@@ -68,6 +68,18 @@
   touch-action: pan-y;
   flex-shrink: 0;
 
+  &[data-web-tab] .tabbar__tab-icon::after {
+    content: '';
+    position: absolute;
+    inset-block-start: calc(100% + 2px);
+    inset-inline-start: 3px;
+    width: 10px;
+    height: 2px;
+    border-radius: 1px;
+    background: color-mix(in srgb, var(--accent) 78%, transparent);
+    pointer-events: none;
+  }
+
   &:hover {
     background: rgba(255, 255, 255, 0.6);
     color: var(--text);
@@ -158,10 +170,13 @@
 }
 
 .tabbar__tab-favicon {
+  --favicon-outline: color-mix(in srgb, var(--text) 58%, transparent);
   width: 16px;
   height: 16px;
   flex-shrink: 0;
   object-fit: contain;
+  filter: drop-shadow(0 0.5px 0.6px var(--favicon-outline))
+    drop-shadow(0 -0.5px 0.6px var(--favicon-outline));
 }
 
 .tabbar__tab-icon {
