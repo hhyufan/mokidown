@@ -24,6 +24,8 @@ mod language_plugins;
 mod lsp;
 #[cfg(windows)]
 mod msvc;
+#[cfg(windows)]
+mod native_web_preview;
 mod process;
 mod reader;
 mod runtime_logs;
@@ -1715,6 +1717,14 @@ fn migrate_legacy_webview_profile() {
     }
 }
 
+#[cfg(all(windows, debug_assertions))]
+fn development_cache_dir() -> PathBuf {
+    Path::new(env!("CARGO_MANIFEST_DIR"))
+        .parent()
+        .expect("Tauri source directory has a parent")
+        .join(".cache")
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 /// 桌面端 `main()` 与移动端入口共用的 Tauri 启动逻辑。
 ///
@@ -1724,6 +1734,22 @@ pub fn run() {
     runtime_logs::init();
     // 必须在创建任何窗口之前执行，见 migrate_legacy_webview_profile 的说明。
     migrate_legacy_webview_profile();
+
+    #[allow(unused_mut)]
+    let mut context = tauri::generate_context!();
+    #[cfg(all(windows, debug_assertions))]
+    let development_windows = context
+        .config_mut()
+        .app
+        .windows
+        .iter_mut()
+        .filter(|window| window.create && matches!(window.label.as_str(), "main" | "splash"))
+        .map(|window| {
+            let config = window.clone();
+            window.create = false;
+            config
+        })
+        .collect::<Vec<_>>();
 
     #[allow(unused_mut)]
     let mut builder = tauri::Builder::default()
@@ -1751,7 +1777,12 @@ pub fn run() {
 
     // 启动期初始化：Windows 下补回关闭阴影后失去的窗口圆角，
     // 并确保 DWM 不绘制强调色边框。
-    builder = builder.setup(|app| {
+    builder = builder.setup(move |app| {
+        #[cfg(all(windows, debug_assertions))]
+        for config in &development_windows {
+            let builder = tauri::WebviewWindowBuilder::from_config(app, config)?;
+            webview_defaults::app_window(builder).build()?;
+        }
         // 品牌更名导致 app_data_dir() 指向新目录：先把旧目录里的本地历史与草稿搬过来。
         migrate_legacy_app_data(app.handle());
         let main_window = app.get_webview_window("main");
@@ -1797,10 +1828,16 @@ pub fn run() {
 
     let builder = builder
         .on_window_event(|window, event| {
+            #[cfg(windows)]
+            if window.label() == "main" && matches!(event, tauri::WindowEvent::Moved(_)) {
+                native_web_preview::moved();
+            }
             if matches!(event, tauri::WindowEvent::Destroyed) {
                 reader::forget_window(window.app_handle(), window.label());
             }
             if window.label() == "main" && matches!(event, tauri::WindowEvent::Destroyed) {
+                #[cfg(windows)]
+                native_web_preview::stop_all();
                 html_preview::stop_all();
                 #[cfg(desktop)]
                 terminal::stop_all();
@@ -1881,6 +1918,14 @@ pub fn run() {
             script_runner::write_script_input,
             html_preview::html_preview_update,
             html_preview::html_preview_close,
+            #[cfg(windows)]
+            native_web_preview::native_web_preview_open,
+            #[cfg(windows)]
+            native_web_preview::native_web_preview_layout,
+            #[cfg(windows)]
+            native_web_preview::native_web_preview_wallpaper,
+            #[cfg(windows)]
+            native_web_preview::native_web_preview_close,
             #[cfg(desktop)]
             terminal::terminal_start,
             #[cfg(desktop)]
@@ -1901,7 +1946,7 @@ pub fn run() {
         ]);
 
     let app = builder
-        .build(tauri::generate_context!())
+        .build(context)
         .expect("error while building tauri application");
 
     app.run(|_app_handle, _event| {

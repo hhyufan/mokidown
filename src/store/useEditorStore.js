@@ -17,6 +17,7 @@ import { clearMarkdownUndo, renameMarkdownUndo } from '@utils/markdownUndo';
 import { historyCapture } from '@utils/tauriApi';
 import { captureDocumentViewState, renameDocumentViewState } from '@utils/documentViewState';
 import { untitledFileName } from '@utils/untitledFileName';
+import { parsePreviewAddress, samePreview } from '@utils/previewAddress';
 
 let untitledCounter = 1;
 const pluginDocsTabId = 'mokidown:plugin-docs';
@@ -39,7 +40,9 @@ function toTabMeta(tab) {
     ext: tab.ext,
     builtin: tab.builtin,
     url: tab.url,
+    webLocation: tab.webLocation,
     favicon: tab.favicon,
+    faviconUrls: tab.faviconUrls,
     modified: !!tab.modified,
     encoding: tab.encoding || 'UTF-8',
     lineEnding: tab.lineEnding || 'LF',
@@ -145,21 +148,18 @@ const useEditorStore = create(
        * 打开网页链接：activate 为 false 时只建标签、不切换。
        *
        * @param {string} url 网页地址。
-       * @param {{ activate?: boolean }} [options] 打开选项。
+       * @param {{ activate?: boolean, replaceTabId?: string, fromSplit?: boolean }} [options] 打开选项。
        * @returns {void}
        */
       openWebTab: (url, options = {}) => {
-        const { activate = true } = options;
-        let parsed;
-        try { parsed = new URL(url); } catch { return; }
-        if (!['http:', 'https:'].includes(parsed.protocol)) return;
-        const { tabs, tabRenderList, activeTabId } = get();
-        const id = `web:${parsed.href}`;
-        if (activeTabId !== id) flushEditorBuffer(activeTabId);
-        if (tabs.some((tab) => tab.id === id)) {
-          if (activate) set({ activeTabId: id });
-          return;
-        }
+        const { activate = true, replaceTabId, fromSplit = false } = options;
+        const parsed = parsePreviewAddress(url);
+        if (!parsed) return;
+        const { tabs, tabRenderList, activeTabId, webSplitUrl } = get();
+        const existing = tabs.find((tab) => tab.builtin === 'web' && (tab.webLocation || tab.url) === parsed.href);
+        const replacing = tabs.find((tab) => tab.builtin === 'web' && tab.id === replaceTabId);
+        const id = existing?.id || replacing?.id || `web:${crypto.randomUUID()}`;
+        if (activate && activeTabId !== id) flushEditorBuffer(activeTabId);
         const tab = {
           id,
           name: parsed.hostname || parsed.href,
@@ -169,22 +169,51 @@ const useEditorStore = create(
           builtin: 'web',
           modified: false,
         };
+        const replace = (list, entry) => {
+          if (existing) return replacing && replacing.id !== id ? list.filter((item) => item.id !== replacing.id) : list;
+          return replacing ? list.map((item) => item.id === id ? entry : item) : [...list, entry];
+        };
         set({
-          tabs: [...tabs, tab],
-          tabRenderList: [...tabRenderList, toTabMeta(tab)],
-          ...(activate ? { activeTabId: tab.id } : {}),
+          tabs: replace(tabs, tab),
+          tabRenderList: replace(tabRenderList, toTabMeta(tab)),
+          ...(activate || (replacing && replacing.id === activeTabId) ? { activeTabId: id } : {}),
+          ...(fromSplit || samePreview(webSplitUrl, parsed.href) ? { webSplitUrl: null } : {}),
         });
       },
 
       openWebSplit: (url) => {
-        let parsed;
-        try { parsed = new URL(url); } catch { return; }
-        if (!['http:', 'https:'].includes(parsed.protocol)) return;
-        if (!get().activeTabId) { get().openWebTab(parsed.href); return; }
-        set({ webSplitUrl: parsed.href });
+        const parsed = parsePreviewAddress(url);
+        if (!parsed) return;
+        const { tabs, tabRenderList, activeTabId } = get();
+        const closing = new Set(tabs.filter((tab) => tab.builtin === 'web' && samePreview(tab.webLocation || tab.url, parsed.href)).map((tab) => tab.id));
+        const remaining = tabs.filter((tab) => !closing.has(tab.id));
+        set({
+          webSplitUrl: parsed.href,
+          ...(closing.size ? {
+            tabs: remaining,
+            tabRenderList: tabRenderList.filter((tab) => !closing.has(tab.id)),
+            activeTabId: closing.has(activeTabId) ? remaining.at(-1)?.id ?? null : activeTabId,
+          } : {}),
+        });
       },
 
       closeWebSplit: () => set({ webSplitUrl: null }),
+
+      setWebTabPage: (tabId, webLocation, urls) => {
+        const { tabs, tabRenderList } = get();
+        const tab = tabs.find((entry) => entry.id === tabId && entry.builtin === 'web');
+        if (!tab) return;
+        const fallback = `${new URL(webLocation).origin}/favicon.ico`;
+        const faviconUrls = [...new Set([...urls.slice(0, 8), fallback].filter((url) =>
+          typeof url === 'string' && url.length < 16384 && /^(https?:\/\/|data:image\/)/i.test(url),
+        ))];
+        if (webLocation === tab.webLocation && faviconUrls.length === tab.faviconUrls?.length
+          && faviconUrls.every((url, index) => url === tab.faviconUrls[index])) return;
+        set({
+          tabs: tabs.map((entry) => entry.id === tabId ? { ...entry, webLocation, faviconUrls } : entry),
+          tabRenderList: tabRenderList.map((entry) => entry.id === tabId ? { ...entry, webLocation, faviconUrls } : entry),
+        });
+      },
 
       
 

@@ -16,9 +16,9 @@ import FloatingToolbar from '@components/editor/FloatingToolbar';
 import FloatingRunButton from '@components/editor/FloatingRunButton';
 import { useFileManager } from '@hooks/useFileManager';
 import { useResponsiveLayout } from '@hooks/useResponsiveLayout';
+import usePreviewFrame from '@hooks/usePreviewFrame';
 import { lazyWithRetry } from '@utils/lazyWithRetry';
-import { openExternal } from '@utils/tauriApi';
-import { externalLink } from '@utils/editorLinks';
+import { externalLink, openEditorLink } from '@utils/editorLinks';
 import { createAppHotkeyHandlers } from '@utils/hotkeyCommands';
 import { reportReactError } from '@/services/runtimeLogs';
 import { bindMarkdownFolding, bindMarkdownScroll, toggleMonacoSection } from '@components/editor/markdownSplitSync';
@@ -36,9 +36,11 @@ import WebPageView from '@components/editor/WebPageView';
 
 function PluginDocsPage({ title }) {
   const theme = useThemeStore((state) => state.theme);
+  const frameRef = useRef(null);
+  const { syncFrameTheme } = usePreviewFrame(frameRef, { transparent: false });
   const url = new URL(`${import.meta.env.BASE_URL}docs/plugins/index.html`, document.baseURI);
   url.searchParams.set('theme', theme);
-  return <iframe className="editor-content__builtin-html" title={title} src={url.href}
+  return <iframe ref={frameRef} onLoad={syncFrameTheme} className="editor-content__builtin-html" title={title} src={url.href}
     sandbox="allow-scripts allow-same-origin allow-downloads" />;
 }
 
@@ -269,6 +271,7 @@ function EditorContent() {
   const isTree = activeTabMeta?.ext?.toLowerCase() === 'mgtree';
   const isHtml = !activeTabMeta?.builtin && /^(html?|xhtml)$/i.test(activeTabMeta?.ext || '');
   const isWebPage = activeTabMeta?.builtin === 'web';
+  const isPluginDocs = activeTabMeta?.builtin === 'pluginDocs';
   const hasPreview = isMarkdown || isTree || isHtml;
   const splitRequested = viewMode === 'split' && hasPreview;
   const [splitPreviewMounted, setSplitPreviewMounted] = useState(false);
@@ -447,13 +450,14 @@ function EditorContent() {
     };
 
     const handleExternalClick = (event) => {
-      if (!(event.ctrlKey || event.metaKey) || event.button !== 0) return;
+      if (event.button !== 0 || !(event.ctrlKey || event.metaKey || useConfigStore.getState().openLinksInEditor)) return;
       const anchor = event.target?.closest?.('a[href]');
+      if (anchor?.hasAttribute('download')) return;
       const url = externalLink(anchor?.getAttribute('href'));
       if (!url) return;
       event.preventDefault();
       event.stopPropagation();
-      void openExternal(url).catch((error) => console.error('Unable to open link:', error));
+      void openEditorLink(url).catch((error) => console.error('Unable to open link:', error));
     };
 
     // 触屏双指缩放单独走手势距离比例推导，避免把连续手势强行离散成滚轮步进，
@@ -534,7 +538,7 @@ function EditorContent() {
     if (!isSplit || !isMarkdown || !splitEditor || !preview) return;
     return bindMarkdownScroll(splitEditor, preview);
   }, [activeTabId, isMarkdown, isSplit, previewSyncHandle, splitEditor]);
-  if (!activeTabMeta) {
+  if (!activeTabMeta && !isWebSplit) {
     return (
       <main className={`editor-content ${isMobileLayout ? 'editor-content--mobile' : ''}`}>
         <div className="editor-content__welcome"><WelcomeScreen /></div>
@@ -542,7 +546,7 @@ function EditorContent() {
     );
   }
 
-  if (activeTabMeta.builtin === 'pluginDocs') {
+  if (isPluginDocs && !isWebSplit) {
     return <main className="editor-content"><PluginDocsPage title={activeTabMeta.name} /></main>;
   }
 
@@ -564,8 +568,19 @@ function EditorContent() {
         ref={containerRef}
         style={isSplit ? { '--split-ratio': `${splitRatio * 100}%` } : undefined}
       >
-        {isWebPage && <WebPageView className="editor-content__primary-surface" url={activeTabMeta.url} />}
-        {!isWebPage && !showMilkdown && (viewMode !== 'preview' || !hasPreview) && (
+        {!activeTabMeta && <div className="editor-content__welcome editor-content__primary-surface"><WelcomeScreen /></div>}
+        {isPluginDocs && <PluginDocsPage title={activeTabMeta.name} />}
+        {isWebPage && <WebPageView
+          key={activeTabMeta.url}
+          className="editor-content__primary-surface"
+          url={activeTabMeta.url}
+          initialLocation={activeTabMeta.webLocation}
+          moveLabel={t('web.splitOpen')}
+          onMove={(url) => useEditorStore.getState().openWebSplit(url)}
+          onNavigate={(url) => useEditorStore.getState().openWebTab(url, { replaceTabId: activeTabId })}
+          onPage={(url, icons) => useEditorStore.getState().setWebTabPage(activeTabId, url, icons)}
+        />}
+        {activeTabMeta && !isWebPage && !isPluginDocs && !showMilkdown && (viewMode !== 'preview' || !hasPreview) && (
           <MonacoEditor
             ref={monacoRef}
             className={`editor-content__editor${isSplit ? ' editor-content__editor--half' : ''}`}
@@ -666,8 +681,12 @@ function EditorContent() {
               onPointerDown={handleDividerPointerDown}
             />
             <WebPageView
+              key={webSplitUrl}
               className="editor-content__preview editor-content__preview--half"
               url={webSplitUrl}
+              moveLabel={t('web.newTab')}
+              onMove={(url) => useEditorStore.getState().openWebTab(url, { fromSplit: true })}
+              onNavigate={(url) => useEditorStore.getState().openWebSplit(url)}
               onClose={() => useEditorStore.getState().closeWebSplit()}
             />
           </div>

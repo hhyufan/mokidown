@@ -64,6 +64,7 @@
 
 .editor-content__workspace--split {
   .editor-content__primary-surface,
+  .editor-content__builtin-html,
   .editor-content__editor { grid-column: 1; grid-row: 1; }
   .editor-content__split-divider { grid-column: 2; grid-row: 1; }
   .editor-content__preview--half { grid-column: 3; grid-row: 1; }

@@ -7,6 +7,20 @@ use webview2_com::Microsoft::Web::WebView2::Win32::{
 #[cfg(windows)]
 use windows::core::{Interface, Result, HSTRING};
 
+/// The development checkout keeps its Chromium state independent of installed builds.
+#[cfg(all(windows, debug_assertions))]
+pub(crate) fn development_profile(name: &str) -> std::path::PathBuf {
+    crate::development_cache_dir().join("webview2").join(name)
+}
+
+pub(crate) fn app_window<'a, M: tauri::Manager<Wry>>(
+    builder: tauri::WebviewWindowBuilder<'a, Wry, M>,
+) -> tauri::WebviewWindowBuilder<'a, Wry, M> {
+    #[cfg(all(windows, debug_assertions))]
+    let builder = builder.data_directory(development_profile("editor"));
+    builder
+}
+
 #[cfg(windows)]
 fn disable_browser_ui(controller: ICoreWebView2Controller) -> Result<()> {
     // Tauri invokes this on the owning UI thread. Editing and clipboard input
