@@ -7,9 +7,9 @@ use std::{cell::RefCell, collections::HashMap, sync::Arc};
 use tauri::Manager;
 use tauri::{ipc::Channel, Webview};
 use webview2_com::{
-    take_pwstr, CallDevToolsProtocolMethodCompletedHandler, CreateCoreWebView2ControllerCompletedHandler,
-    CreateCoreWebView2EnvironmentCompletedHandler, DOMContentLoadedEventHandler,
-    FaviconChangedEventHandler, Microsoft::Web::WebView2::Win32::*,
+    take_pwstr, CallDevToolsProtocolMethodCompletedHandler,
+    CreateCoreWebView2ControllerCompletedHandler, CreateCoreWebView2EnvironmentCompletedHandler,
+    DOMContentLoadedEventHandler, FaviconChangedEventHandler, Microsoft::Web::WebView2::Win32::*,
     NavigationCompletedEventHandler, NavigationStartingEventHandler,
     NewWindowRequestedEventHandler, PermissionRequestedEventHandler, SourceChangedEventHandler,
 };
@@ -95,7 +95,6 @@ impl Appearance {
                 .SetDefaultBackgroundColor(color)
         }
     }
-
 }
 
 impl Bounds {
@@ -203,32 +202,59 @@ fn update_appearance(id: &str, send_image: bool, ready: Option<u64>) -> windows:
     let state = HOST.with(|host| {
         let host = host.borrow();
         let session = host.sessions.get(id)?;
-        Some((session.controller.clone()?, session.script_context?, session.appearance,
-            session.bounds.wallpaper, session.wallpaper.clone()))
+        Some((
+            session.controller.clone()?,
+            session.script_context?,
+            session.appearance,
+            session.bounds.wallpaper,
+            session.wallpaper.clone(),
+        ))
     });
-    let Some((controller, context, appearance, placement, wallpaper)) = state else { return Ok(()); };
+    let Some((controller, context, appearance, placement, wallpaper)) = state else {
+        return Ok(());
+    };
     let settings = json!({ "enabled": appearance.enabled,
         "light": appearance.light.clamp(0.0, 100.0), "dark": appearance.dark.clamp(0.0, 100.0) });
     let placement = json!(placement);
-    let image = if send_image { json!(wallpaper.as_deref()).to_string() } else { "undefined".into() };
-    let bridge = if ready.is_some() { include_str!("../../src/utils/previewFrameBridge.js") } else { "" };
+    let image = if send_image {
+        json!(wallpaper.as_deref()).to_string()
+    } else {
+        "undefined".into()
+    };
+    let bridge = if ready.is_some() {
+        include_str!("../../src/utils/previewFrameBridge.js")
+    } else {
+        ""
+    };
     // A closed shadow tree is created from an isolated world. The page never receives
     // the wallpaper bytes through its own script context, styles, or network.
     let expression = format!("window.__mokiNativePreview = true;\n{bridge}\nwindow.__mokiSetNativePreview?.({settings}, {placement}, {image})");
     let session = id.to_owned();
     let view = unsafe { controller.CoreWebView2()? };
-    devtools(&view, "Runtime.evaluate", json!({
-        "contextId": context, "expression": expression, "awaitPromise": true, "returnByValue": true,
-    }), move |result| {
-        if let Some(navigation_id) = ready { content_ready(&session, navigation_id); }
-        if result.is_none_or(|result| result.get("exceptionDetails").is_some()) {
-            log::debug!("Could not apply the native web preview appearance");
-        }
-    })
+    devtools(
+        &view,
+        "Runtime.evaluate",
+        json!({
+            "contextId": context, "expression": expression, "awaitPromise": true, "returnByValue": true,
+        }),
+        move |result| {
+            if let Some(navigation_id) = ready {
+                content_ready(&session, navigation_id);
+            }
+            if result.is_none_or(|result| result.get("exceptionDetails").is_some()) {
+                log::debug!("Could not apply the native web preview appearance");
+            }
+        },
+    )
 }
 
 fn is_current_document(id: &str, navigation_id: u64) -> bool {
-    HOST.with(|host| host.borrow().sessions.get(id).is_some_and(|view| view.navigation_id == navigation_id))
+    HOST.with(|host| {
+        host.borrow()
+            .sessions
+            .get(id)
+            .is_some_and(|view| view.navigation_id == navigation_id)
+    })
 }
 
 fn content_ready(id: &str, navigation_id: u64) {
@@ -237,32 +263,54 @@ fn content_ready(id: &str, navigation_id: u64) {
     }
 }
 
-fn prepare_appearance(view: &ICoreWebView2, id: &str, navigation_id: u64) -> windows::core::Result<()> {
+fn prepare_appearance(
+    view: &ICoreWebView2,
+    id: &str,
+    navigation_id: u64,
+) -> windows::core::Result<()> {
     let guest = view.clone();
     let session = id.to_owned();
     devtools(view, "Page.getFrameTree", json!({}), move |result| {
-        if !is_current_document(&session, navigation_id) { return; }
-        let Some(result) = result else { content_ready(&session, navigation_id); return; };
+        if !is_current_document(&session, navigation_id) {
+            return;
+        }
+        let Some(result) = result else {
+            content_ready(&session, navigation_id);
+            return;
+        };
         let Some(frame_id) = result["frameTree"]["frame"]["id"].as_str() else {
             content_ready(&session, navigation_id);
             return;
         };
         let target = session.clone();
-        let result = devtools(&guest, "Page.createIsolatedWorld", json!({
-            "frameId": frame_id, "worldName": "MokiDown preview appearance",
-        }), move |result| {
-            let context = result.and_then(|result| result["executionContextId"].as_i64());
-            let installed = HOST.with(|host| {
-                let mut host = host.borrow_mut();
-                let Some(view) = host.sessions.get_mut(&target).filter(|view| view.navigation_id == navigation_id) else { return false; };
-                view.script_context = context;
-                context.is_some()
-            });
-            if !installed || update_appearance(&target, true, Some(navigation_id)).is_err() {
-                content_ready(&target, navigation_id);
-            }
-        });
-        if result.is_err() { content_ready(&session, navigation_id); }
+        let result = devtools(
+            &guest,
+            "Page.createIsolatedWorld",
+            json!({
+                "frameId": frame_id, "worldName": "MokiDown preview appearance",
+            }),
+            move |result| {
+                let context = result.and_then(|result| result["executionContextId"].as_i64());
+                let installed = HOST.with(|host| {
+                    let mut host = host.borrow_mut();
+                    let Some(view) = host
+                        .sessions
+                        .get_mut(&target)
+                        .filter(|view| view.navigation_id == navigation_id)
+                    else {
+                        return false;
+                    };
+                    view.script_context = context;
+                    context.is_some()
+                });
+                if !installed || update_appearance(&target, true, Some(navigation_id)).is_err() {
+                    content_ready(&target, navigation_id);
+                }
+            },
+        );
+        if result.is_err() {
+            content_ready(&session, navigation_id);
+        }
     })
 }
 
@@ -424,7 +472,8 @@ unsafe fn configure(
             if let Some(args) = args {
                 args.NavigationId(&mut navigation_id)?;
             }
-            if !view.is_some_and(|view| prepare_appearance(&view, &session, navigation_id).is_ok()) {
+            if !view.is_some_and(|view| prepare_appearance(&view, &session, navigation_id).is_ok())
+            {
                 content_ready(&session, navigation_id);
             }
             Ok(())
@@ -663,7 +712,12 @@ pub async fn native_web_preview_layout(
                 if let Some(value) = changed {
                     session.appearance = value;
                 }
-                Some((session.pane.0, session.controller.clone()?, changed, wallpaper_moved))
+                Some((
+                    session.pane.0,
+                    session.controller.clone()?,
+                    changed,
+                    wallpaper_moved,
+                ))
             });
             if let Some((pane, controller, changed, wallpaper_moved)) = view {
                 if let Some(value) = changed {
@@ -683,20 +737,35 @@ pub async fn native_web_preview_layout(
 }
 
 #[tauri::command]
-pub async fn native_web_preview_wallpaper(webview: Webview, id: String, image: Option<String>) -> Result<(), String> {
+pub async fn native_web_preview_wallpaper(
+    webview: Webview,
+    id: String,
+    image: Option<String>,
+) -> Result<(), String> {
     editor_only(&webview)?;
-    if image.as_ref().is_some_and(|data| data.len() > 4 * 1024 * 1024 || !data.bytes().all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'+' | b'/' | b'='))) {
+    if image.as_ref().is_some_and(|data| {
+        data.len() > 4 * 1024 * 1024
+            || !data
+                .bytes()
+                .all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'+' | b'/' | b'='))
+    }) {
         return Err("Invalid preview wallpaper data".into());
     }
-    webview.run_on_main_thread(move || {
-        let exists = HOST.with(|host| {
-            let mut host = host.borrow_mut();
-            let Some(view) = host.sessions.get_mut(&id) else { return false; };
-            view.wallpaper = image.map(Arc::from);
-            true
-        });
-        if exists { let _ = update_appearance(&id, true, None); }
-    }).map_err(|error| error.to_string())
+    webview
+        .run_on_main_thread(move || {
+            let exists = HOST.with(|host| {
+                let mut host = host.borrow_mut();
+                let Some(view) = host.sessions.get_mut(&id) else {
+                    return false;
+                };
+                view.wallpaper = image.map(Arc::from);
+                true
+            });
+            if exists {
+                let _ = update_appearance(&id, true, None);
+            }
+        })
+        .map_err(|error| error.to_string())
 }
 
 #[tauri::command]
@@ -743,8 +812,8 @@ mod tests {
         Graphics::Gdi::{GetDC, GetPixel, ReleaseDC},
         System::Com::{CoInitializeEx, CoUninitialize, COINIT_APARTMENTTHREADED},
         UI::WindowsAndMessaging::{
-            DispatchMessageW, GetTopWindow, PeekMessageW, TranslateMessage, MSG, PM_REMOVE,
-            GetWindowRect, SetProcessDPIAware, HWND_TOPMOST, WS_POPUP,
+            DispatchMessageW, GetTopWindow, GetWindowRect, PeekMessageW, SetProcessDPIAware,
+            TranslateMessage, HWND_TOPMOST, MSG, PM_REMOVE, WS_POPUP,
         },
     };
 
@@ -764,7 +833,16 @@ mod tests {
     }
 
     unsafe fn probe_pixels(parent: HWND) -> (u32, u32) {
-        SetWindowPos(parent, Some(HWND_TOPMOST), 48, 80, 640, 480, SWP_NOACTIVATE | SWP_SHOWWINDOW).unwrap();
+        SetWindowPos(
+            parent,
+            Some(HWND_TOPMOST),
+            48,
+            80,
+            640,
+            480,
+            SWP_NOACTIVATE | SWP_SHOWWINDOW,
+        )
+        .unwrap();
         let finish = Instant::now() + Duration::from_secs(1);
         while Instant::now() < finish {
             let mut msg = MSG::default();
@@ -835,7 +913,9 @@ mod tests {
         let profile = tempfile::tempdir_in(test_data).unwrap();
         let (send_event, events) = mpsc::channel();
         let parent = unsafe {
-            if std::env::var_os("MOKI_PREVIEW_PIXEL_PROBE").is_some() { let _ = SetProcessDPIAware(); }
+            if std::env::var_os("MOKI_PREVIEW_PIXEL_PROBE").is_some() {
+                let _ = SetProcessDPIAware();
+            }
             CoInitializeEx(None, COINIT_APARTMENTTHREADED).ok().unwrap();
             CreateWindowExW(
                 WINDOW_EX_STYLE(0),
@@ -857,7 +937,12 @@ mod tests {
         let preview_hwnd = pane.0;
         let covering_editor = PreviewPane::new(parent).unwrap();
         let id = "test";
-        let placement = Some(WallpaperPlacement { x: -100, y: -60, width: 640, height: 480 });
+        let placement = Some(WallpaperPlacement {
+            x: -100,
+            y: -60,
+            width: 640,
+            height: 480,
+        });
         start(
             id.into(),
             Session {
