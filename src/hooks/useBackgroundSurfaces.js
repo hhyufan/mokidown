@@ -5,8 +5,17 @@ import { useLayoutEffect } from 'react';
 // 任务列表面板同理：它与面包屑下拉保持一致。条目上的关闭按钮在标题行里、
 // 背景透明，不压线，所以不需要对位底图。
 // 两套 toast 也走同一套重绘壁纸（叠加一层淡白），因此同样需要这里的坐标。
-const POPUPS = '.knowledge-tree__header, .footer__dropdown, .sort-dropdown, .search-dropdown__panel,  .search-dropdown__scope-menu, .titlebar__search .ant-select-dropdown, .moki-tree-jump-popup .ant-popover-inner, .ant-select-dropdown, .ant-dropdown-menu, .ant-picker-panel-container, .ft, .ft__heading-panel, .ft__table-panel, .ant-modal-content, .editor-content__run, .monaco-context-menu, .moki-tree__chevron, .task-panel, .milkdown-media-tools, .milkdown-media-preview-editor, .notif, .ant-tooltip-inner, .md-preview__task-checkbox, .preview-wallpaper';
-const POSITIONERS = '.ant-dropdown, .ant-picker-dropdown, .moki-tree-jump-popup, .ant-tooltip';
+export const MONACO_POPUPS = [
+  '.monaco-editor .find-widget', '.monaco-editor .findOptionsWidget', '.suggest-widget',
+  '.suggest-details-container .suggest-details', '.parameter-hints-widget', '.monaco-hover',
+  '.monaco-editor .rename-box', '.peekview-widget', '.monaco-editor .zone-widget .marker-widget',
+  '.monaco-editor .post-edit-widget', '.monaco-editor .inline-completions-hints-widget',
+  '.monaco-editor .editor-widget .message', '.standalone-colorpicker-container', '.inspect-tokens-widget',
+  '.monaco-menu-container', '.action-widget', '.quick-input-widget',
+].join(', ');
+const MONACO_SURFACES = `${MONACO_POPUPS}, .monaco-editor .diff-hidden-lines > .center`;
+const POPUPS = `.knowledge-tree__header, .footer__dropdown, .sort-dropdown, .search-dropdown__panel, .search-dropdown__scope-menu, .titlebar__search .ant-select-dropdown, .moki-tree-jump-popup .ant-popover-inner, .ant-select-dropdown, .ant-dropdown-menu, .ant-picker-panel-container, .ft, .ft__heading-panel, .ft__table-panel, .ant-modal-content, .editor-content__run, .monaco-context-menu, .moki-tree__chevron, .task-panel, .milkdown-media-tools, .milkdown-media-preview-editor, .notif, .ant-tooltip-inner, .md-preview__task-checkbox, .preview-wallpaper, ${MONACO_SURFACES}`;
+const POSITIONERS = '.ant-dropdown, .ant-picker-dropdown, .moki-tree-jump-popup, .ant-tooltip, .diff-hidden-lines-widget';
 
 // Portal popups need the same image, cover dimensions and viewport coordinates
 // as the workspace. Explicit coordinates also work inside transformed antd
@@ -99,6 +108,7 @@ export function useBackgroundSurfaces({ enabled, imageUrl, opacity, workspaceSel
       for (const popup of matches) {
         if (!popups.has(popup)) {
           popups.add(popup);
+          if (popup.matches(MONACO_SURFACES)) popup.classList.add('moki-monaco-surface');
           resize.observe(popup);
           if (popup.matches('.md-preview__task-checkbox')) {
             const row = popup.closest('li');
@@ -188,6 +198,7 @@ export function useBackgroundSurfaces({ enabled, imageUrl, opacity, workspaceSel
       }
       for (const popup of popups) {
         popup.style.removeProperty('--moki-popup-x'); popup.style.removeProperty('--moki-popup-y');
+        popup.classList.remove('moki-monaco-surface');
       }
     };
   }, [enabled, imageUrl, workspaceSelector]);

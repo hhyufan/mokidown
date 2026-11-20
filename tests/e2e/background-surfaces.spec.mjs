@@ -49,3 +49,33 @@ test('minimap pixels and the actual breadcrumb popup follow background and theme
     }
   }
 });
+
+test('Monaco find and completion surfaces repaint the wallpaper over an opaque base', async ({ page }) => {
+  test.setTimeout(45000);
+  await page.goto('/tests/background-harness.html');
+  await page.waitForFunction(() => window.trial);
+  await page.evaluate(() => {
+    window.trial.apply({ theme: 'light', background: true });
+    window.trial.editor.getAction('actions.find').run();
+  });
+  const checkSurface = async (widget) => {
+    await expect(widget).toBeVisible();
+    await expect(widget).toHaveCSS('background-image', /data:image\/svg\+xml/);
+    await expect(widget).toHaveCSS('backdrop-filter', 'none');
+    expect(await widget.evaluate((element) => {
+      const style = getComputedStyle(element);
+      const context = new OffscreenCanvas(1, 1).getContext('2d');
+      context.fillStyle = style.backgroundColor;
+      context.fillRect(0, 0, 1, 1);
+      return { alpha: context.getImageData(0, 0, 1, 1).data[3],
+        x: parseFloat(element.style.getPropertyValue('--moki-popup-x')) };
+    })).toMatchObject({ alpha: 255, x: expect.any(Number) });
+  };
+  await checkSurface(page.locator('.find-widget.visible'));
+  await page.keyboard.press('Escape');
+  await page.evaluate(() => window.trial.showSuggestions());
+  const suggestions = page.locator('.suggest-widget.visible').filter({ hasText: 'surfaceSuggestion' });
+  await checkSurface(suggestions);
+  await page.evaluate(() => window.trial.apply({ theme: 'dark', background: false }));
+  await expect(suggestions).toHaveCSS('background-image', 'none');
+});

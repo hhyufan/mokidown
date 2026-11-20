@@ -6,6 +6,7 @@ import useEditorStore from '@store/useEditorStore';
 import { invoke } from '@utils/tauriInvoke';
 import { openExternal } from '@utils/tauriApi';
 import { getBackgroundTransparency, readBackgroundImage } from '@utils/backgroundImage';
+import { MONACO_POPUPS } from '@hooks/useBackgroundSurfaces';
 
 // A sibling HWND sits above DOM content. Hide it while an editor popup covers its area.
 const OVERLAYS = [
@@ -22,6 +23,7 @@ const OVERLAYS = [
   '.task-panel',
   '.notif',
   '.external-file-notice',
+  MONACO_POPUPS,
 ].join(',');
 const LOAD_TIMEOUT_MS = 25000;
 let wallpaperCache;
