@@ -2,8 +2,8 @@
 
 /* 左侧资源管理器底部的历史时间线（VS Code Timeline 同款）。 */
 .timeline {
-  --timeline-row: 27px;   /* 单行高度，行高与列表上限共用同一个值 */
-  --timeline-rows: 6;     /* 展开时最多显示 6 行，超出滚动 */
+  --timeline-row: 27px; /* 单行高度，行高与列表上限共用同一个值 */
+  --timeline-rows: 6; /* 展开时最多显示 6 行，超出滚动 */
 
   display: flex;
   flex-direction: column;
@@ -40,7 +40,9 @@
   background: transparent;
   color: var(--text-sec);
   cursor: pointer;
-  &:hover { color: var(--text); }
+  &:hover {
+    color: var(--text);
+  }
 }
 
 /* 与大纲箭头同款：字形默认朝右（收起态），展开时旋转 90° 朝下。 */
@@ -96,8 +98,12 @@
   background: transparent;
   color: var(--text-sec);
   cursor: pointer;
-  .anticon { font-size: 12px; }
-  &:hover { color: var(--text); }
+  .anticon {
+    font-size: 12px;
+  }
+  &:hover {
+    color: var(--text);
+  }
 }
 
 .timeline__list {
@@ -126,8 +132,13 @@
   cursor: pointer;
   text-align: left;
   color: var(--text);
-  &:hover { background: var(--hover); }
-  &.is-selected { background: var(--accent-bg); color: var(--accent); }
+  &:hover {
+    background: var(--hover);
+  }
+  &.is-selected {
+    background: var(--accent-bg);
+    color: var(--accent);
+  }
 }
 
 .timeline__time {
@@ -146,7 +157,9 @@
   width: 14px;
   height: 14px;
   color: var(--accent);
-  .anticon { font-size: 14px; }
+  .anticon {
+    font-size: 14px;
+  }
 }
 
 .timeline__size {
@@ -230,8 +243,14 @@
   padding: 6px 12px;
   font-size: 11px;
   line-height: 1.5;
-  &:first-child { border-right: 1px solid var(--border); }
-  time { color: var(--text-sec); white-space: nowrap; flex-shrink: 0; }
+  &:first-child {
+    border-right: 1px solid var(--border);
+  }
+  time {
+    color: var(--text-sec);
+    white-space: nowrap;
+    flex-shrink: 0;
+  }
 }
 
 .history-diff__filename {
@@ -254,7 +273,9 @@
   .ant-btn.ant-btn-default {
     background: color-mix(in srgb, var(--surface) 50%, transparent);
 
-    &:hover:not(:disabled) { background: var(--hover); }
+    &:hover:not(:disabled) {
+      background: var(--hover);
+    }
   }
 
   .ant-btn:disabled {
@@ -264,20 +285,31 @@
 
 .history-diff {
   // The preview can open before Monaco registers its icon styles.
-  .codicon-fold::before { content: '\eaf5'; }
-  .codicon-unfold::before { content: '\eb73'; }
-  .codicon-arrow-left::before { content: '\ea9b'; }
-  .codicon-arrow-right::before { content: '\ea9c'; }
+  .codicon-fold::before {
+    content: '\eaf5';
+  }
+  .codicon-unfold::before {
+    content: '\eb73';
+  }
+  .codicon-arrow-left::before {
+    content: '\ea9b';
+  }
+  .codicon-arrow-right::before {
+    content: '\ea9c';
+  }
 }
 
-body.moki-has-background .history-diff { --history-fold-background: transparent; }
+body.moki-has-background .history-diff {
+  --history-fold-background: transparent;
+}
 
 .history-diff .history-markdown-diff__fold,
 .history-diff .monaco-editor .diff-hidden-lines > .center {
   height: var(--history-fold-height);
   background-color: var(--history-fold-background);
   color: var(--text-sec);
-  box-shadow: inset 0 -5px 5px -7px var(--history-fold-shadow),
+  box-shadow:
+    inset 0 -5px 5px -7px var(--history-fold-shadow),
     inset 0 5px 5px -7px var(--history-fold-shadow);
   font: 13px/14px var(--font-app);
 }
@@ -315,7 +347,9 @@ body.moki-has-background .history-diff { --history-fold-background: transparent;
       position: absolute;
       inset-inline: 0;
       pointer-events: none;
-      &:not([data-positioned]) { visibility: hidden; }
+      &:not([data-positioned]) {
+        visibility: hidden;
+      }
     }
   }
 
@@ -326,7 +360,9 @@ body.moki-has-background .history-diff { --history-fold-background: transparent;
     min-width: 0;
     z-index: 1;
 
-    &[data-side='original'] { grid-column: 1; }
+    &[data-side='original'] {
+      grid-column: 1;
+    }
   }
 
   &__editor.md-preview {
@@ -335,9 +371,15 @@ body.moki-has-background .history-diff { --history-fold-background: transparent;
     padding-block: 0;
     padding-inline: var(--history-diff-gutter);
   }
-  &__editor .milkdown-editor > :not([data-history-anchor]) { margin-block: 8px; }
-  &__editor .milkdown-editor > .history-markdown-diff__hidden-draft-node { display: none; }
-  &__editor .milkdown-editor { padding-block-end: 3em; }
+  &__editor .milkdown-editor > :not([data-history-anchor]) {
+    margin-block: 8px;
+  }
+  &__editor .milkdown-editor > .history-markdown-diff__hidden-draft-node {
+    display: none;
+  }
+  &__editor .milkdown-editor {
+    padding-block-end: 3em;
+  }
 
   &__anchor {
     display: flow-root;
@@ -360,16 +402,23 @@ body.moki-has-background .history-diff { --history-fold-background: transparent;
   }
 }
 
-.history-diff__error { padding: 8px 12px; color: var(--text); }
+.history-diff__error {
+  padding: 8px 12px;
+  color: var(--text);
+}
 
 .history-diff__editor {
   position: relative;
   flex: 1;
   min-height: 0;
-  &[hidden] { display: none; }
+  &[hidden] {
+    display: none;
+  }
 
   [data-history-native-fold-tooltip],
-  .monaco-hover:has(.hover-row[data-history-native-fold-tooltip]):not(:has(.hover-row:not([data-history-native-fold-tooltip]))) {
+  .monaco-hover:has(.hover-row[data-history-native-fold-tooltip]):not(
+      :has(.hover-row:not([data-history-native-fold-tooltip]))
+    ) {
     display: none;
   }
 
@@ -426,10 +475,19 @@ body.moki-has-background .history-diff { --history-fold-background: transparent;
   cursor: pointer;
   pointer-events: auto;
 
-  &[hidden] { display: none; }
-  &[data-direction='left'] { transform: translateX(-100%); }
-  &:hover { background: var(--hover); }
-  &:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+  &[hidden] {
+    display: none;
+  }
+  &[data-direction='left'] {
+    transform: translateX(-100%);
+  }
+  &:hover {
+    background: var(--hover);
+  }
+  &:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: -2px;
+  }
 }
 
 .history-markdown-diff {
@@ -439,7 +497,9 @@ body.moki-has-background .history-diff { --history-fold-background: transparent;
   min-height: 0;
   overflow: auto;
   scrollbar-gutter: stable;
-  &[hidden] { display: none; }
+  &[hidden] {
+    display: none;
+  }
 
   &__row {
     position: relative;
@@ -457,13 +517,23 @@ body.moki-has-background .history-diff { --history-fold-background: transparent;
     &:first-child {
       grid-column: 1;
     }
-    &[data-change='removed'] { background: color-mix(in srgb, var(--error) 15%, transparent); }
-    &[data-change='added'] { background: color-mix(in srgb, var(--success) 15%, transparent); }
-    &[data-change] { min-height: 26px; }
+    &[data-change='removed'] {
+      background: color-mix(in srgb, var(--error) 15%, transparent);
+    }
+    &[data-change='added'] {
+      background: color-mix(in srgb, var(--success) 15%, transparent);
+    }
+    &[data-change] {
+      min-height: 26px;
+    }
 
     &[data-gap] {
       --history-diff-stripe: color-mix(in srgb, var(--text) 19%, transparent);
-      background: repeating-linear-gradient(-45deg, var(--history-diff-stripe) 0 1px, transparent 1px 6px);
+      background: repeating-linear-gradient(
+        -45deg,
+        var(--history-diff-stripe) 0 1px,
+        transparent 1px 6px
+      );
       background-clip: content-box;
       padding-block: 0;
     }
@@ -490,8 +560,13 @@ body.moki-has-background .history-diff { --history-fold-background: transparent;
     color: var(--text-sec);
     border: 1px solid var(--border);
     cursor: pointer;
-    &:hover { color: var(--accent); }
-    &:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+    &:hover {
+      color: var(--accent);
+    }
+    &:focus-visible {
+      outline: 2px solid var(--accent);
+      outline-offset: -2px;
+    }
   }
 
   &__revert-actions {
@@ -520,8 +595,13 @@ body.moki-has-background .history-diff { --history-fold-background: transparent;
     background: transparent;
     color: var(--text);
 
-    &:hover:not(:disabled) { background: var(--hover); }
-    &:disabled { opacity: 0.45; cursor: default; }
+    &:hover:not(:disabled) {
+      background: var(--hover);
+    }
+    &:disabled {
+      opacity: 0.45;
+      cursor: default;
+    }
   }
 
   &__fold {
@@ -533,12 +613,19 @@ body.moki-has-background .history-diff { --history-fold-background: transparent;
     border: 0;
     text-align: start;
     white-space: nowrap;
-    .codicon { color: var(--accent); justify-self: center; }
-    &:hover { color: var(--text); }
+    .codicon {
+      color: var(--accent);
+      justify-self: center;
+    }
+    &:hover {
+      color: var(--text);
+    }
   }
 
   &__fold-action {
-    --history-fold-action-inset: calc((var(--history-diff-gutter) - var(--history-diff-action-size)) / 2);
+    --history-fold-action-inset: calc(
+      (var(--history-diff-gutter) - var(--history-diff-action-size)) / 2
+    );
     position: absolute;
     z-index: 2;
     inset-block-start: 0;
@@ -551,8 +638,12 @@ body.moki-has-background .history-diff { --history-fold-background: transparent;
     border: 0;
     border-radius: var(--radius-sm);
     background: transparent;
-    &[data-side='modified'] { inset-inline-start: calc(50% + var(--history-fold-action-inset)); }
-    &:hover { background: var(--hover); }
+    &[data-side='modified'] {
+      inset-inline-start: calc(50% + var(--history-fold-action-inset));
+    }
+    &:hover {
+      background: var(--hover);
+    }
   }
 }
 

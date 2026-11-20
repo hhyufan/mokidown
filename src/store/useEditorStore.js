@@ -47,7 +47,6 @@ function toTabMeta(tab) {
     modified: !!tab.modified,
     encoding: tab.encoding || 'UTF-8',
     lineEnding: tab.lineEnding || 'LF',
-    
   };
 }
 
@@ -67,19 +66,27 @@ const useEditorStore = create(
       sidebarView: 'explorer',
       sidebarWidth: 280,
       sidebarMinWidth: 220,
-      setSidebarMinWidth: (width) => set((s) => {
-        const minimum = Math.max(220, Math.ceil(width));
-        return s.sidebarMinWidth === minimum ? s : { sidebarMinWidth: minimum };
-      }),
-      setSidebarWidth: (width) => set((s) => {
-        const next = Number(width);
-        return { sidebarWidth: Math.max(s.sidebarMinWidth, Math.min(Math.max(640, s.sidebarMinWidth), Number.isFinite(next) ? next : 280)) };
-      }),
+      setSidebarMinWidth: (width) =>
+        set((s) => {
+          const minimum = Math.max(220, Math.ceil(width));
+          return s.sidebarMinWidth === minimum ? s : { sidebarMinWidth: minimum };
+        }),
+      setSidebarWidth: (width) =>
+        set((s) => {
+          const next = Number(width);
+          return {
+            sidebarWidth: Math.max(
+              s.sidebarMinWidth,
+              Math.min(Math.max(640, s.sidebarMinWidth), Number.isFinite(next) ? next : 280),
+            ),
+          };
+        }),
       knowledgeJump: null,
-      requestKnowledgeJump: (language, index) => set((s) => ({
-        knowledgeJump: { tabId: s.activeTabId, language, index, nonce: Date.now() },
-        viewMode: s.viewMode === 'edit' ? 'split' : s.viewMode,
-      })),
+      requestKnowledgeJump: (language, index) =>
+        set((s) => ({
+          knowledgeJump: { tabId: s.activeTabId, language, index, nonce: Date.now() },
+          viewMode: s.viewMode === 'edit' ? 'split' : s.viewMode,
+        })),
       viewMode: 'edit',
       toolbarVisible: false,
       splitRatio: 0.5,
@@ -89,9 +96,10 @@ const useEditorStore = create(
       // Runtime-only. Each tab can have its own unresolved disk change.
       externalFileConflicts: new Map(),
 
-      setExternalFileConflict: (conflict) => set((state) => ({
-        externalFileConflicts: new Map(state.externalFileConflicts).set(conflict.path, conflict),
-      })),
+      setExternalFileConflict: (conflict) =>
+        set((state) => ({
+          externalFileConflicts: new Map(state.externalFileConflicts).set(conflict.path, conflict),
+        })),
       clearExternalFileConflict: (path, expected) => {
         const current = get().externalFileConflicts;
         if (!current.has(path) || (expected && current.get(path) !== expected)) return;
@@ -141,8 +149,18 @@ const useEditorStore = create(
           set({ activeTabId: pluginDocsTabId });
           return;
         }
-        const tab = { id: pluginDocsTabId, name, ext: 'html', builtin: 'pluginDocs', modified: false };
-        set({ tabs: [...tabs, tab], tabRenderList: [...tabRenderList, toTabMeta(tab)], activeTabId: tab.id });
+        const tab = {
+          id: pluginDocsTabId,
+          name,
+          ext: 'html',
+          builtin: 'pluginDocs',
+          modified: false,
+        };
+        set({
+          tabs: [...tabs, tab],
+          tabRenderList: [...tabRenderList, toTabMeta(tab)],
+          activeTabId: tab.id,
+        });
       },
 
       /**
@@ -157,7 +175,9 @@ const useEditorStore = create(
         const parsed = parsePreviewAddress(url);
         if (!parsed) return;
         const { tabs, tabRenderList, activeTabId, webSplitUrl } = get();
-        const existing = tabs.find((tab) => tab.builtin === 'web' && (tab.webLocation || tab.url) === parsed.href);
+        const existing = tabs.find(
+          (tab) => tab.builtin === 'web' && (tab.webLocation || tab.url) === parsed.href,
+        );
         const replacing = tabs.find((tab) => tab.builtin === 'web' && tab.id === replaceTabId);
         const id = existing?.id || replacing?.id || `web:${crypto.randomUUID()}`;
         if (activate && activeTabId !== id) flushEditorBuffer(activeTabId);
@@ -171,8 +191,11 @@ const useEditorStore = create(
           modified: false,
         };
         const replace = (list, entry) => {
-          if (existing) return replacing && replacing.id !== id ? list.filter((item) => item.id !== replacing.id) : list;
-          return replacing ? list.map((item) => item.id === id ? entry : item) : [...list, entry];
+          if (existing)
+            return replacing && replacing.id !== id
+              ? list.filter((item) => item.id !== replacing.id)
+              : list;
+          return replacing ? list.map((item) => (item.id === id ? entry : item)) : [...list, entry];
         };
         set({
           tabs: replace(tabs, tab),
@@ -186,15 +209,26 @@ const useEditorStore = create(
         const parsed = parsePreviewAddress(url);
         if (!parsed) return;
         const { tabs, tabRenderList, activeTabId } = get();
-        const closing = new Set(tabs.filter((tab) => tab.builtin === 'web' && samePreview(tab.webLocation || tab.url, parsed.href)).map((tab) => tab.id));
+        const closing = new Set(
+          tabs
+            .filter(
+              (tab) =>
+                tab.builtin === 'web' && samePreview(tab.webLocation || tab.url, parsed.href),
+            )
+            .map((tab) => tab.id),
+        );
         const remaining = tabs.filter((tab) => !closing.has(tab.id));
         set({
           webSplitUrl: parsed.href,
-          ...(closing.size ? {
-            tabs: remaining,
-            tabRenderList: tabRenderList.filter((tab) => !closing.has(tab.id)),
-            activeTabId: closing.has(activeTabId) ? remaining.at(-1)?.id ?? null : activeTabId,
-          } : {}),
+          ...(closing.size
+            ? {
+                tabs: remaining,
+                tabRenderList: tabRenderList.filter((tab) => !closing.has(tab.id)),
+                activeTabId: closing.has(activeTabId)
+                  ? (remaining.at(-1)?.id ?? null)
+                  : activeTabId,
+              }
+            : {}),
         });
       },
 
@@ -205,18 +239,31 @@ const useEditorStore = create(
         const tab = tabs.find((entry) => entry.id === tabId && entry.builtin === 'web');
         if (!tab) return;
         const fallback = `${new URL(webLocation).origin}/favicon.ico`;
-        const faviconUrls = [...new Set([...urls.slice(0, 8), fallback].filter((url) =>
-          typeof url === 'string' && url.length < 16384 && /^(https?:\/\/|data:image\/)/i.test(url),
-        ))];
-        if (webLocation === tab.webLocation && faviconUrls.length === tab.faviconUrls?.length
-          && faviconUrls.every((url, index) => url === tab.faviconUrls[index])) return;
+        const faviconUrls = [
+          ...new Set(
+            [...urls.slice(0, 8), fallback].filter(
+              (url) =>
+                typeof url === 'string' &&
+                url.length < 16384 &&
+                /^(https?:\/\/|data:image\/)/i.test(url),
+            ),
+          ),
+        ];
+        if (
+          webLocation === tab.webLocation &&
+          faviconUrls.length === tab.faviconUrls?.length &&
+          faviconUrls.every((url, index) => url === tab.faviconUrls[index])
+        )
+          return;
         set({
-          tabs: tabs.map((entry) => entry.id === tabId ? { ...entry, webLocation, faviconUrls } : entry),
-          tabRenderList: tabRenderList.map((entry) => entry.id === tabId ? { ...entry, webLocation, faviconUrls } : entry),
+          tabs: tabs.map((entry) =>
+            entry.id === tabId ? { ...entry, webLocation, faviconUrls } : entry,
+          ),
+          tabRenderList: tabRenderList.map((entry) =>
+            entry.id === tabId ? { ...entry, webLocation, faviconUrls } : entry,
+          ),
         });
       },
-
-      
 
       /**
        * 创建未命名标签，初始内容只落在内存缓冲中，等待首次保存拿到真实路径。
@@ -252,13 +299,21 @@ const useEditorStore = create(
       /** Reorder both document snapshots and tab metadata without changing identity or buffers. */
       reorderTabs: (draggedId, targetId, after = false) => {
         const state = get();
-        if (draggedId === targetId || !state.tabs.some((tab) => tab.id === draggedId) || !state.tabs.some((tab) => tab.id === targetId)) return;
+        if (
+          draggedId === targetId ||
+          !state.tabs.some((tab) => tab.id === draggedId) ||
+          !state.tabs.some((tab) => tab.id === targetId)
+        )
+          return;
         const order = state.tabRenderList.map((tab) => tab.id).filter((id) => id !== draggedId);
         order.splice(order.indexOf(targetId) + (after ? 1 : 0), 0, draggedId);
         if (order.every((id, index) => state.tabRenderList[index].id === id)) return;
         const tabsById = new Map(state.tabs.map((tab) => [tab.id, tab]));
         const metaById = new Map(state.tabRenderList.map((tab) => [tab.id, tab]));
-        set({ tabs: order.map((id) => tabsById.get(id)), tabRenderList: order.map((id) => metaById.get(id)) });
+        set({
+          tabs: order.map((id) => tabsById.get(id)),
+          tabRenderList: order.map((id) => metaById.get(id)),
+        });
       },
 
       /** Restore a session in one update; files opened meanwhile retain priority. */
@@ -273,14 +328,23 @@ const useEditorStore = create(
           const duplicate = tab.path && paths.has(tab.path);
           if (duplicate && !tab.modified) continue;
           if (tab.path) paths.add(tab.path);
-          unique.set(tab.id, { ...tab, path: duplicate ? '' : tab.path, ext: tab.ext || tab.name.split('.').pop() || 'md' });
+          unique.set(tab.id, {
+            ...tab,
+            path: duplicate ? '' : tab.path,
+            ext: tab.ext || tab.name.split('.').pop() || 'md',
+          });
         }
         for (const tab of tabsToKeep) unique.set(tab.id, tab);
         const tabs = [...unique.values()];
         for (const tab of tabs) if (!existing.has(tab.id)) setBuffer(tab.id, tab.content || '');
-        set({ tabs, tabRenderList: tabs.map(toTabMeta),
-          activeTabId: (tabsToKeep.length && current.activeTabId) || (unique.has(activeId) ? activeId : tabs[0]?.id || null),
-          tabsRevision: current.tabsRevision + 1 });
+        set({
+          tabs,
+          tabRenderList: tabs.map(toTabMeta),
+          activeTabId:
+            (tabsToKeep.length && current.activeTabId) ||
+            (unique.has(activeId) ? activeId : tabs[0]?.id || null),
+          tabsRevision: current.tabsRevision + 1,
+        });
         for (const tab of tabs) {
           const number = /^Untitled-(\d+)(?:\.md)?$/.exec(tab.name)?.[1];
           if (number) untitledCounter = Math.max(untitledCounter, Number(number) + 1);
@@ -293,14 +357,24 @@ const useEditorStore = create(
         const { tabs, tabRenderList } = get();
         const baseId = draft.tabId || draft.path || `recovered-${Date.now()}`;
         const path = draft.path || '';
-        const existing = tabs.find((tab) => path ? tab.path === path : tab.id === baseId && !tab.path);
+        const existing = tabs.find((tab) =>
+          path ? tab.path === path : tab.id === baseId && !tab.path,
+        );
         const content = draft.content || '';
         const metadata = {
           encoding: draft.encoding || existing?.encoding || 'UTF-8',
           lineEnding: draft.lineEnding || existing?.lineEnding || 'LF',
         };
-        if (existing && !existing.modified && getBuffer(existing.id, existing.content) === existing.content) {
-          get().replaceTabContent(existing.id, { ...metadata, content }, { modified: true, activate: true });
+        if (
+          existing &&
+          !existing.modified &&
+          getBuffer(existing.id, existing.content) === existing.content
+        ) {
+          get().replaceTabContent(
+            existing.id,
+            { ...metadata, content },
+            { modified: true, activate: true },
+          );
           return existing.id;
         }
         const id = tabs.some((tab) => tab.id === baseId)
@@ -330,10 +404,10 @@ const useEditorStore = create(
       renameTab: (tabId, newName) => {
         set((state) => ({
           tabs: state.tabs.map((t) =>
-            t.id === tabId ? { ...t, name: newName, ext: newName.split('.').pop() || t.ext } : t
+            t.id === tabId ? { ...t, name: newName, ext: newName.split('.').pop() || t.ext } : t,
           ),
           tabRenderList: state.tabRenderList.map((t) =>
-            t.id === tabId ? { ...t, name: newName, ext: newName.split('.').pop() || t.ext } : t
+            t.id === tabId ? { ...t, name: newName, ext: newName.split('.').pop() || t.ext } : t,
           ),
         }));
       },
@@ -359,9 +433,8 @@ const useEditorStore = create(
                   path,
                   name,
                   ext: name.split('.').pop() || '',
-                  
                 }
-              : t
+              : t,
           ),
           tabRenderList: state.tabRenderList.map((t) =>
             t.id === tabId
@@ -371,9 +444,8 @@ const useEditorStore = create(
                   path,
                   name,
                   ext: name.split('.').pop() || '',
-                  
                 }
-              : t
+              : t,
           ),
           activeTabId: state.activeTabId === tabId ? path : state.activeTabId,
         }));
@@ -405,7 +477,7 @@ const useEditorStore = create(
         set({
           tabs: remaining,
           tabRenderList: tabRenderList.filter((tab) => !requested.has(tab.id)),
-          activeTabId: requested.has(activeTabId) ? remaining.at(-1)?.id ?? null : activeTabId,
+          activeTabId: requested.has(activeTabId) ? (remaining.at(-1)?.id ?? null) : activeTabId,
           externalFileConflicts: conflicts,
         });
       },
@@ -429,14 +501,9 @@ const useEditorStore = create(
         const tab = get().tabRenderList.find((t) => t.id === tabId);
         if (!tab || tab.modified === modified) return;
         set((state) => ({
-          
           // 两处都要同步 modified，避免冲突检测读到过期脏状态。
-          tabs: state.tabs.map((t) =>
-            t.id === tabId ? { ...t, modified } : t
-          ),
-          tabRenderList: state.tabRenderList.map((t) =>
-            t.id === tabId ? { ...t, modified } : t
-          ),
+          tabs: state.tabs.map((t) => (t.id === tabId ? { ...t, modified } : t)),
+          tabRenderList: state.tabRenderList.map((t) => (t.id === tabId ? { ...t, modified } : t)),
         }));
       },
 
@@ -449,15 +516,22 @@ const useEditorStore = create(
       replaceTabContent: (tabId, patch = {}, { modified = false, activate = false } = {}) => {
         const tab = get().tabs.find((item) => item.id === tabId);
         if (!tab) return false;
-        const next = { ...tab, ...patch, modified, contentRevision: (tab.contentRevision ?? 0) + 1 };
+        const next = {
+          ...tab,
+          ...patch,
+          modified,
+          contentRevision: (tab.contentRevision ?? 0) + 1,
+        };
         if (typeof patch.content === 'string') {
           clearMarkdownUndo(tabId);
           setBuffer(tabId, patch.content);
           if (modified) next.content = tab.content;
         }
         set((state) => ({
-          tabs: state.tabs.map((item) => item.id === tabId ? next : item),
-          tabRenderList: state.tabRenderList.map((item) => item.id === tabId ? { ...item, ...toTabMeta(next) } : item),
+          tabs: state.tabs.map((item) => (item.id === tabId ? next : item)),
+          tabRenderList: state.tabRenderList.map((item) =>
+            item.id === tabId ? { ...item, ...toTabMeta(next) } : item,
+          ),
           tabsRevision: state.tabsRevision + 1,
           ...(activate ? { activeTabId: tabId } : {}),
         }));
@@ -465,7 +539,6 @@ const useEditorStore = create(
       },
 
       /** ????? `fileId` ????????? */
-      
 
       /**
        * 保存实际落盘的快照；保存期间的新输入继续保持未保存状态。
@@ -481,10 +554,10 @@ const useEditorStore = create(
             tabs: state.tabs.map((t) =>
               t.id === tabId
                 ? { ...t, content: typeof content === 'string' ? content : t.content, modified }
-                : t
+                : t,
             ),
             tabRenderList: state.tabRenderList.map((t) =>
-              t.id === tabId ? { ...t, modified } : t
+              t.id === tabId ? { ...t, modified } : t,
             ),
           };
         });
@@ -531,22 +604,24 @@ const useEditorStore = create(
       },
 
       /** ????? `fileId` ?????????? */
-      
 
       /** ??????????? UI ?????? */
-      toggleSidebar: () => set((s) => ({
-        sidebarVisible: !s.sidebarVisible,
-        uiStateUpdatedAt: Date.now(),
-      })),
+      toggleSidebar: () =>
+        set((s) => ({
+          sidebarVisible: !s.sidebarVisible,
+          uiStateUpdatedAt: Date.now(),
+        })),
       /** ???????????? */
-      setSidebarVisible: (visible, meta = {}) => set({
-        sidebarVisible: visible,
-        uiStateUpdatedAt: meta.updatedAt ?? Date.now(),
-      }),
-      setSidebarView: (view, meta = {}) => set({
-        sidebarView: view,
-        uiStateUpdatedAt: meta.updatedAt ?? Date.now(),
-      }),
+      setSidebarVisible: (visible, meta = {}) =>
+        set({
+          sidebarVisible: visible,
+          uiStateUpdatedAt: meta.updatedAt ?? Date.now(),
+        }),
+      setSidebarView: (view, meta = {}) =>
+        set({
+          sidebarView: view,
+          uiStateUpdatedAt: meta.updatedAt ?? Date.now(),
+        }),
 
       /** ?????????? */
       setViewMode: (mode, meta = {}) => {
@@ -562,7 +637,12 @@ const useEditorStore = create(
         const { activeTabId, tabRenderList, viewMode, setViewMode } = get();
         const comparison = useHistoryStore.getState();
         if (comparison.diff?.tabId === activeTabId && comparison.diff) {
-          if (isMarkdownComparison(tabRenderList.find((tab) => tab.id === activeTabId), comparison.diff))
+          if (
+            isMarkdownComparison(
+              tabRenderList.find((tab) => tab.id === activeTabId),
+              comparison.diff,
+            )
+          )
             comparison.toggleViewMode();
         } else if (viewMode !== 'split') setViewMode(viewMode === 'edit' ? 'preview' : 'edit');
       },
@@ -572,27 +652,32 @@ const useEditorStore = create(
         setViewMode(viewMode === 'split' ? 'edit' : 'split');
       },
 
-      toggleToolbar: () => set((s) => ({
-        toolbarVisible: !s.toolbarVisible,
-        uiStateUpdatedAt: Date.now(),
-      })),
+      toggleToolbar: () =>
+        set((s) => ({
+          toolbarVisible: !s.toolbarVisible,
+          uiStateUpdatedAt: Date.now(),
+        })),
       setSplitRatio: (value) => set({ splitRatio: Math.max(0.15, Math.min(0.85, value)) }),
-      setToolbarVisible: (v, meta = {}) => set({
-        toolbarVisible: v,
-        uiStateUpdatedAt: meta.updatedAt ?? Date.now(),
-      }),
+      setToolbarVisible: (v, meta = {}) =>
+        set({
+          toolbarVisible: v,
+          uiStateUpdatedAt: meta.updatedAt ?? Date.now(),
+        }),
 
-      applyLayoutSnapshot: (uiState = {}, meta = {}) => set((state) => ({
-        sidebarVisible: typeof uiState.sidebarVisible === 'boolean'
-          ? uiState.sidebarVisible
-          : state.sidebarVisible,
-        sidebarView: uiState.sidebarView || state.sidebarView,
-        viewMode: uiState.viewMode || state.viewMode,
-        toolbarVisible: typeof uiState.toolbarVisible === 'boolean'
-          ? uiState.toolbarVisible
-          : state.toolbarVisible,
-        uiStateUpdatedAt: meta.updatedAt ?? state.uiStateUpdatedAt ?? Date.now(),
-      })),
+      applyLayoutSnapshot: (uiState = {}, meta = {}) =>
+        set((state) => ({
+          sidebarVisible:
+            typeof uiState.sidebarVisible === 'boolean'
+              ? uiState.sidebarVisible
+              : state.sidebarVisible,
+          sidebarView: uiState.sidebarView || state.sidebarView,
+          viewMode: uiState.viewMode || state.viewMode,
+          toolbarVisible:
+            typeof uiState.toolbarVisible === 'boolean'
+              ? uiState.toolbarVisible
+              : state.toolbarVisible,
+          uiStateUpdatedAt: meta.updatedAt ?? state.uiStateUpdatedAt ?? Date.now(),
+        })),
     }),
     {
       name: 'mokidown-editor',
@@ -605,8 +690,8 @@ const useEditorStore = create(
         splitRatio: state.splitRatio,
         uiStateUpdatedAt: state.uiStateUpdatedAt,
       }),
-    }
-  )
+    },
+  ),
 );
 
 export default useEditorStore;
