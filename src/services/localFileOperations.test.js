@@ -1,10 +1,21 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { invoke } from '@tauri-apps/api/core';
 import useEditorStore from '@store/useEditorStore';
-import { clearBuffer, getBuffer, setBuffer, registerEditorBufferFlusher } from '@utils/editorBuffer';
+import {
+  clearBuffer,
+  getBuffer,
+  setBuffer,
+  registerEditorBufferFlusher,
+} from '@utils/editorBuffer';
 import { saveFile } from '@utils/tauriApi';
 import { clearDiskBaselines, getDiskBaseline, rememberDiskBaseline } from './localFileGuard';
-import { createFileChangeObserver, reconcileFileChange, restoreExternalDisk, saveExistingFile, setLocalFileComposing } from './localFileOperations';
+import {
+  createFileChangeObserver,
+  reconcileFileChange,
+  restoreExternalDisk,
+  saveExistingFile,
+  setLocalFileComposing,
+} from './localFileOperations';
 
 vi.mock('@tauri-apps/api/core', () => ({ invoke: vi.fn() }));
 
@@ -13,7 +24,9 @@ let diskContent;
 let observers;
 const deferred = () => {
   let resolve;
-  const promise = new Promise((done) => { resolve = done; });
+  const promise = new Promise((done) => {
+    resolve = done;
+  });
   return { promise, resolve };
 };
 
@@ -27,8 +40,8 @@ beforeEach(() => {
   useEditorStore.getState().openFile({ path, name: 'code.js', content: diskContent });
   rememberDiskBaseline(path, diskContent);
   invoke.mockImplementation(async (command, args) => {
-    if (command === 'read_file_content') return diskContent === null
-      ? { success: false } : { success: true, content: diskContent };
+    if (command === 'read_file_content')
+      return diskContent === null ? { success: false } : { success: true, content: diskContent };
     if (command === 'save_file') {
       diskContent = args.content;
       return { success: true };
@@ -45,21 +58,47 @@ afterEach(() => {
 });
 
 describe('local file save/watch coordination', () => {
-  it.each(['binary', 'too-large', 'invalid-encoding', 'unreadable', 'not-file'])('preserves the buffer and baseline when disk becomes %s, then resumes after recovery', async (kind) => {
-    setBuffer(path, 'my unsaved edits');
-    invoke.mockRejectedValueOnce({ kind, message: 'blocked disk' });
-    expect(await reconcileFileChange(path)).toBe('blocked');
-    expect(getBuffer(path)).toBe('my unsaved edits');
-    expect(getDiskBaseline(path).content).toBe('base');
-    expect(useEditorStore.getState().externalFileConflicts.get(path)).toMatchObject({ kind: 'blocked', blockedReason: kind });
-    expect(useEditorStore.getState().externalFileConflicts.get(path)).not.toHaveProperty('diskContent');
-    invoke.mockRejectedValueOnce({ kind, message: 'blocked disk' });
-    expect(await saveExistingFile(path)).toMatchObject({ success: false, conflict: true });
-    expect(invoke.mock.calls.some(([command]) => command === 'save_file')).toBe(false);
-    expect(await saveExistingFile(path)).toMatchObject({ success: true });
-    expect(diskContent).toBe('my unsaved edits');
-    expect(useEditorStore.getState().externalFileConflicts.get(path)).toBeUndefined();
+  it('keeps the live buffer untouched until a comparison replacement is saved', async () => {
+    clearDiskBaselines();
+    setBuffer(path, 'working copy');
+    invoke.mockImplementationOnce(async () => ({ success: true, content: diskContent }));
+    invoke.mockRejectedValueOnce(new Error('write failed'));
+    const save = () =>
+      saveExistingFile(path, 'working copy', 'UTF-8', path, 0, { replacement: 'comparison draft' });
+    await expect(save()).rejects.toThrow('write failed');
+    expect(getBuffer(path)).toBe('working copy');
+    expect(diskContent).toBe('base');
+    await expect(save()).resolves.toMatchObject({
+      success: true,
+      savedContent: 'comparison draft',
+    });
+    expect(getBuffer(path)).toBe('comparison draft');
+    expect(diskContent).toBe('comparison draft');
   });
+
+  it.each(['binary', 'too-large', 'invalid-encoding', 'unreadable', 'not-file'])(
+    'preserves the buffer and baseline when disk becomes %s, then resumes after recovery',
+    async (kind) => {
+      setBuffer(path, 'my unsaved edits');
+      invoke.mockRejectedValueOnce({ kind, message: 'blocked disk' });
+      expect(await reconcileFileChange(path)).toBe('blocked');
+      expect(getBuffer(path)).toBe('my unsaved edits');
+      expect(getDiskBaseline(path).content).toBe('base');
+      expect(useEditorStore.getState().externalFileConflicts.get(path)).toMatchObject({
+        kind: 'blocked',
+        blockedReason: kind,
+      });
+      expect(useEditorStore.getState().externalFileConflicts.get(path)).not.toHaveProperty(
+        'diskContent',
+      );
+      invoke.mockRejectedValueOnce({ kind, message: 'blocked disk' });
+      expect(await saveExistingFile(path)).toMatchObject({ success: false, conflict: true });
+      expect(invoke.mock.calls.some(([command]) => command === 'save_file')).toBe(false);
+      expect(await saveExistingFile(path)).toMatchObject({ success: true });
+      expect(diskContent).toBe('my unsaved edits');
+      expect(useEditorStore.getState().externalFileConflicts.get(path)).toBeUndefined();
+    },
+  );
 
   it('keeps unresolved changes for different tabs independently', async () => {
     const other = 'C:\\notes\\other.js';
@@ -86,27 +125,39 @@ describe('local file save/watch coordination', () => {
   });
 
   it('flushes a delayed editor before writing and clears dirty state for that exact snapshot', async () => {
-    const stop = registerEditorBufferFlusher(() => path, () => {
-      setBuffer(path, 'latest editor text');
-      useEditorStore.getState().markTabDirty(path);
-    });
+    const stop = registerEditorBufferFlusher(
+      () => path,
+      () => {
+        setBuffer(path, 'latest editor text');
+        useEditorStore.getState().markTabDirty(path);
+      },
+    );
     try {
-      expect(await saveExistingFile(path, 'old buffer', 'UTF-8', path)).toMatchObject({ success: true, savedContent: 'latest editor text' });
+      expect(await saveExistingFile(path, 'old buffer', 'UTF-8', path)).toMatchObject({
+        success: true,
+        savedContent: 'latest editor text',
+      });
       expect(diskContent).toBe('latest editor text');
       expect(useEditorStore.getState().tabRenderList[0].modified).toBe(false);
       expect(useEditorStore.getState().tabs[0].content).toBe(diskContent);
       expect(getDiskBaseline(path).content).toBe(diskContent);
       expect(await reconcileFileChange(path)).toBe('unchanged');
       expect(useEditorStore.getState().externalFileConflicts.get(path)).toBeUndefined();
-    } finally { stop(); }
+    } finally {
+      stop();
+    }
   });
   it('skips a previously scheduled autosave while IME is composing, then saves the committed buffer', async () => {
     setLocalFileComposing(true);
-    expect(await saveExistingFile(path, 'unfinished', 'UTF-8', path)).toMatchObject({ superseded: true });
+    expect(await saveExistingFile(path, 'unfinished', 'UTF-8', path)).toMatchObject({
+      superseded: true,
+    });
     expect(invoke).not.toHaveBeenCalled();
     setBuffer(path, '中文');
     setLocalFileComposing(false);
-    expect(await saveExistingFile(path, 'unfinished', 'UTF-8', path)).toMatchObject({ savedContent: '中文' });
+    expect(await saveExistingFile(path, 'unfinished', 'UTF-8', path)).toMatchObject({
+      savedContent: '中文',
+    });
     expect(diskContent).toBe('中文');
   });
   it('waits for our write acknowledgement before checking a watcher event during continued typing', async () => {
@@ -129,7 +180,10 @@ describe('local file save/watch coordination', () => {
     expect(await watcher).toBe('unchanged');
     expect(useEditorStore.getState().externalFileConflicts.get(path)).toBeUndefined();
     expect(getDiskBaseline(path).content).toBe('first word');
-    expect(useEditorStore.getState().tabs[0]).toMatchObject({ content: 'first word', modified: true });
+    expect(useEditorStore.getState().tabs[0]).toMatchObject({
+      content: 'first word',
+      modified: true,
+    });
     expect(getBuffer(path)).toBe('first word next');
   });
 
@@ -169,7 +223,10 @@ describe('local file save/watch coordination', () => {
     const read = deferred();
     diskContent = 'external';
     setBuffer(path, 'my edits');
-    invoke.mockImplementationOnce(async () => { entered.resolve(); return read.promise; });
+    invoke.mockImplementationOnce(async () => {
+      entered.resolve();
+      return read.promise;
+    });
     const watcher = reconcileFileChange(path);
     await entered.promise;
     rememberDiskBaseline(path, 'acknowledged version');
@@ -184,7 +241,10 @@ describe('local file save/watch coordination', () => {
     diskContent = 'external';
     const entered = deferred();
     const read = deferred();
-    invoke.mockImplementationOnce(async () => { entered.resolve(); return read.promise; });
+    invoke.mockImplementationOnce(async () => {
+      entered.resolve();
+      return read.promise;
+    });
     const watcher = reconcileFileChange(path);
     await entered.promise;
     setBuffer(path, 'IME committed word');
@@ -196,11 +256,16 @@ describe('local file save/watch coordination', () => {
   it('blocks writing a genuine external conflict and preserves both versions', async () => {
     diskContent = 'external';
     setBuffer(path, 'my edits');
-    expect(await saveExistingFile(path, 'my edits', 'UTF-8', path)).toMatchObject({ conflict: true, success: false });
+    expect(await saveExistingFile(path, 'my edits', 'UTF-8', path)).toMatchObject({
+      conflict: true,
+      success: false,
+    });
     expect(diskContent).toBe('external');
     expect(getBuffer(path)).toBe('my edits');
     expect(getDiskBaseline(path).content).toBe('base');
-    expect(useEditorStore.getState().externalFileConflicts.get(path)).toMatchObject({ diskContent: 'external' });
+    expect(useEditorStore.getState().externalFileConflicts.get(path)).toMatchObject({
+      diskContent: 'external',
+    });
     expect(invoke.mock.calls.every(([cmd]) => cmd !== 'save_file')).toBe(true);
   });
 
@@ -213,7 +278,10 @@ describe('local file save/watch coordination', () => {
   });
 
   it('checks unpublished editor changes before choosing whether to reload', async () => {
-    const stop = registerEditorBufferFlusher(() => path, () => setBuffer(path, 'unpublished edit'));
+    const stop = registerEditorBufferFlusher(
+      () => path,
+      () => setBuffer(path, 'unpublished edit'),
+    );
     try {
       diskContent = 'external';
       expect(await reconcileFileChange(path)).toBe('conflict');
@@ -233,13 +301,20 @@ describe('local file save/watch coordination', () => {
     expect(await restoreExternalDisk(externalFileConflict)).toBe(true);
     expect(getBuffer(path)).toBe(diskContent);
     expect(getDiskBaseline(path).content).toBe(diskContent);
-    expect(useEditorStore.getState().tabs[0]).toMatchObject({ content: diskContent, modified: false });
+    expect(useEditorStore.getState().tabs[0]).toMatchObject({
+      content: diskContent,
+      modified: false,
+    });
     expect(useEditorStore.getState().externalFileConflicts.get(path)).toBeUndefined();
   });
 
   it('ignores an autosave queued before the same tab received recovered content', async () => {
-    useEditorStore.getState().restoreRecoveredTab({ path, tabId: path, content: 'recovered unsaved draft' });
-    expect(await saveExistingFile(path, undefined, undefined, path, 0)).toMatchObject({ superseded: true });
+    useEditorStore
+      .getState()
+      .restoreRecoveredTab({ path, tabId: path, content: 'recovered unsaved draft' });
+    expect(await saveExistingFile(path, undefined, undefined, path, 0)).toMatchObject({
+      superseded: true,
+    });
     expect(invoke).not.toHaveBeenCalled();
     expect(getBuffer(path)).toBe('recovered unsaved draft');
     expect(diskContent).toBe('base');
@@ -268,7 +343,9 @@ describe('local file save/watch coordination', () => {
     await expect(saveExistingFile(path, 'my edits', 'UTF-8', path)).rejects.toThrow('write failed');
     expect(getDiskBaseline(path).content).toBe('base');
     expect(diskContent).toBe('base');
-    expect(await saveExistingFile(path, 'my edits', 'UTF-8', path)).toMatchObject({ success: true });
+    expect(await saveExistingFile(path, 'my edits', 'UTF-8', path)).toMatchObject({
+      success: true,
+    });
     expect(diskContent).toBe('my edits');
   });
 
@@ -295,7 +372,10 @@ describe('local file save/watch coordination', () => {
     await vi.advanceTimersByTimeAsync(10);
     expect(useEditorStore.getState().externalFileConflicts.get(path)).toBeUndefined();
     await vi.advanceTimersByTimeAsync(10);
-    expect(useEditorStore.getState().externalFileConflicts.get(path)).toMatchObject({ kind: 'removed', path });
+    expect(useEditorStore.getState().externalFileConflicts.get(path)).toMatchObject({
+      kind: 'removed',
+      path,
+    });
   });
 
   it('does not deliver a pending conflict after the observer is disposed', async () => {
@@ -323,6 +403,8 @@ describe('local file save/watch coordination', () => {
     composing = false;
     await vi.advanceTimersByTimeAsync(10);
     expect(getBuffer(path)).toBe('中文');
-    expect(useEditorStore.getState().externalFileConflicts.get(path)).toMatchObject({ diskContent: 'external' });
+    expect(useEditorStore.getState().externalFileConflicts.get(path)).toMatchObject({
+      diskContent: 'external',
+    });
   });
 });

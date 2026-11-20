@@ -1,7 +1,7 @@
 import { test, expect } from '@playwright/test';
 
-async function prepare(page, mode = 'edit') {
-  await page.addInitScript(() => {
+async function installDesktopMocks(page, readerDenied = false) {
+  await page.addInitScript((readerDenied) => {
     let next = 0;
     window.__TAURI_EVENT_PLUGIN_INTERNALS__ = { unregisterListener() {} };
     window.__TAURI_INTERNALS__ = {
@@ -15,12 +15,17 @@ async function prepare(page, mode = 'edit') {
         }
         if (command.startsWith('plugin:event|')) return ++next;
         if (command.startsWith('is_')) return false;
+        if (readerDenied && command === 'reader_bootstrap') throw 'Access is denied. (os error 5)';
         if (['reader_bootstrap', 'read_recovery_snapshot'].includes(command)) return null;
         if (['get_cli_args', 'list_language_plugins', 'history_list', 'read_runtime_logs'].includes(command)) return [];
         return true;
       },
     };
-  });
+  }, readerDenied);
+}
+
+async function prepare(page, mode = 'edit') {
+  await installDesktopMocks(page);
   await page.goto('/');
   await expect(page.locator('.editor-content__welcome')).toBeVisible({ timeout: 25000 });
   await page.evaluate(async (mode) => {
@@ -41,6 +46,14 @@ async function prepare(page, mode = 'edit') {
     store.getState().setToolbarVisible(true);
   }, mode);
 }
+
+test('startup opens the editor when the reader preference cannot be read or written', async ({ page }) => {
+  test.setTimeout(60000);
+  await installDesktopMocks(page, true);
+  await page.goto('/');
+  await expect(page.locator('.editor-content__welcome')).toBeVisible({ timeout: 45000 });
+  await expect(page.locator('#moki-startup-recovery')).toHaveCount(0);
+});
 
 test('reload restores ordered tabs, active document, layout and Monaco cursor/scroll', async ({ page }) => {
   test.setTimeout(60000);

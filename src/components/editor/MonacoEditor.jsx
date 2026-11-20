@@ -17,8 +17,8 @@ import { attachMonacoLsp } from '@/services/monacoLsp';
 import { languageSuggestionOptions } from '@/services/monacoLanguageServices';
 import { watchMonacoProblems } from '@/services/monacoProblems';
 import useProblemsStore from '@store/useProblemsStore';
-import { readFileContent, openExternal } from '@utils/tauriApi';
-import { externalLink } from '@utils/editorLinks';
+import { readFileContent } from '@utils/tauriApi';
+import { externalLink, openEditorLink } from '@utils/editorLinks';
 import { getFileLanguage } from '@utils/fileLanguage';
 import { initMonacoShiki, isMonacoShikiReady, getMonacoThemeName } from '@utils/monacoShiki';
 import { setBuffer, getBuffer, registerEditorBufferFlusher } from '@utils/editorBuffer';
@@ -302,7 +302,7 @@ const MonacoEditorComponent = forwardRef(function MonacoEditorComponent({ classN
         }
         const url = externalLink(resource.toString());
         if (!url) return false;
-        try { await openExternal(url); } catch (error) { console.error('Unable to open link:', error); }
+        try { await openEditorLink(url); } catch (error) { console.error('Unable to open link:', error); }
         return true;
       },
     });

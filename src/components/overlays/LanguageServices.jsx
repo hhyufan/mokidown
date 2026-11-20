@@ -7,7 +7,7 @@ import { ArrowLeftOutlined, CheckOutlined, CloudDownloadOutlined, PlusOutlined, 
 import { useTranslation } from 'react-i18next';
 import useLspStore, { availablePlugins, selectLanguagePlugin } from '@store/useLspStore';
 import useExtensionStore, { OFFICIAL_EXTENSIONS } from '@store/useExtensionStore';
-import { openExternal } from '@utils/tauriApi';
+import { openEditorLink } from '@utils/editorLinks';
 import { getMaterialIcons, loadMaterialIcons } from '@utils/materialIcons';
 import TaskRing from '@components/ui/TaskRing';
 import ExtensionSettings from './ExtensionSettings';
@@ -288,7 +288,7 @@ export default function LanguageServices({ onOpenDocs }) {
         <div><dt>{t('languageServices.version')}</dt><dd>{state.installed.find((plugin) => plugin.manifest.id === selected.id)?.installedVersion || selected.version}</dd></div>
         <div><dt>{t('languageServices.requires')}</dt><dd>{localize(selected, 'requirements', i18n.language) || '—'}</dd></div>
       </dl>
-      {selected.homepage && <Button type="link" size="small" icon={<LinkOutlined />} onClick={() => act(() => openExternal(selected.homepage))}>{t('languageServices.homepage')}</Button>}
+      {selected.homepage && <Button type="link" size="small" icon={<LinkOutlined />} onClick={() => act(() => openEditorLink(selected.homepage))}>{t('languageServices.homepage')}</Button>}
       {state.installed.find((plugin) => plugin.manifest.id === selected.id)?.enabled && selected.languages.map((language) => {
         const candidates = state.installed.filter((plugin) => plugin.enabled && plugin.manifest.languages.includes(language));
         if (candidates.length < 2) return null;

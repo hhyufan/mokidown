@@ -11,6 +11,9 @@ use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, Ordering as AtomicOrdering};
 use std::sync::{Arc, Mutex};
 use std::time::UNIX_EPOCH;
+use tauri::AppHandle;
+#[cfg(not(all(windows, debug_assertions)))]
+use tauri::Manager;
 use tempfile::TempDir;
 
 const CHUNK_SIZE: usize = 4096;
@@ -293,11 +296,20 @@ fn merge(
 }
 
 fn build(
+    cache: &Path,
     entries: impl Iterator<Item = Result<FileInfo, String>>,
     sort: Sort,
     cancelled: &AtomicBool,
 ) -> Result<Snapshot, String> {
-    let directory = tempfile::tempdir().map_err(|e| e.to_string())?;
+    check_cancelled(cancelled)?;
+    let directory = fs::create_dir_all(cache)
+        .and_then(|()| tempfile::Builder::new().prefix("index-").tempdir_in(cache))
+        .map_err(|error| {
+            format!(
+                "Could not create directory index in {}: {error}",
+                cache.display()
+            )
+        })?;
     let mut runs = Vec::new();
     let mut chunk = Vec::with_capacity(CHUNK_SIZE);
     for info in entries {
@@ -444,6 +456,7 @@ fn directory_entries(
 
 #[tauri::command]
 pub(crate) async fn open_directory_index(
+    _app: AppHandle,
     id: String,
     generation: u64,
     dir_path: String,
@@ -464,6 +477,14 @@ pub(crate) async fn open_directory_index(
             _ => return Err("Invalid directory sort order".into()),
         },
     };
+    #[cfg(all(windows, debug_assertions))]
+    let cache = crate::development_cache_dir().join("directory-index");
+    #[cfg(not(all(windows, debug_assertions)))]
+    let cache = _app
+        .path()
+        .app_cache_dir()
+        .map_err(|error| error.to_string())?
+        .join("directory-index");
     let cancelled = Arc::new(AtomicBool::new(false));
     let scope = scope.unwrap_or_default();
     {
@@ -478,6 +499,7 @@ pub(crate) async fn open_directory_index(
         let _build = BUILD_LOCK.lock().map_err(|e| e.to_string())?;
         check_cancelled(&cancelled)?;
         let snapshot = Arc::new(build(
+            &cache,
             directory_entries(Path::new(&dir_path))?,
             sort,
             &cancelled,
@@ -565,20 +587,32 @@ pub(crate) fn close_directory_index(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn fixture() -> TempDir {
+        let parent = Path::new(env!("CARGO_MANIFEST_DIR")).join("target");
+        fs::create_dir_all(&parent).unwrap();
+        tempfile::tempdir_in(parent).unwrap()
+    }
+
     #[test]
     fn parent_snapshot_contains_child_directory_states_before_expanding_children() {
-        let root = tempfile::tempdir().unwrap();
-        let empty = root.path().join("empty");
-        let full = root.path().join("full");
+        let root = fixture();
+        let source = root.path().join("documents");
+        let cache = root.path().join("cache");
+        fs::create_dir(&source).unwrap();
+        let empty = source.join("empty");
+        let full = source.join("full");
         fs::create_dir(&empty).unwrap();
         fs::create_dir(&full).unwrap();
         fs::write(full.join("child.txt"), "one").unwrap();
         let snapshot = build(
-            directory_entries(root.path()).unwrap(),
+            &cache,
+            directory_entries(&source).unwrap(),
             name_sort(),
             &AtomicBool::new(false),
         )
         .unwrap();
+        assert_eq!(snapshot.directory.path().parent(), Some(cache.as_path()));
         let entries = snapshot.page(0, PAGE_SIZE).unwrap();
         assert_eq!(entries[0].name, "empty");
         assert_eq!(entries[0].directory_state.as_deref(), Some("empty"));
@@ -658,6 +692,7 @@ mod tests {
             Ordering::Less
         );
         let mut folder = entry(99);
+        let cache = fixture();
         folder.is_dir = true;
         folder.is_file = false;
         for descending in [false, true] {
@@ -666,6 +701,7 @@ mod tests {
                 ..name_sort()
             };
             let snapshot = build(
+                cache.path(),
                 vec![Ok(entry(10)), Ok(folder.clone()), Ok(entry(2))].into_iter(),
                 sort,
                 &AtomicBool::new(false),
@@ -680,7 +716,9 @@ mod tests {
     #[test]
     fn external_sort_multiple_passes_random_access_and_page_limit() {
         let count = CHUNK_SIZE * (MERGE_WIDTH + 1) + 17;
+        let cache = fixture();
         let snapshot = build(
+            cache.path(),
             (0..count).rev().map(|n| Ok(entry(n))),
             name_sort(),
             &AtomicBool::new(false),
@@ -701,13 +739,20 @@ mod tests {
 
     #[test]
     fn empty_cancelled_and_metadata_sorts() {
+        let cache = fixture();
         assert_eq!(
-            build(std::iter::empty(), name_sort(), &AtomicBool::new(false))
-                .unwrap()
-                .total,
+            build(
+                cache.path(),
+                std::iter::empty(),
+                name_sort(),
+                &AtomicBool::new(false)
+            )
+            .unwrap()
+            .total,
             0
         );
         assert!(build(
+            cache.path(),
             (0..10).map(|n| Ok(entry(n))),
             name_sort(),
             &AtomicBool::new(true)
@@ -715,6 +760,7 @@ mod tests {
         .is_err());
         for field in [Field::Size, Field::Time] {
             let snapshot = build(
+                cache.path(),
                 (0..10).map(|n| Ok(entry(n))),
                 Sort {
                     field,
@@ -729,7 +775,9 @@ mod tests {
 
     #[test]
     fn locates_off_page_results_and_honors_cancellation() {
+        let cache = fixture();
         let snapshot = build(
+            cache.path(),
             (0..1000).map(|n| Ok(entry(n))),
             name_sort(),
             &AtomicBool::new(false),

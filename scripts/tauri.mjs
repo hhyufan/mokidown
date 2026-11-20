@@ -1,6 +1,6 @@
 import { createRequire } from 'node:module';
 import { fileURLToPath } from 'node:url';
-import { initializeMsvc } from './windows-msvc.mjs';
+import { initializeMsvc, ensureCargoOnPath } from './windows-msvc.mjs';
 
 const args = process.argv.slice(2);
 
@@ -17,6 +17,7 @@ if (args[0] === 'build' && !args.includes('--app') && !args.includes('--bundles'
 
 try {
   initializeMsvc(args);
+  ensureCargoOnPath();
   if (!process.env.CARGO_TARGET_DIR) {
     process.env.CARGO_TARGET_DIR = fileURLToPath(new URL('../src-tauri/target', import.meta.url));
   }

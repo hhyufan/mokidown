@@ -20,7 +20,9 @@ installTauriEventCleanupGuard();
 installWebThemeBridge();
 const stopRuntimeLogging = installRuntimeLogging();
 if (import.meta.hot) import.meta.hot.dispose(stopRuntimeLogging);
-void preloadMonacoEditor().catch((error) => console.error('[Monaco] Startup preload failed:', error));
+void preloadMonacoEditor().catch((error) =>
+  console.error('[Monaco] Startup preload failed:', error),
+);
 installTooltipHygiene();
 
 const Root = import.meta.env.DEV ? React.StrictMode : React.Fragment;
@@ -29,10 +31,14 @@ const App = lazy(() => import('./App'));
 function SplashHandover({ children }) {
   useEffect(() => {
     if (!window.__TAURI_INTERNALS__) return undefined;
-    return announceMainWindowReady(Promise.all([
-      preloadMonacoEditor(),
-      import('@/services/editorSession').then(({ restoreEditorSession }) => restoreEditorSession()),
-    ]));
+    return announceMainWindowReady(
+      Promise.all([
+        preloadMonacoEditor(),
+        import('@/services/editorSession').then(({ restoreEditorSession }) =>
+          restoreEditorSession(),
+        ),
+      ]),
+    );
   }, []);
   return children;
 }
@@ -42,13 +48,16 @@ ReactDOM.createRoot(document.getElementById('root')).render(
     <StyleProvider hashPriority="high">
       <ThemedConfigProvider>
         <NativeTitleTooltips />
+
         <RuntimeLogHost />
         <RuntimeErrorBoundary root>
           <Suspense fallback={null}>
-            <SplashHandover><App skipCliArgs={new URLSearchParams(location.search).has('editor')} /></SplashHandover>
+            <SplashHandover>
+              <App skipCliArgs={new URLSearchParams(location.search).has('editor')} />
+            </SplashHandover>
           </Suspense>
         </RuntimeErrorBoundary>
       </ThemedConfigProvider>
     </StyleProvider>
-  </Root>
+  </Root>,
 );

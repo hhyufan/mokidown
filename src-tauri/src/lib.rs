@@ -24,6 +24,8 @@ mod language_plugins;
 mod lsp;
 #[cfg(windows)]
 mod msvc;
+#[cfg(windows)]
+mod native_web_preview;
 mod process;
 mod reader;
 mod runtime_logs;
@@ -35,6 +37,8 @@ mod startup_gate;
 mod terminal;
 mod text_file;
 mod webview_defaults;
+#[cfg(windows)]
+mod windows_external;
 
 /// 返回给前端的轻量级文件系统条目元数据，
 /// 用于资源管理器界面展示文件和目录。
@@ -241,20 +245,24 @@ fn replace_existing_file(temp: &Path, target: &Path) -> Result<(), String> {
 }
 
 /// Write into the destination directory, flush bytes to stable storage and only then
-/// replace the destination. On failure the temporary file is intentionally retained as
-/// a recovery copy and its path is included in the error.
+/// replace the destination. Once created, the temporary file is retained on failure.
 fn atomic_write(target: &Path, bytes: &[u8]) -> Result<(), String> {
     let parent = target
         .parent()
         .ok_or_else(|| "Target has no parent directory".to_string())?;
     fs::create_dir_all(parent).map_err(|error| format!("Failed to create directory: {error}"))?;
     let temp = unique_temp_path(target)?;
+    let mut file = OpenOptions::new()
+        .write(true)
+        .create_new(true)
+        .open(&temp)
+        .map_err(|error| {
+            format!(
+                "Failed to create recovery file in {}: {error}",
+                parent.display()
+            )
+        })?;
     let write_result = (|| -> Result<(), String> {
-        let mut file = OpenOptions::new()
-            .write(true)
-            .create_new(true)
-            .open(&temp)
-            .map_err(|error| format!("Failed to create recovery file: {error}"))?;
         file.write_all(bytes)
             .map_err(|error| format!("Failed to write recovery file: {error}"))?;
         file.sync_all()
@@ -687,17 +695,18 @@ async fn history_capture(
     content: String,
     force: Option<bool>,
     restored_from: Option<u64>,
-) -> Result<(), String> {
-    if capture_history(
+) -> Result<bool, String> {
+    let written = capture_history(
         &app,
         &file_path,
         &content,
         force.unwrap_or(false),
         restored_from,
-    )? {
+    )?;
+    if written {
         let _ = app.emit("history-changed", &HistoryChangeEvent { path: file_path });
     }
-    Ok(())
+    Ok(written)
 }
 
 #[tauri::command]
@@ -1533,9 +1542,14 @@ async fn show_main_window(app: AppHandle) -> Result<(), String> {
 async fn open_external(url: String) -> Result<(), String> {
     let allowed =
         url.starts_with("http://") || url.starts_with("https://") || url.starts_with("mailto:");
-    if !allowed {
+    if !allowed || url.contains('\0') {
         return Err("Only http(s) and mailto URLs are allowed".to_string());
     }
+    #[cfg(windows)]
+    return tauri::async_runtime::spawn_blocking(move || windows_external::open(&url))
+        .await
+        .map_err(|error| error.to_string())?;
+    #[cfg(not(windows))]
     open::that(url).map_err(|e| format!("Failed to open URL: {}", e))
 }
 
@@ -1715,6 +1729,14 @@ fn migrate_legacy_webview_profile() {
     }
 }
 
+#[cfg(all(windows, debug_assertions))]
+fn development_cache_dir() -> PathBuf {
+    Path::new(env!("CARGO_MANIFEST_DIR"))
+        .parent()
+        .expect("Tauri source directory has a parent")
+        .join(".cache")
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 /// 桌面端 `main()` 与移动端入口共用的 Tauri 启动逻辑。
 ///
@@ -1724,6 +1746,22 @@ pub fn run() {
     runtime_logs::init();
     // 必须在创建任何窗口之前执行，见 migrate_legacy_webview_profile 的说明。
     migrate_legacy_webview_profile();
+
+    #[allow(unused_mut)]
+    let mut context = tauri::generate_context!();
+    #[cfg(all(windows, debug_assertions))]
+    let development_windows = context
+        .config_mut()
+        .app
+        .windows
+        .iter_mut()
+        .filter(|window| window.create && matches!(window.label.as_str(), "main" | "splash"))
+        .map(|window| {
+            let config = window.clone();
+            window.create = false;
+            config
+        })
+        .collect::<Vec<_>>();
 
     #[allow(unused_mut)]
     let mut builder = tauri::Builder::default()
@@ -1751,7 +1789,12 @@ pub fn run() {
 
     // 启动期初始化：Windows 下补回关闭阴影后失去的窗口圆角，
     // 并确保 DWM 不绘制强调色边框。
-    builder = builder.setup(|app| {
+    builder = builder.setup(move |app| {
+        #[cfg(all(windows, debug_assertions))]
+        for config in &development_windows {
+            let builder = tauri::WebviewWindowBuilder::from_config(app, config)?;
+            webview_defaults::app_window(builder).build()?;
+        }
         // 品牌更名导致 app_data_dir() 指向新目录：先把旧目录里的本地历史与草稿搬过来。
         migrate_legacy_app_data(app.handle());
         let main_window = app.get_webview_window("main");
@@ -1797,10 +1840,20 @@ pub fn run() {
 
     let builder = builder
         .on_window_event(|window, event| {
+            #[cfg(windows)]
+            if window.label() == "main" {
+                match event {
+                    tauri::WindowEvent::Moved(_) => native_web_preview::moved(),
+                    tauri::WindowEvent::Resized(size) => native_web_preview::resized(*size),
+                    _ => {}
+                }
+            }
             if matches!(event, tauri::WindowEvent::Destroyed) {
                 reader::forget_window(window.app_handle(), window.label());
             }
             if window.label() == "main" && matches!(event, tauri::WindowEvent::Destroyed) {
+                #[cfg(windows)]
+                native_web_preview::stop_all();
                 html_preview::stop_all();
                 #[cfg(desktop)]
                 terminal::stop_all();
@@ -1881,6 +1934,16 @@ pub fn run() {
             script_runner::write_script_input,
             html_preview::html_preview_update,
             html_preview::html_preview_close,
+            #[cfg(windows)]
+            native_web_preview::native_web_preview_open,
+            #[cfg(windows)]
+            native_web_preview::native_web_preview_layout,
+            #[cfg(windows)]
+            native_web_preview::native_web_preview_hide,
+            #[cfg(windows)]
+            native_web_preview::native_web_preview_wallpaper,
+            #[cfg(windows)]
+            native_web_preview::native_web_preview_close,
             #[cfg(desktop)]
             terminal::terminal_start,
             #[cfg(desktop)]
@@ -1901,7 +1964,7 @@ pub fn run() {
         ]);
 
     let app = builder
-        .build(tauri::generate_context!())
+        .build(context)
         .expect("error while building tauri application");
 
     app.run(|_app_handle, _event| {

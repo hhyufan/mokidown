@@ -23,10 +23,14 @@ async function boot() {
   }
   let document = null;
   if (window.__TAURI_INTERNALS__) {
-    document = await invoke('reader_bootstrap', {
-      mode: useConfigStore.getState().associatedOpenMode === 'reader' ? 'reader' : 'editor',
-      editor: params.has('editor'),
-    });
+    try {
+      document = await invoke('reader_bootstrap', {
+        mode: useConfigStore.getState().associatedOpenMode === 'reader' ? 'reader' : 'editor',
+        editor: params.has('editor'),
+      });
+    } catch (error) {
+      console.warn('[startup] Could not restore the reader window. Opening the editor.', error);
+    }
   } else if (params.has('reader')) {
     // Browser QA uses real content supplied through the URL, never a restored workspace.
     document = { id: 'reader-preview', name: params.get('name') || 'Markdown.md',
@@ -42,5 +46,6 @@ async function boot() {
 
 void boot().catch((error) => {
   console.error('[startup] Could not select window runtime:', error);
-  window.dispatchEvent(new ErrorEvent('error', { message: error.message, error }));
+  const message = typeof error === 'string' ? error : error?.message || String(error);
+  window.dispatchEvent(new ErrorEvent('error', { message, error }));
 });

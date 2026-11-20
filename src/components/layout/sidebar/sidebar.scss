@@ -6,7 +6,7 @@
  */
 
 .sidebar {
-  --sidebar-actual-width: max(var(--sidebar-min-width, 220px), min(var(--sidebar-width, 280px), max(var(--sidebar-min-width, 220px), calc(100vw - 360px))));
+  --sidebar-actual-width: max(var(--sidebar-min-width, 220px), min(var(--sidebar-drag-width, var(--sidebar-width, 280px)), max(var(--sidebar-min-width, 220px), calc(100vw - 360px))));
   position: relative;
   width: var(--sidebar-actual-width);
   min-width: var(--sidebar-actual-width);
