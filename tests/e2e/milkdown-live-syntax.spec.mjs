@@ -447,10 +447,12 @@ test('$$ away from the line start stays an inline draft, not a block', async ({ 
   const editor = await openEditor(page);
   await editor.click();
   await page.keyboard.type('正文 $$ ');
-  // 行中写的 `$$` 不再抢块级入口；正文还是空的，就留在普通文字里。
+  // 行中写的 `$$` 不再抢块级入口：成对草稿的两枚定界符中间只摊着一个空格，
+  // 还算不出式子，所以那两枚照常摆在屏幕上，等用户接着写。
   expect(await page.evaluate(() => window.trial.state().parent)).toBe('paragraph');
   await expect(editor.locator('.md-preview__math-source--block')).toHaveCount(0);
-  // 只有行首的 `$$` + 空格才归块级输入规则管。
+  await expect(editor.locator('.moki-math-draft-marker')).toHaveCount(0);
+  // 只有行首的空对 + 空格才归块级输入规则管。
   const block = await openEditor(page);
   await block.click();
   await page.keyboard.type('$$ ');
@@ -458,7 +460,7 @@ test('$$ away from the line start stays an inline draft, not a block', async ({ 
   expect(await page.evaluate(() => window.trial.state().parent)).toBe('math_source_block');
 });
 
-test('a fresh $$ draft opens the whole symbol table before any control sequence', async ({ page }) => {
+test('a fresh $$ pair opens the whole symbol table before any control sequence', async ({ page }) => {
   const editor = await openEditor(page);
   const list = page.locator('.moki-math-completion');
   const rows = list.getByRole('option');
@@ -467,29 +469,59 @@ test('a fresh $$ draft opens the whole symbol table before any control sequence'
   // 开界符刚落下就把整张表摊开：不认得 LaTeX 编码的人这时候最需要它。
   await expect(list).toBeVisible();
   expect(await rows.count()).toBeGreaterThan(10);
-  // 空正文还不是草稿，预览浮层要等有正文的那一步。
-  await expect(editor.locator('.moki-math-preview--inline')).toHaveCount(0);
+  // 空对也给一只空预览框：摆在那儿就说清「这里即将排出一条公式」。
+  await expect(editor.locator('.moki-math-preview--inline')).toHaveCount(1);
+  // 那两枚 `$` 是手势替用户补的，屏幕上不再摆出来。
+  const markers = editor.locator('.moki-math-draft-marker');
+  await expect(markers).toHaveCount(2);
+  await expect(markers.first()).toHaveCSS('color', 'rgba(0, 0, 0, 0)');
   const box = await list.boundingBox();
-  const edge = await editor.locator('p').first().evaluate((node) => {
-    // Chromium 会把行尾的空 Range 报成整行开头，所以量已有文字的真实矩形，取最后一行的右端。
+  const opening = await markers.first().boundingBox();
+  const bottom = await editor.locator('p').first().evaluate((node) => {
+    // Chromium 会把行尾的空 Range 报成整行开头，所以量已有文字的真实矩形，取最后一行的下沿。
     const range = document.createRange();
     range.selectNodeContents(node);
-    const rect = [...range.getClientRects()].at(-1);
-    return { right: rect.right, bottom: rect.bottom };
+    return [...range.getClientRects()].at(-1).bottom;
   });
-  // 列表跟着光标走，而不是钉在段落头上。
-  expect(Math.abs(box.x - edge.right)).toBeLessThan(2);
-  expect(box.y).toBeGreaterThanOrEqual(edge.bottom);
-  expect(box.y).toBeLessThanOrEqual(edge.bottom + 12);
+  // 列表跟着光标走：光标停在开界符右边那一格，而不是钉在段落头上。
+  expect(Math.abs(box.x - (opening.x + opening.width))).toBeLessThan(2);
+  expect(box.y).toBeGreaterThanOrEqual(bottom);
+  expect(box.y).toBeLessThanOrEqual(bottom + 12);
   const item = await rows.filter({ hasText: '\\alpha' }).boundingBox();
   await page.mouse.click(item.x + item.width / 2, item.y + item.height / 2);
   // 选中的宏落在草稿正文里，草稿从这一刻起才有正文可预览。
-  expect(await page.evaluate(() => window.trial.markdown())).toContain('正文 $$\\alpha');
+  expect(await page.evaluate(() => window.trial.markdown())).toContain('正文 $\\alpha $');
   await expect(list).toHaveCount(0);
   await expect(editor.locator('.moki-math-preview--inline')).toHaveCount(1);
-  // 收尾那对 `$` 一齐就折成公式，与原先的草稿规则完全一样。
+  // 老手感里收尾的那对 `$` 一齐，第一下跳过定界符、当场折成公式，第二下被右边界吃掉。
   await page.keyboard.type('$$');
+  await expect(editor.locator('[data-moki-math-mark]')).toHaveCount(1);
   expect(await page.evaluate(() => window.trial.markdown())).toMatch(/正文 \$\\alpha\$/);
+});
+
+test('a pair with nothing typed inside stays two plain dollar signs', async ({ page }) => {
+  const editor = await openEditor(page);
+  await editor.click();
+  await page.keyboard.type('正文 $$');
+  await expect(editor.locator('.moki-math-draft-marker')).toHaveCount(2);
+  // 折叠之前得先看这对 `$` 里有没有输入：空的没什么可折，光标一走，那两枚就照常
+  // 以普通文字摆在句子里，跟用户自己打的 `$$` 一模一样。
+  await page.keyboard.press('End');
+  await expect(editor.locator('[data-moki-math-mark]')).toHaveCount(0);
+  await expect(editor.locator('.moki-math-draft-marker')).toHaveCount(0);
+  await expect(editor.locator('.moki-math-preview--inline')).toHaveCount(0);
+  expect(await page.evaluate(() => window.trial.markdown())).toBe('正文 $$\n');
+  // 两枚之间只摊着一个空格的也一样：那连草稿都算不上。
+  const spaced = await openEditor(page);
+  await spaced.click();
+  await page.keyboard.type('正文 $$ ');
+  await page.keyboard.press('End');
+  await expect(spaced.locator('[data-moki-math-mark]')).toHaveCount(0);
+  // 浏览器在文本节点边界上打出来的空格是不换行空格（U+00A0），跟成对手势无关，
+  // 只在断言前把它当普通空格看。
+  expect(
+    (await page.evaluate(() => window.trial.markdown())).replace(/\u00a0/g, ' '),
+  ).toBe('正文 $ $\n');
 });
 
 test('the draft is measured as the whole expression, not up to the caret', async ({ page }) => {
@@ -535,7 +567,7 @@ test('Enter takes the only candidate without another key press', async ({ page }
   await expect(list).toHaveCount(0);
   // Enter 没漏给编辑器：段落还是那一段，草稿也没被断行打断。
   expect((await page.evaluate(() => window.trial.state())).doc.content).toHaveLength(1);
-  expect(await page.evaluate(() => window.trial.markdown())).toMatch(/^正文 \$\$\\sqrt\{\}\n$/);
+  expect(await page.evaluate(() => window.trial.markdown())).toMatch(/^正文 \$\\sqrt\{\}\$\n$/);
 });
 
 test('Enter with several candidates left stays the editor’s own', async ({ page }) => {
@@ -547,7 +579,8 @@ test('Enter with several candidates left stays the editor’s own', async ({ pag
   await page.keyboard.press('Enter');
   // 还没写完的编码该由接着打字的人自己决定，列表不许抢走 Enter。
   expect((await page.evaluate(() => window.trial.state())).doc.content).toHaveLength(2);
-  expect(await page.evaluate(() => window.trial.markdown())).toMatch(/^正文 \$\$\\in\n/);
+  // 断行把成对的那两枚 `$` 拆到两段里，草稿当场散掉：收尾那枚留在第二段，还是普通文字。
+  expect(await page.evaluate(() => window.trial.markdown())).toMatch(/^正文 \$\\in\n\n\$\n/);
 });
 
 test('a macro still being typed is not handed to KaTeX', async ({ page }) => {
@@ -680,7 +713,7 @@ test('a completion narrows to the closest code when several macros share the pre
   // 按左键退进宏名，查询仍是那整段 `\in`，挑 `\infty` 换掉的也是整段。
   await page.keyboard.press('ArrowLeft');
   await rows.filter({ hasText: '\\infty' }).click();
-  expect(await page.evaluate(() => window.trial.markdown())).toMatch(/^正文 \$\$\\infty \n$/);
+  expect(await page.evaluate(() => window.trial.markdown())).toMatch(/^正文 \$\\infty \$\n$/);
   await expect(editor.locator('.moki-math-preview--inline .katex-html')).toHaveText('∞');
 });
 
@@ -693,7 +726,9 @@ test('the table written by $$ goes away as soon as the body stops being a macro'
   // 接着打的是普通内容，列表当场收走，不该赖在句子里。
   await page.keyboard.type('100');
   await expect(list).toHaveCount(0);
-  expect(await page.evaluate(() => window.trial.markdown())).toContain('价格 $$100');
+  // 手势补出的那枚收尾 `$` 跟着正文一起留在句子里：写进文件就是 `$100$`，
+  // 与 remark 认它是一条公式是同一回事，两边不会各说各话。
+  expect(await page.evaluate(() => window.trial.markdown())).toContain('价格 $100$');
 });
 
 test('a $$ that is not a delimiter keeps the symbol table closed', async ({ page }) => {
@@ -888,7 +923,9 @@ test('links and formulas render immediately after typing and reveal their syntax
   await expect(editor.locator('a')).toHaveText('site');
   await page.evaluate(() => window.trial.selectTextblock(0));
   await expect.poll(() => visibleMarkers(editor)).toEqual(['[', '](https://example.com)']);
-  await page.keyboard.press('End');
+  // 挪光标走插件，不走按键：程序化选区之后，定界符还要一拍才落到 DOM 上，那一拍的重新
+  // 渲染会把浏览器刚摆好的光标抹掉，紧接着的回车就切到段落开头去了。
+  await page.evaluate(() => window.trial.selectTextblock(0, 'end'));
   await page.keyboard.press('Enter');
   await page.keyboard.type('$x^2$');
   await expect(editor.locator('[data-moki-math-mark]')).toHaveCount(1);
@@ -898,7 +935,7 @@ test('links and formulas render immediately after typing and reveal their syntax
   await page.evaluate(() => window.trial.selectTextblock(1));
   await expect(editor.locator('.moki-math-source')).toHaveCount(0);
   await expect(editor.locator('.moki-math-preview--cover .katex')).toBeVisible();
-  await page.keyboard.press('End');
+  await page.evaluate(() => window.trial.selectTextblock(1, 'end'));
   await expect(editor.locator('.moki-math-preview--cover .katex')).toBeVisible();
   await page.keyboard.press('Enter');
   await page.keyboard.type('[***styled**](https://styled.example) plain');

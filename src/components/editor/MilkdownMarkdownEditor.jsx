@@ -675,17 +675,23 @@ function parseTableSource(source, schema, schemaTypes) {
 /**
  * 块级数学公式输入规则。
  *
- * 当用户输入 `$$` 起始标记时，创建只含公式正文的可编辑块。
+ * 成对手势打出空对 `$|$`，在中间敲一个空格就是把这条公式要摆在正文之外：整段换成
+ * 只含公式源码的可编辑块。输入规则只看得见光标左边的文本，右边那枚收尾 `$` 是手势
+ * 自己补的，得在 handler 里点名确认。
  */
 const mathBlockInputRule = $inputRule(
   (ctx) =>
-    new InputRule(/^\$\$\s$/, (state, _match, start, end) => {
+    new InputRule(/^\$\s$/, (state, _match, start, end) => {
       const $start = state.doc.resolve(start);
+      const $caret = state.doc.resolve(end);
+      const closer = $caret.nodeAfter;
       const sourceType = mathSourceBlockSchema.type(ctx);
       if (
         !$start.parent.isTextblock ||
         $start.parentOffset ||
-        end !== $start.end() ||
+        closer?.text !== '$' ||
+        closer.marks.length ||
+        end + 1 !== $caret.end() ||
         !$start.node(-1).canReplaceWith($start.index(-1), $start.indexAfter(-1), sourceType)
       )
         return null;

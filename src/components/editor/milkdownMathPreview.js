@@ -11,14 +11,17 @@
  * 行内公式分「查看」和「编辑」两档：单击只把源码翻出来看，预览框和补全列表都不出现；
  * 只有双击（光标落进正文）或在公式边上按一下退格/删除，才算真的在改它，那时候预览与补全才跟上。
  * 查看档里挪光标、接着打字都还当查看——手滑碰一下方向键不该就把整篇的公式点亮。
+ *
+ * 从零写一条公式走的是草稿：连打两个 `$` 由实时语法补成一对，光标停在中间，那两枚定界符
+ * 在这里被染透明（本插件的活儿），光标一走就把定界符删掉、正文挂上 mark 折成公式。
  */
 import { Decoration, DecorationSet } from '@milkdown/kit/prose/view';
 import { Plugin, PluginKey, TextSelection } from '@milkdown/kit/prose/state';
+import { closeHistory } from '@milkdown/kit/prose/history';
 import { $prose } from '@milkdown/kit/utils';
 import { isImeComposing } from '@utils/keyboard';
 import katex from 'katex';
-import { mathDraftRange, mathMarkName } from './milkdownMathMark';
-import { syntaxScanText } from './milkdownRawText';
+import { mathDraftAt, mathMarkName } from './milkdownMathMark';
 import { endsWithPartialMacro } from './milkdownMathSymbols';
 
 // 块级源码态的节点名与文档协议绑定，改动会让已存文档的公式失效。
@@ -69,7 +72,8 @@ function renderPreview(value, spec) {
   // 预览不许光标进去：浏览器光标一走进非文档内容，PM 就读不回文档位置。
   bubble.setAttribute('contenteditable', 'false');
   bubble.setAttribute('aria-hidden', 'true');
-  bubble.innerHTML = (spec.cover ? coverHtml(value) : previewHtml(value, spec.displayMode)).html;
+  // 刚打开的空对没有正文可排，`previewHtml` 会给出 error：那正是要的一个空框。
+  bubble.innerHTML = (spec.cover ? coverHtml(value) : previewHtml(value, spec.displayMode)).html || '';
   if (!spec.draft) return bubble;
   // 草稿正文没挂 mark，PM 又会在 widget 两侧断开装饰 span，气泡在正文里找不到
   // position:relative 的参照物。所以让 widget 自带一个零宽锚点当包含块。
@@ -214,27 +218,37 @@ function enterAtEdge(view, math, range, forward) {
     .scrollIntoView());
 }
 
-// 行内公式草稿只在光标停着的时候预览：`$$` 还没闭合，正文是一段没挂 mark 的字面
-// 文本，光标一走就该退回普通文字，不该继续假装成公式。区间判定交给 mathDraftRange，
-// 它量的是光标所在这一段连续 LaTeX，而不是光标本身——从列表挑回模板后光标停在花括号
-// 里、或者按左键退到宏名中间，屏幕上的式子都没变，预览也就不该变。
-// 草稿区间之外的文本节点是什么形状都不影响换算。
+// 行内公式草稿只在光标停着的时候预览：成对手势打出的那对 `$` 还摊在文档里，正文是一段
+// 没挂 mark 的字面文本，光标一走就该折成公式（见 foldDraft）。区间判定与换算都在
+// mathDraftAt，补全和实时语法读的是同一份。
 function mathDraft(state, ranges) {
   const { selection } = state;
   if (!selection.empty) return null;
-  const $caret = selection.$from;
-  if (!$caret.parent.isTextblock || $caret.parent.type.spec.code) return null;
-  // 代码里的 `$` 是正文：math mark 自己也算 code，靠下面的区间重叠一并排除。
-  if ($caret.marks().some((mark) => mark.type.spec.code)) return null;
-  const offset = $caret.parentOffset;
-  const value = syntaxScanText($caret.parent);
-  const draft = mathDraftRange(value, offset);
-  if (!draft) return null;
-  const at = (index) => $caret.pos - (offset - index);
-  const to = at(draft.to);
-  const from = at(draft.from);
-  if (ranges.some(({ from: start, to: end }) => to > start && from < end)) return null;
-  return { anchor: at(draft.anchor), from, to };
+  const draft = mathDraftAt(selection.$from);
+  // 框进了已有公式（正文里挂着 code mark 的转义符这类）就不算草稿：那两枚 `$` 是画出来的。
+  if (!draft || ranges.some(({ from, to }) => draft.close >= from && draft.anchor <= to)) return null;
+  return draft;
+}
+
+// 光标离开那一对 `$` 才算这个式子写完：定界符从文档里删掉，正文挂上 math mark，
+// 屏幕上当场退回渲染态。打字的时候不折——那几笔人还在式子里，正文随时会长。
+// 只在纯选区移动的事务上折，两份文档是同一份，区间不用换算。
+function foldDraft(transactions, oldState, state, math) {
+  if (!transactions.some(({ selectionSet }) => selectionSet)) return null;
+  if (transactions.some(({ docChanged }) => docChanged)) return null;
+  const { selection } = oldState;
+  if (!selection.empty) return null;
+  const draft = mathDraftAt(selection.$from);
+  // 空对没什么可折的，那两枚 `$` 就是用户要打的字。
+  if (!draft || draft.from === draft.to) return null;
+  // 选区还搭在这对定界符上（含正好压在收尾那一格）就还没写完。
+  if (state.selection.to >= draft.from && state.selection.from <= draft.close) return null;
+  const tr = closeHistory(state.tr);
+  // 定界符连同它和正文之间的空白一起退场：`$ x $` 排出来与 `$x$` 是同一个式子，把空白留在
+  // 句子里只会平白多出一对空格。先删右边那枚，左边的坐标才不用跟着挪。
+  tr.delete(draft.to, draft.close + 1).delete(draft.anchor, draft.from);
+  const shift = draft.from - draft.anchor;
+  return tr.addMark(draft.from - shift, draft.to - shift, math.create());
 }
 
 // 气泡的可视范围由最近的滚动祖先决定，正文自己不是滚动容器。
@@ -297,7 +311,10 @@ export const milkdownMathPreview = $prose(() => {
     // 编辑档里光标压在公式尾巴上时，PM 每敲一个字就把 storedMarks 清空，下一个字顺着
     // `inclusive:false` 就跑到正文外面去了（`$x^2$` 末尾连打两个字会变成 `$x^2A$B`）。
     // 只要还认这条公式在编辑，就把 mark 重新按上：光标停在尾巴上也还是在正文里打字。
-    appendTransaction(transactions, _oldState, state) {
+    appendTransaction(transactions, oldState, state) {
+      const math = state.schema.marks[mathMarkName];
+      const folded = math && foldDraft(transactions, oldState, state, math);
+      if (folded) return folded;
       if (!transactions.some(({ docChanged, selectionSet }) => docChanged || selectionSet)) return null;
       const clicked = previewKey.getState(state);
       if (!clicked || isInspecting(clicked)) return null;
@@ -361,12 +378,13 @@ export const milkdownMathPreview = $prose(() => {
           { key, side, stopEvent: () => true, ignoreSelection: true }));
 
         // 正文不成立时沿用上一次成功的样子；还没成功渲染过就没有可沿用的预览，
-        // 等用户写出可解析的东西再出现气泡。
-        const addBubble = (identity, pos, value, spec, side) => {
+        // 等用户写出可解析的东西再出现气泡。空对（`placeholder`）是唯一的例外。
+        const addBubble = (identity, pos, value, spec, side, placeholder = false) => {
           active.add(identity);
           if (isPreviewable(value, spec.displayMode)) lastGood.set(identity, value);
           const shown = lastGood.get(identity);
           if (shown) attach(pos, shown, spec, side, `${spec.variant}:${pos}:${shown}`);
+          else if (placeholder) attach(pos, '', spec, side, `${spec.variant}:${pos}:pending`);
         };
 
         // 块级气泡排在源码块前头：挂在它后面会让预览和源码块上下颠倒。
@@ -393,8 +411,13 @@ export const milkdownMathPreview = $prose(() => {
         // 定位参照由 widget 自带的零宽锚点提供。锚点摆在正文正中，气泡就正好压在正文上方。
         const draft = math ? mathDraft(state, ranges) : null;
         if (draft) {
+          // 那两枚 `$` 是成对手势替用户补出来的，屏幕上不再摆出来：预览框与补全列表已经说清
+          // 「这里在写公式」。染透明而不是删字符，光标才照常落得进去，折成公式时宽度也不跳。
+          for (const pos of [draft.anchor, draft.close]) {
+            decorations.push(Decoration.inline(pos, pos + 1, { class: 'moki-math-draft-marker' }));
+          }
           addBubble(`draft:${draft.anchor}`, draft.from + ((draft.to - draft.from) >> 1),
-            doc.textBetween(draft.from, draft.to), draftSpec, 1);
+            doc.textBetween(draft.from, draft.to), draftSpec, 1, draft.from === draft.to);
         }
 
         for (const identity of lastGood.keys()) if (!active.has(identity)) lastGood.delete(identity);
