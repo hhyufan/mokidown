@@ -25,7 +25,11 @@ import { normalizeCodeLanguage } from '@utils/knowledgeTree';
 import { createMilkdownHeadingFoldsPlugin, restoreMilkdownFolds } from './milkdownHeadingFolds';
 import { jumpToFootnote } from '@utils/footnoteParser';
 import { createMilkdownFoldBridge } from './milkdownFoldBridge';
-import { comparisonDecorations } from './milkdownComparisonLayout';
+import {
+  comparisonDecorations,
+  comparisonLayoutKey,
+  mapComparisonDecorations,
+} from './milkdownComparisonLayout';
 import { reportReactError } from '@/services/runtimeLogs';
 import { Milkdown, MilkdownProvider, useEditor } from '@milkdown/react';
 import {
@@ -1986,34 +1990,34 @@ function MilkdownInner(
           .use(milkdownInlineLinkRule);
       if (isComparison)
         editor.use(
-          $prose((ctx) => {
-            let previousDoc;
-            let previousLayout;
-            let decorations;
-            return new Plugin({
-              props: {
-                decorations: ({ doc }) => {
-                  const layout = comparisonLayoutRef.current;
-                  if (doc !== previousDoc || layout !== previousLayout) {
-                    previousDoc = doc;
-                    previousLayout = layout;
-                    decorations = comparisonDecorations(doc, layout);
-                  }
-                  return decorations;
+          $prose(
+            (ctx) =>
+              new Plugin({
+                key: comparisonLayoutKey,
+                state: {
+                  init: (_, { doc }) => comparisonDecorations(doc, comparisonLayoutRef.current),
+                  apply(tr, decorations) {
+                    const layout = tr.getMeta(comparisonLayoutKey);
+                    if (layout) return comparisonDecorations(tr.doc, layout);
+                    // Keep folding and alignment attached to the previous blocks while the worker catches up.
+                    return tr.docChanged ? mapComparisonDecorations(decorations, tr) : decorations;
+                  },
                 },
-              },
-              view: readOnly
-                ? undefined
-                : () => ({
-                    update(view, previous) {
-                      if (view.state.doc === previous.doc) return;
-                      queueMicrotask(() => {
-                        if (!view.isDestroyed) publishEditorContent(ctx);
-                      });
-                    },
-                  }),
-            });
-          }),
+                props: {
+                  decorations: (state) => comparisonLayoutKey.getState(state),
+                },
+                view: readOnly
+                  ? undefined
+                  : () => ({
+                      update(view, previous) {
+                        if (view.state.doc === previous.doc) return;
+                        queueMicrotask(() => {
+                          if (!view.isDestroyed) publishEditorContent(ctx);
+                        });
+                      },
+                    }),
+              }),
+          ),
         );
 
       editorRef.current = editor;
@@ -2021,14 +2025,6 @@ function MilkdownInner(
     },
     [activeTabId, content, isComparison, readOnly, publishEditorContent],
   );
-
-  useLayoutEffect(() => {
-    if (!isComparison || editorInfo.loading) return;
-    editorRef.current?.action((ctx) => {
-      const view = ctx.get(editorViewCtx);
-      view.dispatch(view.state.tr.setMeta('addToHistory', false));
-    });
-  }, [comparisonLayout, editorInfo.loading, isComparison]);
 
   useEffect(() => {
     if (!editorInfo.loading) onComparisonReady?.();
@@ -2043,18 +2039,28 @@ function MilkdownInner(
       const next = ctx.get(parserCtx)(comparisonSource);
       if (!next) return;
       const view = ctx.get(editorViewCtx);
-      const { doc, selection } = view.state;
-      const tr = view.state.tr.replaceWith(0, doc.content.size, next.content);
-      tr.setSelection(
-        TextSelection.between(
-          tr.doc.resolve(Math.min(selection.anchor, tr.doc.content.size)),
-          tr.doc.resolve(Math.min(selection.head, tr.doc.content.size)),
-        ),
-      );
-      view.dispatch(tr);
+      const { doc } = view.state;
+      const start = doc.content.findDiffStart(next.content);
+      if (start != null) {
+        const { a, b } = doc.content.findDiffEnd(next.content);
+        const overlap = Math.max(0, start - Math.min(a, b));
+        const tr = view.state.tr.replace(start, a + overlap, next.slice(start, b + overlap));
+        if (!tr.doc.eq(next)) tr.replaceWith(0, tr.doc.content.size, next.content);
+        view.dispatch(tr);
+      }
       publishedMarkdownRef.current = ctx.get(serializerCtx)(persistentMilkdownDocument(view.state));
     });
   }, [comparisonSource, editorInfo.loading, isComparison]);
+
+  useLayoutEffect(() => {
+    if (!isComparison || editorInfo.loading || !comparisonLayout) return;
+    editorRef.current?.action((ctx) => {
+      const view = ctx.get(editorViewCtx);
+      view.dispatch(
+        view.state.tr.setMeta(comparisonLayoutKey, comparisonLayout).setMeta('addToHistory', false),
+      );
+    });
+  }, [comparisonLayout, editorInfo.loading, isComparison]);
 
   const resolveCodeTarget = useCallback(
     (language, index) => {
