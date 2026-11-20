@@ -121,7 +121,9 @@ export default defineConfig(async ({ mode }) => ({
       '@utils': resolve(__dirname, './src/utils'),
       '@store': resolve(__dirname, './src/store'),
       // Markdown parsing runs inside workers too, where the browser export has no DOM.
-      'decode-named-character-reference': fileURLToPath(import.meta.resolve('decode-named-character-reference')),
+      'decode-named-character-reference': fileURLToPath(
+        import.meta.resolve('decode-named-character-reference'),
+      ),
     },
   },
 

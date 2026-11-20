@@ -28,7 +28,16 @@ import { createMilkdownFoldBridge } from './milkdownFoldBridge';
 import { comparisonDecorations } from './milkdownComparisonLayout';
 import { reportReactError } from '@/services/runtimeLogs';
 import { Milkdown, MilkdownProvider, useEditor } from '@milkdown/react';
-import { Editor, commandsCtx, defaultValueCtx, editorViewCtx, editorViewOptionsCtx, parserCtx, rootCtx, serializerCtx } from '@milkdown/kit/core';
+import {
+  Editor,
+  commandsCtx,
+  defaultValueCtx,
+  editorViewCtx,
+  editorViewOptionsCtx,
+  parserCtx,
+  rootCtx,
+  serializerCtx,
+} from '@milkdown/kit/core';
 import {
   commonmark,
   bulletListSchema,
@@ -61,13 +70,28 @@ import { history } from '@milkdown/kit/plugin/history';
 import { clipboard } from '@milkdown/kit/plugin/clipboard';
 import { listener, listenerCtx } from '@milkdown/kit/plugin/listener';
 import { codeBlockComponent, codeBlockConfig } from '@milkdown/kit/component/code-block';
-import { $ctx, $inputRule, $nodeSchema, $prose, $remark, getMarkdown, insert, replaceRange } from '@milkdown/kit/utils';
+import {
+  $ctx,
+  $inputRule,
+  $nodeSchema,
+  $prose,
+  $remark,
+  getMarkdown,
+  insert,
+  replaceRange,
+} from '@milkdown/kit/utils';
 import { toggleMark } from '@milkdown/kit/prose/commands';
 import { closeHistory, isHistoryTransaction } from '@milkdown/kit/prose/history';
 import { InputRule } from '@milkdown/kit/prose/inputrules';
 import { NodeSelection, Plugin, TextSelection } from '@milkdown/kit/prose/state';
 import { findChildren } from '@milkdown/kit/prose';
-import { HighlightStyle, LanguageDescription, LanguageSupport, StreamLanguage, syntaxHighlighting } from '@codemirror/language';
+import {
+  HighlightStyle,
+  LanguageDescription,
+  LanguageSupport,
+  StreamLanguage,
+  syntaxHighlighting,
+} from '@codemirror/language';
 import { EditorView as CodeMirrorView } from '@codemirror/view';
 import { tags } from '@lezer/highlight';
 import katex from 'katex';
@@ -133,17 +157,31 @@ import useConfigStore from '@store/useConfigStore';
 import useNotificationStore from '@store/useNotificationStore';
 import { useEditorBufferContent } from '@hooks/useEditorBufferContent';
 import { useDocumentScrollState } from '@hooks/useDocumentScrollState';
-import { getDocumentViewState, registerDocumentViewState, requestDocumentViewStateSave } from '@utils/documentViewState';
+import {
+  getDocumentViewState,
+  registerDocumentViewState,
+  requestDocumentViewStateSave,
+} from '@utils/documentViewState';
 import { getBuffer, setBuffer, registerEditorBufferFlusher } from '@utils/editorBuffer';
 import { hasMarkdownUndoStep, markdownUndoDirection } from '@utils/markdownUndo';
 import { milkdownSharedHistory, replayMilkdownHistory } from './milkdownSharedHistory';
 import { isImeComposing } from '@utils/keyboard';
-import { hydrateMarkdownImages, parseMarkdownLineHint, resolveMarkdownLinkPath } from '@utils/markdownAssets';
+import {
+  hydrateMarkdownImages,
+  parseMarkdownLineHint,
+  resolveMarkdownLinkPath,
+} from '@utils/markdownAssets';
 import { observeMarkdownEnhancements } from '@utils/observeMarkdownEnhancements';
 import i18n from '@/i18n';
 import MermaidRenderer from './MermaidRenderer';
 import { attachCodeBlockExecutions } from './milkdownCodeBlockRuns';
-import { milkdownEditingFlow, milkdownGapCursor, handleMilkdownBlockKeyDown, handleMilkdownBlankPointerDown, persistentMilkdownDocument } from './milkdownEditingFlow';
+import {
+  milkdownEditingFlow,
+  milkdownGapCursor,
+  handleMilkdownBlockKeyDown,
+  handleMilkdownBlankPointerDown,
+  persistentMilkdownDocument,
+} from './milkdownEditingFlow';
 import { milkdownMarkdownPaste } from './milkdownMarkdownPaste';
 import { htmlBlockSchema, htmlBlockView, sanitizeMilkdownHtml } from './milkdownHtmlBlock';
 import { configureEditingWhitespace, initialEditingSelection } from './milkdownWhitespace';
@@ -155,7 +193,13 @@ import MilkdownTooltips from './MilkdownTooltips';
 import { milkdownMediaEditor, milkdownMediaImageView } from './milkdownMedia';
 import { openEditorLink } from '@utils/editorLinks';
 import './markdown-preview.scss';
-import { milkdownBlockSelection, milkdownFenceConfirmation, milkdownInlineLinkRule, milkdownInlineSyntaxSource, milkdownLiveSyntax } from './milkdownLiveSyntax';
+import {
+  milkdownBlockSelection,
+  milkdownFenceConfirmation,
+  milkdownInlineLinkRule,
+  milkdownInlineSyntaxSource,
+  milkdownLiveSyntax,
+} from './milkdownLiveSyntax';
 import { CODE_FENCE_LANGUAGE_EVENT } from '@utils/markdownCodeFence';
 import MarkdownCodeLanguageMenu from './MarkdownCodeLanguageMenu';
 import { MATH_COMPLETION_EVENT, milkdownMathCompletion } from './milkdownMathCompletion';
@@ -168,25 +212,85 @@ import MarkdownMathCompletionMenu from './MarkdownMathCompletionMenu';
  * 用于统一代码块头部标签、语言选择器与预览模式中的语言文案展示。
  */
 const LANG_DISPLAY = {
-  html: 'HTML', xml: 'XML', sql: 'SQL', css: 'CSS', cpp: 'C++',
-  js: 'JavaScript', javascript: 'JavaScript', ts: 'TypeScript', typescript: 'TypeScript',
-  py: 'Python', python: 'Python', php: 'PHP', md: 'Markdown',
-  yml: 'YAML', yaml: 'YAML', json: 'JSON', rb: 'Ruby', java: 'Java',
-  c: 'C', go: 'Go', rust: 'Rust', kotlin: 'Kotlin', swift: 'Swift',
-  scss: 'SCSS', sass: 'Sass', bash: 'Bash', shell: 'Shell', sh: 'Shell',
-  mermaid: 'Mermaid', jsx: 'JSX', tsx: 'TSX', vue: 'Vue',
-  toml: 'TOML', ini: 'INI', lua: 'Lua', r: 'R', dart: 'Dart',
-  cs: 'C#', csharp: 'C#', 'c#': 'C#',
+  html: 'HTML',
+  xml: 'XML',
+  sql: 'SQL',
+  css: 'CSS',
+  cpp: 'C++',
+  js: 'JavaScript',
+  javascript: 'JavaScript',
+  ts: 'TypeScript',
+  typescript: 'TypeScript',
+  py: 'Python',
+  python: 'Python',
+  php: 'PHP',
+  md: 'Markdown',
+  yml: 'YAML',
+  yaml: 'YAML',
+  json: 'JSON',
+  rb: 'Ruby',
+  java: 'Java',
+  c: 'C',
+  go: 'Go',
+  rust: 'Rust',
+  kotlin: 'Kotlin',
+  swift: 'Swift',
+  scss: 'SCSS',
+  sass: 'Sass',
+  bash: 'Bash',
+  shell: 'Shell',
+  sh: 'Shell',
+  mermaid: 'Mermaid',
+  jsx: 'JSX',
+  tsx: 'TSX',
+  vue: 'Vue',
+  toml: 'TOML',
+  ini: 'INI',
+  lua: 'Lua',
+  r: 'R',
+  dart: 'Dart',
+  cs: 'C#',
+  csharp: 'C#',
+  'c#': 'C#',
 };
 
 const codeHighlightStyle = HighlightStyle.define([
   { tag: tags.keyword, color: 'var(--md-code-keyword)' },
-  { tag: [tags.name, tags.deleted, tags.character, tags.propertyName, tags.macroName], color: 'var(--md-code-name)' },
+  {
+    tag: [tags.name, tags.deleted, tags.character, tags.propertyName, tags.macroName],
+    color: 'var(--md-code-name)',
+  },
   { tag: [tags.function(tags.variableName), tags.labelName], color: 'var(--md-code-function)' },
-  { tag: [tags.color, tags.constant(tags.name), tags.standard(tags.name)], color: 'var(--md-code-constant)' },
+  {
+    tag: [tags.color, tags.constant(tags.name), tags.standard(tags.name)],
+    color: 'var(--md-code-constant)',
+  },
   { tag: [tags.definition(tags.name), tags.separator], color: 'var(--md-code-definition)' },
-  { tag: [tags.typeName, tags.className, tags.number, tags.changed, tags.annotation, tags.modifier, tags.self, tags.namespace], color: 'var(--md-code-type)' },
-  { tag: [tags.operator, tags.operatorKeyword, tags.url, tags.escape, tags.regexp, tags.link, tags.special(tags.string)], color: 'var(--md-code-operator)' },
+  {
+    tag: [
+      tags.typeName,
+      tags.className,
+      tags.number,
+      tags.changed,
+      tags.annotation,
+      tags.modifier,
+      tags.self,
+      tags.namespace,
+    ],
+    color: 'var(--md-code-type)',
+  },
+  {
+    tag: [
+      tags.operator,
+      tags.operatorKeyword,
+      tags.url,
+      tags.escape,
+      tags.regexp,
+      tags.link,
+      tags.special(tags.string),
+    ],
+    color: 'var(--md-code-operator)',
+  },
   { tag: [tags.meta, tags.comment], color: 'var(--md-code-comment)' },
   { tag: tags.strong, fontWeight: '600' },
   { tag: tags.emphasis, fontStyle: 'italic' },
@@ -221,11 +325,12 @@ const codeMirrorTheme = CodeMirrorView.theme({
   '&.cm-focused': {
     outline: 'none',
   },
-  '.cm-selectionBackground, &.cm-focused > .cm-scroller > .cm-selectionLayer .cm-selectionBackground': {
-    // Match CodeMirror's focused selector specificity, otherwise its opaque
-    // light-theme default (#d7d4f0) overrides the shared selection colour.
-    backgroundColor: 'var(--selection-bg)',
-  },
+  '.cm-selectionBackground, &.cm-focused > .cm-scroller > .cm-selectionLayer .cm-selectionBackground':
+    {
+      // Match CodeMirror's focused selector specificity, otherwise its opaque
+      // light-theme default (#d7d4f0) overrides the shared selection colour.
+      backgroundColor: 'var(--selection-bg)',
+    },
 });
 
 const codeBlockExtensions = [
@@ -249,23 +354,49 @@ const markdownHtmlPlugin = $remark('mokiMarkdownHtml', () => remarkMarkdownHtml,
 
 const footnoteReferenceLink = footnoteReferenceSchema.extendSchema((base) => (ctx) => ({
   ...base(ctx),
-  toDOM: (node) => ['sup', { 'data-type': 'footnote_reference', 'data-label': node.attrs.label },
-    ['a', { class: 'footnote-ref', href: '#', contenteditable: 'false' }, `[${node.attrs.label}]`]],
+  toDOM: (node) => [
+    'sup',
+    { 'data-type': 'footnote_reference', 'data-label': node.attrs.label },
+    ['a', { class: 'footnote-ref', href: '#', contenteditable: 'false' }, `[${node.attrs.label}]`],
+  ],
 }));
 
 const footnoteDefinitionWithBackref = footnoteDefinitionSchema.extendSchema((base) => (ctx) => ({
   ...base(ctx),
-  toDOM: (node) => ['dl', { 'data-type': 'footnote_definition', 'data-label': node.attrs.label },
-    ['dt', node.attrs.label], ['dd', ['div', 0], ['a', {
-      class: 'footnote-backref', href: '#', contenteditable: 'false', 'aria-label': i18n.t('editor.footnoteBack'),
-    }, '↩']]],
-  parseDOM: [{ tag: 'dl[data-type="footnote_definition"]',
-    getAttrs: (dom) => ({ label: dom.dataset.label }), contentElement: (dom) => dom.querySelector('dd > div') || dom.querySelector('dd') }],
+  toDOM: (node) => [
+    'dl',
+    { 'data-type': 'footnote_definition', 'data-label': node.attrs.label },
+    ['dt', node.attrs.label],
+    [
+      'dd',
+      ['div', 0],
+      [
+        'a',
+        {
+          class: 'footnote-backref',
+          href: '#',
+          contenteditable: 'false',
+          'aria-label': i18n.t('editor.footnoteBack'),
+        },
+        '↩',
+      ],
+    ],
+  ],
+  parseDOM: [
+    {
+      tag: 'dl[data-type="footnote_definition"]',
+      getAttrs: (dom) => ({ label: dom.dataset.label }),
+      contentElement: (dom) => dom.querySelector('dd > div') || dom.querySelector('dd'),
+    },
+  ],
 }));
-const katexOptionsCtx = $ctx({
-  throwOnError: false,
-  strict: false,
-}, 'katexOptions');
+const katexOptionsCtx = $ctx(
+  {
+    throwOnError: false,
+    strict: false,
+  },
+  'katexOptions',
+);
 
 const mathInlineSchema = $nodeSchema(mathInlineType, () => ({
   group: 'inline',
@@ -275,10 +406,12 @@ const mathInlineSchema = $nodeSchema(mathInlineType, () => ({
   attrs: {
     value: { default: '' },
   },
-  parseDOM: [{
-    tag: `span[data-type="${mathInlineType}"]`,
-    getAttrs: (dom) => ({ value: dom.dataset.value || dom.textContent || '' }),
-  }],
+  parseDOM: [
+    {
+      tag: `span[data-type="${mathInlineType}"]`,
+      getAttrs: (dom) => ({ value: dom.dataset.value || dom.textContent || '' }),
+    },
+  ],
   toDOM: (node) => [
     'span',
     {
@@ -312,11 +445,13 @@ const mathBlockSchema = $nodeSchema(mathBlockType, () => ({
   attrs: {
     value: { default: '' },
   },
-  parseDOM: [{
-    tag: `div[data-type="${mathBlockType}"]`,
-    preserveWhitespace: 'full',
-    getAttrs: (dom) => ({ value: dom.dataset.value || dom.textContent || '' }),
-  }],
+  parseDOM: [
+    {
+      tag: `div[data-type="${mathBlockType}"]`,
+      preserveWhitespace: 'full',
+      getAttrs: (dom) => ({ value: dom.dataset.value || dom.textContent || '' }),
+    },
+  ],
   toDOM: (node) => [
     'div',
     {
@@ -347,9 +482,11 @@ const mathSourceInlineSchema = $nodeSchema(mathSourceInlineType, () => ({
   inline: true,
   isolating: true,
   marks: '',
-  parseDOM: [{
-    tag: `span[data-type="${mathSourceInlineType}"]`,
-  }],
+  parseDOM: [
+    {
+      tag: `span[data-type="${mathSourceInlineType}"]`,
+    },
+  ],
   toDOM: () => [
     'span',
     {
@@ -377,10 +514,12 @@ const mathSourceBlockSchema = $nodeSchema(mathSourceBlockType, () => ({
   defining: true,
   isolating: true,
   code: true,
-  parseDOM: [{
-    tag: `div[data-type="${mathSourceBlockType}"]`,
-    preserveWhitespace: 'full',
-  }],
+  parseDOM: [
+    {
+      tag: `div[data-type="${mathSourceBlockType}"]`,
+      preserveWhitespace: 'full',
+    },
+  ],
   toDOM: () => [
     'div',
     {
@@ -418,10 +557,12 @@ function rawSourceNodeSchema(name, { inline }) {
     defining: !inline,
     isolating: true,
     code: !inline,
-    parseDOM: [{
-      tag: `${inline ? 'span' : 'div'}[data-type="${name}"]`,
-      preserveWhitespace: inline ? undefined : 'full',
-    }],
+    parseDOM: [
+      {
+        tag: `${inline ? 'span' : 'div'}[data-type="${name}"]`,
+        preserveWhitespace: inline ? undefined : 'full',
+      },
+    ],
     toDOM: () => [
       inline ? 'span' : 'div',
       {
@@ -521,9 +662,7 @@ function tableToSource(node) {
   const header = rows[0] || [];
   const separator = header.map(() => '---');
   const body = rows.slice(1);
-  return [header, separator, ...body]
-    .map((cells) => `| ${cells.join(' | ')} |`)
-    .join('\n');
+  return [header, separator, ...body].map((cells) => `| ${cells.join(' | ')} |`).join('\n');
 }
 
 /**
@@ -584,10 +723,19 @@ function parseTableSource(source, schema, schemaTypes) {
   const rows = lines.slice(2).map(splitTableRow);
   if (!header.length) return null;
 
-  const makeParagraph = (text) => schema.nodes.paragraph.create(null, text ? schema.text(text) : null);
+  const makeParagraph = (text) =>
+    schema.nodes.paragraph.create(null, text ? schema.text(text) : null);
   const makeCell = (type, text) => type.create(null, makeParagraph(text));
-  const headerRow = schemaTypes.tableHeaderRow.create(null, header.map((cell) => makeCell(schemaTypes.tableHeader, cell)));
-  const bodyRows = rows.map((row) => schemaTypes.tableRow.create(null, header.map((_, index) => makeCell(schemaTypes.tableCell, row[index] || ''))));
+  const headerRow = schemaTypes.tableHeaderRow.create(
+    null,
+    header.map((cell) => makeCell(schemaTypes.tableHeader, cell)),
+  );
+  const bodyRows = rows.map((row) =>
+    schemaTypes.tableRow.create(
+      null,
+      header.map((_, index) => makeCell(schemaTypes.tableCell, row[index] || '')),
+    ),
+  );
   return schemaTypes.table.create(null, [headerRow, ...bodyRows]);
 }
 
@@ -597,11 +745,13 @@ function parseTableSource(source, schema, schemaTypes) {
  * 将 `$...$` 输入即时折叠为受控数学原子节点。
  */
 const mathInlineInputRule = $inputRule(
-  (ctx) => new InputRule(/(?:\$)([^$]+)(?:\$)$/, (state, match, start, end) => {
-    const value = match[1] || '';
-    if (!value || state.doc.resolve(start).parent.type === mathSourceInlineSchema.type(ctx)) return null;
-    return state.tr.replaceWith(start, end, mathInlineSchema.type(ctx).create({ value }));
-  })
+  (ctx) =>
+    new InputRule(/(?:\$)([^$]+)(?:\$)$/, (state, match, start, end) => {
+      const value = match[1] || '';
+      if (!value || state.doc.resolve(start).parent.type === mathSourceInlineSchema.type(ctx))
+        return null;
+      return state.tr.replaceWith(start, end, mathInlineSchema.type(ctx).create({ value }));
+    }),
 );
 
 /**
@@ -610,15 +760,21 @@ const mathInlineInputRule = $inputRule(
  * 当用户输入 `$$` 起始标记时，创建只含公式正文的可编辑块。
  */
 const mathBlockInputRule = $inputRule(
-  (ctx) => new InputRule(/^\$\$\s$/, (state, _match, start, end) => {
-    const $start = state.doc.resolve(start);
-    const sourceType = mathSourceBlockSchema.type(ctx);
-    if (!$start.parent.isTextblock || $start.parentOffset || end !== $start.end()
-      || !$start.node(-1).canReplaceWith($start.index(-1), $start.indexAfter(-1), sourceType)) return null;
-    const from = $start.before();
-    const tr = state.tr.replaceWith(from, $start.after(), sourceType.create());
-    return tr.setSelection(TextSelection.create(tr.doc, from + 1)).scrollIntoView();
-  })
+  (ctx) =>
+    new InputRule(/^\$\$\s$/, (state, _match, start, end) => {
+      const $start = state.doc.resolve(start);
+      const sourceType = mathSourceBlockSchema.type(ctx);
+      if (
+        !$start.parent.isTextblock ||
+        $start.parentOffset ||
+        end !== $start.end() ||
+        !$start.node(-1).canReplaceWith($start.index(-1), $start.indexAfter(-1), sourceType)
+      )
+        return null;
+      const from = $start.before();
+      const tr = state.tr.replaceWith(from, $start.after(), sourceType.create());
+      return tr.setSelection(TextSelection.create(tr.doc, from + 1)).scrollIntoView();
+    }),
 );
 
 /**
@@ -628,17 +784,19 @@ const mathBlockInputRule = $inputRule(
  * 让符号补全与预览气泡也能用在「新写一个行内公式」上。
  */
 const mathSourceInlineInputRule = $inputRule(
-  (ctx) => new InputRule(/\$\$\s$/, (state, _match, start, end) => {
-    const $start = state.doc.resolve(start);
-    // 整段只有一个 `$$ ` 时归块级规则管，它不成立才会走到这里。
-    if (!$start.parent.isTextblock || !$start.parentOffset) return null;
-    const sourceType = mathSourceInlineSchema.type(ctx);
-    if (!$start.parent.canReplaceWith($start.index(), $start.indexAfter(), sourceType)) return null;
-    // 触发用的收尾空格不进文档：输入规则接管后，这段事务吃掉整个 `$$ `。
-    const tr = state.tr.replaceWith(start, end, sourceType.create(null, state.schema.text('$')));
-    // 光标停在 `$` 之后，接着打字就是接着写公式正文。
-    return tr.setSelection(TextSelection.create(tr.doc, start + 2)).scrollIntoView();
-  })
+  (ctx) =>
+    new InputRule(/\$\$\s$/, (state, _match, start, end) => {
+      const $start = state.doc.resolve(start);
+      // 整段只有一个 `$$ ` 时归块级规则管，它不成立才会走到这里。
+      if (!$start.parent.isTextblock || !$start.parentOffset) return null;
+      const sourceType = mathSourceInlineSchema.type(ctx);
+      if (!$start.parent.canReplaceWith($start.index(), $start.indexAfter(), sourceType))
+        return null;
+      // 触发用的收尾空格不进文档：输入规则接管后，这段事务吃掉整个 `$$ `。
+      const tr = state.tr.replaceWith(start, end, sourceType.create(null, state.schema.text('$')));
+      // 光标停在 `$` 之后，接着打字就是接着写公式正文。
+      return tr.setSelection(TextSelection.create(tr.doc, start + 2)).scrollIntoView();
+    }),
 );
 
 /**
@@ -664,14 +822,14 @@ const mathValueEditPlugin = $prose((ctx) => {
     tableCell: tableCellSchema.type(ctx),
   };
   const isMathNode = (node) => node?.type === inlineType || node?.type === blockType;
-  const mathSourceTypes = { inline: inlineType, inlineSource: inlineSourceType, blockSource: blockSourceType };
+  const mathSourceTypes = {
+    inline: inlineType,
+    inlineSource: inlineSourceType,
+    blockSource: blockSourceType,
+  };
   const isEditableRenderedNode = (node) => isMathNode(node) || node?.type === imageType;
-  const isSourceNode = (node) => [
-    inlineSourceType,
-    blockSourceType,
-    imageSourceType,
-    tableSourceType,
-  ].includes(node?.type);
+  const isSourceNode = (node) =>
+    [inlineSourceType, blockSourceType, imageSourceType, tableSourceType].includes(node?.type);
   const deleteOne = (source, fromEnd) => (fromEnd ? source.slice(0, -1) : source.slice(1));
 
   const removeEmptyMathBlock = (view, pos, node, fromEnd) => {
@@ -709,13 +867,22 @@ const mathValueEditPlugin = $prose((ctx) => {
       event.preventDefault();
       return removeEmptyMathBlock(view, pos, node, event.key === 'Backspace');
     }
-    if ((event.key === 'Backspace' && offset <= 0) || (event.key === 'Delete' && offset >= source.length)) return false;
+    if (
+      (event.key === 'Backspace' && offset <= 0) ||
+      (event.key === 'Delete' && offset >= source.length)
+    )
+      return false;
 
     const nextOffset = event.key === 'Backspace' ? offset - 1 : offset;
-    const nextSource = event.key === 'Backspace'
-      ? `${source.slice(0, offset - 1)}${source.slice(offset)}`
-      : `${source.slice(0, offset)}${source.slice(offset + 1)}`;
-    const nextNode = node.type.create(node.attrs, nextSource ? schema.text(nextSource) : null, node.marks);
+    const nextSource =
+      event.key === 'Backspace'
+        ? `${source.slice(0, offset - 1)}${source.slice(offset)}`
+        : `${source.slice(0, offset)}${source.slice(offset + 1)}`;
+    const nextNode = node.type.create(
+      node.attrs,
+      nextSource ? schema.text(nextSource) : null,
+      node.marks,
+    );
     const tr = view.state.tr
       .replaceWith(pos, pos + node.nodeSize, nextNode)
       .setMeta(markdownSourceEditMeta, true);
@@ -725,7 +892,15 @@ const mathValueEditPlugin = $prose((ctx) => {
     return true;
   };
 
-  const replaceWithRawSource = (view, pos, node, sourceType, source, fromEnd, cursorOffsetFromEnd = 0) => {
+  const replaceWithRawSource = (
+    view,
+    pos,
+    node,
+    sourceType,
+    source,
+    fromEnd,
+    cursorOffsetFromEnd = 0,
+  ) => {
     const nextSource = deleteOne(source, fromEnd);
     if (!nextSource) {
       view.dispatch(view.state.tr.delete(pos, pos + node.nodeSize).scrollIntoView());
@@ -735,7 +910,10 @@ const mathValueEditPlugin = $prose((ctx) => {
     const tr = view.state.tr
       .replaceWith(pos, pos + node.nodeSize, replacement)
       .setMeta(markdownSourceEditMeta, true);
-    const cursorPos = Math.min(pos + 1 + nextSource.length - cursorOffsetFromEnd, tr.doc.content.size);
+    const cursorPos = Math.min(
+      pos + 1 + nextSource.length - cursorOffsetFromEnd,
+      tr.doc.content.size,
+    );
     tr.setSelection(TextSelection.create(tr.doc, Math.max(pos + 1, cursorPos)));
     view.dispatch(tr.scrollIntoView());
     return true;
@@ -744,29 +922,60 @@ const mathValueEditPlugin = $prose((ctx) => {
   const replaceMathWithSource = (view, pos, node, fromEnd) => {
     const value = node.attrs.value || '';
     if (node.type === blockType && !value) return removeEmptyMathBlock(view, pos, node, fromEnd);
-    view.dispatch(mathSourceTransaction(view, pos, node, mathSourceTypes, fromEnd, false).scrollIntoView());
+    view.dispatch(
+      mathSourceTransaction(view, pos, node, mathSourceTypes, fromEnd, false).scrollIntoView(),
+    );
     return true;
   };
 
   const replaceRenderedWithSource = (view, pos, node, fromEnd) => {
     if (isMathNode(node)) return replaceMathWithSource(view, pos, node, fromEnd);
-    if (node.type === imageType) return replaceWithRawSource(view, pos, node, imageSourceType, imageToSource(node), fromEnd, 0);
-    if (node.type === tableType) return replaceWithRawSource(view, pos, node, tableSourceType, tableToSource(node), fromEnd, 0);
+    if (node.type === imageType)
+      return replaceWithRawSource(
+        view,
+        pos,
+        node,
+        imageSourceType,
+        imageToSource(node),
+        fromEnd,
+        0,
+      );
+    if (node.type === tableType)
+      return replaceWithRawSource(
+        view,
+        pos,
+        node,
+        tableSourceType,
+        tableToSource(node),
+        fromEnd,
+        0,
+      );
     return false;
   };
 
   return new Plugin({
     appendTransaction(transactions, _oldState, newState) {
       // Undo and redo already restore the intended node and selection.
-      if (transactions.some((tr) => {
-        const root = tr.getMeta('appendedTransaction') || tr;
-        return isHistoryTransaction(root) || root.getMeta(mathSourceEditMeta) || root.getMeta(markdownSourceEditMeta);
-      })) return null;
+      if (
+        transactions.some((tr) => {
+          const root = tr.getMeta('appendedTransaction') || tr;
+          return (
+            isHistoryTransaction(root) ||
+            root.getMeta(mathSourceEditMeta) ||
+            root.getMeta(markdownSourceEditMeta)
+          );
+        })
+      )
+        return null;
       let tr = null;
       const replaceSource = (pos, node, replacement) => {
         tr ||= newState.tr;
         // Earlier replacements change positions in tr.doc, while descendants visits newState.doc.
-        tr.replaceWith(tr.mapping.map(pos, 1), tr.mapping.map(pos + node.nodeSize, -1), replacement);
+        tr.replaceWith(
+          tr.mapping.map(pos, 1),
+          tr.mapping.map(pos + node.nodeSize, -1),
+          replacement,
+        );
       };
 
       newState.doc.descendants((node, pos) => {
@@ -809,14 +1018,17 @@ const mathValueEditPlugin = $prose((ctx) => {
 
         if (selection instanceof NodeSelection && isEditableRenderedNode(selection.node)) {
           event.preventDefault();
-          return replaceRenderedWithSource(view, selection.from, selection.node, event.key === 'Backspace');
+          return replaceRenderedWithSource(
+            view,
+            selection.from,
+            selection.node,
+            event.key === 'Backspace',
+          );
         }
 
         const { $from } = selection;
         const side = event.key === 'Backspace' ? $from.nodeBefore : $from.nodeAfter;
-        const pos = event.key === 'Backspace'
-          ? $from.pos - (side?.nodeSize || 0)
-          : $from.pos;
+        const pos = event.key === 'Backspace' ? $from.pos - (side?.nodeSize || 0) : $from.pos;
 
         if (!isEditableRenderedNode(side)) return false;
         event.preventDefault();
@@ -830,20 +1042,27 @@ const taskListMarker = /^(?:([-+*])[ \u00a0]+)?\[([ xX\u00a0])\][ \u00a0]+$/;
 
 function convertTaskListMarker(state, match, start, end) {
   const $start = state.doc.resolve(start);
-  if (!$start.depth || $start.parent.type !== state.schema.nodes.paragraph || $start.parentOffset) return null;
+  if (!$start.depth || $start.parent.type !== state.schema.nodes.paragraph || $start.parentOffset)
+    return null;
   const { list_item: itemType, bullet_list: listType } = state.schema.nodes;
   const parent = $start.node(-1);
   const index = $start.index(-1);
   const checked = match[2].toLowerCase() === 'x';
   if (!match[1]) {
     if (parent.type !== itemType || index !== 0 || parent.attrs.checked != null) return null;
-    return state.tr.delete(start, end).setNodeMarkup($start.before(-1), undefined, { ...parent.attrs, checked });
+    return state.tr
+      .delete(start, end)
+      .setNodeMarkup($start.before(-1), undefined, { ...parent.attrs, checked });
   }
   if (!parent.canReplaceWith(index, index + 1, listType)) return null;
   const pos = $start.before();
   const tr = state.tr.delete(start, end);
   const paragraph = tr.doc.nodeAt(pos);
-  tr.replaceWith(pos, pos + paragraph.nodeSize, listType.create(null, itemType.create({ checked }, paragraph)));
+  tr.replaceWith(
+    pos,
+    pos + paragraph.nodeSize,
+    listType.create(null, itemType.create({ checked }, paragraph)),
+  );
   return tr.setSelection(TextSelection.create(tr.doc, pos + 3));
 }
 
@@ -945,7 +1164,7 @@ function wrapMermaidPreview(svg) {
  */
 function getLangDisplay(raw) {
   const key = (raw || '').toLowerCase();
-  return LANG_DISPLAY[key] || (key.charAt(0).toUpperCase() + key.slice(1));
+  return LANG_DISPLAY[key] || key.charAt(0).toUpperCase() + key.slice(1);
 }
 
 // Milkdown 代码块预览协议要求这里同步返回：
@@ -981,7 +1200,11 @@ function renderCodeBlockPreview(language, content, applyPreview) {
       const { svg } = await mermaid.render(id, content);
       applyPreview(wrapMermaidPreview(svg));
     } catch (error) {
-      applyPreview(wrapMermaidPreview(`<pre class="md-preview__mermaid md-preview__mermaid--error"><span>Mermaid Error:</span> ${String(error?.message || error)}</pre>`));
+      applyPreview(
+        wrapMermaidPreview(
+          `<pre class="md-preview__mermaid md-preview__mermaid--error"><span>Mermaid Error:</span> ${String(error?.message || error)}</pre>`,
+        ),
+      );
     }
   })();
 
@@ -1001,8 +1224,12 @@ function renderCodeBlockPreview(language, content, applyPreview) {
  * @returns {boolean} 命中编辑器工具栏控件时返回 `true`。
  */
 function isInteractiveToolbarTarget(target) {
-  return target instanceof Element
-    && !!target.closest('.tools, .language-button, .preview-toggle-button, .language-picker, .lang-tag, .md-code-execution');
+  return (
+    target instanceof Element &&
+    !!target.closest(
+      '.tools, .language-button, .preview-toggle-button, .language-picker, .lang-tag, .md-code-execution',
+    )
+  );
 }
 
 /**
@@ -1012,12 +1239,15 @@ function isInteractiveToolbarTarget(target) {
  * @returns {string} 匹配到的标准语言名；未命中时返回空字符串。
  */
 function findKnownCodeLanguageName(raw) {
-  const value = String(raw || '').trim().toLowerCase();
+  const value = String(raw || '')
+    .trim()
+    .toLowerCase();
   if (!value) return '';
-  const match = codeLanguages.find((language) => (
-    language.name.toLowerCase() === value
-    || language.alias.some((alias) => alias.toLowerCase() === value)
-  ));
+  const match = codeLanguages.find(
+    (language) =>
+      language.name.toLowerCase() === value ||
+      language.alias.some((alias) => alias.toLowerCase() === value),
+  );
   return match?.name || '';
 }
 
@@ -1074,14 +1304,16 @@ function commitTypedCodeBlockLanguage(view, event) {
   if (event.key !== 'Enter') return false;
 
   const target = event.target;
-  if (!(target instanceof HTMLInputElement) || !target.classList.contains('search-input')) return false;
+  if (!(target instanceof HTMLInputElement) || !target.classList.contains('search-input'))
+    return false;
 
   const picker = target.closest('.language-picker');
   const codeBlock = target.closest('.milkdown-code-block');
   if (!picker || !codeBlock) return false;
 
   const typedValue = target.value.trim();
-  const firstListedLanguage = picker.querySelector('.language-list-item[data-language]')?.dataset.language || '';
+  const firstListedLanguage =
+    picker.querySelector('.language-list-item[data-language]')?.dataset.language || '';
   const nextLanguage = findKnownCodeLanguageName(typedValue) || typedValue || firstListedLanguage;
   if (!nextLanguage) return false;
 
@@ -1117,14 +1349,18 @@ function isFootnoteBackrefTarget(target) {
 
 function handleFootnoteClick(event, origins) {
   const ref = event.target.closest?.('sup[data-type="footnote_reference"]');
-  const back = event.target.closest?.('.footnote-backref')?.closest('dl[data-type="footnote_definition"]');
+  const back = event.target
+    .closest?.('.footnote-backref')
+    ?.closest('dl[data-type="footnote_definition"]');
   if (!ref && !back) return;
   const root = event.currentTarget;
   const label = CSS.escape((ref || back).dataset.label || '');
   const origin = back && origins.get(back);
   const target = ref
     ? root.querySelector(`dl[data-type="footnote_definition"][data-label="${label}" i]`)
-    : origin?.isConnected ? origin : root.querySelector(`sup[data-type="footnote_reference"][data-label="${label}" i]`);
+    : origin?.isConnected
+      ? origin
+      : root.querySelector(`sup[data-type="footnote_reference"][data-label="${label}" i]`);
   if (target && ref) origins.set(target, ref);
   if (target) jumpToFootnote(target, Boolean(back));
   event.preventDefault();
@@ -1138,22 +1374,24 @@ function handleFootnoteClick(event, origins) {
  * @returns {boolean} 命中不可编辑预览区域时返回 `true`。
  */
 function isNonEditablePreviewTarget(target) {
-  return target instanceof Element
-    && !isInteractiveToolbarTarget(target)
-    && (
-      !!target.closest('sup[data-type="footnote_reference"]')
-      || isFootnoteBackrefTarget(target)
-      || !!target.closest([
-      '.md-preview__milkdown-mermaid-inline',
-      '.md-preview__milkdown-mermaid',
-      '.md-preview__mermaid',
-      '.md-preview__math',
-      '.md-preview__html',
-      '.preview-panel',
-      'img[data-moki-original-src]',
-      'img[data-moki-resolved-src]',
-    ].join(', '))
-    );
+  return (
+    target instanceof Element &&
+    !isInteractiveToolbarTarget(target) &&
+    (!!target.closest('sup[data-type="footnote_reference"]') ||
+      isFootnoteBackrefTarget(target) ||
+      !!target.closest(
+        [
+          '.md-preview__milkdown-mermaid-inline',
+          '.md-preview__milkdown-mermaid',
+          '.md-preview__mermaid',
+          '.md-preview__math',
+          '.md-preview__html',
+          '.preview-panel',
+          'img[data-moki-original-src]',
+          'img[data-moki-resolved-src]',
+        ].join(', '),
+      ))
+  );
 }
 
 /**
@@ -1171,11 +1409,18 @@ function mathSourceTransaction(view, pos, node, types, fromEnd, keepValue) {
   const { inline, inlineSource, blockSource } = types;
   const isInline = node.type === inline;
   const value = node.attrs.value || '';
-  const nextValue = keepValue ? value : (fromEnd ? value.slice(0, -1) : value.slice(1));
+  const nextValue = keepValue ? value : fromEnd ? value.slice(0, -1) : value.slice(1);
   const source = isInline ? `$${nextValue}$` : nextValue;
   const { state } = view;
   const tr = state.tr
-    .replaceWith(pos, pos + node.nodeSize, (isInline ? inlineSource : blockSource).create(null, source ? state.schema.text(source) : null))
+    .replaceWith(
+      pos,
+      pos + node.nodeSize,
+      (isInline ? inlineSource : blockSource).create(
+        null,
+        source ? state.schema.text(source) : null,
+      ),
+    )
     .setMeta(mathSourceEditMeta, true);
   // 行内停在收尾的 `$` 之前，块级停在正文末尾，接着打字就是接着写公式。
   tr.setSelection(TextSelection.create(tr.doc, pos + 1 + source.length - Number(isInline)));
@@ -1194,20 +1439,27 @@ function createNonEditablePreviewSelectionHandler(getEditor, readOnly) {
     if (event.target.closest?.('img[src], .milkdown-media-inline')) return;
     if (event.target.closest?.('sup[data-type="footnote_reference"], .footnote-backref')) return;
 
-    if (readOnly || event.target.closest?.('[data-type="html_block"]') || !isNonEditablePreviewTarget(event.target)) return;
+    if (
+      readOnly ||
+      event.target.closest?.('[data-type="html_block"]') ||
+      !isNonEditablePreviewTarget(event.target)
+    )
+      return;
 
     getEditor()?.action((ctx) => {
       const view = ctx.get(editorViewCtx);
-      const target = event.target.closest([
-        '.md-preview__milkdown-mermaid-inline',
-        '.md-preview__milkdown-mermaid',
-        '.md-preview__mermaid',
-        '.md-preview__math',
-        '.md-preview__html',
-        '.preview-panel',
-        'img[data-moki-original-src]',
-        'img[data-moki-resolved-src]',
-      ].join(', '));
+      const target = event.target.closest(
+        [
+          '.md-preview__milkdown-mermaid-inline',
+          '.md-preview__milkdown-mermaid',
+          '.md-preview__mermaid',
+          '.md-preview__math',
+          '.md-preview__html',
+          '.preview-panel',
+          'img[data-moki-original-src]',
+          'img[data-moki-resolved-src]',
+        ].join(', '),
+      );
       if (!target) return;
 
       try {
@@ -1230,16 +1482,30 @@ function createNonEditablePreviewSelectionHandler(getEditor, readOnly) {
         const { nodes } = view.state.schema;
         // 双击公式是进入源码态的手势。PM 用 mousedown 序列判定双击，而这条隔离链
         // 正好把 mousedown 拦掉了，所以双击只能就地在这里换成源码节点。
-        if (event.type === 'dblclick' && (node.type === nodes[mathBlockType] || node.type === nodes[mathInlineType])) {
-          view.dispatch(mathSourceTransaction(view, pos, node, {
-            inline: nodes[mathInlineType],
-            inlineSource: nodes[mathSourceInlineType],
-            blockSource: nodes[mathSourceBlockType],
-          }, false, true).scrollIntoView());
+        if (
+          event.type === 'dblclick' &&
+          (node.type === nodes[mathBlockType] || node.type === nodes[mathInlineType])
+        ) {
+          view.dispatch(
+            mathSourceTransaction(
+              view,
+              pos,
+              node,
+              {
+                inline: nodes[mathInlineType],
+                inlineSource: nodes[mathSourceInlineType],
+                blockSource: nodes[mathSourceBlockType],
+              },
+              false,
+              true,
+            ).scrollIntoView(),
+          );
           view.focus();
           return;
         }
-        view.dispatch(view.state.tr.setSelection(NodeSelection.create(view.state.doc, pos)).scrollIntoView());
+        view.dispatch(
+          view.state.tr.setSelection(NodeSelection.create(view.state.doc, pos)).scrollIntoView(),
+        );
         view.focus();
       } catch {
         // 少数第三方预览 DOM 无法稳定映射回 ProseMirror 节点；即便如此，
@@ -1278,21 +1544,23 @@ function renderMilkdownHtml(root) {
  * @returns {void}
  */
 function renderMilkdownMath(root) {
-  root.querySelectorAll(`span[data-type="${mathInlineType}"], div[data-type="${mathBlockType}"]`).forEach((node) => {
-    const value = node.dataset.value || node.textContent || '';
-    if (!value || node.dataset.renderedValue === value) return;
-    try {
-      katex.render(value, node, {
-        throwOnError: false,
-        strict: false,
-        displayMode: node.dataset.type === mathBlockType,
-      });
-      node.dataset.renderedValue = value;
-    } catch {
-      node.textContent = value;
-      node.dataset.renderedValue = value;
-    }
-  });
+  root
+    .querySelectorAll(`span[data-type="${mathInlineType}"], div[data-type="${mathBlockType}"]`)
+    .forEach((node) => {
+      const value = node.dataset.value || node.textContent || '';
+      if (!value || node.dataset.renderedValue === value) return;
+      try {
+        katex.render(value, node, {
+          throwOnError: false,
+          strict: false,
+          displayMode: node.dataset.type === mathBlockType,
+        });
+        node.dataset.renderedValue = value;
+      } catch {
+        node.textContent = value;
+        node.dataset.renderedValue = value;
+      }
+    });
 }
 
 /**
@@ -1314,9 +1582,13 @@ function enhanceCodeBlocks(container, { readOnly, mermaidRoots }) {
     const code = pre.querySelector('code');
     if (!code) return;
 
-    const rawLang = (pre.dataset.language
-      || [...code.classList].find((item) => item.startsWith('language-'))?.replace('language-', '')
-      || '').toLowerCase().replace(/^c#$/, 'csharp');
+    const rawLang = (
+      pre.dataset.language ||
+      [...code.classList].find((item) => item.startsWith('language-'))?.replace('language-', '') ||
+      ''
+    )
+      .toLowerCase()
+      .replace(/^c#$/, 'csharp');
 
     if (rawLang) {
       pre.classList.add(`language-${rawLang}`);
@@ -1356,11 +1628,14 @@ function enhanceCodeBlocks(container, { readOnly, mermaidRoots }) {
     tag.textContent = getLangDisplay(rawLang);
     tag.dataset.mokiTooltip = i18n.t('editor.copyCode');
     tag.addEventListener('click', () => {
-      navigator.clipboard.writeText(code.textContent || '').then(() => {
-        notify('success', i18n.t('preview.copiedToClipboard'), '', 2500);
-      }).catch(() => {
-        notify('error', i18n.t('preview.copyFailed'), '', 2500);
-      });
+      navigator.clipboard
+        .writeText(code.textContent || '')
+        .then(() => {
+          notify('success', i18n.t('preview.copiedToClipboard'), '', 2500);
+        })
+        .catch(() => {
+          notify('error', i18n.t('preview.copyFailed'), '', 2500);
+        });
     });
     pre.appendChild(tag);
   });
@@ -1427,21 +1702,24 @@ function findDomByOutlineItem(container, { text, type }) {
  * 负责挂载编辑器、向外暴露工具栏操作能力，并把编辑中的 Markdown
  * 通过 `editorBuffer`、脏状态与自动保存节流器同步给应用其余部分。
  */
-function MilkdownInner({
-  activeTabId,
-  className,
-  content,
-  contentRevision,
-  fontSize,
-  lineHeight,
-  onAutoSave,
-  readOnly,
-  onDraftChange,
-  comparisonLayout,
-  comparisonSource,
-  onComparisonReady,
-  previewBoundsRef,
-}, ref) {
+function MilkdownInner(
+  {
+    activeTabId,
+    className,
+    content,
+    contentRevision,
+    fontSize,
+    lineHeight,
+    onAutoSave,
+    readOnly,
+    onDraftChange,
+    comparisonLayout,
+    comparisonSource,
+    onComparisonReady,
+    previewBoundsRef,
+  },
+  ref,
+) {
   const isComparison = comparisonSource !== undefined;
   const onDraftChangeRef = useRef(onDraftChange);
   onDraftChangeRef.current = onDraftChange;
@@ -1481,8 +1759,11 @@ function MilkdownInner({
   const imageCleanupsRef = useRef([]);
   const mediaToolsRef = useRef(null);
   const getMediaView = useCallback(() => {
-    try { return editorRef.current?.action((ctx) => ctx.get(editorViewCtx)); }
-    catch { return null; }
+    try {
+      return editorRef.current?.action((ctx) => ctx.get(editorViewCtx));
+    } catch {
+      return null;
+    }
   }, []);
   const [renderTick, setRenderTick] = useState(0);
   const { menu, openMenu, closeMenu } = useEditorContextMenu(`${activeTabId}:${renderTick}`);
@@ -1490,8 +1771,14 @@ function MilkdownInner({
     const editor = editorRef.current;
     if (!editor || readOnly || event.target.closest('input, textarea, button, select')) return;
     const items = milkdownContextItems({
-      editor, target: event.target, x: event.clientX, y: event.clientY, t: i18n.t.bind(i18n),
-      canReplayHistory: isComparison ? undefined : (direction) => hasMarkdownUndoStep(activeTabId, direction),
+      editor,
+      target: event.target,
+      x: event.clientX,
+      y: event.clientY,
+      t: i18n.t.bind(i18n),
+      canReplayHistory: isComparison
+        ? undefined
+        : (direction) => hasMarkdownUndoStep(activeTabId, direction),
       replayHistory: isComparison ? undefined : replayHistory,
     });
     openMenu(event, items, 'wysiwyg');
@@ -1512,176 +1799,228 @@ function MilkdownInner({
    * 这里把内容缓冲、脏标记、字数统计与自动保存拆成不同节流窗口，
    * 避免每次按键都立刻触发整条 React/Zustand 链路。
    */
-  const scheduleEditorSideEffects = useCallback((markdown) => {
-    const tabId = currentTabIdRef.current;
-    if (!tabId || readOnly) return;
-    if (isComparison) {
-      onDraftChangeRef.current(markdown);
-      return;
-    }
+  const scheduleEditorSideEffects = useCallback(
+    (markdown) => {
+      const tabId = currentTabIdRef.current;
+      if (!tabId || readOnly) return;
+      if (isComparison) {
+        onDraftChangeRef.current(markdown);
+        return;
+      }
 
-    setBuffer(tabId, markdown);
+      setBuffer(tabId, markdown);
 
-    // A delayed dirty callback can re-light the indicator after saving.
-    markTabDirty(tabId, true);
+      // A delayed dirty callback can re-light the indicator after saving.
+      markTabDirty(tabId, true);
 
-    if (!charTimerRef.current) {
-      charTimerRef.current = setTimeout(() => {
-        charTimerRef.current = null;
-        setCharacterCount(markdown.length);
-      }, 250);
-    }
+      if (!charTimerRef.current) {
+        charTimerRef.current = setTimeout(() => {
+          charTimerRef.current = null;
+          setCharacterCount(markdown.length);
+        }, 250);
+      }
 
-    if (!saveTimerRef.current) {
-      saveTimerRef.current = setTimeout(() => {
-        saveTimerRef.current = null;
-        const current = useEditorStore.getState().tabs.find((tab) => tab.id === tabId);
-        if (current && (current.contentRevision ?? 0) === contentRevision) onAutoSaveRef.current?.(tabId);
-      }, 300);
-    }
-  }, [contentRevision, isComparison, markTabDirty, readOnly, setCharacterCount]);
+      if (!saveTimerRef.current) {
+        saveTimerRef.current = setTimeout(() => {
+          saveTimerRef.current = null;
+          const current = useEditorStore.getState().tabs.find((tab) => tab.id === tabId);
+          if (current && (current.contentRevision ?? 0) === contentRevision)
+            onAutoSaveRef.current?.(tabId);
+        }, 300);
+      }
+    },
+    [contentRevision, isComparison, markTabDirty, readOnly, setCharacterCount],
+  );
 
-  const publishEditorContent = useCallback((ctx) => {
-    if (readOnly || !ctx.isInjected(editorViewCtx)) return;
-    const tab = useEditorStore.getState().tabs.find((item) => item.id === activeTabId);
-    if (!isComparison && (!tab || (tab.contentRevision ?? 0) !== contentRevision || currentTabIdRef.current !== activeTabId)) return;
-    const state = ctx.get(editorViewCtx).state;
-    const markdown = ctx.get(serializerCtx)(persistentMilkdownDocument(state));
-    if (markdown === publishedMarkdownRef.current) return;
-    publishedMarkdownRef.current = markdown;
-    scheduleEditorSideEffects(markdown);
-    setRenderTick((value) => value + 1);
-  }, [activeTabId, contentRevision, isComparison, readOnly, scheduleEditorSideEffects]);
+  const publishEditorContent = useCallback(
+    (ctx) => {
+      if (readOnly || !ctx.isInjected(editorViewCtx)) return;
+      const tab = useEditorStore.getState().tabs.find((item) => item.id === activeTabId);
+      if (
+        !isComparison &&
+        (!tab ||
+          (tab.contentRevision ?? 0) !== contentRevision ||
+          currentTabIdRef.current !== activeTabId)
+      )
+        return;
+      const state = ctx.get(editorViewCtx).state;
+      const markdown = ctx.get(serializerCtx)(persistentMilkdownDocument(state));
+      if (markdown === publishedMarkdownRef.current) return;
+      publishedMarkdownRef.current = markdown;
+      scheduleEditorSideEffects(markdown);
+      setRenderTick((value) => value + 1);
+    },
+    [activeTabId, contentRevision, isComparison, readOnly, scheduleEditorSideEffects],
+  );
 
-  const replayHistory = (direction) => editorRef.current?.action((ctx) => {
-    const view = ctx.get(editorViewCtx);
-    publishEditorContent(ctx);
-    const result = replayMilkdownHistory(ctx, view, activeTabId, direction);
-    if (!result) return false;
-    publishedMarkdownRef.current = result.serialized;
-    scheduleEditorSideEffects(result.text);
-    setRenderTick((value) => value + 1);
-    return true;
-  });
+  const replayHistory = (direction) =>
+    editorRef.current?.action((ctx) => {
+      const view = ctx.get(editorViewCtx);
+      publishEditorContent(ctx);
+      const result = replayMilkdownHistory(ctx, view, activeTabId, direction);
+      if (!result) return false;
+      publishedMarkdownRef.current = result.serialized;
+      scheduleEditorSideEffects(result.text);
+      setRenderTick((value) => value + 1);
+      return true;
+    });
 
-  const editorInfo = useEditor((root) => {
-    const foldBridge = !isComparison && createMilkdownFoldBridge(activeTabId, content || '', (state) =>
-      editor.ctx.get(serializerCtx)(persistentMilkdownDocument(state)));
-    const editor = Editor.make()
-      .config((ctx) => {
-        configureEditingWhitespace(ctx, { readOnly: readOnly && !isComparison });
-        configureEditingTables(ctx);
-        ctx.set(rootCtx, root);
-        ctx.set(defaultValueCtx, content || '');
-        ctx.set(katexOptionsCtx.key, {
-          throwOnError: false,
-          strict: false,
-        });
-        ctx.set(codeBlockConfig.key, {
-          ...ctx.get(codeBlockConfig.key),
-          extensions: codeBlockExtensions,
-          languages: codeLanguages,
-          expandIcon: '',
-          searchIcon: '',
-          clearSearchIcon: 'x',
-          searchPlaceholder: 'Search language',
-          noResultText: 'No result',
-          copyText: '',
-          copyIcon: copyIconSvg,
-          onCopy: () => useNotificationStore.getState().notify('success', i18n.t('preview.copiedToClipboard'), '', 2500),
-          renderLanguage: (language) => getLangDisplay(language),
-          renderPreview: (language, source, applyPreview) => {
-            if (!/^(tree|mgtree)$/i.test(language || '')) return renderCodeBlockPreview(language, source, applyPreview);
-            const id = ++treePreviewId.current;
-            treePreviewSources.current.set(String(id), source);
-            // Milkdown sanitizes and clones the preview HTML. Mount into the
-            // actual placeholder after that clone reaches the editor DOM.
-            return `<div class="milkdown-knowledge-tree" data-tree-preview="${id}" contenteditable="false"></div>`;
-          },
-          previewToggleButton: (previewOnlyMode) => (previewOnlyMode ? editIconSvg : previewIconSvg),
-          previewOnlyByDefault: true,
-          previewLabel: 'Preview',
-          previewLoading: 'Rendering...',
-        });
-        ctx.update(editorViewOptionsCtx, (prev) => ({
-          ...prev,
-          editable: () => !readOnly,
-          attributes: {
-            class: readOnly ? 'milkdown-editor milkdown-editor--readonly' : 'milkdown-editor',
-            'aria-label': 'Markdown WYSIWYG editor',
-          },
-        }));
-        const listeners = ctx.get(listenerCtx)
-          .mounted((editorCtx) => {
+  const editorInfo = useEditor(
+    (root) => {
+      const foldBridge =
+        !isComparison &&
+        createMilkdownFoldBridge(activeTabId, content || '', (state) =>
+          editor.ctx.get(serializerCtx)(persistentMilkdownDocument(state)),
+        );
+      const editor = Editor.make()
+        .config((ctx) => {
+          configureEditingWhitespace(ctx, { readOnly: readOnly && !isComparison });
+          configureEditingTables(ctx);
+          ctx.set(rootCtx, root);
+          ctx.set(defaultValueCtx, content || '');
+          ctx.set(katexOptionsCtx.key, {
+            throwOnError: false,
+            strict: false,
+          });
+          ctx.set(codeBlockConfig.key, {
+            ...ctx.get(codeBlockConfig.key),
+            extensions: codeBlockExtensions,
+            languages: codeLanguages,
+            expandIcon: '',
+            searchIcon: '',
+            clearSearchIcon: 'x',
+            searchPlaceholder: 'Search language',
+            noResultText: 'No result',
+            copyText: '',
+            copyIcon: copyIconSvg,
+            onCopy: () =>
+              useNotificationStore
+                .getState()
+                .notify('success', i18n.t('preview.copiedToClipboard'), '', 2500),
+            renderLanguage: (language) => getLangDisplay(language),
+            renderPreview: (language, source, applyPreview) => {
+              if (!/^(tree|mgtree)$/i.test(language || ''))
+                return renderCodeBlockPreview(language, source, applyPreview);
+              const id = ++treePreviewId.current;
+              treePreviewSources.current.set(String(id), source);
+              // Milkdown sanitizes and clones the preview HTML. Mount into the
+              // actual placeholder after that clone reaches the editor DOM.
+              return `<div class="milkdown-knowledge-tree" data-tree-preview="${id}" contenteditable="false"></div>`;
+            },
+            previewToggleButton: (previewOnlyMode) =>
+              previewOnlyMode ? editIconSvg : previewIconSvg,
+            previewOnlyByDefault: true,
+            previewLabel: 'Preview',
+            previewLoading: 'Rendering...',
+          });
+          ctx.update(editorViewOptionsCtx, (prev) => ({
+            ...prev,
+            editable: () => !readOnly,
+            attributes: {
+              class: readOnly ? 'milkdown-editor milkdown-editor--readonly' : 'milkdown-editor',
+              'aria-label': 'Markdown WYSIWYG editor',
+            },
+          }));
+          const listeners = ctx.get(listenerCtx).mounted((editorCtx) => {
             const view = editorCtx.get(editorViewCtx);
             const selection = !readOnly && initialEditingSelection(view.state);
             if (selection) view.dispatch(view.state.tr.setSelection(selection));
             // 在完整文档与 NodeView 挂载后显式恢复，不能只依赖插件初始化快照。
             if (!isComparison) restoreMilkdownFolds(view, foldBridge.initialFolds(view.state.doc));
             const state = view.state;
-            if (!readOnly) publishedMarkdownRef.current = editorCtx.get(serializerCtx)(persistentMilkdownDocument(state));
+            if (!readOnly)
+              publishedMarkdownRef.current = editorCtx.get(serializerCtx)(
+                persistentMilkdownDocument(state),
+              );
           });
-        if (!isComparison) listeners.markdownUpdated(publishEditorContent);
-      })
-      .use(markdownHtmlPlugin)
-      .use(milkdownTableKeys)
-      .use(commonmark.filter((plugin) => plugin !== createCodeBlockInputRule))
-      .use(gfm.filter((plugin) => ![insertTableInputRule, wrapInTaskListInputRule, footnoteDefinitionSchema, footnoteReferenceSchema].includes(plugin)))
-      .use(footnoteDefinitionWithBackref)
-      .use(footnoteReferenceLink)
-      .use(milkdownTableView)
-      .use(htmlBlockSchema)
-      .use(htmlBlockView)
-      .use(taskListSpacingPlugin)
-      .use(milkdownRawText)
-      .use(milkdownTaskListCheckboxes(taskListMarker, convertTaskListMarker))
-      .use(taskListInputRule)
-      .use(mathPlugins)
-      .use(history)
-      .use(milkdownMediaEditor)
-      .use(milkdownMediaImageView)
-      .use(codeBlockComponent)
-      .use(milkdownBlockSelection)
-      .use(listener);
+          if (!isComparison) listeners.markdownUpdated(publishEditorContent);
+        })
+        .use(markdownHtmlPlugin)
+        .use(milkdownTableKeys)
+        .use(commonmark.filter((plugin) => plugin !== createCodeBlockInputRule))
+        .use(
+          gfm.filter(
+            (plugin) =>
+              ![
+                insertTableInputRule,
+                wrapInTaskListInputRule,
+                footnoteDefinitionSchema,
+                footnoteReferenceSchema,
+              ].includes(plugin),
+          ),
+        )
+        .use(footnoteDefinitionWithBackref)
+        .use(footnoteReferenceLink)
+        .use(milkdownTableView)
+        .use(htmlBlockSchema)
+        .use(htmlBlockView)
+        .use(taskListSpacingPlugin)
+        .use(milkdownRawText)
+        .use(milkdownTaskListCheckboxes(taskListMarker, convertTaskListMarker))
+        .use(taskListInputRule)
+        .use(mathPlugins)
+        .use(history)
+        .use(milkdownMediaEditor)
+        .use(milkdownMediaImageView)
+        .use(codeBlockComponent)
+        .use(milkdownBlockSelection)
+        .use(listener);
 
-    if (foldBridge) editor.use($prose(() => createMilkdownHeadingFoldsPlugin(foldBridge)));
-    if (!readOnly && !isComparison) editor.use(milkdownSharedHistory(activeTabId, () => {
-      const store = useEditorStore.getState();
-      const tab = store.tabs.find((item) => item.id === activeTabId);
-      return tab && (tab.contentRevision ?? 0) === contentRevision;
-    }));
-    if (!readOnly) editor.use(milkdownMarkdownPaste).use(clipboard).use(milkdownEditingFlow).use(milkdownGapCursor)
-      .use(milkdownInlineSyntaxSource).use(milkdownLiveSyntax).use(milkdownInlineLinkRule);
-    if (isComparison) editor.use($prose((ctx) => {
-      let previousDoc;
-      let previousLayout;
-      let decorations;
-      return new Plugin({
-        props: {
-          decorations: ({ doc }) => {
-            const layout = comparisonLayoutRef.current;
-            if (doc !== previousDoc || layout !== previousLayout) {
-              previousDoc = doc;
-              previousLayout = layout;
-              decorations = comparisonDecorations(doc, layout);
-            }
-            return decorations;
-          },
-        },
-        view: readOnly ? undefined : () => ({
-          update(view, previous) {
-            if (view.state.doc === previous.doc) return;
-            queueMicrotask(() => {
-              if (!view.isDestroyed) publishEditorContent(ctx);
+      if (foldBridge) editor.use($prose(() => createMilkdownHeadingFoldsPlugin(foldBridge)));
+      if (!readOnly && !isComparison)
+        editor.use(
+          milkdownSharedHistory(activeTabId, () => {
+            const store = useEditorStore.getState();
+            const tab = store.tabs.find((item) => item.id === activeTabId);
+            return tab && (tab.contentRevision ?? 0) === contentRevision;
+          }),
+        );
+      if (!readOnly)
+        editor
+          .use(milkdownMarkdownPaste)
+          .use(clipboard)
+          .use(milkdownEditingFlow)
+          .use(milkdownGapCursor)
+          .use(milkdownInlineSyntaxSource)
+          .use(milkdownLiveSyntax)
+          .use(milkdownInlineLinkRule);
+      if (isComparison)
+        editor.use(
+          $prose((ctx) => {
+            let previousDoc;
+            let previousLayout;
+            let decorations;
+            return new Plugin({
+              props: {
+                decorations: ({ doc }) => {
+                  const layout = comparisonLayoutRef.current;
+                  if (doc !== previousDoc || layout !== previousLayout) {
+                    previousDoc = doc;
+                    previousLayout = layout;
+                    decorations = comparisonDecorations(doc, layout);
+                  }
+                  return decorations;
+                },
+              },
+              view: readOnly
+                ? undefined
+                : () => ({
+                    update(view, previous) {
+                      if (view.state.doc === previous.doc) return;
+                      queueMicrotask(() => {
+                        if (!view.isDestroyed) publishEditorContent(ctx);
+                      });
+                    },
+                  }),
             });
-          },
-        }),
-      });
-    }));
+          }),
+        );
 
-    editorRef.current = editor;
-    return editor;
-  }, [activeTabId, content, isComparison, readOnly, publishEditorContent]);
+      editorRef.current = editor;
+      return editor;
+    },
+    [activeTabId, content, isComparison, readOnly, publishEditorContent],
+  );
 
   useLayoutEffect(() => {
     if (!isComparison || editorInfo.loading) return;
@@ -1696,7 +2035,8 @@ function MilkdownInner({
   }, [editorInfo.loading, onComparisonReady]);
 
   useLayoutEffect(() => {
-    if (!isComparison || editorInfo.loading || syncedComparisonRef.current === comparisonSource) return;
+    if (!isComparison || editorInfo.loading || syncedComparisonRef.current === comparisonSource)
+      return;
     syncedComparisonRef.current = comparisonSource;
     if (comparisonSource === publishedMarkdownRef.current) return;
     editorRef.current?.action((ctx) => {
@@ -1705,36 +2045,57 @@ function MilkdownInner({
       const view = ctx.get(editorViewCtx);
       const { doc, selection } = view.state;
       const tr = view.state.tr.replaceWith(0, doc.content.size, next.content);
-      tr.setSelection(TextSelection.between(
-        tr.doc.resolve(Math.min(selection.anchor, tr.doc.content.size)),
-        tr.doc.resolve(Math.min(selection.head, tr.doc.content.size)),
-      ));
+      tr.setSelection(
+        TextSelection.between(
+          tr.doc.resolve(Math.min(selection.anchor, tr.doc.content.size)),
+          tr.doc.resolve(Math.min(selection.head, tr.doc.content.size)),
+        ),
+      );
       view.dispatch(tr);
       publishedMarkdownRef.current = ctx.get(serializerCtx)(persistentMilkdownDocument(view.state));
     });
   }, [comparisonSource, editorInfo.loading, isComparison]);
 
-  const resolveCodeTarget = useCallback((language, index) => {
-    const view = getMediaView();
-    if (!view || !Number.isSafeInteger(index) || index < 1) return null;
-    let count = 0;
-    let target = null;
-    view.state.doc.descendants((node, pos) => {
-      if (node.type.name !== 'code_block' || normalizeCodeLanguage(node.attrs.language || '') !== normalizeCodeLanguage(language)) return;
-      if (++count === index) target = view.nodeDOM(pos);
-      return false;
-    });
-    return target instanceof HTMLElement ? target : null;
-  }, [getMediaView]);
-  const jumpToCode = useCodeBlockNavigation(activeTabId, resolveCodeTarget, !isComparison && !editorInfo.loading);
+  const resolveCodeTarget = useCallback(
+    (language, index) => {
+      const view = getMediaView();
+      if (!view || !Number.isSafeInteger(index) || index < 1) return null;
+      let count = 0;
+      let target = null;
+      view.state.doc.descendants((node, pos) => {
+        if (
+          node.type.name !== 'code_block' ||
+          normalizeCodeLanguage(node.attrs.language || '') !== normalizeCodeLanguage(language)
+        )
+          return;
+        if (++count === index) target = view.nodeDOM(pos);
+        return false;
+      });
+      return target instanceof HTMLElement ? target : null;
+    },
+    [getMediaView],
+  );
+  const jumpToCode = useCodeBlockNavigation(
+    activeTabId,
+    resolveCodeTarget,
+    !isComparison && !editorInfo.loading,
+  );
 
   useEffect(() => {
     if (isComparison || editorInfo.loading || readOnly) return undefined;
     const editor = editorRef.current;
-    return registerEditorBufferFlusher(() => activeTabId, () => editor?.action(publishEditorContent));
+    return registerEditorBufferFlusher(
+      () => activeTabId,
+      () => editor?.action(publishEditorContent),
+    );
   }, [activeTabId, editorInfo.loading, isComparison, readOnly, publishEditorContent]);
 
-  useDocumentScrollState(wrapperRef, activeTabId, 'milkdownScroll', !isComparison && !editorInfo.loading);
+  useDocumentScrollState(
+    wrapperRef,
+    activeTabId,
+    'milkdownScroll',
+    !isComparison && !editorInfo.loading,
+  );
   useEffect(() => {
     if (isComparison || editorInfo.loading || readOnly) return undefined;
     const editor = editorRef.current;
@@ -1748,13 +2109,20 @@ function MilkdownInner({
         const end = view.state.doc.content.size;
         const anchor = Math.max(0, Math.min(end, saved.anchor));
         const head = Math.max(0, Math.min(end, saved.head));
-        const selection = TextSelection.between(view.state.doc.resolve(anchor), view.state.doc.resolve(head));
+        const selection = TextSelection.between(
+          view.state.doc.resolve(anchor),
+          view.state.doc.resolve(head),
+        );
         view.dispatch(view.state.tr.setSelection(selection));
       }
-      stopView = registerDocumentViewState('milkdown', () => activeTabId, () => {
-        const { anchor, head } = view.state.selection;
-        return { anchor, head };
-      });
+      stopView = registerDocumentViewState(
+        'milkdown',
+        () => activeTabId,
+        () => {
+          const { anchor, head } = view.state.selection;
+          return { anchor, head };
+        },
+      );
     });
     document.addEventListener('selectionchange', requestDocumentViewStateSave);
     return () => {
@@ -1763,91 +2131,110 @@ function MilkdownInner({
     };
   }, [activeTabId, editorInfo.loading, isComparison, readOnly]);
 
-  useImperativeHandle(ref, () => ({
-    getEditor: () => editorRef.current,
-    getCurrentValue: () => editorRef.current?.action((ctx) => ctx.get(serializerCtx)(persistentMilkdownDocument(ctx.get(editorViewCtx).state))) ?? content ?? '',
-    handleToolbarAction(action) {
-      let handled = false;
-      editorRef.current?.action((ctx) => {
-        const commands = ctx.get(commandsCtx);
-        const view = ctx.get(editorViewCtx);
-        const run = (command, payload) => {
-          handled = Boolean(commands.call(command.key, payload));
-          view.focus();
-        };
+  useImperativeHandle(
+    ref,
+    () => ({
+      getEditor: () => editorRef.current,
+      getCurrentValue: () =>
+        editorRef.current?.action((ctx) =>
+          ctx.get(serializerCtx)(persistentMilkdownDocument(ctx.get(editorViewCtx).state)),
+        ) ??
+        content ??
+        '',
+      handleToolbarAction(action) {
+        let handled = false;
+        editorRef.current?.action((ctx) => {
+          const commands = ctx.get(commandsCtx);
+          const view = ctx.get(editorViewCtx);
+          const run = (command, payload) => {
+            handled = Boolean(commands.call(command.key, payload));
+            view.focus();
+          };
 
-        switch (action?.command) {
-          case 'bold':
-            run(toggleStrongCommand);
-            break;
-          case 'italic':
-            handled = toggleMark(emphasisSchema.type(ctx), { marker: '*' })(view.state, view.dispatch.bind(view));
-            view.focus();
-            break;
-          case 'strikethrough':
-            run(toggleStrikethroughCommand);
-            break;
-          case 'heading':
-            run(wrapInHeadingCommand, action.level || 1);
-            break;
-          case 'blockquote':
-            run(wrapInBlockquoteCommand);
-            break;
-          case 'table':
-            run(insertTableCommand, { row: action.rows || 3, col: action.columns || 3 });
-            break;
-          case 'code':
-            run(createCodeBlockCommand, '');
-            break;
-          case 'link':
-          case 'image':
-            mediaToolsRef.current?.open(action.command);
-            handled = true;
-            break;
-          case 'taskList':
-            {
-              const paragraph = paragraphSchema.type(ctx).createAndFill();
-              const item = listItemSchema.type(ctx).create({ checked: false }, paragraph);
-              const list = bulletListSchema.type(ctx).create(null, item);
-              view.dispatch(view.state.tr.replaceSelectionWith(list).scrollIntoView());
-            }
-            handled = true;
-            view.focus();
-            break;
-          case 'hr':
-            run(insertHrCommand);
-            break;
-          default:
-            handled = false;
-        }
-      });
-      return handled;
-    },
-    insertText(text) {
-      editorRef.current?.action(insert(text, true));
-    },
-    wrapSelection(before, after) {
-      editorRef.current?.action((ctx) => {
-        const view = ctx.get(editorViewCtx);
-        const { from, to, empty } = view.state.selection;
-        if (empty) {
-          insert(`${before}${after}`, true)(ctx);
-          return;
-        }
-        const selected = getMarkdown({ from, to })(ctx);
-        replaceRange(`${before}${selected}${after}`, { from, to })(ctx);
-      });
-    },
-  }), [content]);
+          switch (action?.command) {
+            case 'bold':
+              run(toggleStrongCommand);
+              break;
+            case 'italic':
+              handled = toggleMark(emphasisSchema.type(ctx), { marker: '*' })(
+                view.state,
+                view.dispatch.bind(view),
+              );
+              view.focus();
+              break;
+            case 'strikethrough':
+              run(toggleStrikethroughCommand);
+              break;
+            case 'heading':
+              run(wrapInHeadingCommand, action.level || 1);
+              break;
+            case 'blockquote':
+              run(wrapInBlockquoteCommand);
+              break;
+            case 'table':
+              run(insertTableCommand, { row: action.rows || 3, col: action.columns || 3 });
+              break;
+            case 'code':
+              run(createCodeBlockCommand, '');
+              break;
+            case 'link':
+            case 'image':
+              mediaToolsRef.current?.open(action.command);
+              handled = true;
+              break;
+            case 'taskList':
+              {
+                const paragraph = paragraphSchema.type(ctx).createAndFill();
+                const item = listItemSchema.type(ctx).create({ checked: false }, paragraph);
+                const list = bulletListSchema.type(ctx).create(null, item);
+                view.dispatch(view.state.tr.replaceSelectionWith(list).scrollIntoView());
+              }
+              handled = true;
+              view.focus();
+              break;
+            case 'hr':
+              run(insertHrCommand);
+              break;
+            default:
+              handled = false;
+          }
+        });
+        return handled;
+      },
+      insertText(text) {
+        editorRef.current?.action(insert(text, true));
+      },
+      wrapSelection(before, after) {
+        editorRef.current?.action((ctx) => {
+          const view = ctx.get(editorViewCtx);
+          const { from, to, empty } = view.state.selection;
+          if (empty) {
+            insert(`${before}${after}`, true)(ctx);
+            return;
+          }
+          const selected = getMarkdown({ from, to })(ctx);
+          replaceRange(`${before}${selected}${after}`, { from, to })(ctx);
+        });
+      },
+    }),
+    [content],
+  );
 
   useEffect(() => {
-    if (isComparison || editorInfo.loading || !wrapperRef.current || isAndroidRuntime()) return undefined;
+    if (isComparison || editorInfo.loading || !wrapperRef.current || isAndroidRuntime())
+      return undefined;
     return attachCodeBlockExecutions({
-      root: wrapperRef.current, documentId: activeTabId, filePath: documentPath,
-      fileName: useEditorStore.getState().tabs.find((tab) => tab.id === activeTabId)?.name || 'Markdown',
+      root: wrapperRef.current,
+      documentId: activeTabId,
+      filePath: documentPath,
+      fileName:
+        useEditorStore.getState().tabs.find((tab) => tab.id === activeTabId)?.name || 'Markdown',
       getView: () => {
-        try { return editorRef.current?.action((ctx) => ctx.get(editorViewCtx)); }
-        catch { return null; }
+        try {
+          return editorRef.current?.action((ctx) => ctx.get(editorViewCtx));
+        } catch {
+          return null;
+        }
       },
     });
   }, [activeTabId, documentPath, editorInfo.loading, isComparison]);
@@ -1859,7 +2246,10 @@ function MilkdownInner({
     const observer = new MutationObserver(() => {
       setRenderTick((value) => value + 1);
     });
-    observer.observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] });
+    observer.observe(document.documentElement, {
+      attributes: true,
+      attributeFilter: ['data-theme'],
+    });
     return () => {
       observer.disconnect();
     };
@@ -1870,19 +2260,24 @@ function MilkdownInner({
     if (!wrapper) return undefined;
 
     const run = () => {
-      if ([...wrapper.querySelectorAll('.milkdown-editor img[src]')].some((img) => {
-        const src = img.getAttribute('src');
-        return src && src !== img.dataset.mokiResolvedSrc && src !== img.dataset.mokiObjectUrl;
-      })) {
+      if (
+        [...wrapper.querySelectorAll('.milkdown-editor img[src]')].some((img) => {
+          const src = img.getAttribute('src');
+          return src && src !== img.dataset.mokiResolvedSrc && src !== img.dataset.mokiObjectUrl;
+        })
+      ) {
         imageCleanupsRef.current.push(hydrateMarkdownImages(wrapper, documentPath));
       }
       renderMilkdownHtml(wrapper);
       renderMilkdownMath(wrapper);
     };
 
-    const stop = observeMarkdownEnhancements(wrapper,
+    const stop = observeMarkdownEnhancements(
+      wrapper,
       `img[src], span[data-type="html"], span[data-type="${mathInlineType}"], div[data-type="${mathBlockType}"]`,
-      run, ['data-value', 'src']);
+      run,
+      ['data-value', 'src'],
+    );
 
     return () => {
       stop();
@@ -1896,10 +2291,11 @@ function MilkdownInner({
     const wrapper = wrapperRef.current;
     if (!wrapper) return undefined;
 
-    const run = () => enhanceCodeBlocks(wrapper, {
-      readOnly,
-      mermaidRoots: mermaidRootsRef.current,
-    });
+    const run = () =>
+      enhanceCodeBlocks(wrapper, {
+        readOnly,
+        mermaidRoots: mermaidRootsRef.current,
+      });
 
     return observeMarkdownEnhancements(wrapper, 'pre', run);
   }, [isComparison, readOnly, renderTick]);
@@ -1909,11 +2305,21 @@ function MilkdownInner({
     if (!wrapper) return undefined;
     const refresh = () => {
       const next = [...wrapper.querySelectorAll('.milkdown-knowledge-tree[data-tree-preview]')]
-        .map((element) => ({ element, id: element.dataset.treePreview, source: treePreviewSources.current.get(element.dataset.treePreview) }))
+        .map((element) => ({
+          element,
+          id: element.dataset.treePreview,
+          source: treePreviewSources.current.get(element.dataset.treePreview),
+        }))
         .filter((entry) => entry.source !== undefined);
       setTreePreviews((entries) => {
-        if (entries.length === next.length && entries.every((entry, index) => entry.element === next[index].element)) return entries;
-        for (const entry of entries) if (!next.some((item) => item.id === entry.id)) treePreviewSources.current.delete(entry.id);
+        if (
+          entries.length === next.length &&
+          entries.every((entry, index) => entry.element === next[index].element)
+        )
+          return entries;
+        for (const entry of entries)
+          if (!next.some((item) => item.id === entry.id))
+            treePreviewSources.current.delete(entry.id);
         return next;
       });
     };
@@ -1938,7 +2344,9 @@ function MilkdownInner({
       if (!target.internal || !target.path) {
         if (/^(https?:|mailto:|tel:|sms:)/i.test(href)) {
           event.preventDefault();
-          void openEditorLink(href, { browserFallback: true }).catch((error) => console.error('Unable to open link:', error));
+          void openEditorLink(href, { browserFallback: true }).catch((error) =>
+            console.error('Unable to open link:', error),
+          );
         } else if (/^(javascript:|data:|vbscript:)/i.test(href)) event.preventDefault();
         return;
       }
@@ -1948,20 +2356,27 @@ function MilkdownInner({
       event.nativeEvent?.stopImmediatePropagation?.();
       event.stopImmediatePropagation?.();
       const fileName = target.path.split(/[\\/]/).pop() || target.path;
-      const lineHint = parseMarkdownLineHint(target.hash)
-        || parseMarkdownLineHint([
-          anchor.textContent || '',
-          anchor.getAttribute('aria-label') || '',
-          anchor.querySelector('img')?.getAttribute('alt') || '',
-          anchor.querySelector('img')?.dataset.mokiTooltip || '',
-        ].filter(Boolean).join(' '));
+      const lineHint =
+        parseMarkdownLineHint(target.hash) ||
+        parseMarkdownLineHint(
+          [
+            anchor.textContent || '',
+            anchor.getAttribute('aria-label') || '',
+            anchor.querySelector('img')?.getAttribute('alt') || '',
+            anchor.querySelector('img')?.dataset.mokiTooltip || '',
+          ]
+            .filter(Boolean)
+            .join(' '),
+        );
 
       void openFileFromPath(target.path, fileName).then(() => {
         if (!lineHint?.line) return;
         window.setTimeout(() => {
-          window.dispatchEvent(new CustomEvent('editor:jump-to-line', {
-            detail: { line: lineHint.line },
-          }));
+          window.dispatchEvent(
+            new CustomEvent('editor:jump-to-line', {
+              detail: { line: lineHint.line },
+            }),
+          );
         }, 150);
       });
     };
@@ -1995,7 +2410,11 @@ function MilkdownInner({
           return;
         }
 
-        view.dispatch(view.state.tr.setSelection(NodeSelection.create(view.state.doc, target.pos)).scrollIntoView());
+        view.dispatch(
+          view.state.tr
+            .setSelection(NodeSelection.create(view.state.doc, target.pos))
+            .scrollIntoView(),
+        );
       });
     };
 
@@ -2010,7 +2429,9 @@ function MilkdownInner({
 
     const focusBlank = (event) => {
       if (event.target.closest?.('.knowledge-tree')) return;
-      editorRef.current?.action((ctx) => handleMilkdownBlankPointerDown(ctx.get(editorViewCtx), event));
+      editorRef.current?.action((ctx) =>
+        handleMilkdownBlankPointerDown(ctx.get(editorViewCtx), event),
+      );
     };
     wrapper.addEventListener('pointerdown', focusBlank, true);
     return () => wrapper.removeEventListener('pointerdown', focusBlank, true);
@@ -2077,15 +2498,18 @@ function MilkdownInner({
     };
   }, [readOnly]);
 
-  useEffect(() => () => {
-    [charTimerRef, saveTimerRef].forEach((timerRef) => {
-      if (timerRef.current) clearTimeout(timerRef.current);
-    });
-    imageCleanupsRef.current.forEach((cleanup) => cleanup?.());
-    imageCleanupsRef.current = [];
-    mermaidRootsRef.current.forEach((root) => root.unmount());
-    mermaidRootsRef.current.clear();
-  }, []);
+  useEffect(
+    () => () => {
+      [charTimerRef, saveTimerRef].forEach((timerRef) => {
+        if (timerRef.current) clearTimeout(timerRef.current);
+      });
+      imageCleanupsRef.current.forEach((cleanup) => cleanup?.());
+      imageCleanupsRef.current = [];
+      mermaidRootsRef.current.forEach((root) => root.unmount());
+      mermaidRootsRef.current.clear();
+    },
+    [],
+  );
 
   return (
     <div
@@ -2094,8 +2518,15 @@ function MilkdownInner({
       onContextMenu={handleContextMenu}
       onKeyDownCapture={(event) => {
         const direction = markdownUndoDirection(event.nativeEvent);
-        if (isComparison || readOnly || !direction || !event.target.closest('.milkdown-editor') ||
-            event.target.closest('input, textarea, select') || !replayHistory(direction)) return;
+        if (
+          isComparison ||
+          readOnly ||
+          !direction ||
+          !event.target.closest('.milkdown-editor') ||
+          event.target.closest('input, textarea, select') ||
+          !replayHistory(direction)
+        )
+          return;
         event.preventDefault();
         event.stopPropagation();
       }}
@@ -2109,12 +2540,24 @@ function MilkdownInner({
       {isComparison && !editorInfo.loading && editorRef.current?.status !== 'Created' && (
         <p role="alert">{i18n.t('editor.loadFailed')}</p>
       )}
-      {treePreviews.map((entry) => createPortal(<MarkdownTreeBlock source={entry.source} filePath={documentPath}
-        onJump={jumpToCode} />, entry.element, entry.id))}
+      {treePreviews.map((entry) =>
+        createPortal(
+          <MarkdownTreeBlock source={entry.source} filePath={documentPath} onJump={jumpToCode} />,
+          entry.element,
+          entry.id,
+        ),
+      )}
       <MilkdownTooltips rootRef={wrapperRef} readOnly={readOnly} />
-      <MilkdownMediaTools key={activeTabId} ref={mediaToolsRef} rootRef={wrapperRef} previewBoundsRef={previewBoundsRef}
-        documentPath={documentPath} getView={getMediaView}
-        ready={!editorInfo.loading} readOnly={readOnly} />
+      <MilkdownMediaTools
+        key={activeTabId}
+        ref={mediaToolsRef}
+        rootRef={wrapperRef}
+        previewBoundsRef={previewBoundsRef}
+        documentPath={documentPath}
+        getView={getMediaView}
+        ready={!editorInfo.loading}
+        readOnly={readOnly}
+      />
       <EditorContextMenu menu={menu} onClose={closeMenu} />
       <MarkdownCodeLanguageMenu request={codeLanguageMenu} onClose={closeCodeLanguageMenu} />
       <MarkdownMathCompletionMenu request={mathCompletion} onClose={closeMathCompletion} />
@@ -2164,7 +2607,9 @@ class MilkdownErrorBoundary extends Component {
   render() {
     if (this.state.error) {
       return (
-        <div className={`md-preview md-preview--milkdown md-preview--error ${this.props.className || ''}`}>
+        <div
+          className={`md-preview md-preview--milkdown md-preview--error ${this.props.className || ''}`}
+        >
           <p>{i18n.t('editor.loadFailed')}</p>
           <pre>{String(this.state.error?.message || this.state.error)}</pre>
         </div>
@@ -2181,16 +2626,16 @@ class MilkdownErrorBoundary extends Component {
  * 根据当前标签、是否只读以及预览缩放同步配置，选择合适的内容源和字号，
  * 并用 ErrorBoundary 包住第三方编辑器初始化过程。
  */
-const MilkdownMarkdownEditor = forwardRef(function MilkdownMarkdownEditor({
-  className,
-  onAutoSave,
-  readOnly = false,
-  comparison,
-}, ref) {
-  const documentVersion = useEditorStore(useShallow((s) => ({
-    id: s.activeTabId,
-    revision: s.tabs.find((tab) => tab.id === s.activeTabId)?.contentRevision ?? 0,
-  })));
+const MilkdownMarkdownEditor = forwardRef(function MilkdownMarkdownEditor(
+  { className, onAutoSave, readOnly = false, comparison },
+  ref,
+) {
+  const documentVersion = useEditorStore(
+    useShallow((s) => ({
+      id: s.activeTabId,
+      revision: s.tabs.find((tab) => tab.id === s.activeTabId)?.contentRevision ?? 0,
+    })),
+  );
   const activeTabId = comparison?.tabId ?? documentVersion.id;
   const contentRevision = comparison ? 0 : documentVersion.revision;
   const editorFontSize = useConfigStore((s) => s.fontSize);
@@ -2203,13 +2648,21 @@ const MilkdownMarkdownEditor = forwardRef(function MilkdownMarkdownEditor({
     const tab = useEditorStore.getState().tabs.find((t) => t.id === documentVersion.id);
     return getBuffer(documentVersion.id, tab?.content || '');
   }, [documentVersion]);
-  const bufferedContent = useEditorBufferContent(readOnly && !comparison ? activeTabId : null, fallback, 240);
+  const bufferedContent = useEditorBufferContent(
+    readOnly && !comparison ? activeTabId : null,
+    fallback,
+    240,
+  );
   const content = comparison ? comparison.initialContent : readOnly ? bufferedContent : fallback;
-  const fontSize = previewZoomSync ? editorFontSize : (previewFontSize || editorFontSize);
-  const lineHeight = previewZoomSync ? editorLineHeight : (previewLineHeight || editorLineHeight);
+  const fontSize = previewZoomSync ? editorFontSize : previewFontSize || editorFontSize;
+  const lineHeight = previewZoomSync ? editorLineHeight : previewLineHeight || editorLineHeight;
 
   return (
-    <MilkdownErrorBoundary key={`${activeTabId}:${contentRevision}`} className={className} onComparisonReady={comparison?.onReady}>
+    <MilkdownErrorBoundary
+      key={`${activeTabId}:${contentRevision}`}
+      className={className}
+      onComparisonReady={comparison?.onReady}
+    >
       <MilkdownProvider>
         <ForwardedMilkdownInner
           key={readOnly && !comparison ? `${activeTabId}:${content}` : activeTabId}

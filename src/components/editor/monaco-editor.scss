@@ -18,18 +18,29 @@
 .monaco-editor {
   background: transparent !important;
 
-  .margin-view-overlays :is(.moki-fold-hovered, .moki-fold-rotating) { pointer-events: none; }
+  .margin-view-overlays :is(.moki-fold-hovered, .moki-fold-rotating) {
+    pointer-events: none;
+  }
 
-  .margin-view-overlays:hover .codicon:is(.codicon-folding-expanded, .codicon-folding-manual-expanded) {
+  .margin-view-overlays:hover
+    .codicon:is(.codicon-folding-expanded, .codicon-folding-manual-expanded) {
     opacity: 0;
   }
-  .margin-view-overlays :has(> :is(.moki-fold-hovered, .moki-fold-rotating)) > .codicon:is(.codicon-folding-expanded, .codicon-folding-manual-expanded),
-  .margin-view-overlays .codicon:is(.codicon-folding-expanded, .codicon-folding-manual-expanded):hover {
+  .margin-view-overlays
+    :has(> :is(.moki-fold-hovered, .moki-fold-rotating))
+    > .codicon:is(.codicon-folding-expanded, .codicon-folding-manual-expanded),
+  .margin-view-overlays
+    .codicon:is(.codicon-folding-expanded, .codicon-folding-manual-expanded):hover {
     opacity: 1;
   }
 
-  .margin-view-overlays :is(.codicon-folding-expanded, .codicon-folding-collapsed,
-    .codicon-folding-manual-expanded, .codicon-folding-manual-collapsed) {
+  .margin-view-overlays
+    :is(
+      .codicon-folding-expanded,
+      .codicon-folding-collapsed,
+      .codicon-folding-manual-expanded,
+      .codicon-folding-manual-collapsed
+    ) {
     background: transparent;
     &::before {
       @include fold.arrow;
@@ -45,15 +56,21 @@
   }
 
   @media (prefers-reduced-motion: no-preference) {
-    .margin-view-overlays :has(> .moki-fold-rotating) > :is(.codicon-folding-expanded, .codicon-folding-manual-expanded)::before {
+    .margin-view-overlays
+      :has(> .moki-fold-rotating)
+      > :is(.codicon-folding-expanded, .codicon-folding-manual-expanded)::before {
       animation: moki-fold-expand 160ms ease;
     }
-    .margin-view-overlays :has(> .moki-fold-rotating) > :is(.codicon-folding-collapsed, .codicon-folding-manual-collapsed)::before {
+    .margin-view-overlays
+      :has(> .moki-fold-rotating)
+      > :is(.codicon-folding-collapsed, .codicon-folding-manual-collapsed)::before {
       animation: moki-fold-collapse 160ms ease;
     }
   }
 
-  .inline-folded::after { color: var(--text-sec); }
+  .inline-folded::after {
+    color: var(--text-sec);
+  }
 
   // Monaco draws the normal caret itself and lets the textarea draw it during IME.
   .cursors-layer > .cursor {
@@ -65,7 +82,12 @@
     transition-property: top, left;
   }
 
-  .cursors-layer:not(.cursor-block-outline-style, .cursor-underline-style, .cursor-underline-thin-style) > .cursor {
+  .cursors-layer:not(
+      .cursor-block-outline-style,
+      .cursor-underline-style,
+      .cursor-underline-thin-style
+    )
+    > .cursor {
     background-color: var(--code-caret) !important;
   }
 
@@ -75,7 +97,9 @@
 
   @media (forced-colors: active) {
     --code-caret: CanvasText;
-    .cursors-layer > .cursor { forced-color-adjust: none; }
+    .cursors-layer > .cursor {
+      forced-color-adjust: none;
+    }
   }
 
   .margin {
@@ -136,8 +160,22 @@
   }
 }
 
-@keyframes moki-fold-expand { from { transform: rotate(-90deg); } to { transform: rotate(0); } }
-@keyframes moki-fold-collapse { from { transform: rotate(0); } to { transform: rotate(-90deg); } }
+@keyframes moki-fold-expand {
+  from {
+    transform: rotate(-90deg);
+  }
+  to {
+    transform: rotate(0);
+  }
+}
+@keyframes moki-fold-collapse {
+  from {
+    transform: rotate(0);
+  }
+  to {
+    transform: rotate(-90deg);
+  }
+}
 
 /* 搜索结果跳转高亮，从蓝色逐渐淡出到透明 */
 @keyframes search-jump-fade {
@@ -146,7 +184,7 @@
     box-shadow: inset 3px 0 0 rgba(59, 130, 246, 1);
   }
   60% {
-    background-color: rgba(59, 130, 246, 0.10);
+    background-color: rgba(59, 130, 246, 0.1);
     box-shadow: inset 3px 0 0 rgba(59, 130, 246, 0.5);
   }
   100% {
@@ -215,7 +253,7 @@
   }
 }
 
-[data-theme="dark"] {
+[data-theme='dark'] {
   .monaco-editor {
     .inline-completion-text-to-insert {
       opacity: 0.6 !important;

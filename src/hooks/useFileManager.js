@@ -1,4 +1,3 @@
-
 import { broadcastToPlugins } from '@utils/pluginBus';
 import { useCallback, useEffect, useMemo, useRef } from 'react';
 import { open, save } from '@tauri-apps/plugin-dialog';
@@ -155,7 +154,7 @@ async function readFileMetadata(path) {
 }
 
 async function rememberSavedDiskVersion(path, content, metadata) {
-  const currentMetadata = metadata || await readFileMetadata(path);
+  const currentMetadata = metadata || (await readFileMetadata(path));
   return rememberDiskBaseline(path, content, currentMetadata || {});
 }
 
@@ -167,11 +166,7 @@ export function useFileManager() {
     createUntitledTab,
     updateTabPath,
   } = useEditorStore.getState();
-  const {
-    addRecentFile,
-    replaceRecentFilePath,
-    replaceBookmarkPath,
-  } = useFileStore.getState();
+  const { addRecentFile, replaceRecentFilePath, replaceBookmarkPath } = useFileStore.getState();
   const notify = useNotificationStore.getState().notify;
   const t = useMemo(() => i18n.t.bind(i18n), []);
   const isAndroid = isAndroidRuntime();
@@ -245,14 +240,23 @@ export function useFileManager() {
    * @returns {(filePath: string, content: string, encoding: string, meta?: object) => void} 防抖后的保存函数。
    */
   const debouncedAutoSave = useMemo(
-    () => debounceByKey(async (filePath, tabId, revision) => {
-      const live = getLiveTabById(tabId);
-      if (!useConfigStore.getState().autoSave || !live?.modified) return;
-      try {
-        await saveExistingFile(filePath, getBuffer(tabId, live.content ?? ''), undefined, tabId, revision);
-      } catch (_) { /* silent */ }
-    }, 1000),
-    []
+    () =>
+      debounceByKey(async (filePath, tabId, revision) => {
+        const live = getLiveTabById(tabId);
+        if (!useConfigStore.getState().autoSave || !live?.modified) return;
+        try {
+          await saveExistingFile(
+            filePath,
+            getBuffer(tabId, live.content ?? ''),
+            undefined,
+            tabId,
+            revision,
+          );
+        } catch (_) {
+          /* silent */
+        }
+      }, 1000),
+    [],
   );
 
   // 前者落盘并入同步队列，后者直接更新远端文档快照。
@@ -262,22 +266,28 @@ export function useFileManager() {
    *
    * @returns {void}
    */
-  const triggerAutoSave = useCallback((tabId) => {
-    const autoSave = useConfigStore.getState().autoSave;
-    if (!autoSave) return;
-    const tab = typeof tabId === 'string' ? getLiveTabById(tabId) : useEditorStore.getState().getActiveTab();
-    if (!tab?.modified) return;
+  const triggerAutoSave = useCallback(
+    (tabId) => {
+      const autoSave = useConfigStore.getState().autoSave;
+      if (!autoSave) return;
+      const tab =
+        typeof tabId === 'string'
+          ? getLiveTabById(tabId)
+          : useEditorStore.getState().getActiveTab();
+      if (!tab?.modified) return;
 
-    if (!tab.path) {
-      // Desktop drafts stay in memory until an explicit Save / Save As action.
-      if (!isAndroid) return;
-      const canSaveToExplorerDir = hasOpenExplorerDirectory();
-      if (!canSaveToExplorerDir && dismissedAutoSavePromptRef.current.has(tab.id)) return;
-      persistUntitledTab(tab, { allowDialog: !canSaveToExplorerDir, source: 'auto-save' });
-      return;
-    }
-    debouncedAutoSave(tab.path, tab.id, tab.contentRevision ?? 0);
-  }, [debouncedAutoSave, isAndroid]);
+      if (!tab.path) {
+        // Desktop drafts stay in memory until an explicit Save / Save As action.
+        if (!isAndroid) return;
+        const canSaveToExplorerDir = hasOpenExplorerDirectory();
+        if (!canSaveToExplorerDir && dismissedAutoSavePromptRef.current.has(tab.id)) return;
+        persistUntitledTab(tab, { allowDialog: !canSaveToExplorerDir, source: 'auto-save' });
+        return;
+      }
+      debouncedAutoSave(tab.path, tab.id, tab.contentRevision ?? 0);
+    },
+    [debouncedAutoSave, isAndroid],
+  );
 
   /**
    * 加载指定目录，并同步更新当前目录与文件列表。
@@ -285,23 +295,26 @@ export function useFileManager() {
    * @param {string} dirPath 目标目录路径或 SAF tree URI。
    * @returns {Promise<void>}
    */
-  const loadDirectory = useCallback(async (dirPath) => {
-    if (webDemo && !window.__TAURI_INTERNALS__) {
-      if (!isWebPath(dirPath)) {
-        notify('info', i18n.t('webDemo.title'), i18n.t('webDemo.openDirectory'));
-        return;
+  const loadDirectory = useCallback(
+    async (dirPath) => {
+      if (webDemo && !window.__TAURI_INTERNALS__) {
+        if (!isWebPath(dirPath)) {
+          notify('info', i18n.t('webDemo.title'), i18n.t('webDemo.openDirectory'));
+          return;
+        }
+        if (/^web:(\/\/?)?$/.test(String(dirPath).replace(/\/+$/, ''))) {
+          notify('info', i18n.t('webDemo.title'), i18n.t('webDemo.rootDirectory'));
+          return;
+        }
       }
-      if (/^web:(\/\/?)?$/.test(String(dirPath).replace(/\/+$/, ''))) {
-        notify('info', i18n.t('webDemo.title'), i18n.t('webDemo.rootDirectory'));
-        return;
+      try {
+        await loadWorkspaceFiles(dirPath, { navigate: true });
+      } catch (err) {
+        notify('error', t('notification.error'), String(err));
       }
-    }
-    try {
-      await loadWorkspaceFiles(dirPath, { navigate: true });
-    } catch (err) {
-      notify('error', t('notification.error'), String(err));
-    }
-  }, [notify, t]);
+    },
+    [notify, t],
+  );
 
   /**
    * 仅刷新目录内容，不推进目录导航历史。
@@ -315,23 +328,26 @@ export function useFileManager() {
    * @param {string} dirPath 目标目录路径或 SAF tree URI。
    * @returns {Promise<void>}
    */
-  const loadFilesOnly = useCallback(async (dirPath) => {
-    if (webDemo && !window.__TAURI_INTERNALS__) {
-      if (!isWebPath(dirPath)) {
-        notify('info', i18n.t('webDemo.title'), i18n.t('webDemo.openDirectory'));
-        return;
+  const loadFilesOnly = useCallback(
+    async (dirPath) => {
+      if (webDemo && !window.__TAURI_INTERNALS__) {
+        if (!isWebPath(dirPath)) {
+          notify('info', i18n.t('webDemo.title'), i18n.t('webDemo.openDirectory'));
+          return;
+        }
+        if (/^web:(\/\/?)?$/.test(String(dirPath).replace(/\/+$/, ''))) {
+          notify('info', i18n.t('webDemo.title'), i18n.t('webDemo.rootDirectory'));
+          return;
+        }
       }
-      if (/^web:(\/\/?)?$/.test(String(dirPath).replace(/\/+$/, ''))) {
-        notify('info', i18n.t('webDemo.title'), i18n.t('webDemo.rootDirectory'));
-        return;
+      try {
+        await loadWorkspaceFiles(dirPath);
+      } catch (err) {
+        notify('error', t('notification.error'), String(err));
       }
-    }
-    try {
-      await loadWorkspaceFiles(dirPath);
-    } catch (err) {
-      notify('error', t('notification.error'), String(err));
-    }
-  }, [notify, t]);
+    },
+    [notify, t],
+  );
 
   // 供 TabBar 的 “+” 和资源管理器工具栏的 “+” 复用：
   // 若当前已打开目录，则触发资源管理器内联新建文件；
@@ -403,20 +419,23 @@ export function useFileManager() {
    * @param {string} [source='manual-save'] 保存来源标识。
    * @returns {Promise<void>}
    */
-  const finalizeSavedTab = useCallback(async (tab, path) => {
-    const name = path.split(/[\\/]/).pop();
-    const ext = name.split('.').pop() || '';
-    const currentDir = useFileStore.getState().currentDir;
+  const finalizeSavedTab = useCallback(
+    async (tab, path) => {
+      const name = path.split(/[\\/]/).pop();
+      const ext = name.split('.').pop() || '';
+      const currentDir = useFileStore.getState().currentDir;
 
-    updateTabPath(tab.id, path, name);
-    markTabSaved(path, tab.content);
-    addRecentFile({ name, path, ext });
-    if (!isAndroid) startFileWatching(path).catch(() => {});
+      updateTabPath(tab.id, path, name);
+      markTabSaved(path, tab.content);
+      addRecentFile({ name, path, ext });
+      if (!isAndroid) startFileWatching(path).catch(() => {});
 
-    if (currentDir && path.startsWith(currentDir.replace(/[\\/]+$/, ''))) {
-      await loadDirectory(currentDir);
-    }
-  }, [addRecentFile, isAndroid, loadDirectory, markTabSaved, updateTabPath]);
+      if (currentDir && path.startsWith(currentDir.replace(/[\\/]+$/, ''))) {
+        await loadDirectory(currentDir);
+      }
+    },
+    [addRecentFile, isAndroid, loadDirectory, markTabSaved, updateTabPath],
+  );
 
   /**
    * 将未命名标签真正持久化到磁盘或 SAF 文档树。
@@ -469,81 +488,97 @@ export function useFileManager() {
    * @param {{allowDialog?: boolean, source?: string}} [options={}] 保存选项。
    * @returns {Promise<string | null>} 保存成功后的路径；失败或取消时返回 `null`。
    */
-  const persistUntitledTab = useCallback(async (tab, options = {}) => {
-    if (!tab || tab.path) return null;
-    if (pendingUntitledSaveRef.current.has(tab.id)) return null;
+  const persistUntitledTab = useCallback(
+    async (tab, options = {}) => {
+      if (!tab || tab.path) return null;
+      if (pendingUntitledSaveRef.current.has(tab.id)) return null;
 
-    pendingUntitledSaveRef.current.add(tab.id);
-    const content = options.replacement ?? tab.content;
-    try {
-      const currentDir = useFileStore.getState().currentDir;
-      const canSaveToExplorerDir = hasOpenExplorerDirectory();
-      let targetPath = '';
+      pendingUntitledSaveRef.current.add(tab.id);
+      const content = options.replacement ?? tab.content;
+      try {
+        const currentDir = useFileStore.getState().currentDir;
+        const canSaveToExplorerDir = hasOpenExplorerDirectory();
+        let targetPath = '';
 
-      if (isAndroid && currentDir && canSaveToExplorerDir) {
-        const suggestedName = ensureSuggestedFileName(tab);
-        targetPath = await buildUniqueUntitledPath(currentDir, suggestedName);
-      } else if (isAndroid) {
-        // Android 没有可直接使用的原生保存对话框，因此回退到应用私有
-        // Documents 目录，并自动为重名文件追加序号，确保首次保存一定能真正落盘。
-        const dir = await ensureAndroidDocsDir();
-        if (!dir) return null;
-        const suggestedName = ensureSuggestedFileName(tab);
-        targetPath = await buildUniqueUntitledPath(dir, suggestedName);
-      } else if (webDemo && !window.__TAURI_INTERNALS__) {
-        // Browser demo: save through the File System Access API. Auto-save
-        // cannot open a picker without a user gesture, so it stays a draft.
-        if (!options.allowDialog || !window.showSaveFilePicker) return null;
-        const handle = await window.showSaveFilePicker({
-          suggestedName: ensureSuggestedFileName(tab),
-          types: [{ description: 'Markdown', accept: { 'text/markdown': ['.md'] } }],
-        });
-        const file = await handle.getFile();
-        targetPath = `web://${file.name}`;
-        registerWebFile(targetPath, handle, content);
-      } else if (options.allowDialog) {
-        const selected = await save({
-          defaultPath: ensureSuggestedFileName(tab),
-          filters: [
-            { name: 'Markdown', extensions: ['md'] },
-            { name: 'Text', extensions: ['txt'] },
-            { name: 'All Files', extensions: ['*'] },
-          ],
-        });
-        if (!selected) {
-          if (options.source === 'auto-save') {
-            dismissedAutoSavePromptRef.current.add(tab.id);
+        if (isAndroid && currentDir && canSaveToExplorerDir) {
+          const suggestedName = ensureSuggestedFileName(tab);
+          targetPath = await buildUniqueUntitledPath(currentDir, suggestedName);
+        } else if (isAndroid) {
+          // Android 没有可直接使用的原生保存对话框，因此回退到应用私有
+          // Documents 目录，并自动为重名文件追加序号，确保首次保存一定能真正落盘。
+          const dir = await ensureAndroidDocsDir();
+          if (!dir) return null;
+          const suggestedName = ensureSuggestedFileName(tab);
+          targetPath = await buildUniqueUntitledPath(dir, suggestedName);
+        } else if (webDemo && !window.__TAURI_INTERNALS__) {
+          // Browser demo: save through the File System Access API. Auto-save
+          // cannot open a picker without a user gesture, so it stays a draft.
+          if (!options.allowDialog || !window.showSaveFilePicker) return null;
+          const handle = await window.showSaveFilePicker({
+            suggestedName: ensureSuggestedFileName(tab),
+            types: [{ description: 'Markdown', accept: { 'text/markdown': ['.md'] } }],
+          });
+          const file = await handle.getFile();
+          targetPath = `web://${file.name}`;
+          registerWebFile(targetPath, handle, content);
+        } else if (options.allowDialog) {
+          const selected = await save({
+            defaultPath: ensureSuggestedFileName(tab),
+            filters: [
+              { name: 'Markdown', extensions: ['md'] },
+              { name: 'Text', extensions: ['txt'] },
+              { name: 'All Files', extensions: ['*'] },
+            ],
+          });
+          if (!selected) {
+            if (options.source === 'auto-save') {
+              dismissedAutoSavePromptRef.current.add(tab.id);
+            }
+            return null;
           }
+          targetPath = selected;
+        } else {
           return null;
         }
-        targetPath = selected;
-      } else {
-        return null;
-      }
 
-      const result = await saveFile(targetPath, content, tab.encoding);
-      if (!result.success) {
-        notify('error', t('notification.error'), result.message);
-        return null;
-      }
+        const result = await saveFile(targetPath, content, tab.encoding);
+        if (!result.success) {
+          notify('error', t('notification.error'), result.message);
+          return null;
+        }
 
-      dismissedAutoSavePromptRef.current.delete(tab.id);
-      const live = getLiveTabById(tab.id);
-      if (options.replacement !== undefined && live && !live.path && live.content === tab.content &&
-          live.contentRevision === tab.contentRevision) {
-        useEditorStore.getState().replaceTabContent(tab.id, { content });
+        dismissedAutoSavePromptRef.current.delete(tab.id);
+        const live = getLiveTabById(tab.id);
+        if (
+          options.replacement !== undefined &&
+          live &&
+          !live.path &&
+          live.content === tab.content &&
+          live.contentRevision === tab.contentRevision
+        ) {
+          useEditorStore.getState().replaceTabContent(tab.id, { content });
+        }
+        await finalizeSavedTab(
+          { ...tab, content },
+          targetPath,
+          options.source === 'auto-save' ? 'auto-save' : 'save-as',
+        );
+        // Save-as also counts as a save for plugins (e.g. sync the new file).
+        broadcastToPlugins({
+          type: 'event',
+          name: 'didSave',
+          payload: { path: targetPath, name: targetPath.split(/[\\/]/).pop() },
+        });
+        return targetPath;
+      } catch (err) {
+        notify('error', t('notification.error'), String(err));
+        return null;
+      } finally {
+        pendingUntitledSaveRef.current.delete(tab.id);
       }
-      await finalizeSavedTab({ ...tab, content }, targetPath, options.source === 'auto-save' ? 'auto-save' : 'save-as');
-      // Save-as also counts as a save for plugins (e.g. sync the new file).
-      broadcastToPlugins({ type: 'event', name: 'didSave', payload: { path: targetPath, name: targetPath.split(/[\\/]/).pop() } });
-      return targetPath;
-    } catch (err) {
-      notify('error', t('notification.error'), String(err));
-      return null;
-    } finally {
-      pendingUntitledSaveRef.current.delete(tab.id);
-    }
-  }, [buildUniqueUntitledPath, ensureAndroidDocsDir, finalizeSavedTab, isAndroid, notify, t]);
+    },
+    [buildUniqueUntitledPath, ensureAndroidDocsDir, finalizeSavedTab, isAndroid, notify, t],
+  );
 
   /**
    * 按路径或 URI 打开文件，并根据来源选择本地或 external 标签模式。
@@ -552,47 +587,58 @@ export function useFileManager() {
    * @param {string} fileName 展示文件名。
    * @returns {Promise<void>}
    */
-  const openFileFromPath = useCallback(async (filePath, fileName) => {
-    if (webDemo && !window.__TAURI_INTERNALS__ && !isWebPath(filePath)) {
-      notify('info', i18n.t('webDemo.title'), i18n.t('webDemo.openFile'));
-      return;
-    }
-
-    // external 标签打开；首次保存再走另存为并把本地路径登记到服务端。
-
-    try {
-      const result = await readFileContent(filePath);
-      if (result.success) {
-        await rememberSavedDiskVersion(
-          filePath,
-          result.content || '',
-          await readFileMetadata(filePath),
-        );
-        const ext = fileName.split('.').pop() || '';
-
-        const alreadyOpen = Boolean(useEditorStore.getState().getTabByPath(filePath));
-        openTab({
-          name: fileName,
-          path: filePath,
-          content: result.content || '',
-          encoding: result.encoding || 'UTF-8',
-          lineEnding: result.line_ending || 'LF',
-        });
-        // 新打开的文件强制记录起始版本，即使与上次历史内容完全相同。
-        // 已打开标签的重复选择不产生记录，定时/退出快照仍按内容去重。
-        if (!isAndroid && !alreadyOpen) {
-          historyCapture(filePath, result.content || '', { force: true }).catch(() => {});
-        }
-        addRecentFile({ name: fileName, path: filePath, ext });
-        if (!isAndroid) startFileWatching(filePath).catch(() => {});
-        broadcastToPlugins({ type: 'event', name: 'didOpen', payload: { path: filePath, name: fileName } });
-      } else {
-        notify(result.blockedReason ? 'warning' : 'error', t('notification.error'), result.message);
+  const openFileFromPath = useCallback(
+    async (filePath, fileName) => {
+      if (webDemo && !window.__TAURI_INTERNALS__ && !isWebPath(filePath)) {
+        notify('info', i18n.t('webDemo.title'), i18n.t('webDemo.openFile'));
+        return;
       }
-    } catch (err) {
-      notify('error', t('notification.error'), String(err));
-    }
-  }, [addRecentFile, isAndroid, notify, openTab, t]);
+
+      // external 标签打开；首次保存再走另存为并把本地路径登记到服务端。
+
+      try {
+        const result = await readFileContent(filePath);
+        if (result.success) {
+          await rememberSavedDiskVersion(
+            filePath,
+            result.content || '',
+            await readFileMetadata(filePath),
+          );
+          const ext = fileName.split('.').pop() || '';
+
+          const alreadyOpen = Boolean(useEditorStore.getState().getTabByPath(filePath));
+          openTab({
+            name: fileName,
+            path: filePath,
+            content: result.content || '',
+            encoding: result.encoding || 'UTF-8',
+            lineEnding: result.line_ending || 'LF',
+          });
+          // 新打开的文件强制记录起始版本，即使与上次历史内容完全相同。
+          // 已打开标签的重复选择不产生记录，定时/退出快照仍按内容去重。
+          if (!isAndroid && !alreadyOpen) {
+            historyCapture(filePath, result.content || '', { force: true }).catch(() => {});
+          }
+          addRecentFile({ name: fileName, path: filePath, ext });
+          if (!isAndroid) startFileWatching(filePath).catch(() => {});
+          broadcastToPlugins({
+            type: 'event',
+            name: 'didOpen',
+            payload: { path: filePath, name: fileName },
+          });
+        } else {
+          notify(
+            result.blockedReason ? 'warning' : 'error',
+            t('notification.error'),
+            result.message,
+          );
+        }
+      } catch (err) {
+        notify('error', t('notification.error'), String(err));
+      }
+    },
+    [addRecentFile, isAndroid, notify, openTab, t],
+  );
 
   /**
    * 在当前 Explorer 目录下创建新文件，并在成功后立即打开。
@@ -600,59 +646,69 @@ export function useFileManager() {
    * @param {string} fileName 用户输入的目标文件名。
    * @returns {Promise<{ok: boolean, path?: string}>} 创建结果。
    */
-  const createFileInCurrentDir = useCallback(async (fileName, directory = useFileStore.getState().currentDir) => {
-    const currentDir = directory;
-    const trimmed = (fileName || '').trim();
-    if (!currentDir) {
-      notify('error', t('notification.error'), t('sidebar.explorer.openFolder'));
-      return { ok: false };
-    }
-    if (!trimmed || /[\\/]/.test(trimmed)) {
-      notify('error', t('notification.error'), t('sidebar.explorer.invalidFileName'));
-      return { ok: false };
-    }
+  const createFileInCurrentDir = useCallback(
+    async (fileName, directory = useFileStore.getState().currentDir) => {
+      const currentDir = directory;
+      const trimmed = (fileName || '').trim();
+      if (!currentDir) {
+        notify('error', t('notification.error'), t('sidebar.explorer.openFolder'));
+        return { ok: false };
+      }
+      if (!trimmed || /[\\/]/.test(trimmed)) {
+        notify('error', t('notification.error'), t('sidebar.explorer.invalidFileName'));
+        return { ok: false };
+      }
 
-    try {
-      // SAF 场景下要通过 bridge 直接创建文档，拿到真实子 URI；同时让
-      // DocumentsProvider 自己负责校验非法字符等命名规则，而不是拖到写入时再报错。
-      if (isSafUri(currentDir)) {
-        if (safChildExists(currentDir, trimmed)) {
+      try {
+        // SAF 场景下要通过 bridge 直接创建文档，拿到真实子 URI；同时让
+        // DocumentsProvider 自己负责校验非法字符等命名规则，而不是拖到写入时再报错。
+        if (isSafUri(currentDir)) {
+          if (safChildExists(currentDir, trimmed)) {
+            notify('error', t('notification.error'), t('sidebar.explorer.fileExists'));
+            return { ok: false };
+          }
+          const childUri = await safCreateFileUnder(currentDir, trimmed);
+          if (!childUri) {
+            notify('error', t('notification.error'), t('sidebar.explorer.invalidFileName'));
+            return { ok: false };
+          }
+          if (useFileStore.getState().currentDir === currentDir) await loadDirectory(currentDir);
+          await openFileFromPath(childUri, trimmed);
+          return { ok: true, path: childUri };
+        }
+
+        const targetPath = joinPath(currentDir, trimmed);
+        if (await checkFileExists(targetPath)) {
           notify('error', t('notification.error'), t('sidebar.explorer.fileExists'));
           return { ok: false };
         }
-        const childUri = await safCreateFileUnder(currentDir, trimmed);
-        if (!childUri) {
-          notify('error', t('notification.error'), t('sidebar.explorer.invalidFileName'));
-          return { ok: false };
-        }
+        await writeFileContent(targetPath, '');
         if (useFileStore.getState().currentDir === currentDir) await loadDirectory(currentDir);
-        await openFileFromPath(childUri, trimmed);
-        return { ok: true, path: childUri };
-      }
-
-      const targetPath = joinPath(currentDir, trimmed);
-      if (await checkFileExists(targetPath)) {
-        notify('error', t('notification.error'), t('sidebar.explorer.fileExists'));
+        await openFileFromPath(targetPath, trimmed);
+        return { ok: true, path: targetPath };
+      } catch (err) {
+        notify('error', t('notification.error'), String(err));
         return { ok: false };
       }
-      await writeFileContent(targetPath, '');
-      if (useFileStore.getState().currentDir === currentDir) await loadDirectory(currentDir);
-      await openFileFromPath(targetPath, trimmed);
-      return { ok: true, path: targetPath };
-    } catch (err) {
-      notify('error', t('notification.error'), String(err));
-      return { ok: false };
-    }
-  }, [loadDirectory, notify, openFileFromPath, t]);
+    },
+    [loadDirectory, notify, openFileFromPath, t],
+  );
 
   // The tab-bar + creates immediately; Explorer's New File keeps its naming field.
   const createNewTab = useCallback(() => {
     const directory = useFileStore.getState().currentDir;
-    if (!directory) { createUntitledTab(); return Promise.resolve({ ok: true }); }
+    if (!directory) {
+      createUntitledTab();
+      return Promise.resolve({ ok: true });
+    }
     const task = newMarkdownTabQueue.then(async () => {
       let index = 1;
       let fileName = untitledFileName();
-      while (isSafUri(directory) ? safChildExists(directory, fileName) : await checkFileExists(joinPath(directory, fileName))) {
+      while (
+        isSafUri(directory)
+          ? safChildExists(directory, fileName)
+          : await checkFileExists(joinPath(directory, fileName))
+      ) {
         fileName = untitledFileName(++index);
       }
       return createFileInCurrentDir(fileName, directory);
@@ -747,48 +803,81 @@ export function useFileManager() {
    * @param {{replacement?: string}} [options] 成功落盘后应用到标签的正文。
    * @returns {Promise<{ok: boolean, tabId?: string, cancelled?: boolean}>} 保存结果。
    */
-  const saveTab = useCallback(async (tabId, { replacement } = {}) => {
-    // 实时正文保存在 editorBuffer 中，`tab.content` 只是上一次持久化的快照。
-    // 这里统一通过 getLiveTabById 取最新缓冲内容，避免把过期正文落盘/推云
+  const saveTab = useCallback(
+    async (tabId, { replacement } = {}) => {
+      // 实时正文保存在 editorBuffer 中，`tab.content` 只是上一次持久化的快照。
+      // 这里统一通过 getLiveTabById 取最新缓冲内容，避免把过期正文落盘/推云
 
-    const activeId = useEditorStore.getState().activeTabId;
-    flushEditorBuffer(tabId || activeId);
-    const tab = getLiveTabById(tabId || activeId);
-    if (!tab || tab.builtin) return { ok: false };
+      const activeId = useEditorStore.getState().activeTabId;
+      flushEditorBuffer(tabId || activeId);
+      const tab = getLiveTabById(tabId || activeId);
+      if (!tab || tab.builtin) return { ok: false };
 
-    if (!tab.path) {
-
-      // 而不是再次触发整篇内容回推同步。
-      // Android 会自动把标签落到应用私有 Documents 目录；桌面端则弹出
-      // 保存对话框。两条路径最终都会写入真实文件，不再停留在“只有草稿”的死胡同。
-      dismissedAutoSavePromptRef.current.delete(tab.id);
-      const targetPath = await persistUntitledTab(tab, { allowDialog: true, source: 'manual-save', replacement });
-      return targetPath
-        ? { ok: true, tabId: targetPath, path: targetPath, savedContent: replacement ?? tab.content, previousContent: tab.content }
-        : { ok: false, cancelled: true };
-    }
-
-    try {
-      const result = await saveExistingFile(tab.path, tab.content, tab.encoding, tab.id, tab.contentRevision ?? 0, { replacement });
-      if (result.success) {
-        // Ctrl+S path: tell plugins a save happened (cloud sync reacts to it).
-        try {
-          broadcastToPlugins({ type: 'event', name: 'didSave', payload: { path: tab.path, name: tab.path.split(/[\\\\/]/).pop() } });
-        } catch (error) {
-          console.warn('[files] save notification failed:', error);
-        }
-        return { ok: true, tabId: tab.id, path: tab.path, savedContent: result.savedContent, previousContent: result.previousContent };
-      } else if (!result.conflict && !result.externalReloaded && !result.superseded) {
-        notify('error', t('notification.error'), result.message);
-        return { ok: false, message: result.message };
-      } else {
-        return { ok: false, conflict: !!result.conflict, externalReloaded: !!result.externalReloaded };
+      if (!tab.path) {
+        // 而不是再次触发整篇内容回推同步。
+        // Android 会自动把标签落到应用私有 Documents 目录；桌面端则弹出
+        // 保存对话框。两条路径最终都会写入真实文件，不再停留在“只有草稿”的死胡同。
+        dismissedAutoSavePromptRef.current.delete(tab.id);
+        const targetPath = await persistUntitledTab(tab, {
+          allowDialog: true,
+          source: 'manual-save',
+          replacement,
+        });
+        return targetPath
+          ? {
+              ok: true,
+              tabId: targetPath,
+              path: targetPath,
+              savedContent: replacement ?? tab.content,
+              previousContent: tab.content,
+            }
+          : { ok: false, cancelled: true };
       }
-    } catch (err) {
-      notify('error', t('notification.error'), String(err));
-      return { ok: false, message: err?.message || String(err) };
-    }
-  }, [notify, persistUntitledTab, t]);
+
+      try {
+        const result = await saveExistingFile(
+          tab.path,
+          tab.content,
+          tab.encoding,
+          tab.id,
+          tab.contentRevision ?? 0,
+          { replacement },
+        );
+        if (result.success) {
+          // Ctrl+S path: tell plugins a save happened (cloud sync reacts to it).
+          try {
+            broadcastToPlugins({
+              type: 'event',
+              name: 'didSave',
+              payload: { path: tab.path, name: tab.path.split(/[\\\\/]/).pop() },
+            });
+          } catch (error) {
+            console.warn('[files] save notification failed:', error);
+          }
+          return {
+            ok: true,
+            tabId: tab.id,
+            path: tab.path,
+            savedContent: result.savedContent,
+            previousContent: result.previousContent,
+          };
+        } else if (!result.conflict && !result.externalReloaded && !result.superseded) {
+          notify('error', t('notification.error'), result.message);
+          return { ok: false, message: result.message };
+        } else {
+          return {
+            ok: false,
+            conflict: !!result.conflict,
+            externalReloaded: !!result.externalReloaded,
+          };
+        }
+      } catch (err) {
+        notify('error', t('notification.error'), String(err));
+        return { ok: false, message: err?.message || String(err) };
+      }
+    },
+    [notify, persistUntitledTab, t],
+  );
 
   /**
    * 保存当前活动标签。
@@ -837,7 +926,6 @@ export function useFileManager() {
           markTabSaved(path, tab.content);
           addRecentFile({ name, path, ext });
           broadcastToPlugins({ type: 'event', name: 'didSave', payload: { path, name } });
-
         }
       }
     } catch (err) {
@@ -860,28 +948,31 @@ export function useFileManager() {
    * @param {string} path 本地路径或 SAF URI。
    * @returns {Promise<void>}
    */
-  const openInExplorer = useCallback(async (path) => {
-    // Android 仅能对 SAF URI 交给系统 DocumentsUI 打开；私有 `/data/data`
-    // 目录既不能被 DocumentsUI 浏览，也没有合适的系统 Intent 可以跳转。
-    if (isAndroid) {
-      if (isSafUri(path)) {
-        try {
-          await showInExplorer(path);
-        } catch (err) {
-          notify('error', t('notification.error'), String(err));
+  const openInExplorer = useCallback(
+    async (path) => {
+      // Android 仅能对 SAF URI 交给系统 DocumentsUI 打开；私有 `/data/data`
+      // 目录既不能被 DocumentsUI 浏览，也没有合适的系统 Intent 可以跳转。
+      if (isAndroid) {
+        if (isSafUri(path)) {
+          try {
+            await showInExplorer(path);
+          } catch (err) {
+            notify('error', t('notification.error'), String(err));
+          }
+          return;
         }
+        notify('info', t('notification.info', 'Info'), t('sidebar.explorer.openInExplorer'));
         return;
       }
-      notify('info', t('notification.info', 'Info'), t('sidebar.explorer.openInExplorer'));
-      return;
-    }
 
-    try {
-      await showInExplorer(path);
-    } catch (err) {
-      notify('error', t('notification.error'), String(err));
-    }
-  }, [isAndroid, notify, t]);
+      try {
+        await showInExplorer(path);
+      } catch (err) {
+        notify('error', t('notification.error'), String(err));
+      }
+    },
+    [isAndroid, notify, t],
+  );
 
   /**
    * 打开目录选择对话框，并将所选目录加载到 Explorer。
@@ -953,32 +1044,42 @@ export function useFileManager() {
    * @param {string[]} [paths=[]] 拖入路径列表。
    * @returns {Promise<void>}
    */
-  const openDroppedPathsInEditor = useCallback(async (paths = []) => {
-    for (const filePath of paths) {
-      try {
-        const info = await getFileInfo(filePath);
-        if (info?.is_file) {
-          await openFileFromPath(info.path, info.name);
+  const openDroppedPathsInEditor = useCallback(
+    async (paths = []) => {
+      for (const filePath of paths) {
+        try {
+          const info = await getFileInfo(filePath);
+          if (info?.is_file) {
+            await openFileFromPath(info.path, info.name);
+          }
+        } catch (err) {
+          notify('error', t('notification.error'), String(err));
         }
-      } catch (err) {
-        notify('error', t('notification.error'), String(err));
       }
-    }
-  }, [notify, openFileFromPath, t]);
+    },
+    [notify, openFileFromPath, t],
+  );
 
-  const openDroppedBrowserFiles = useCallback(async (files) => {
-    for (const file of files) {
-      try {
-        if (file.size > MAX_TEXT_BYTES) throw new TextFileError('too-large');
-        const { content, encoding } = decodeTextBytes(new Uint8Array(await file.arrayBuffer()));
-        const newline = /\r\n|\n|\r/.exec(content)?.[0];
-        useEditorStore.getState().createUntitledTab({ name: file.name, content, encoding,
-          lineEnding: newline === '\r\n' ? 'CRLF' : newline === '\r' ? 'CR' : 'LF' });
-      } catch (error) {
-        notify('error', t('drag.failed'), String(error));
+  const openDroppedBrowserFiles = useCallback(
+    async (files) => {
+      for (const file of files) {
+        try {
+          if (file.size > MAX_TEXT_BYTES) throw new TextFileError('too-large');
+          const { content, encoding } = decodeTextBytes(new Uint8Array(await file.arrayBuffer()));
+          const newline = /\r\n|\n|\r/.exec(content)?.[0];
+          useEditorStore.getState().createUntitledTab({
+            name: file.name,
+            content,
+            encoding,
+            lineEnding: newline === '\r\n' ? 'CRLF' : newline === '\r' ? 'CR' : 'LF',
+          });
+        } catch (error) {
+          notify('error', t('drag.failed'), String(error));
+        }
       }
-    }
-  }, [notify, t]);
+    },
+    [notify, t],
+  );
 
   /**
    * 将拖入路径移动到当前 Explorer 目录，并更新相关标签与书签引用。
@@ -986,62 +1087,68 @@ export function useFileManager() {
    * @param {string[]} [paths=[]] 拖入路径列表。
    * @returns {Promise<void>}
    */
-  const moveDroppedPathsToExplorer = useCallback(async (paths, { directory, effect = null, resolveConflict } = {}) => {
-    if (!directory) {
-      notify('error', t('notification.error'), t('sidebar.explorer.openFolder'));
-      return;
-    }
-
-    for (const sourcePath of paths || []) {
-      try {
-        let name = null;
-        let result;
-        do {
-          result = await invoke('transfer_dropped_entry', { source: sourcePath, directory, name, effect });
-          if (result.status !== 'conflict') break;
-          name = await resolveConflict?.(sourcePath, result.path);
-          if (!name) break;
-        } while (name);
-        if (result.status !== 'finished' || !result.moved) continue;
-        hideMovedExplorerEntry(sourcePath);
-        const from = sourcePath.replace(/[\\/]+$/, '');
-        const source = normalizePath(from);
-        const store = useFileStore.getState();
-        const tabs = useEditorStore.getState().tabs.filter(({ path }) => path);
-        const referenced = new Set([
-          ...[...tabs, ...store.recentFiles].map(({ path }) => path),
-          ...store.bookmarkedPaths.map((entry) => typeof entry === 'string' ? entry : entry.path),
-        ].filter(Boolean));
-        for (const path of referenced) {
-          const current = normalizePath(path);
-          if (current !== source && (!result.directory || !current.startsWith(`${source}/`))) continue;
-          const target = current === source ? result.path : result.path + path.slice(from.length);
-          const fileName = target.split(/[\\/]/).pop();
-          const tab = tabs.find((entry) => entry.path === path);
-          if (tab) {
-            moveDiskBaseline(path, target);
-            updateTabPath(tab.id, target, fileName);
-            void stopFileWatching(path).catch(() => {});
-            void startFileWatching(target).catch(() => {});
-          }
-          replaceRecentFilePath(path, target, fileName);
-          replaceBookmarkPath(path, target);
-        }
-      } catch (err) {
-        notify('error', t('notification.error'), String(err));
+  const moveDroppedPathsToExplorer = useCallback(
+    async (paths, { directory, effect = null, resolveConflict } = {}) => {
+      if (!directory) {
+        notify('error', t('notification.error'), t('sidebar.explorer.openFolder'));
+        return;
       }
-    }
 
-    const currentDir = useFileStore.getState().currentDir;
-    if (currentDir) await loadFilesOnly(currentDir);
-  }, [
-    loadFilesOnly,
-    notify,
-    replaceBookmarkPath,
-    replaceRecentFilePath,
-    t,
-    updateTabPath,
-  ]);
+      for (const sourcePath of paths || []) {
+        try {
+          let name = null;
+          let result;
+          do {
+            result = await invoke('transfer_dropped_entry', {
+              source: sourcePath,
+              directory,
+              name,
+              effect,
+            });
+            if (result.status !== 'conflict') break;
+            name = await resolveConflict?.(sourcePath, result.path);
+            if (!name) break;
+          } while (name);
+          if (result.status !== 'finished' || !result.moved) continue;
+          hideMovedExplorerEntry(sourcePath);
+          const from = sourcePath.replace(/[\\/]+$/, '');
+          const source = normalizePath(from);
+          const store = useFileStore.getState();
+          const tabs = useEditorStore.getState().tabs.filter(({ path }) => path);
+          const referenced = new Set(
+            [
+              ...[...tabs, ...store.recentFiles].map(({ path }) => path),
+              ...store.bookmarkedPaths.map((entry) =>
+                typeof entry === 'string' ? entry : entry.path,
+              ),
+            ].filter(Boolean),
+          );
+          for (const path of referenced) {
+            const current = normalizePath(path);
+            if (current !== source && (!result.directory || !current.startsWith(`${source}/`)))
+              continue;
+            const target = current === source ? result.path : result.path + path.slice(from.length);
+            const fileName = target.split(/[\\/]/).pop();
+            const tab = tabs.find((entry) => entry.path === path);
+            if (tab) {
+              moveDiskBaseline(path, target);
+              updateTabPath(tab.id, target, fileName);
+              void stopFileWatching(path).catch(() => {});
+              void startFileWatching(target).catch(() => {});
+            }
+            replaceRecentFilePath(path, target, fileName);
+            replaceBookmarkPath(path, target);
+          }
+        } catch (err) {
+          notify('error', t('notification.error'), String(err));
+        }
+      }
+
+      const currentDir = useFileStore.getState().currentDir;
+      if (currentDir) await loadFilesOnly(currentDir);
+    },
+    [loadFilesOnly, notify, replaceBookmarkPath, replaceRecentFilePath, t, updateTabPath],
+  );
 
   /**
    * 重命名文件或目录，并同步所有引用。
@@ -1054,49 +1161,61 @@ export function useFileManager() {
    * @param {string} newName 新名字（仅名字，不含目录）。
    * @returns {Promise<{ok: boolean, path?: string, message?: string}>} 结果。
    */
-  const renameEntry = useCallback(async (sourcePath, newName) => {
-    const currentDir = useFileStore.getState().currentDir;
-    const trimmed = (newName || '').trim();
-    if (!trimmed || /[\\/]/.test(trimmed)) {
-      notify('error', t('notification.error'), t('sidebar.explorer.invalidFileName'));
-      return { ok: false };
-    }
-
-    const sourceName = sourcePath.split(/[\\/]/).pop();
-    if (trimmed === sourceName) return { ok: true, path: sourcePath };
-
-    const parentDir = currentDir || sourcePath.slice(0, Math.max(0, sourcePath.length - sourceName.length));
-    const targetPath = joinPath(parentDir, trimmed);
-
-    try {
-      if (await checkFileExists(targetPath)) {
-        notify('error', t('notification.error'), t('sidebar.explorer.fileExists'));
+  const renameEntry = useCallback(
+    async (sourcePath, newName) => {
+      const currentDir = useFileStore.getState().currentDir;
+      const trimmed = (newName || '').trim();
+      if (!trimmed || /[\\/]/.test(trimmed)) {
+        notify('error', t('notification.error'), t('sidebar.explorer.invalidFileName'));
         return { ok: false };
       }
 
-      const result = await renameFile(sourcePath, targetPath);
-      if (!result.success) {
-        notify('error', t('notification.error'), result.message);
+      const sourceName = sourcePath.split(/[\\/]/).pop();
+      if (trimmed === sourceName) return { ok: true, path: sourcePath };
+
+      const parentDir =
+        currentDir || sourcePath.slice(0, Math.max(0, sourcePath.length - sourceName.length));
+      const targetPath = joinPath(parentDir, trimmed);
+
+      try {
+        if (await checkFileExists(targetPath)) {
+          notify('error', t('notification.error'), t('sidebar.explorer.fileExists'));
+          return { ok: false };
+        }
+
+        const result = await renameFile(sourcePath, targetPath);
+        if (!result.success) {
+          notify('error', t('notification.error'), result.message);
+          return { ok: false };
+        }
+
+        // 标签、监听、最近文件与书签都要从旧路径迁到新路径。
+        const existingTab = useEditorStore.getState().getTabByPath(sourcePath);
+        if (existingTab) {
+          updateTabPath(existingTab.id, targetPath, trimmed);
+          stopFileWatching(sourcePath).catch(() => {});
+          if (!isAndroid) startFileWatching(targetPath).catch(() => {});
+        }
+        replaceRecentFilePath(sourcePath, targetPath, trimmed);
+        replaceBookmarkPath(sourcePath, targetPath);
+
+        if (currentDir) await loadDirectory(currentDir);
+        return { ok: true, path: targetPath };
+      } catch (error) {
+        notify('error', t('notification.error'), String(error));
         return { ok: false };
       }
-
-      // 标签、监听、最近文件与书签都要从旧路径迁到新路径。
-      const existingTab = useEditorStore.getState().getTabByPath(sourcePath);
-      if (existingTab) {
-        updateTabPath(existingTab.id, targetPath, trimmed);
-        stopFileWatching(sourcePath).catch(() => {});
-        if (!isAndroid) startFileWatching(targetPath).catch(() => {});
-      }
-      replaceRecentFilePath(sourcePath, targetPath, trimmed);
-      replaceBookmarkPath(sourcePath, targetPath);
-
-      if (currentDir) await loadDirectory(currentDir);
-      return { ok: true, path: targetPath };
-    } catch (error) {
-      notify('error', t('notification.error'), String(error));
-      return { ok: false };
-    }
-  }, [isAndroid, loadDirectory, notify, replaceBookmarkPath, replaceRecentFilePath, t, updateTabPath]);
+    },
+    [
+      isAndroid,
+      loadDirectory,
+      notify,
+      replaceBookmarkPath,
+      replaceRecentFilePath,
+      t,
+      updateTabPath,
+    ],
+  );
 
   return {
     loadDirectory,

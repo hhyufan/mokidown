@@ -1,7 +1,12 @@
 import useEditorStore from '@store/useEditorStore';
 import { getBuffer, flushEditorBuffer } from '@utils/editorBuffer';
 import { readFileContent, saveFile } from '@utils/tauriApi';
-import { classifyFileVersions, getDiskBaseline, rememberDiskBaseline, withFileOperation } from './localFileGuard';
+import {
+  classifyFileVersions,
+  getDiskBaseline,
+  rememberDiskBaseline,
+  withFileOperation,
+} from './localFileGuard';
 
 let composingTarget = null;
 export function setLocalFileComposing(target) {
@@ -27,11 +32,21 @@ async function inspectFile(path, isCurrent = () => true, tabId, replacement) {
     const editorContent = getBuffer(tab.id, tab.content || '');
     const diskContent = disk?.content || '';
     return {
-      state, tab, disk, editorContent, diskContent,
-      outcome: disk?.blockedReason && disk.blockedReason !== 'missing' ? 'blocked' : disk?.success ? classifyFileVersions({
-        baseContent: baseline?.content ?? tab.content ?? '',
-        editorContent: replacement ?? editorContent, diskContent,
-      }) : 'unavailable',
+      state,
+      tab,
+      disk,
+      editorContent,
+      diskContent,
+      outcome:
+        disk?.blockedReason && disk.blockedReason !== 'missing'
+          ? 'blocked'
+          : disk?.success
+            ? classifyFileVersions({
+                baseContent: baseline?.content ?? tab.content ?? '',
+                editorContent: replacement ?? editorContent,
+                diskContent,
+              })
+            : 'unavailable',
     };
   }
   return null;
@@ -45,38 +60,74 @@ function reportConflict(path, version) {
   const { state, tab, disk, diskContent } = version;
   const conflict = state.externalFileConflicts.get(path);
   const kind = version.outcome === 'blocked' ? 'blocked' : disk?.success ? 'modified' : 'removed';
-  if (conflict?.path === path && conflict.kind === kind && conflict.diskContent === disk?.content && conflict.blockedReason === disk?.blockedReason) return;
+  if (
+    conflict?.path === path &&
+    conflict.kind === kind &&
+    conflict.diskContent === disk?.content &&
+    conflict.blockedReason === disk?.blockedReason
+  )
+    return;
   state.setExternalFileConflict({
-    path, tabId: tab.id, kind,
+    path,
+    tabId: tab.id,
+    kind,
     ...(kind === 'blocked' ? { blockedReason: disk.blockedReason, message: disk.message } : {}),
-    ...(disk?.success ? { diskContent, encoding: disk.encoding || tab.encoding,
-      lineEnding: disk.line_ending || tab.lineEnding } : {}),
+    ...(disk?.success
+      ? {
+          diskContent,
+          encoding: disk.encoding || tab.encoding,
+          lineEnding: disk.line_ending || tab.lineEnding,
+        }
+      : {}),
   });
 }
 
 function reloadExternal(path, version) {
   const { state, tab, disk, diskContent } = version;
-  if (!state.replaceTabContent(tab.id, {
-    content: diskContent, encoding: disk.encoding || tab.encoding,
-    lineEnding: disk.line_ending || tab.lineEnding,
-  })) return false;
+  if (
+    !state.replaceTabContent(tab.id, {
+      content: diskContent,
+      encoding: disk.encoding || tab.encoding,
+      lineEnding: disk.line_ending || tab.lineEnding,
+    })
+  )
+    return false;
   rememberDiskBaseline(path, diskContent, disk);
   clearConflict(path);
   return true;
 }
 
 /** Compare and save as one operation; queued autosaves use the current buffer. */
-export function saveExistingFile(path, initialContent, encoding, tabId, expectedRevision, { replacement } = {}) {
+export function saveExistingFile(
+  path,
+  initialContent,
+  encoding,
+  tabId,
+  expectedRevision,
+  { replacement } = {},
+) {
   return withFileOperation(path, async () => {
-    const isCurrent = () => !isInputComposing() &&
-      (replacement === undefined || getBuffer(tabId, initialContent) === initialContent) && (expectedRevision == null ||
-      useEditorStore.getState().tabs.some((tab) => tab.id === tabId && tab.path === path &&
-        (tab.contentRevision ?? 0) === expectedRevision));
+    const isCurrent = () =>
+      !isInputComposing() &&
+      (replacement === undefined || getBuffer(tabId, initialContent) === initialContent) &&
+      (expectedRevision == null ||
+        useEditorStore
+          .getState()
+          .tabs.some(
+            (tab) =>
+              tab.id === tabId &&
+              tab.path === path &&
+              (tab.contentRevision ?? 0) === expectedRevision,
+          ));
     const version = await inspectFile(path, isCurrent, tabId, replacement);
     if (!version) return { success: false, superseded: true };
     const { state, tab, outcome, editorContent, diskContent } = version;
-    if (outcome === 'conflict' || outcome === 'unavailable' || outcome === 'blocked' ||
-        (outcome === 'external-only' && replacement !== undefined)) {
+    if (
+      outcome === 'conflict' ||
+      outcome === 'unavailable' ||
+      outcome === 'blocked' ||
+      (outcome === 'external-only' && replacement !== undefined)
+    ) {
       reportConflict(path, version);
       return { success: false, conflict: true };
     }
@@ -85,16 +136,22 @@ export function saveExistingFile(path, initialContent, encoding, tabId, expected
       return { success: false, externalReloaded: true };
     }
     const content = replacement ?? editorContent;
-    const result = outcome === 'converged' || content === diskContent
-      ? { success: true, converged: true, file_path: path }
-      : await saveFile(path, content, encoding || tab.encoding, { operationHeld: true });
+    const result =
+      outcome === 'converged' || content === diskContent
+        ? { success: true, converged: true, file_path: path }
+        : await saveFile(path, content, encoding || tab.encoding, { operationHeld: true });
     if (result?.success) {
       rememberDiskBaseline(path, content);
-      const current = useEditorStore.getState().tabs.find((item) => item.id === tab.id && item.path === path);
+      const current = useEditorStore
+        .getState()
+        .tabs.find((item) => item.id === tab.id && item.path === path);
       if (current) {
         // Apply a diff only after writing it, and keep edits made while writing.
-        if (content !== editorContent && current.contentRevision === tab.contentRevision &&
-            getBuffer(tab.id, current.content) === editorContent) {
+        if (
+          content !== editorContent &&
+          current.contentRevision === tab.contentRevision &&
+          getBuffer(tab.id, current.content) === editorContent
+        ) {
           state.replaceTabContent(tab.id, { content });
         } else {
           state.markTabSaved(tab.id, content);
@@ -150,7 +207,11 @@ export function reconcileFileChange(path, { isCurrent, confirmMissing = false } 
 }
 
 /** Coalesce atomic replace events; confirm missing files after the replace gap. */
-export function createFileChangeObserver({ delay = 300, isComposing = () => false, onError = console.warn } = {}) {
+export function createFileChangeObserver({
+  delay = 300,
+  isComposing = () => false,
+  onError = console.warn,
+} = {}) {
   const pending = new Map();
   let disposed = false;
   const schedule = (event) => {
@@ -168,7 +229,8 @@ export function createFileChangeObserver({ delay = 300, isComposing = () => fals
       }
       try {
         const outcome = await reconcileFileChange(event.path, {
-          isCurrent: () => isCurrent() && !isComposing(), confirmMissing,
+          isCurrent: () => isCurrent() && !isComposing(),
+          confirmMissing,
         });
         if (!isCurrent()) return;
         if (outcome === 'superseded' && isComposing()) {

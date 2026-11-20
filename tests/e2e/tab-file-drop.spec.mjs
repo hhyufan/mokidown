@@ -12,11 +12,12 @@ test('resizing a crowded tab strip keeps its active tab visible', async ({ page 
     }
   });
   const active = page.locator('.tabbar__tab--active');
-  const visible = () => active.evaluate((tab) => {
-    const box = tab.getBoundingClientRect();
-    const strip = tab.parentElement.getBoundingClientRect();
-    return box.left >= strip.left - 1 && box.right <= strip.right + 1;
-  });
+  const visible = () =>
+    active.evaluate((tab) => {
+      const box = tab.getBoundingClientRect();
+      const strip = tab.parentElement.getBoundingClientRect();
+      return box.left >= strip.left - 1 && box.right <= strip.right + 1;
+    });
   await expect.poll(visible).toBe(true);
   await page.setViewportSize({ width: 920, height: 700 });
   await expect.poll(visible).toBe(true);
@@ -69,7 +70,9 @@ test('menu, keyboard and close button use the same exit animation', async ({ pag
   await expect(page.locator('.tabbar__tab-exit')).toHaveCount(0);
 });
 
-test('the new-tab menu closes tabs and asks before discarding a dirty document', async ({ page }) => {
+test('the new-tab menu closes tabs and asks before discarding a dirty document', async ({
+  page,
+}) => {
   test.setTimeout(60000);
   await page.goto('/');
   await expect(page.locator('.editor-content__welcome')).toBeVisible({ timeout: 30000 });
@@ -89,7 +92,9 @@ test('the new-tab menu closes tabs and asks before discarding a dirty document',
   await expect(tabs).toHaveCount(0);
 });
 
-test('browser file drop draws an editor outline and opens the text in a new tab', async ({ page }) => {
+test('browser file drop draws an editor outline and opens the text in a new tab', async ({
+  page,
+}) => {
   test.setTimeout(60000);
   const errors = [];
   page.on('pageerror', (error) => errors.push(error.message));
@@ -108,14 +113,20 @@ test('browser file drop draws an editor outline and opens the text in a new tab'
   await editor.dispatchEvent('drop', position);
   await expect(page.locator('.drag-overlay')).toHaveCount(0);
   await expect(page.locator('.tabbar')).toContainText('example.txt');
-  await expect.poll(() => page.evaluate(async () => {
-    const { default: store } = await import('/src/store/useEditorStore.js');
-    return store.getState().getTabContent(store.getState().activeTabId);
-  })).toBe('From drop');
+  await expect
+    .poll(() =>
+      page.evaluate(async () => {
+        const { default: store } = await import('/src/store/useEditorStore.js');
+        return store.getState().getTabContent(store.getState().activeTabId);
+      }),
+    )
+    .toBe('From drop');
   expect(errors.filter((message) => /isDragOver|FileDropConflict/.test(message))).toEqual([]);
 });
 
-test('Windows starts tracking an explorer row inside the app and routes local drops to the destination folder', async ({ page }) => {
+test('Windows starts tracking an explorer row inside the app and routes local drops to the destination folder', async ({
+  page,
+}) => {
   test.setTimeout(60000);
   const source = 'C:/project/example.txt';
   const directory = 'C:/project/folder';
@@ -128,7 +139,10 @@ test('Windows starts tracking an explorer row inside the app and routes local dr
     window.__TAURI_EVENT_PLUGIN_INTERNALS__ = { unregisterListener() {} };
     window.__TAURI_INTERNALS__ = {
       metadata: { currentWindow: { label: 'main' }, currentWebview: { label: 'main' } },
-      transformCallback: (callback) => { callbacks.set(++next, callback); return next; },
+      transformCallback: (callback) => {
+        callbacks.set(++next, callback);
+        return next;
+      },
       unregisterCallback: (id) => callbacks.delete(id),
       invoke: async (command, args = {}) => {
         if (command === 'plugin:event|listen') {
@@ -137,7 +151,9 @@ test('Windows starts tracking an explorer row inside the app and routes local dr
         }
         if (command === 'transfer_dropped_entry') {
           window.fileDragCalls.push({ command, ...args });
-          return args.name ? { status: 'unchanged' } : { status: 'conflict', path: args.directory + '/example.txt' };
+          return args.name
+            ? { status: 'unchanged' }
+            : { status: 'conflict', path: args.directory + '/example.txt' };
         }
         if (command === 'begin_reader_tab_detach_watch') {
           window.fileDragCalls.push({ command, ...args });
@@ -145,56 +161,89 @@ test('Windows starts tracking an explorer row inside the app and routes local dr
         }
         if (command.startsWith('is_')) return false;
         if (['reader_bootstrap', 'read_recovery_snapshot'].includes(command)) return null;
-        if (['get_cli_args', 'list_language_plugins', 'history_list', 'read_runtime_logs'].includes(command)) return [];
+        if (
+          ['get_cli_args', 'list_language_plugins', 'history_list', 'read_runtime_logs'].includes(
+            command,
+          )
+        )
+          return [];
         return true;
       },
     };
   });
   await page.goto('/');
   await expect(page.locator('.editor-content__welcome')).toBeVisible({ timeout: 30000 });
-  await page.evaluate(({ source, directory }) => {
-    const fixture = document.createElement('section');
-    fixture.className = 'file-tree';
-    fixture.style.cssText = 'position:fixed;z-index:100;left:70px;top:160px;width:150px';
-    fixture.innerHTML = '<div id="drag-test-source" style="height:32px">example.txt</div><div id="drag-test-target" style="height:32px">folder</div>';
-    fixture.firstChild.dataset.readerPath = source;
-    fixture.lastChild.dataset.dropDirectory = directory;
-    document.body.append(fixture);
-  }, { source, directory });
+  await page.evaluate(
+    ({ source, directory }) => {
+      const fixture = document.createElement('section');
+      fixture.className = 'file-tree';
+      fixture.style.cssText = 'position:fixed;z-index:100;left:70px;top:160px;width:150px';
+      fixture.innerHTML =
+        '<div id="drag-test-source" style="height:32px">example.txt</div><div id="drag-test-target" style="height:32px">folder</div>';
+      fixture.firstChild.dataset.readerPath = source;
+      fixture.lastChild.dataset.dropDirectory = directory;
+      document.body.append(fixture);
+    },
+    { source, directory },
+  );
   const from = await page.locator('#drag-test-source').boundingBox();
   const to = await page.locator('#drag-test-target').boundingBox();
   await page.mouse.move(from.x + 25, from.y + 12);
   await page.mouse.down();
   await page.mouse.move(to.x + 25, to.y + 12, { steps: 6 });
-  await expect.poll(() => page.evaluate(() => window.fileDragCalls[0])).toMatchObject({
-    command: 'begin_reader_tab_detach_watch',
-    document: { path: source, keepSource: true },
-    shellDrop: true,
-    preview: { token: expect.any(String), name: 'example.txt', markup: expect.stringContaining('example.txt') },
-  });
+  await expect
+    .poll(() => page.evaluate(() => window.fileDragCalls[0]))
+    .toMatchObject({
+      command: 'begin_reader_tab_detach_watch',
+      document: { path: source, keepSource: true },
+      shellDrop: true,
+      preview: {
+        token: expect.any(String),
+        name: 'example.txt',
+        markup: expect.stringContaining('example.txt'),
+      },
+    });
   await expect(page.locator('.drag-overlay--explorer')).toBeVisible();
   await page.mouse.up();
   const conflict = page.getByRole('dialog');
   await expect(conflict.getByRole('textbox')).toHaveValue('example (2).txt');
   await conflict.getByRole('button', { name: /Keep Both|保留两份/ }).click();
-  await expect.poll(() => page.evaluate(() => window.fileDragCalls.slice(1))).toEqual([
-    { command: 'transfer_dropped_entry', source, directory, name: null, effect: null },
-    { command: 'transfer_dropped_entry', source, directory, name: 'example (2).txt', effect: null },
-  ]);
+  await expect
+    .poll(() => page.evaluate(() => window.fileDragCalls.slice(1)))
+    .toEqual([
+      { command: 'transfer_dropped_entry', source, directory, name: null, effect: null },
+      {
+        command: 'transfer_dropped_entry',
+        source,
+        directory,
+        name: 'example (2).txt',
+        effect: null,
+      },
+    ]);
   await expect(page.locator('.drag-overlay')).toHaveCount(0);
 
-  await page.evaluate(({ x, y }) => {
-    const position = { x: x * devicePixelRatio, y: y * devicePixelRatio };
-    window.sendNativeDragEvent('tauri://drag-enter', { position });
-  }, { x: to.x + 25, y: to.y + 12 });
+  await page.evaluate(
+    ({ x, y }) => {
+      const position = { x: x * devicePixelRatio, y: y * devicePixelRatio };
+      window.sendNativeDragEvent('tauri://drag-enter', { position });
+    },
+    { x: to.x + 25, y: to.y + 12 },
+  );
   await expect(page.locator('.drag-overlay--explorer')).toBeVisible();
-  await page.evaluate(({ x, y }) => {
-    const position = { x: x * devicePixelRatio, y: y * devicePixelRatio };
-    window.sendNativeDragEvent('tauri://drag-drop', { position, paths: ['D:/example.txt'] });
-  }, { x: to.x + 25, y: to.y + 12 });
+  await page.evaluate(
+    ({ x, y }) => {
+      const position = { x: x * devicePixelRatio, y: y * devicePixelRatio };
+      window.sendNativeDragEvent('tauri://drag-drop', { position, paths: ['D:/example.txt'] });
+    },
+    { x: to.x + 25, y: to.y + 12 },
+  );
   await expect(conflict.getByRole('textbox')).toHaveValue('example (2).txt');
   await conflict.getByRole('button', { name: /Skip|跳过/ }).click();
-  await expect.poll(() => page.evaluate(() => window.fileDragCalls.at(-1))).toMatchObject({
-    command: 'transfer_dropped_entry', source: 'D:/example.txt', directory,
-  });
+  await expect
+    .poll(() => page.evaluate(() => window.fileDragCalls.at(-1)))
+    .toMatchObject({
+      command: 'transfer_dropped_entry',
+      source: 'D:/example.txt',
+      directory,
+    });
 });
