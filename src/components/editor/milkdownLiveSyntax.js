@@ -10,6 +10,8 @@ import { isImeComposing } from '@utils/keyboard';
 import useConfigStore from '@store/useConfigStore';
 import { activeMarkdownPairs, emptyAsteriskPair, emptyMarkdownMarkPair, markdownAsteriskEdit, markdownBacktickEdit, markdownBrackets, markdownPairDeletion, markdownPairEnabled, matchingMarkdownBracket } from '@utils/markdownPairs';
 import { CODE_FENCE_LANGUAGE_EVENT, completedFenceLanguage, readMarkdownFence } from '@utils/markdownCodeFence';
+import { mathDraftRange, mathMarkName } from './milkdownMathMark';
+import { characterEscapeMarkName, syntaxScanText } from './milkdownRawText';
 
 const sourceTypeName = 'moki_inline_syntax_source';
 const liveSyntaxKey = new PluginKey('moki-live-syntax');
@@ -63,6 +65,9 @@ function markDelimiters(mark, text) {
     case 'emphasis': return [marker, marker];
     case 'strong': return [marker.repeat(2), marker.repeat(2)];
     case 'strike_through': return ['~~', '~~'];
+    // 行内公式的定界符不进文档：正文只存 LaTeX，两个 `$` 由这里画出来。
+    // 于是序列化交回 remark 的永远是「mark + 正文」，结构上就写不出双层 `$`。
+    case 'math': return ['$', '$'];
     case 'inlineCode': {
       let length = 1;
       for (const match of text.matchAll(/`+/g)) length = Math.max(length, match[0].length + 1);
@@ -186,6 +191,10 @@ function deleteDelimiter(ctx, view, event) {
   const atStart = opening.length > 0;
   const range = (atStart ? opening : closing).sort((a, b) => (a.to - a.from) - (b.to - b.from)
     || a.delimiters[0].length - b.delimiters[0].length)[0];
+  // 行内公式的两个 `$` 不在文档里，是画出来的：把它当一对标记拆掉，交回 remark 的是裸
+  // LaTeX，屏幕上反而多出两个 `$`。贴在公式边上那一下归公式预览插件——它把源码掀开、
+  // 光标送进正文，删不删字符由下一按键决定。
+  if (range?.mark.type.name === mathMarkName) return false;
   const preference = activeMarkdownPairs(useConfigStore.getState());
   if (!range) {
     let text = '';
@@ -259,7 +268,8 @@ function trackInlineClick(view, event) {
   if (!view.editable || view.composing || event.detail !== 1 || event.shiftKey || event.ctrlKey ||
     event.metaKey || event.altKey || event.target.closest?.('a, button, .cm-editor')) return;
   const marker = event.target.closest?.('.moki-markdown-marker');
-  const inline = event.target.closest?.('strong, b, em, i, del, s, code');
+  // 行内公式的正文也走这条路：点进公式时两个 `$` 要跟着浮出来，不然只看得到源码文字。
+  const inline = event.target.closest?.('strong, b, em, i, del, s, code, [data-moki-math-mark]');
   if (!marker && !inline) return;
 
   // Resolve the click before revealing or hiding delimiters, which reflows
@@ -512,7 +522,95 @@ function typeAsterisk(view, $pos, value, text) {
   return false;
 }
 
+// 打 `\$` 想要的是普通文字里的 `$`：把前面那个反斜杠吃掉，换成和文件里 `\$` 读进来
+// 一样的形状（挂转义 mark 的 `$`），扫描据此不再把它当定界符，见 syntaxScanText。
+// 公式正文与代码里不适用：`$` 在正文里是收界符，remark-math 也写不出转义的 `$`；
+// 还没闭合的 `$$` 草稿里则照旧留给草稿判定，别把用户正在写的 LaTeX 搅了。
+function typeEscapeDollar(view, $pos, value, text) {
+  const { state } = view;
+  if (text !== '$') return false;
+  const type = state.schema.marks[characterEscapeMarkName];
+  if (!type) return false;
+  const marks = state.storedMarks ?? $pos.marks();
+  if (marks.some((mark) => mark.type.spec.code)) return false;
+  let back = 0;
+  while (value[$pos.parentOffset - back - 1] === '\\') back++;
+  if (!(back % 2) || mathDraftRange(value, $pos.parentOffset)) return false;
+  const tr = state.tr.replaceWith($pos.pos - 1, $pos.pos,
+    state.schema.text('$', [...$pos.nodeBefore.marks, type.create()]));
+  view.dispatch(tr.setSelection(TextSelection.create(tr.doc, $pos.pos)).scrollIntoView());
+  return true;
+}
 
+// 打字判定只看向刚敲下的这个字符：`$` 要么收尾已有公式，要么把之前打下的字面 `$`
+// 连同中间的正文一起折成 math mark，两个定界符都不留在文档里；连写成 `$$` 时先让
+// 正文以字面文本摊着（见 mathDraftRange），等收尾那对 `$` 齐了才折。
+// 判据照抄 pendingMarkers 对 `$` 的保护（数字开头是价格、转义的是正文），
+// 让打字看到的样子和折叠的结果一致。
+function typeDollar(view, $pos, value, text) {
+  if (text !== '$') return false;
+  const { state } = view;
+  const type = state.schema.marks.math;
+  if (!type) return false;
+  const marks = state.storedMarks ?? $pos.marks();
+  // 光标在公式正文里：把 mark 收到 caret 为止，后面的正文退回普通文字。
+  // 直接留个字面 $ 在正文里不行——remark-math 里 $ 没法转义，写回去会变成两段公式。
+  if (type.isInSet(marks)) {
+    const range = activeMarkRanges($pos).find((item) => item.mark.type === type);
+    if (!range) return false;
+    const tr = closeHistory(state.tr);
+    if (range.to > $pos.pos) tr.removeMark($pos.pos, range.to, type);
+    view.dispatch(tr.setStoredMarks(type.removeFromSet(marks)));
+    return true;
+  }
+  // inclusive:false 让公式右边界的 marks() 早就摘掉了 math，只能看文档两侧。
+  const left = $pos.nodeBefore?.marks || [];
+  const right = $pos.nodeAfter?.marks || [];
+  if (!$pos.textOffset && type.isInSet(left) && !type.isInSet(right)) {
+    view.dispatch(state.tr.setStoredMarks(type.removeFromSet(marks)));
+    return true;
+  }
+  if (marks.some((mark) => mark.type.spec.code) || right.some((mark) => mark.type.spec.code)) return false;
+  const offset = $pos.parentOffset;
+  // `$$` 打头是行内草稿：锚点与正文一直是字面文本，补齐收尾的第二个 `$` 才折成 mark。
+  // 先量草稿，连写的 `$` 才不会被下面当成单 `$` 公式的开界符。
+  const draft = mathDraftRange(value, offset);
+  if (draft?.closing) {
+    const anchor = $pos.pos - (offset - draft.anchor);
+    const bodyFrom = $pos.pos - (offset - draft.from);
+    const bodyTo = $pos.pos - (offset - draft.to);
+    const tr = closeHistory(state.tr);
+    tr.delete(bodyTo, $pos.pos);
+    tr.delete(anchor, bodyFrom);
+    const to = anchor + bodyTo - bodyFrom;
+    tr.addMark(anchor, to, type.create());
+    tr.setSelection(TextSelection.create(tr.doc, to));
+    tr.setStoredMarks(type.removeFromSet(tr.selection.$from.marks()));
+    view.dispatch(tr.scrollIntoView());
+    return true;
+  }
+  for (let index = offset - 1; index >= 0; index--) {
+    if (value[index] !== '$') continue;
+    // 连写的 `$` 归草稿判定管，不能拿半截去折一个单 `$` 公式。
+    if (value[index - 1] === '$') return false;
+    let escaped = 0;
+    for (let back = index - 1; back >= 0 && value[back] === '\\'; back--) escaped++;
+    if (escaped % 2) continue;
+    const body = value.slice(index + 1, offset);
+    // 正文跨了 inline 子节点或占位符就交给默认插入，折叠只负责单个文本节点里的 LaTeX。
+    if (!body || /^[\s\r\n]|\s$|[\n\ufffc]/.test(body) || /^\d/.test(body)) return false;
+    if (index > 0 && /[\w:/\\]/.test(value[index - 1])) return false;
+    const from = $pos.pos - body.length - 1;
+    const tr = closeHistory(state.tr);
+    tr.delete(from, from + 1);
+    tr.addMark(from, $pos.pos - 1, type.create());
+    tr.setSelection(TextSelection.create(tr.doc, $pos.pos - 1));
+    tr.setStoredMarks(type.removeFromSet(tr.selection.$from.marks()));
+    view.dispatch(tr.scrollIntoView());
+    return true;
+  }
+  return false;
+}
 
 function completeInlinePair(view, $pos, value, text, composition, paste = false) {
   const { state } = view;
@@ -552,7 +650,7 @@ function handleSmartTextInput(view, from, to, text) {
   const { state } = view;
   const $pos = state.doc.resolve(from);
   if (!$pos.parent.isTextblock || $pos.parent.type.spec.code) return false;
-  const value = $pos.parent.textBetween(0, $pos.parent.content.size, '\n', '\ufffc');
+  const value = syntaxScanText($pos.parent);
   const preference = activeMarkdownPairs(useConfigStore.getState());
   if (markdownPairEnabled(preference, '`')) {
     if (text === '`') return typeBacktick(view, $pos, value);
@@ -572,6 +670,8 @@ function handleSmartTextInput(view, from, to, text) {
   if (text === '*' && !(state.storedMarks ?? $pos.marks()).some((mark) => mark.type.spec.code)
     && !$pos.nodeAfter?.marks.some((mark) => mark.type.spec.code) && completeClosedAsterisk(view, $pos, value)) return true;
   if (markdownPairEnabled(preference, '*') && typeAsterisk(view, $pos, value, text)) return true;
+  if (typeEscapeDollar(view, $pos, value, text)) return true;
+  if (typeDollar(view, $pos, value, text)) return true;
   if (completeInlinePair(view, $pos, value, text)) return true;
   // Explicitly exiting an inline mark takes precedence over DOM mark inheritance.
   if (text && state.storedMarks && (liveSyntaxKey.getState(state).caret || $pos.nodeBefore?.marks.some((mark) => !mark.isInSet(state.storedMarks)
@@ -742,11 +842,7 @@ export const milkdownLiveSyntax = $prose((ctx) => new Plugin({
       const selection = pointer?.selection || state.selection;
       const { $from } = selection;
       if (!$from.parent.isTextblock || $from.parent.type.spec.code) return null;
-      const next = selection.empty ? $from.nodeAfter : selection.node;
-      const formula = next?.type.name === 'math_inline' && Decoration.node($from.pos, $from.pos + next.nodeSize, {
-        class: 'moki-markdown-math-source', 'data-moki-math-source': `$${next.attrs.value}$`,
-      });
-      if (!selection.empty) return formula ? DecorationSet.create(doc, [formula]) : null;
+      if (!selection.empty) return null;
       const virtualCaret = pointer ? pointer.caret : caret;
       const decorations = pendingMarkers($from);
       const opening = new Map(), closing = new Map();
@@ -761,7 +857,6 @@ export const milkdownLiveSyntax = $prose((ctx) => new Plugin({
         if (!virtualCaret) decorations.push(markerWidget($from.pos, '#'.repeat($from.parent.attrs.level), -2, true));
         decorations.push(Decoration.node($from.before(), $from.after(), { class: 'moki-markdown-heading-source' }));
       }
-      if (formula) decorations.push(formula);
       if (virtualCaret) {
         const boundary = delimiterBoundary($from);
         opening.delete($from.pos);
