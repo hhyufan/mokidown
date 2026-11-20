@@ -1,5 +1,27 @@
 import { expect, test } from '@playwright/test';
 
+test('resizing a crowded tab strip keeps its active tab visible', async ({ page }) => {
+  await page.setViewportSize({ width: 1500, height: 800 });
+  await page.goto('/');
+  await expect(page.locator('.editor-content__welcome')).toBeVisible({ timeout: 40000 });
+  await page.evaluate(async () => {
+    const { default: store } = await import('/src/store/useEditorStore.js');
+    for (let i = 0; i < 12; i++) {
+      const name = `Working document ${i + 1}.txt`;
+      store.getState().openFile({ path: `/tmp/${name}`, name, content: String(i) });
+    }
+  });
+  const active = page.locator('.tabbar__tab--active');
+  const visible = () => active.evaluate((tab) => {
+    const box = tab.getBoundingClientRect();
+    const strip = tab.parentElement.getBoundingClientRect();
+    return box.left >= strip.left - 1 && box.right <= strip.right + 1;
+  });
+  await expect.poll(visible).toBe(true);
+  await page.setViewportSize({ width: 920, height: 700 });
+  await expect.poll(visible).toBe(true);
+});
+
 test('menu, keyboard and close button use the same exit animation', async ({ page }) => {
   test.setTimeout(60000);
   await page.addInitScript(() => {

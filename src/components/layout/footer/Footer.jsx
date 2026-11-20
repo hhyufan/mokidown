@@ -3,6 +3,7 @@ import { useHorizontalDragScroll } from '@hooks/useHorizontalDragScroll';
 import { useTranslation } from 'react-i18next';
 import { Dropdown, Tooltip } from 'antd';
 import useEditorStore from '@store/useEditorStore';
+import useHistoryStore, { isMarkdownComparison } from '@store/useHistoryStore';
 import useUpdateStore from '@store/useUpdateStore';
 import usePluginContributions from '@store/usePluginContributions';
 import { sendToPlugin } from '@utils/pluginBus';
@@ -84,6 +85,8 @@ function Footer() {
   const pluginStatus = usePluginContributions((s) => s.statusBar);
   const tabs = useEditorStore((s) => s.tabRenderList);
   const activeTabId = useEditorStore((s) => s.activeTabId);
+  const historyDiff = useHistoryStore((s) => s.diff);
+  const historyMode = useHistoryStore((s) => s.viewMode);
   const cursorPosition = useEditorStore((s) => s.cursorPosition);
   const characterCount = useEditorStore((s) => s.characterCount);
 
@@ -99,8 +102,12 @@ function Footer() {
   const pathContext = usePathContextMenu(activeTab?.path);
   const webUrl = activeTab?.builtin === 'web' ? activeTab.webLocation || activeTab.url : '';
 
-  const showModeToggle =
-    activeTab && !activeTab.builtin && PREVIEW_EXT.test(activeTab.ext) && viewMode !== 'split';
+  const comparing = Boolean(historyDiff && historyDiff.tabId === activeTabId);
+  const showModeToggle = comparing
+    ? isMarkdownComparison(activeTab, historyDiff)
+    : activeTab && !activeTab.builtin && PREVIEW_EXT.test(activeTab.ext) && viewMode !== 'split';
+  const editing = (comparing ? historyMode : viewMode) === 'edit';
+  const modeLabel = t(editing ? 'footer.switchToPreview' : 'footer.switchToCode');
 
   const [pathSegments, setPathSegments] = useState([]);
   const [directoryContents, setDirectoryContents] = useState({});
@@ -296,19 +303,17 @@ function Footer() {
           <>
             <span className="footer__sep" />
             <Tooltip
-              title={viewMode === 'edit' ? t('footer.switchToPreview') : t('footer.switchToCode')}
+              title={modeLabel}
               placement="top"
               mouseEnterDelay={0.3}
             >
               <button
                 className="footer__mode-toggle"
-                aria-label={
-                  viewMode === 'edit' ? t('footer.switchToPreview') : t('footer.switchToCode')
-                }
+                aria-label={modeLabel}
                 onClick={toggleEditPreview}
                 type="button"
               >
-                {viewMode === 'edit' ? <EyeIcon /> : <CodeIcon />}
+                {editing ? <EyeIcon /> : <CodeIcon />}
               </button>
             </Tooltip>
           </>

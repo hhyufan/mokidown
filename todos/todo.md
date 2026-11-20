@@ -60,11 +60,11 @@
 
   * [x] feat(editor): HTML 代码块实时预览（分屏渲染、编辑热刷新、预览端口设置）。
 
-  * [ ] feat(editor): HTML 文件支持编辑 / 分屏预览 / 纯预览三模式。
+  * [x] feat(editor): HTML 文件支持编辑 / 分屏预览 / 纯预览三模式。
 
   * [x] feat(editor): 源码模式控制台改为集成终端。
 
-  * [ ] feat(editor): 插件开发文档支持内置以 HTML 打开。
+  * [x] feat(editor): 插件开发文档支持内置以 HTML 打开。
 
   * [ ] feat(editor): Markdown 预览级文档差异对比组件。
 
