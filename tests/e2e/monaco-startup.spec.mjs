@@ -1,5 +1,30 @@
 import { test, expect } from '@playwright/test';
 
+test('Monaco keeps the light caret during theme changes and IME composition', async ({ page }) => {
+  test.setTimeout(45000);
+  await page.emulateMedia({ colorScheme: 'dark' });
+  await page.goto('/tests/background-harness.html');
+  await page.waitForFunction(() => window.trial?.editor);
+  await page.addStyleTag({ content: `
+    .monaco-editor .cursors-layer[class] > .cursor { background-color: white; border-color: white; }
+    .monaco-editor .inputarea.ime-input { caret-color: white; }
+  ` });
+  const editor = page.locator('#editor .monaco-editor');
+  const input = editor.locator('textarea.inputarea');
+  const cursor = editor.locator('.cursors-layer > .cursor').first();
+  for (const [theme, color] of [['light', 'rgb(82, 111, 255)'], ['dark', 'rgb(82, 139, 255)'], ['light', 'rgb(82, 111, 255)']]) {
+    await page.evaluate((theme) => window.trial.apply({ theme, background: false }), theme);
+    await input.focus();
+    await expect(cursor).toHaveCSS('background-color', color);
+    await input.evaluate((element) => element.dispatchEvent(new CompositionEvent('compositionstart', { data: '', bubbles: true })));
+    await expect(input).toHaveClass(/ime-input/);
+    await expect(input).toHaveCSS('caret-color', color);
+    await input.evaluate((element) => element.dispatchEvent(new CompositionEvent('compositionend', { data: '', bubbles: true })));
+    await expect(input).not.toHaveClass(/ime-input/);
+    await input.blur();
+  }
+});
+
 test('the application prepares Monaco on the welcome screen and opens its first document without a loading spinner', async ({ page }) => {
   test.setTimeout(60000);
   const errors = [];
