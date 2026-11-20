@@ -117,6 +117,7 @@ function FileTree() {
     const el = bcScrollRef.current;
     const thumb = bcThumbRef.current;
     if (!el || !thumb) return;
+    el.classList.toggle('is-clipped-end', el.scrollWidth - el.clientWidth - el.scrollLeft > 1);
     const ratio = el.clientWidth / el.scrollWidth;
     if (ratio >= 1) {
       thumb.style.display = 'none';
@@ -150,7 +151,7 @@ function FileTree() {
       el.removeEventListener('wheel', onWheel);
       ro.disconnect();
     };
-  }, [updateBcScrollbar, currentDir]);
+  }, [updateBcScrollbar, currentDir, breadcrumbExpanded]);
 
   // 路径变化后自动滚到尾部，优先露出当前所在的最深层目录。
   useEffect(() => {

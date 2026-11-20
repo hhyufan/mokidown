@@ -91,15 +91,9 @@ jobs:
           $config = $env:TAURI_CONFIG | ConvertFrom-Json
           $thumbprint = $config.bundle.windows.certificateThumbprint
           if (!$thumbprint) { throw 'Missing Windows signing certificate thumbprint.' }
-          $sdkRoot = Join-Path ${env:ProgramFiles(x86)} 'Windows Kits/10/bin'
-          $signTool = Get-ChildItem -LiteralPath $sdkRoot -Filter signtool.exe -Recurse -File |
-            Where-Object { $_.Directory.Name -eq 'x64' } | Sort-Object FullName -Descending | Select-Object -First 1
-          if (!$signTool) { throw 'signtool.exe not found.' }
           $version = (Get-Content -LiteralPath src-tauri/tauri.conf.json -Raw | ConvertFrom-Json).version
           $installer = Get-Item -LiteralPath "src-tauri/target/release/react/MokiDown_${version}_x64-setup.exe"
-          if (@($installer).Count -ne 1) { throw 'Expected one React installer.' }
-          & $signTool.FullName sign /sha1 $thumbprint /fd SHA256 /tr http://timestamp.digicert.com /td SHA256 $installer.FullName
-          if ($LASTEXITCODE -ne 0) { throw 'React installer signing failed.' }
+          & scripts/sign-windows-installer.ps1 -InstallerPath $installer.FullName -Thumbprint $thumbprint
       - name: Sign the React installer with the updater key
         shell: pwsh
         env:

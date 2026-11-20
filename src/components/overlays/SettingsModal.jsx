@@ -28,6 +28,7 @@ import { open, save } from '@tauri-apps/plugin-dialog';
 import { readTextFile, writeTextFile } from '@tauri-apps/plugin-fs';
 import { getVersion } from '@tauri-apps/api/app';
 import { openExternal } from '@utils/tauriApi';
+import { openEditorLink } from '@utils/editorLinks';
 import { useTranslation } from 'react-i18next';
 import { markdownPairOptions, normalizeMarkdownPairs } from '@utils/markdownPairs';
 import { canCheckUpdates } from '@utils/appUpdater';
@@ -113,7 +114,7 @@ function SettingsModal({ open: openProp, onClose }) {
    */
   async function handleOpenRepo() {
     try {
-      await openExternal(REPO_URL);
+      await openEditorLink(REPO_URL);
     } catch (err) {
       notify('error', t('notification.error'), err?.message || String(err));
     }
@@ -410,6 +411,9 @@ function SettingsModal({ open: openProp, onClose }) {
             {activeNav === 'renderer' && (
               <div className="settings-section">
                 <SettingGroup label={t('htmlPreview.title')} />
+                <SettingRow label={t('web.openLinksInEditor')} desc={t('web.openLinksInEditorHint')}>
+                  <Switch checked={config.openLinksInEditor === true} onChange={(value) => handleChange('openLinksInEditor', value)} />
+                </SettingRow>
                 <SettingRow label={t('htmlPreview.liveReload')} desc={t('htmlPreview.liveReloadHint')}>
                   <Switch checked={config.htmlPreviewLiveReload ?? true} onChange={(v) => handleChange('htmlPreviewLiveReload', v)} />
                 </SettingRow>

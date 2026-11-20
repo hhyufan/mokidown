@@ -1,5 +1,6 @@
 import { existsSync, readdirSync } from 'node:fs';
 import path from 'node:path';
+import { homedir } from 'node:os';
 import { spawnSync } from 'node:child_process';
 
 const versionsDescending = (a, b) => b.localeCompare(a, 'en', { numeric: true });
@@ -16,6 +17,7 @@ const directories = (directory) => {
 
 // vswhere's isComplete describes the installer, not the actual C++ toolchain files.
 export function findCompleteToolchain(installations, arch = 'x64') {
+  const candidates = [];
   for (const installation of installations) {
     const vcvars = path.join(installation, 'VC', 'Auxiliary', 'Build', 'vcvarsall.bat');
     if (!existsSync(vcvars)) continue;
@@ -32,11 +34,12 @@ export function findCompleteToolchain(installations, arch = 'x64') {
           path.join(root, 'lib', arch, 'libcmt.lib'),
         ].every(existsSync)
       ) {
-        return { installation, vcvars, root, version, compiler, linker, arch };
+        candidates.push({ installation, vcvars, root, version, compiler, linker, arch });
       }
     }
   }
-  return null;
+  // VS 2026 的 MSVC 14.51 编译 aws-lc/ring 会失败；跨安装优先选 VS 2022 的 v143 (14.4x)。
+  return candidates.find((candidate) => candidate.version.startsWith('14.4')) || candidates[0] || null;
 }
 
 export function parseDeveloperEnvironment(output) {
@@ -133,9 +136,46 @@ export function initializeMsvc(args, env = process.env) {
   if (!developerEnv.INCLUDE || !developerEnv.LIB)
     throw new Error('MSVC 开发环境未提供 INCLUDE/LIB。');
   Object.assign(env, developerEnv);
+  // cl 运行时要靠同目录的 c1.dll，显式把 MSVC bin 放到 PATH 最前。
+  const msvcBin = path.join(toolchain.root, 'bin', 'Hostx64', arch);
+  env.PATH = [msvcBin, env.PATH].filter(Boolean).join(';');
+  // 中文代码页下 MSVC 会把 UTF-8 源码/头文件里的字符报成 C4819，配合 -WX 直接失败。
+  env.CL = [env.CL, '/utf-8'].filter(Boolean).join(' ');
+  // cc-rs 读 CFLAGS/CXXFLAGS；CL 只对直接调 cl 的场景可靠，两个都设上。
+  env.CFLAGS = [env.CFLAGS, '/utf-8'].filter(Boolean).join(' ');
+  env.CXXFLAGS = [env.CXXFLAGS, '/utf-8'].filter(Boolean).join(' ');
   const cargoTarget = `${rustArch}_pc_windows_msvc`;
-  env[`CC_${cargoTarget}`] = toolchain.compiler;
-  env[`CXX_${cargoTarget}`] = toolchain.compiler;
+  // 本机 MSVC 14.4x 在 cc-rs 下加载 c1.dll 会报 D8050；有 LLVM 就优先用 clang-cl。
+  const llvmBin = 'C:\\Program Files\\LLVM\\bin';
+  const clangCl = path.join(llvmBin, 'clang-cl.exe');
+  const llvmLib = path.join(llvmBin, 'llvm-lib.exe');
+  if (existsSync(clangCl) && existsSync(llvmLib)) {
+    env[`CC_${cargoTarget}`] = clangCl;
+    env[`CXX_${cargoTarget}`] = clangCl;
+    env[`AR_${cargoTarget}`] = llvmLib;
+    console.log(`[mokidown] clang-cl + MSVC ${toolchain.version} (${arch}): ${llvmBin}`);
+  } else {
+    env[`CC_${cargoTarget}`] = toolchain.compiler;
+    env[`CXX_${cargoTarget}`] = toolchain.compiler;
+    console.log(`[mokidown] MSVC ${toolchain.version} (${arch}): ${toolchain.installation}`);
+  }
   env[`CARGO_TARGET_${cargoTarget.toUpperCase()}_LINKER`] = toolchain.linker;
-  console.log(`[mokidown] MSVC ${toolchain.version} (${arch}): ${toolchain.installation}`);
+}
+
+/** 有些开发机只装了 rustup toolchain 而没有把 cargo 放进 PATH；启动 CLI 前补一次探测。 */
+export function ensureCargoOnPath() {
+  if (process.platform !== 'win32') return;
+  const pathValue = process.env.PATH || '';
+  if (pathValue.split(';').some((dir) => dir && existsSync(path.join(dir, 'cargo.exe')))) return;
+  const candidates = [
+    process.env.RUSTUP_HOME && path.join(process.env.RUSTUP_HOME, 'toolchains', 'stable-x86_64-pc-windows-msvc', 'bin'),
+    path.join(homedir(), '.rustup', 'toolchains', 'stable-x86_64-pc-windows-msvc', 'bin'),
+    'C:\\Env\\rustup\\toolchains\\stable-x86_64-pc-windows-msvc\\bin',
+  ].filter(Boolean);
+  for (const dir of candidates) {
+    if (existsSync(path.join(dir, 'cargo.exe'))) {
+      process.env.PATH = `${dir};${pathValue}`;
+      return;
+    }
+  }
 }

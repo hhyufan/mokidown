@@ -7,6 +7,7 @@ import { WebLinksAddon } from '@xterm/addon-web-links';
 import useThemeStore from '@store/useThemeStore';
 import useEditorStore from '@store/useEditorStore';
 import { openExternal } from '@utils/tauriApi';
+import { openEditorLink } from '@utils/editorLinks';
 import '@xterm/xterm/css/xterm.css';
 
 const ansi = {
@@ -101,7 +102,7 @@ export default function TerminalPane({ active, directory }) {
         store.openWebTab(uri, { activate: Boolean(event.shiftKey) });
         return;
       }
-      void openExternal(uri).catch((error) =>
+      void openEditorLink(uri).catch((error) =>
         setStatus((previous) => ({ ...previous, error: String(error?.message || error) })),
       );
     };

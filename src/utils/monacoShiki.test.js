@@ -4,13 +4,18 @@ import { shikiToMonaco } from '@shikijs/monaco';
 const mock = vi.hoisted(() => ({
   editor: { create: vi.fn(), setTheme: vi.fn(), defineTheme: vi.fn() },
   languages: { getLanguages: () => [], setTokensProvider: vi.fn() },
-  createHighlighter: vi.fn(), highlighter: null, nativeCreate: null, nativeSetTheme: null,
+  createHighlighter: vi.fn(),
+  highlighter: null,
+  nativeCreate: null,
+  nativeSetTheme: null,
 }));
 vi.mock('monaco-editor', () => ({ editor: mock.editor, languages: mock.languages }));
 vi.mock('shiki', () => ({ createHighlighter: mock.createHighlighter }));
 vi.mock('./mgtreeLanguage', () => ({ registerMgtreeLanguage: vi.fn(), treeTokenRules: () => [] }));
 // The standalone editor runtime must not pull in the application's store graph.
-vi.mock('@store/useLspStore', () => { throw new Error('Highlighter imported application stores'); });
+vi.mock('@store/useLspStore', () => {
+  throw new Error('Highlighter imported application stores');
+});
 
 beforeEach(() => {
   vi.resetModules();
@@ -24,7 +29,8 @@ beforeEach(() => {
     'one-dark-pro': { type: 'dark', rules: [], colors: { 'minimap.background': '#282c34' } },
   };
   mock.highlighter = {
-    getLoadedThemes: () => Object.keys(themes), getLoadedLanguages: () => [],
+    getLoadedThemes: () => Object.keys(themes),
+    getLoadedLanguages: () => [],
     getTheme: (name) => {
       if (!themes[name]) throw new Error(`Theme ${name} not found`);
       return themes[name];
@@ -53,11 +59,14 @@ it('normalizes built-in theme aliases for the real Shiki adapter and editor crea
 it('registers complete fallback theme data before asynchronous initialization or diff editor creation', async () => {
   await import('./monacoShiki');
   expect(mock.editor.defineTheme.mock.calls).toHaveLength(2);
-  for (const [, theme] of mock.editor.defineTheme.mock.calls) {
+  for (const [name, theme] of mock.editor.defineTheme.mock.calls) {
     // Monaco's tokenTheme getter reads colors directly even with inherit enabled.
     expect(theme.colors['editor.foreground']).toBeUndefined();
     expect(theme.colors['editor.background']).toBeUndefined();
     expect(theme.colors['minimap.background']).toBe('#00000000');
+    expect(theme.colors['editorCursor.foreground']).toBe(
+      name === 'one-light' ? '#526fff' : '#528bff',
+    );
   }
 });
 
@@ -65,11 +74,20 @@ it('keeps the minimap canvas transparent in both Shiki themes', async () => {
   const runtime = await import('./monacoShiki');
   await runtime.initMonacoShiki();
   for (const name of ['one-light', 'one-dark-pro']) {
-    expect(mock.editor.defineTheme).toHaveBeenCalledWith(name, expect.objectContaining({
-      colors: expect.objectContaining({ 'minimap.background': '#00000000' }),
-    }));
+    expect(mock.editor.defineTheme).toHaveBeenCalledWith(
+      name,
+      expect.objectContaining({
+        colors: expect.objectContaining({ 'minimap.background': '#00000000' }),
+      }),
+    );
     const theme = mock.editor.defineTheme.mock.calls.filter(([id]) => id === name).at(-1)[1];
     expect(theme.colors['minimap.background']).toBe('#00000000');
+    const caret = name === 'one-light' ? '#526fff' : '#528bff';
+    expect(theme.colors).toMatchObject({
+      'editorCursor.foreground': caret,
+      'editorMultiCursor.primary.foreground': caret,
+      'editorMultiCursor.secondary.foreground': caret,
+    });
   }
 });
 
@@ -104,7 +122,10 @@ it('keeps a working fallback and allows retry after bootstrap failure', async ()
   const runtime = await import('./monacoShiki');
   await runtime.initMonacoShiki();
   expect(runtime.isMonacoShikiReady()).toBe(false);
-  expect(mock.editor.defineTheme).toHaveBeenCalledWith('one-light', expect.objectContaining({ base: 'vs', inherit: true }));
+  expect(mock.editor.defineTheme).toHaveBeenCalledWith(
+    'one-light',
+    expect.objectContaining({ base: 'vs', inherit: true }),
+  );
   expect(() => mock.editor.create({}, { theme: runtime.getMonacoThemeName(false) })).not.toThrow();
   mock.editor.setTheme('vs-dark');
   expect(mock.nativeSetTheme).toHaveBeenLastCalledWith('one-dark-pro');
@@ -116,7 +137,9 @@ it('keeps a working fallback and allows retry after bootstrap failure', async ()
 
 it('does not leave public Monaco methods partially patched if Shiki throws while applying a theme', async () => {
   vi.spyOn(console, 'error').mockImplementation(() => {});
-  mock.highlighter.setTheme.mockImplementationOnce(() => { throw new Error('theme initialization failed'); });
+  mock.highlighter.setTheme.mockImplementationOnce(() => {
+    throw new Error('theme initialization failed');
+  });
   const runtime = await import('./monacoShiki');
   await runtime.initMonacoShiki();
   expect(() => mock.editor.create({}, { theme: runtime.getMonacoThemeName(true) })).not.toThrow();
