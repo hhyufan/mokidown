@@ -45,6 +45,20 @@ afterEach(() => {
 });
 
 describe('local file save/watch coordination', () => {
+  it('keeps the live buffer untouched until a comparison replacement is saved', async () => {
+    clearDiskBaselines();
+    setBuffer(path, 'working copy');
+    invoke.mockImplementationOnce(async () => ({ success: true, content: diskContent }));
+    invoke.mockRejectedValueOnce(new Error('write failed'));
+    const save = () => saveExistingFile(path, 'working copy', 'UTF-8', path, 0, { replacement: 'comparison draft' });
+    await expect(save()).rejects.toThrow('write failed');
+    expect(getBuffer(path)).toBe('working copy');
+    expect(diskContent).toBe('base');
+    await expect(save()).resolves.toMatchObject({ success: true, savedContent: 'comparison draft' });
+    expect(getBuffer(path)).toBe('comparison draft');
+    expect(diskContent).toBe('comparison draft');
+  });
+
   it.each(['binary', 'too-large', 'invalid-encoding', 'unreadable', 'not-file'])('preserves the buffer and baseline when disk becomes %s, then resumes after recovery', async (kind) => {
     setBuffer(path, 'my unsaved edits');
     invoke.mockRejectedValueOnce({ kind, message: 'blocked disk' });

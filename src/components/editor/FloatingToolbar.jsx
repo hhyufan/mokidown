@@ -107,7 +107,7 @@ function readSavedPosition() {
  * @param {{ onInsert?: (action: Record<string, unknown>) => void }} props 组件属性
  * @returns {JSX.Element} 悬浮工具栏
  */
-function FloatingToolbar({ onInsert }) {
+function FloatingToolbar({ onInsert, boundsRef }) {
   const { t } = useTranslation();
   const visible = useEditorStore((s) => s.toolbarVisible);
   const toggleToolbar = useEditorStore((s) => s.toggleToolbar);
@@ -116,6 +116,7 @@ function FloatingToolbar({ onInsert }) {
   const [position, setPosition] = useState(() => readSavedPosition());
   const [headingOpen, setHeadingOpen] = useState(false);
   const [tableOpen, setTableOpen] = useState(false);
+  const bounds = useCallback(() => boundsRef?.current?.getBoundingClientRect() || getToolbarBounds(), [boundsRef]);
 
   /**
    * 统一分发插入动作，并在执行后关闭标题面板。
@@ -169,10 +170,10 @@ function FloatingToolbar({ onInsert }) {
       startX: startPosition.x,
       startY: startPosition.y,
       rect,
-      bounds: getToolbarBounds(),
+      bounds: bounds(),
     };
     event.currentTarget.setPointerCapture?.(event.pointerId);
-  }, [position]);
+  }, [bounds, position]);
 
   /**
    * 根据指针位移实时更新工具栏位置。
@@ -201,17 +202,17 @@ function FloatingToolbar({ onInsert }) {
     dragRef.current = null;
     event.currentTarget.releasePointerCapture?.(event.pointerId);
     setPosition((current) => {
-      const next = clampPosition(current, toolbarRef.current?.getBoundingClientRect());
+      const next = clampPosition(current, toolbarRef.current?.getBoundingClientRect(), bounds());
       if (next) localStorage.setItem(TOOLBAR_POSITION_KEY, JSON.stringify(next));
       return next;
     });
-  }, []);
+  }, [bounds]);
 
   // 窗口尺寸变化后重新约束工具栏位置，避免越界。
   useEffect(() => {
     const handleResize = () => {
       setPosition((current) => {
-        const next = clampPosition(current, toolbarRef.current?.getBoundingClientRect());
+        const next = clampPosition(current, toolbarRef.current?.getBoundingClientRect(), bounds());
         if (next) localStorage.setItem(TOOLBAR_POSITION_KEY, JSON.stringify(next));
         return next;
       });
@@ -219,7 +220,7 @@ function FloatingToolbar({ onInsert }) {
 
     window.addEventListener('resize', handleResize);
     return () => window.removeEventListener('resize', handleResize);
-  }, []);
+  }, [bounds]);
 
   /*
    * 每次唤出时都要把位置夹回可视区。
@@ -235,7 +236,7 @@ function FloatingToolbar({ onInsert }) {
     if (!visible) return undefined;
     const frame = requestAnimationFrame(() => {
       setPosition((current) => {
-        const clamped = clampPosition(current, toolbarRef.current?.getBoundingClientRect());
+        const clamped = clampPosition(current, toolbarRef.current?.getBoundingClientRect(), bounds());
         if (!clamped) return current;
         if (current && clamped.x === current.x && clamped.y === current.y) return current;
         localStorage.setItem(TOOLBAR_POSITION_KEY, JSON.stringify(clamped));
@@ -243,7 +244,7 @@ function FloatingToolbar({ onInsert }) {
       });
     });
     return () => cancelAnimationFrame(frame);
-  }, [visible]);
+  }, [bounds, visible]);
 
   return (
     <>
