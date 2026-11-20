@@ -1,38 +1,38 @@
 /**
- * 公式源码态的实时预览气泡。
+ * 公式的实时预览。
  *
- * 编辑 `$$` / `$` 公式时正文处于源码态，此处按当前正文同步渲染 KaTeX 预览。
- * 逐字符输入必然经过许多临时不成立的中间态（`\` → `\a` → `\alpha`），
- * 所以语法不成立时沿用上一次成功的样子，避免预览在输入过程中跳成报错文案。
+ * 块级公式在源码态把预览排在源码块上方。行内公式是一段挂着 `math` mark 的 LaTeX
+ * 正文：没在编辑时用 KaTeX 覆盖层压住正文，编辑时正文露出来、预览浮到正文上方。
+ * 逐字符输入必然经过许多临时不成立的中间态（`\` → `\a` → `\alpha`），所以气泡沿用
+ * 上一次成功的样子，避免预览在输入过程中跳成报错文案。
+ * 末尾那个宏还没打完时也不喂 KaTeX：`\in`、`\inf` 恰好是它认得的前缀，
+ * 真会排出「属于」和 `inf`，看着就像补全挑错了符号。
+ *
+ * 行内公式分「查看」和「编辑」两档：单击只把源码翻出来看，预览框和补全列表都不出现；
+ * 只有双击（光标落进正文）或在公式边上按一下退格/删除，才算真的在改它，那时候预览与补全才跟上。
+ * 查看档里挪光标、接着打字都还当查看——手滑碰一下方向键不该就把整篇的公式点亮。
  */
 import { Decoration, DecorationSet } from '@milkdown/kit/prose/view';
-import { Plugin, PluginKey } from '@milkdown/kit/prose/state';
+import { Plugin, PluginKey, TextSelection } from '@milkdown/kit/prose/state';
 import { $prose } from '@milkdown/kit/utils';
+import { isImeComposing } from '@utils/keyboard';
 import katex from 'katex';
+import { mathDraftRange, mathMarkName } from './milkdownMathMark';
+import { syntaxScanText } from './milkdownRawText';
+import { endsWithPartialMacro } from './milkdownMathSymbols';
 
-// 源码态节点名与文档协议绑定，改动会让已存文档的公式失效。
-const sourceTypes = {
-  math_source_block: { displayMode: true, variant: 'block' },
-  math_source_inline: { displayMode: false, variant: 'inline' },
-};
+// 块级源码态的节点名与文档协议绑定，改动会让已存文档的公式失效。
+const blockSource = 'math_source_block';
+const blockSpec = { displayMode: true, variant: 'block' };
+const bubbleSpec = { displayMode: false, variant: 'inline' };
+const draftSpec = { displayMode: false, variant: 'inline', draft: true };
+const coverSpec = { displayMode: false, variant: 'cover', cover: true };
 
 const previewKey = new PluginKey('moki-math-preview');
 const MAX_CACHE = 200;
-// 行内气泡按锚点对齐中线。两种源码态的盒子分属不同元素，锚点名各一个，
-// 免得文档里同时存在两个时气泡指错地方；对应 anchor-name 写在 markdown-preview.scss。
-const sourceAnchor = '--moki-math-source';
-const revealedAnchor = '--moki-math-revealed';
 // 只缓存渲染结果字符串；widget 的 toDOM 每次必须返回新节点，
 // 复用同一 DOM 实例会让内容相同的两个公式互相"搬走"对方的节点。
 const rendered = new Map();
-
-// 行内源码态存的是 `$正文$`，块级源码态只存正文，需分别取回 LaTeX。
-function latexSource(textContent, variant) {
-  const text = textContent.trim();
-  if (variant !== 'inline') return text;
-  const closed = /^\$([\s\S]*)\$$/.exec(text);
-  return (closed ? closed[1] : text.replace(/^\$+|\$+$/g, '')).trim();
-}
 
 function previewHtml(value, displayMode) {
   const cacheKey = `${displayMode ? 'd' : 'i'}${value}`;
@@ -50,31 +50,191 @@ function previewHtml(value, displayMode) {
 }
 
 function isPreviewable(value, displayMode) {
+  // 只挡气泡：覆盖层没有「上一次成功」可沿用，非要有东西压住透明正文。
+  if (endsWithPartialMacro(value)) return false;
   return value && !previewHtml(value, displayMode).error;
 }
 
-function renderPreview(value, { displayMode, variant }, anchorName) {
-  // 气泡只挂在确认能渲染的正文上，此处不再需要报错分支。
+// 覆盖层没有「上一次成功」可用：正文被染成透明时不显示点东西就等于凭空少字。
+// 所以正文不成立也要摆，退回 KaTeX 自己的报错排字，与旧的渲染态节点表现一致。
+function coverHtml(value) {
+  const result = previewHtml(value, false);
+  if (!result.error) return result;
+  return { html: katex.renderToString(value, { displayMode: false, throwOnError: false, strict: false }) };
+}
+
+function renderPreview(value, spec) {
   const bubble = document.createElement('span');
-  bubble.className = `moki-math-preview moki-math-preview--${variant}`;
-  bubble.innerHTML = previewHtml(value, displayMode).html;
-  if (variant !== 'inline') {
-    bubble.setAttribute('contenteditable', 'false');
-    bubble.setAttribute('aria-hidden', 'true');
-    return bubble;
-  }
-  // 中线对齐交给锚点定位：气泡直接读公式所在元素的真实盒子，正文变宽、折行、
-  // 改窗口宽度都自动跟随，不必测量。
-  bubble.style.positionAnchor = anchorName;
-  // 行内气泡要浮在公式自己那一行上方。绝对定位只认「最近的定位祖先」，而正文里
-  // 没有任何元素站在公式的槽位上，所以外面套一个零尺寸的行内锚点：它不占宽度、
-  // 不产生断行机会，只负责在锚点定位不可用时提供水平起点与所在行。
+  bubble.className = `moki-math-preview moki-math-preview--${spec.variant}`;
+  // 预览不许光标进去：浏览器光标一走进非文档内容，PM 就读不回文档位置。
+  bubble.setAttribute('contenteditable', 'false');
+  bubble.setAttribute('aria-hidden', 'true');
+  bubble.innerHTML = (spec.cover ? coverHtml(value) : previewHtml(value, spec.displayMode)).html;
+  if (!spec.draft) return bubble;
+  // 草稿正文没挂 mark，PM 又会在 widget 两侧断开装饰 span，气泡在正文里找不到
+  // position:relative 的参照物。所以让 widget 自带一个零宽锚点当包含块。
   const anchor = document.createElement('span');
-  anchor.className = 'moki-math-preview-anchor';
-  anchor.setAttribute('contenteditable', 'false');
-  anchor.setAttribute('aria-hidden', 'true');
+  anchor.className = 'moki-math-draft';
   anchor.append(bubble);
   return anchor;
+}
+
+// 一段 LaTeX 可能被拆成好几个文本节点，相邻且同属性的片段并成一个区间。
+function mathRanges(doc, type) {
+  const ranges = [];
+  doc.descendants((node, pos) => {
+    if (!node.isText) return;
+    const mark = type.isInSet(node.marks);
+    if (!mark) return;
+    const last = ranges.at(-1);
+    if (last && last.to === pos && last.mark.eq(mark)) last.to = pos + node.nodeSize;
+    else ranges.push({ from: pos, to: pos + node.nodeSize, mark });
+  });
+  return ranges;
+}
+
+// 展开源码的条件是光标整个落在公式里。按「与选区相交就展开」写的话，Ctrl+A 会把
+// 全文公式一起掀开，整篇重排。空光标还要更严一档，必须严格在内：mark 是
+// inclusive:false，贴在公式左右边界打字落在正文外面，那时候掀开源码反而对不上手。
+// 非空选区允许正好框住整段——双击选词拿到的就是这个形状。
+function isRevealed({ from, to }, range) {
+  if (from === to) return from > range.from && to < range.to;
+  return from >= range.from && to <= range.to;
+}
+
+// 点在公式正文上（含首尾那个字的两半边）时，浏览器给的光标正好压在边界上，
+// 上面那条严格在内的判定不放行，看起来就是「单击没反应」；正文只有一个字符时
+// 根本没有向内的光标位，永远掀不开。鼠标这一下点的是这段正文，所以额外记住
+// 「刚被点开的公式」，让源码翻出来。光标挪走或文档一改就忘。
+function isClicked(clicked, range) {
+  return !!clicked && clicked.from === range.from && clicked.to === range.to;
+}
+
+// 记住的那一下还分档：`inspect` 为真表示只是点开来看源码，预览浮层先不摆。
+function isInspecting(clicked) {
+  return !!clicked?.inspect;
+}
+
+// 补全列表是另一个插件，读的是同一份单击记忆：查看档里它不该冒头。
+export const isMathInspecting = (state) => isInspecting(previewKey.getState(state));
+
+// 单击落在公式上先只算「我要看它的源码」：点的位置离首尾那个字近一半，浏览器就把光标
+// 放在边界上，inclusive:false 让那个位置读起来是「在旁边打字」，掀开判定不放行。
+// 位置要用 PM 的坐标换算而不是量 DOM 盒子：mousedown 已经把定界符画出来，
+// 正文在指针底下挪了位，mouseup 再按盒子判就已经偏了。
+// `event.detail` 是这一连串点击的第几下：一下算查看，两下才算编辑。
+// 第二下要在 `dblclick` 里收而不是 mouseup——mouseup 时浏览器还没开始选词；可它当场也还没
+// 选完，落光标得再等一拍，详见下面那段。
+function revealClickedMath(view, event) {
+  const { state } = view;
+  const double = event.type === 'dblclick';
+  if (!view.editable || event.button !== 0) return;
+  if (double ? event.detail !== 2 : event.detail !== 1) return;
+  const math = state.schema.marks[mathMarkName];
+  if (!math) return;
+  const ranges = mathRanges(state.doc, math);
+  const { head, from: start, to: end } = state.selection;
+  // 坐标算不出文档位置也要接着判：第一下把源码揭开之后正文在指针底下挪了位，行盒还从
+  // 覆盖层那么高塌回源码那么矮，第二下的坐标常常已经不在字上。那就退回选区那头去量。
+  const at = view.posAtCoords({ left: event.clientX, top: event.clientY })?.pos ?? head;
+  const range = ranges.find(({ from, to }) => at >= from && at <= to)
+    ?? (double ? ranges.find(({ from, to }) => end > from && start < to) : null);
+  if (!double) {
+    if (range) view.dispatch(state.tr.setMeta(previewKey, { ...range, inspect: true }));
+    return;
+  }
+  // 双击第二下交回来的是浏览器的原生选词，可公式刚被第一下重新排过，Chromium 找不回
+  // 那个词，退化成整行选中（`正文 $x^2$ 结尾` 量到 8→17）：两头都在公式外面，之后方向键、
+  // 打字全都跑偏，定界符与补全也因为选区非空而收走。所以这一下由我们自己落进正文。
+  if (range) {
+    const pos = editPos(range, at);
+    // 落点还得等一拍。浏览器把自己那份选词写进 DOM 比 `dblclick` 事件更晚：当场 dispatch 的
+    // 光标要是跟状态里已有的选区一样，PM 就不再去动 DOM 选区，随后 Chromium 那份
+    // （`$\in$` 量到 8→9，选中正是开头那个反斜杠）原样盖回来。等它写完，这一下才算落定。
+    window.setTimeout(() => {
+      if (view.isDestroyed || !view.state.doc.eq(state.doc)) return;
+      view.dispatch(editInside(view.state, math, range, pos));
+    }, 0);
+  }
+  // 两下之间隔着别的事务的话，单击记忆可能已经被那个非空选区冲掉了；记忆还在就照常
+  // 从查看档切到编辑档。
+  else if (isInspecting(previewKey.getState(state))) {
+    view.dispatch(state.tr.setMeta(previewKey, { ...previewKey.getState(state), inspect: false }));
+  }
+}
+
+// 指针贴着公式左右边界时，inclusive:false 会把打字送到正文外面，所以往内收一格。
+// 只有一个字符的正文没有严格向内的位置，只能停在左边界。
+function editPos({ from, to }, caret) {
+  return to - from < 2 ? from : Math.min(Math.max(caret, from + 1), to - 1);
+}
+
+function editInside(state, math, { from, to }, pos) {
+  const tr = state.tr
+    .setSelection(TextSelection.create(state.doc, pos))
+    .setMeta(previewKey, { from, to, inspect: false });
+  // 单字符正文的光标只能压在边界上，而边界上打字会被当成公式外面的普通文字，整个公式
+  // 当场散掉。把 mark 记成待插入的 marks，下一笔字才落进正文里。
+  if (to - from < 2) tr.setStoredMarks(state.doc.resolve(from).nodeAfter?.marks ?? [math.create()]);
+  return tr;
+}
+
+// 查看档里只有 Backspace 才算「我要改它」：方向键、Home/End 挪一下光标、接着打字都还当查看，
+// 气泡与补全列表照旧不出现。键盘一动就作废的老规矩太宽——手滑碰一下方向键就把公式点亮了。
+function releaseInspect(view, event) {
+  if (event.key !== 'Backspace') return;
+  const clicked = previewKey.getState(view.state);
+  if (clicked?.inspect) view.dispatch(view.state.tr.setMeta(previewKey, { ...clicked, inspect: false }));
+}
+
+// 光标贴在渲染态公式的边上按退格/删除：原本吃掉的是正文最后一个字符，或者整对 `$`
+// （`$` 不在文档里，拆掉 mark 反而凭空多出两个 `$`）。这一下改成「我要改这个公式」——
+// 源码翻出来、光标落在指针这一侧、一个字符都不删。已经在编辑档了就不插手，
+// 第二下退格照常删字，正文删空整段公式自然消失。
+function edgeToEdit(state, math, forward) {
+  const { selection } = state;
+  if (!selection.empty) return null;
+  const pos = forward ? selection.from : selection.to;
+  const clicked = previewKey.getState(state);
+  const editing = (range) => isClicked(clicked, range) && !isInspecting(clicked);
+  return mathRanges(state.doc, math).find((range) => (forward
+    ? range.from === pos
+    : range.to === pos) && !editing(range)) ?? null;
+}
+
+function enterAtEdge(view, math, range, forward) {
+  const { state } = view;
+  // 停在边界上打字会被 inclusive:false 送到公式外面，所以把正文那串 marks 记成待插入的
+  // marks：光标点完公式紧接着打字，才落得进正文的头上或尾巴。
+  const marks = state.doc.resolve(range.from).nodeAfter?.marks ?? [math.create()];
+  view.dispatch(state.tr
+    .setSelection(TextSelection.create(state.doc, forward ? range.from : range.to))
+    .setStoredMarks(marks)
+    .setMeta(previewKey, { ...range, inspect: false })
+    .scrollIntoView());
+}
+
+// 行内公式草稿只在光标停着的时候预览：`$$` 还没闭合，正文是一段没挂 mark 的字面
+// 文本，光标一走就该退回普通文字，不该继续假装成公式。区间判定交给 mathDraftRange，
+// 它量的是光标所在这一段连续 LaTeX，而不是光标本身——从列表挑回模板后光标停在花括号
+// 里、或者按左键退到宏名中间，屏幕上的式子都没变，预览也就不该变。
+// 草稿区间之外的文本节点是什么形状都不影响换算。
+function mathDraft(state, ranges) {
+  const { selection } = state;
+  if (!selection.empty) return null;
+  const $caret = selection.$from;
+  if (!$caret.parent.isTextblock || $caret.parent.type.spec.code) return null;
+  // 代码里的 `$` 是正文：math mark 自己也算 code，靠下面的区间重叠一并排除。
+  if ($caret.marks().some((mark) => mark.type.spec.code)) return null;
+  const offset = $caret.parentOffset;
+  const value = syntaxScanText($caret.parent);
+  const draft = mathDraftRange(value, offset);
+  if (!draft) return null;
+  const at = (index) => $caret.pos - (offset - index);
+  const to = at(draft.to);
+  const from = at(draft.from);
+  if (ranges.some(({ from: start, to: end }) => to > start && from < end)) return null;
+  return { anchor: at(draft.anchor), from, to };
 }
 
 // 气泡的可视范围由最近的滚动祖先决定，正文自己不是滚动容器。
@@ -86,9 +246,8 @@ function scrollParent(element) {
 }
 
 // 气泡浮在正文上方，第一行写公式就会被编辑区上沿裁掉；预览比源码宽很多时，
-// 按中线居中又会探出左右边界。position-try 判不了这事：它只看「包含块」放得下
-// 放不下，而气泡的包含块是那个零宽锚点，量不到编辑区，滚动后更对不上。所以每次
-// 更新按可视范围量一次，放不下就翻到下方，探出去就按差值平移收回来的距离。
+// 按中线居中又会探出左右边界。所以每次更新按可视范围量一次，放不下就翻到下方，
+// 探出去就按差值平移收回来的距离。
 // 横向用平移而不是贴边，是为了让尾巴始终指着公式——贴到正文末尾会把尾巴撇开几十像素。
 function fitBubbles(view) {
   const scroller = scrollParent(view.dom);
@@ -105,6 +264,12 @@ function fitBubbles(view) {
   }
 }
 
+// 改动是不是整个落在记住的那条公式里：是的话区间跟着打字一起变长，记忆接着用；
+// 只要动到了公式外面，坐标就全乱了，按老规矩忘掉。
+function staysInside(steps, clicked) {
+  return !!clicked && steps.every(({ from, to }) => from >= clicked.from && to <= clicked.to);
+}
+
 export const milkdownMathPreview = $prose(() => {
   // 「上一次成功的样子」按编辑器实例保存：跨标签页或换文档不会把别的公式的预览带过来。
   const lastGood = new Map();
@@ -112,9 +277,46 @@ export const milkdownMathPreview = $prose(() => {
 
   return new Plugin({
     key: previewKey,
+    state: {
+      init: () => null,
+      apply(tr, clicked) {
+        const marked = tr.getMeta(previewKey);
+        if (marked !== undefined) return marked;
+        // 文档一改，区间坐标就全变了。只有改动整段落在记住的那条公式里才跟得上——
+        // 贴在公式右边界进编辑态之后接着打字，光标一直压在边界上，一忘就把刚掀开的源码合上了。
+        // 两个端点各自往外让一格：敲在首尾那两格上的字属于这条公式，不是把它挤短。
+        const memory = !tr.docChanged ? clicked
+          : staysInside(tr.steps, clicked)
+            ? { ...clicked, from: tr.mapping.map(clicked.from, -1), to: tr.mapping.map(clicked.to, 1) }
+            : null;
+        if (!memory || !tr.selectionSet) return memory;
+        const { from, to } = tr.selection;
+        return from === to && from >= memory.from && to <= memory.to ? memory : null;
+      },
+    },
+    // 编辑档里光标压在公式尾巴上时，PM 每敲一个字就把 storedMarks 清空，下一个字顺着
+    // `inclusive:false` 就跑到正文外面去了（`$x^2$` 末尾连打两个字会变成 `$x^2A$B`）。
+    // 只要还认这条公式在编辑，就把 mark 重新按上：光标停在尾巴上也还是在正文里打字。
+    appendTransaction(transactions, _oldState, state) {
+      if (!transactions.some(({ docChanged, selectionSet }) => docChanged || selectionSet)) return null;
+      const clicked = previewKey.getState(state);
+      if (!clicked || isInspecting(clicked)) return null;
+      const { selection } = state;
+      if (!selection.empty || selection.to !== clicked.to) return null;
+      const marks = selection.$from.nodeBefore?.marks;
+      if (!marks?.some((mark) => mark.type.name === mathMarkName)) return null;
+      const current = state.storedMarks;
+      const same = current?.length === marks.length && current?.every((mark, i) => mark.eq(marks[i]));
+      return same ? null : state.tr.setStoredMarks(marks);
+    },
     view(editorView) {
       const refit = () => fitBubbles(editorView);
+      const onClick = (event) => revealClickedMath(editorView, event);
+      const onKeydown = (event) => releaseInspect(editorView, event);
       window.addEventListener('resize', refit);
+      editorView.dom.addEventListener('mouseup', onClick);
+      editorView.dom.addEventListener('dblclick', onClick);
+      editorView.dom.addEventListener('keydown', onKeydown);
       return {
         // 插件视图在文档同步之后才跑，这时气泡已经在 DOM 里，量到的是最终位置。
         update() {
@@ -126,53 +328,73 @@ export const milkdownMathPreview = $prose(() => {
         },
         destroy() {
           window.removeEventListener('resize', refit);
+          editorView.dom.removeEventListener('mouseup', onClick);
+          editorView.dom.removeEventListener('dblclick', onClick);
+          editorView.dom.removeEventListener('keydown', onKeydown);
           scroller?.removeEventListener('scroll', refit);
           scroller = null;
         },
       };
     },
     props: {
+      handleKeyDown(view, event) {
+        const forward = event.key === 'Delete';
+        if (event.key !== 'Backspace' && !forward) return false;
+        if (!view.editable || view.composing || isImeComposing(event)
+          || event.ctrlKey || event.metaKey || event.altKey || event.shiftKey) return false;
+        const math = view.state.schema.marks[mathMarkName];
+        const range = math && edgeToEdit(view.state, math, forward);
+        if (!range) return false;
+        event.preventDefault();
+        enterAtEdge(view, math, range, forward);
+        return true;
+      },
       decorations(state) {
-        const { selection, doc } = state;
+        const { doc, selection } = state;
         const decorations = [];
         const active = new Set();
 
-        const addPreview = (identity, pos, value, spec, anchorName) => {
+        // widget 不带 marks:[]，才会嵌进 math mark 自己的 span 里，被那个
+        // position:relative 的盒子当包含块——覆盖层和气泡都靠这一点对齐正文。
+        const attach = (pos, value, spec, side, key) => decorations.push(Decoration.widget(pos,
+          () => renderPreview(value, spec),
+          { key, side, stopEvent: () => true, ignoreSelection: true }));
+
+        // 正文不成立时沿用上一次成功的样子；还没成功渲染过就没有可沿用的预览，
+        // 等用户写出可解析的东西再出现气泡。
+        const addBubble = (identity, pos, value, spec, side) => {
           active.add(identity);
-          // 空正文时 KaTeX 无内容可渲染；正文不成立时保留已有预览。
           if (isPreviewable(value, spec.displayMode)) lastGood.set(identity, value);
           const shown = lastGood.get(identity);
-          // 还没成功渲染过就没有可沿用的预览，等用户写出可解析的东西再出现气泡。
-          if (!shown) return;
-          decorations.push(Decoration.widget(pos, () => renderPreview(shown, spec, anchorName), {
-            // 锚点名必须在 key 里：PM 只按 key 决定要不要重建 widget 的 DOM，而锚点是
-            // 写在行内样式上的。双击把「光标贴住渲染态」换成源码态时，变体、位置、正文
-            // 全都没变，key 也就没变，DOM 被原样复用，气泡还指着已经不存在的
-            // --moki-math-revealed，anchor() 整体失效，退回到贴在公式起点的兜底摆法。
-            key: `${spec.variant}:${pos}:${shown}:${anchorName}`,
-            side: -1,
-            stopEvent: () => true,
-            ignoreSelection: true,
-          }));
+          if (shown) attach(pos, shown, spec, side, `${spec.variant}:${pos}:${shown}`);
         };
 
-        // 气泡排在公式自己前头：块级挂在源码块起点，行内挂在源码节点起点。
-        // 行内不能挂在公式之后——夹在节点与后续文字之间的 widget 会让浏览器把
-        // End 这类原生光标移动吞掉，光标卡在公式前面出不去；挂在前面就没有这个坑。
+        // 块级气泡排在源码块前头：挂在它后面会让预览和源码块上下颠倒。
         doc.descendants((node, pos) => {
-          const spec = sourceTypes[node.type.name];
-          if (!spec) return;
-          addPreview(`${node.type.name}:${pos}`, pos, latexSource(node.textContent, spec.variant), spec, sourceAnchor);
+          if (node.type.name === blockSource) addBubble(`${blockSource}:${pos}`, pos, node.textContent.trim(), blockSpec, -1);
         });
 
-        // 行内公式被光标贴住时仍是渲染态节点，只是由 milkdownLiveSyntax 的
-        // 装饰改显 `$…$` 源码；那种状态下正文里没有源码节点，需在此补上预览。
-        const { $from } = selection;
-        if ($from.parent.isTextblock && !$from.parent.type.spec.code) {
-          const adjacent = selection.empty ? $from.nodeAfter : selection.node;
-          if (adjacent?.type.name === 'math_inline') {
-            addPreview(`math_inline:${$from.pos}`, $from.pos, String(adjacent.attrs.value || '').trim(), sourceTypes.math_source_inline, revealedAnchor);
+        const math = state.schema.marks[mathMarkName];
+        const ranges = math ? mathRanges(doc, math) : [];
+        const clicked = math ? previewKey.getState(state) : null;
+        for (const range of ranges) {
+          const value = doc.textBetween(range.from, range.to);
+          if (!isRevealed(selection, range) && !isClicked(clicked, range)) {
+            decorations.push(Decoration.inline(range.from, range.to, { class: 'moki-math-rendered' }));
+            attach(range.from, value, coverSpec, 1, `cover:${range.from}:${value}`);
+            continue;
           }
+          decorations.push(Decoration.inline(range.from, range.to, { class: 'moki-math-source' }));
+          // 查看档只翻源码，预览框等编辑档再出现。
+          if (!isInspecting(clicked)) addBubble(`math:${range.from}`, range.from, value, bubbleSpec, 1);
+        }
+
+        // 草稿的 `$` 和正文都还是普通文字，气泡没有 mark span 可以挂靠，
+        // 定位参照由 widget 自带的零宽锚点提供。锚点摆在正文正中，气泡就正好压在正文上方。
+        const draft = math ? mathDraft(state, ranges) : null;
+        if (draft) {
+          addBubble(`draft:${draft.anchor}`, draft.from + ((draft.to - draft.from) >> 1),
+            doc.textBetween(draft.from, draft.to), draftSpec, 1);
         }
 
         for (const identity of lastGood.keys()) if (!active.has(identity)) lastGood.delete(identity);
