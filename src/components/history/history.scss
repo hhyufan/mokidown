@@ -1,3 +1,5 @@
+@import 'monaco-editor/esm/vs/base/browser/ui/codicons/codicon/codicon.css';
+
 /* 左侧资源管理器底部的历史时间线（VS Code Timeline 同款）。 */
 .timeline {
   --timeline-row: 27px;   /* 单行高度，行高与列表上限共用同一个值 */
@@ -163,6 +165,10 @@
 
 /* 主编辑区的历史对比视图。 */
 .history-diff {
+  --history-fold-height: 24px;
+  --history-fold-background: var(--hover);
+  --history-fold-shadow: color-mix(in srgb, var(--text) 24%, transparent);
+
   display: flex;
   flex-direction: column;
   width: 100%;
@@ -209,6 +215,11 @@
   flex-shrink: 0;
   border-bottom: 1px solid var(--border);
   background: var(--sidebar);
+
+  &--preview {
+    overflow: hidden;
+    scrollbar-gutter: stable;
+  }
 }
 
 .history-diff__file {
@@ -239,14 +250,128 @@
 
 .history-diff__action {
   display: inline-flex;
+
+  .ant-btn.ant-btn-default {
+    background: color-mix(in srgb, var(--surface) 50%, transparent);
+
+    &:hover:not(:disabled) { background: var(--hover); }
+  }
+
+  .ant-btn:disabled {
+    background: color-mix(in srgb, var(--text) 6%, transparent);
+  }
+}
+
+.history-diff {
+  // The preview can open before Monaco registers its icon styles.
+  .codicon-fold::before { content: '\eaf5'; }
+  .codicon-unfold::before { content: '\eb73'; }
+  .codicon-arrow-left::before { content: '\ea9b'; }
+  .codicon-arrow-right::before { content: '\ea9c'; }
+}
+
+body.moki-has-background .history-diff { --history-fold-background: transparent; }
+
+.history-diff .history-markdown-diff__fold,
+.history-diff .monaco-editor .diff-hidden-lines > .center {
+  height: var(--history-fold-height);
+  background-color: var(--history-fold-background);
+  color: var(--text-sec);
+  box-shadow: inset 0 -5px 5px -7px var(--history-fold-shadow),
+    inset 0 5px 5px -7px var(--history-fold-shadow);
+  font: 13px/14px var(--font-app);
+}
+
+.ant-btn.history-diff__fold-button {
+  display: grid;
+  place-items: center;
+  padding: 0;
+
+  > .ant-btn-icon {
+    display: grid;
+    place-items: center;
+    line-height: 1;
+  }
+}
+
+.history-markdown-draft {
+  &__layout {
+    position: relative;
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+
+    &::before {
+      position: absolute;
+      inset-block: 0;
+      inset-inline-end: 50%;
+      width: 1px;
+      z-index: 1;
+      background: var(--border);
+      pointer-events: none;
+      content: '';
+    }
+
+    > .history-markdown-diff__row {
+      position: absolute;
+      inset-inline: 0;
+      pointer-events: none;
+      &:not([data-positioned]) { visibility: hidden; }
+    }
+  }
+
+  &__pane {
+    grid-row: 1;
+    grid-column: 2;
+    position: relative;
+    min-width: 0;
+    z-index: 1;
+
+    &[data-side='original'] { grid-column: 1; }
+  }
+
+  &__editor.md-preview {
+    contain: none;
+    overflow: visible;
+    padding-block: 0;
+    padding-inline: var(--history-diff-gutter);
+  }
+  &__editor .milkdown-editor > :not([data-history-anchor]) { margin-block: 8px; }
+  &__editor .milkdown-editor > .history-markdown-diff__hidden-draft-node { display: none; }
+  &__editor .milkdown-editor { padding-block-end: 3em; }
+
+  &__anchor {
+    display: flow-root;
+    box-sizing: content-box;
+    height: 0;
+    padding-block-start: 1px;
+    pointer-events: none;
+  }
+
+  .history-markdown-diff__fold,
+  .history-markdown-diff__fold-action,
+  .history-markdown-diff__revert-actions {
+    pointer-events: auto;
+  }
+
+  .history-markdown-diff__fold,
+  .history-markdown-diff__revert-actions {
+    position: relative;
+    z-index: 2;
+  }
 }
 
 .history-diff__error { padding: 8px 12px; color: var(--text); }
 
 .history-diff__editor {
+  position: relative;
   flex: 1;
   min-height: 0;
   &[hidden] { display: none; }
+
+  [data-history-native-fold-tooltip],
+  .monaco-hover:has(.hover-row[data-history-native-fold-tooltip]):not(:has(.hover-row:not([data-history-native-fold-tooltip]))) {
+    display: none;
+  }
 
   /*
    * Monaco 在并排模式下给左右编辑器各投一条柔和阴影
@@ -274,6 +399,160 @@
     .editor.modified {
       border-left: 0;
     }
+  }
+}
+
+.history-diff__source-arrows {
+  --history-source-arrow-size: 22px;
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  pointer-events: none;
+  z-index: 5;
+}
+
+.history-diff__source-arrow {
+  position: absolute;
+  display: grid;
+  place-items: center;
+  left: var(--history-source-split);
+  width: var(--history-source-arrow-size);
+  height: var(--history-source-arrow-size);
+  border: 0;
+  border-radius: var(--radius-sm);
+  padding: 0;
+  color: var(--text);
+  background: transparent;
+  cursor: pointer;
+  pointer-events: auto;
+
+  &[hidden] { display: none; }
+  &[data-direction='left'] { transform: translateX(-100%); }
+  &:hover { background: var(--hover); }
+  &:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+}
+
+.history-markdown-diff {
+  --history-diff-gutter: 40px;
+  --history-diff-action-size: 24px;
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  scrollbar-gutter: stable;
+  &[hidden] { display: none; }
+
+  &__row {
+    position: relative;
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  &__cell {
+    grid-area: 1 / 2;
+    position: relative;
+    min-width: 0;
+    padding: 8px var(--history-diff-gutter);
+    overflow-wrap: anywhere;
+
+    &:first-child {
+      grid-column: 1;
+    }
+    &[data-change='removed'] { background: color-mix(in srgb, var(--error) 15%, transparent); }
+    &[data-change='added'] { background: color-mix(in srgb, var(--success) 15%, transparent); }
+    &[data-change] { min-height: 26px; }
+
+    &[data-gap] {
+      --history-diff-stripe: color-mix(in srgb, var(--text) 19%, transparent);
+      background: repeating-linear-gradient(-45deg, var(--history-diff-stripe) 0 1px, transparent 1px 6px);
+      background-clip: content-box;
+      padding-block: 0;
+    }
+  }
+
+  &__marker {
+    position: absolute;
+    inset-block-start: 10px;
+    inset-inline-start: 0;
+    width: var(--history-diff-gutter);
+    text-align: center;
+    color: var(--text-sec);
+    font: 11px var(--font-editor);
+  }
+
+  [data-side='modified'] > &__marker {
+    inset-inline-start: calc(var(--history-diff-action-size) + 2px);
+    width: calc(var(--history-diff-gutter) - var(--history-diff-action-size) - 2px);
+  }
+
+  &__revert,
+  &__fold,
+  &__fold-action {
+    color: var(--text-sec);
+    border: 1px solid var(--border);
+    cursor: pointer;
+    &:hover { color: var(--accent); }
+    &:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+  }
+
+  &__revert-actions {
+    grid-area: 1 / 2;
+    justify-self: start;
+    align-self: start;
+    z-index: 1;
+    display: flex;
+    flex-direction: column;
+    padding-block: 2px;
+
+    &[data-direction='left'] {
+      grid-column: 1;
+      justify-self: end;
+    }
+  }
+
+  &__revert {
+    display: grid;
+    place-items: center;
+    width: var(--history-diff-action-size);
+    height: var(--history-diff-action-size);
+    padding: 0;
+    border: 0;
+    border-radius: var(--radius-sm);
+    background: transparent;
+    color: var(--text);
+
+    &:hover:not(:disabled) { background: var(--hover); }
+    &:disabled { opacity: 0.45; cursor: default; }
+  }
+
+  &__fold {
+    display: grid;
+    grid-template-columns: var(--history-diff-gutter) minmax(0, 1fr);
+    align-items: center;
+    width: 100%;
+    padding: 0;
+    border: 0;
+    text-align: start;
+    white-space: nowrap;
+    .codicon { color: var(--accent); justify-self: center; }
+    &:hover { color: var(--text); }
+  }
+
+  &__fold-action {
+    --history-fold-action-inset: calc((var(--history-diff-gutter) - var(--history-diff-action-size)) / 2);
+    position: absolute;
+    z-index: 2;
+    inset-block-start: 0;
+    inset-inline-start: var(--history-fold-action-inset);
+    display: grid;
+    place-items: center;
+    width: var(--history-diff-action-size);
+    height: var(--history-diff-action-size);
+    padding: 0;
+    border: 0;
+    border-radius: var(--radius-sm);
+    background: transparent;
+    &[data-side='modified'] { inset-inline-start: calc(50% + var(--history-fold-action-inset)); }
+    &:hover { background: var(--hover); }
   }
 }
 

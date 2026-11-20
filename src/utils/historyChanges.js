@@ -1,3 +1,45 @@
+function* selectedRanges(changes, selection, side) {
+  if (!selection || !changes?.length) return;
+  const selectedStart = selection.startLineNumber;
+  // A selection ending at column 1 excludes that final line.
+  const selectedEnd =
+    selection.endLineNumber > selectedStart && selection.endColumn === 1
+      ? selection.endLineNumber - 1
+      : selection.endLineNumber;
+  for (const change of changes) {
+    const start =
+      side === 'original' ? change.originalStartLineNumber : change.modifiedStartLineNumber;
+    const end = side === 'original' ? change.originalEndLineNumber : change.modifiedEndLineNumber;
+    if (!end) continue;
+    const from = Math.max(selectedStart, start);
+    const to = Math.min(selectedEnd, end);
+    if (from <= to) yield { change, start, from, to };
+  }
+}
+
+export function historyAddition(change) {
+  const {
+    originalStartLineNumber,
+    originalEndLineNumber,
+    modifiedStartLineNumber,
+    modifiedEndLineNumber,
+  } = change;
+  const paired = originalEndLineNumber ? originalEndLineNumber - originalStartLineNumber + 1 : 0;
+  const firstAdded = modifiedStartLineNumber + paired;
+  if (!modifiedEndLineNumber || firstAdded > modifiedEndLineNumber) return null;
+  return { ...change, originalEndLineNumber: 0, modifiedStartLineNumber: firstAdded };
+}
+
+export function hasSelectedHistoryChanges(changes, selection, side) {
+  if (
+    !selection ||
+    (selection.startLineNumber === selection.endLineNumber &&
+      selection.startColumn === selection.endColumn)
+  )
+    return false;
+  return !selectedRanges(changes, selection, side).next().done;
+}
+
 /** Restore selected lines/blocks while preserving every other current-file change. */
 export function restoreSelectedHistoryChanges(
   original,
@@ -10,24 +52,12 @@ export function restoreSelectedHistoryChanges(
   const originalLines = original.split(/\r\n|\r|\n/);
   const modifiedLines = modified.split(/\r\n|\r|\n/);
   const eol = modified.includes('\r\n') ? '\r\n' : modified.includes('\r') ? '\r' : '\n';
-  const selectedStart = selection.startLineNumber;
-  // A selection ending at column 1 excludes that final line.
-  const selectedEnd =
-    selection.endLineNumber > selectedStart && selection.endColumn === 1
-      ? selection.endLineNumber - 1
-      : selection.endLineNumber;
   const edits = [];
-  for (const change of changes) {
+  for (const { change, start, from, to } of selectedRanges(changes, selection, side)) {
     const os = change.originalStartLineNumber,
       oe = change.originalEndLineNumber;
     const ms = change.modifiedStartLineNumber,
       me = change.modifiedEndLineNumber;
-    const start = side === 'original' ? os : ms;
-    const end = side === 'original' ? oe : me;
-    const anchor = end === 0 ? Math.max(1, start) : start;
-    const from = Math.max(selectedStart, anchor);
-    const to = Math.min(selectedEnd, end === 0 ? anchor : end);
-    if (from > to) continue;
     const originalCount = oe === 0 ? 0 : oe - os + 1;
     const modifiedCount = me === 0 ? 0 : me - ms + 1;
     if (originalCount === modifiedCount && originalCount > 0) {

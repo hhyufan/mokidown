@@ -70,7 +70,8 @@ export default function Timeline() {
   const cancelLoad = useCallback(() => { requestRef.current++; }, []);
 
   useEffect(() => {
-    setDiff(null);
+    const comparison = useHistoryStore.getState().diff;
+    if (comparison && comparison.tabId !== activeTabId) setDiff(null);
     setEntries([]);
     setLoaded(false);
     load();
@@ -81,16 +82,30 @@ export default function Timeline() {
   // 让新快照即时出现，而不是等到切换标签或手动刷新。
   useEffect(() => {
     if (!eligible || !tab?.path) return undefined;
-    const unlisten = onHistoryChanged(({ path }) => {
-      if (path === tab.path) load();
+    let frame = 0;
+    const refresh = ({ path }) => {
+      if (path !== tab.path || frame) return;
+      frame = requestAnimationFrame(() => {
+        frame = 0;
+        void load();
+      });
+    };
+    const unlisten = onHistoryChanged(refresh);
+    const unsubscribe = useHistoryStore.subscribe((state, previous) => {
+      if (state.historyWrite && state.historyWrite !== previous.historyWrite) refresh(state.historyWrite);
     });
-    return () => { unlisten.then((fn) => fn()).catch(() => {}); };
+    return () => {
+      unsubscribe();
+      if (frame) cancelAnimationFrame(frame);
+      unlisten.then((fn) => fn()).catch(() => {});
+    };
   }, [eligible, tab?.path, load]);
 
   const openDiff = async (timestamp) => {
     if (!tab?.path) return;
     try {
       const content = await historyRead(tab.path, timestamp);
+      if (useEditorStore.getState().activeTabId !== activeTabId) return;
       setDiff({ tabId: activeTabId, timestamp, content });
     } catch {
       /* 版本可能已被清理，忽略。 */

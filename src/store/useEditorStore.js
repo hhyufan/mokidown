@@ -18,6 +18,7 @@ import { historyCapture } from '@utils/tauriApi';
 import { captureDocumentViewState, renameDocumentViewState } from '@utils/documentViewState';
 import { untitledFileName } from '@utils/untitledFileName';
 import { parsePreviewAddress, samePreview } from '@utils/previewAddress';
+import useHistoryStore, { isMarkdownComparison } from './useHistoryStore';
 
 let untitledCounter = 1;
 const pluginDocsTabId = 'mokidown:plugin-docs';
@@ -558,8 +559,12 @@ const useEditorStore = create(
         set({ viewMode: mode, uiStateUpdatedAt: meta.updatedAt ?? Date.now() });
       },
       toggleEditPreview: () => {
-        const { viewMode, setViewMode } = get();
-        if (viewMode !== 'split') setViewMode(viewMode === 'edit' ? 'preview' : 'edit');
+        const { activeTabId, tabRenderList, viewMode, setViewMode } = get();
+        const comparison = useHistoryStore.getState();
+        if (comparison.diff?.tabId === activeTabId && comparison.diff) {
+          if (isMarkdownComparison(tabRenderList.find((tab) => tab.id === activeTabId), comparison.diff))
+            comparison.toggleViewMode();
+        } else if (viewMode !== 'split') setViewMode(viewMode === 'edit' ? 'preview' : 'edit');
       },
       /** ????????????????? */
       toggleSplit: () => {

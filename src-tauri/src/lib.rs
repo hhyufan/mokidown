@@ -245,20 +245,24 @@ fn replace_existing_file(temp: &Path, target: &Path) -> Result<(), String> {
 }
 
 /// Write into the destination directory, flush bytes to stable storage and only then
-/// replace the destination. On failure the temporary file is intentionally retained as
-/// a recovery copy and its path is included in the error.
+/// replace the destination. Once created, the temporary file is retained on failure.
 fn atomic_write(target: &Path, bytes: &[u8]) -> Result<(), String> {
     let parent = target
         .parent()
         .ok_or_else(|| "Target has no parent directory".to_string())?;
     fs::create_dir_all(parent).map_err(|error| format!("Failed to create directory: {error}"))?;
     let temp = unique_temp_path(target)?;
+    let mut file = OpenOptions::new()
+        .write(true)
+        .create_new(true)
+        .open(&temp)
+        .map_err(|error| {
+            format!(
+                "Failed to create recovery file in {}: {error}",
+                parent.display()
+            )
+        })?;
     let write_result = (|| -> Result<(), String> {
-        let mut file = OpenOptions::new()
-            .write(true)
-            .create_new(true)
-            .open(&temp)
-            .map_err(|error| format!("Failed to create recovery file: {error}"))?;
         file.write_all(bytes)
             .map_err(|error| format!("Failed to write recovery file: {error}"))?;
         file.sync_all()
@@ -691,17 +695,18 @@ async fn history_capture(
     content: String,
     force: Option<bool>,
     restored_from: Option<u64>,
-) -> Result<(), String> {
-    if capture_history(
+) -> Result<bool, String> {
+    let written = capture_history(
         &app,
         &file_path,
         &content,
         force.unwrap_or(false),
         restored_from,
-    )? {
+    )?;
+    if written {
         let _ = app.emit("history-changed", &HistoryChangeEvent { path: file_path });
     }
-    Ok(())
+    Ok(written)
 }
 
 #[tauri::command]
