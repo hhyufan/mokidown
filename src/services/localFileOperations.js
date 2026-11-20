@@ -11,7 +11,7 @@ const isInputComposing = () => composingTarget === true || Boolean(composingTarg
 
 // Call only while holding the path's operation queue. Read editor state AFTER IO;
 // neither a captured Zustand state nor a watcher event is a disk snapshot.
-async function inspectFile(path, isCurrent = () => true, tabId) {
+async function inspectFile(path, isCurrent = () => true, tabId, replacement) {
   const matches = (tab) => tab.path === path && (!tabId || tab.id === tabId);
   for (let attempt = 0; attempt < 3; attempt += 1) {
     if (!isCurrent() || !useEditorStore.getState().tabs.some(matches)) return null;
@@ -29,7 +29,8 @@ async function inspectFile(path, isCurrent = () => true, tabId) {
     return {
       state, tab, disk, editorContent, diskContent,
       outcome: disk?.blockedReason && disk.blockedReason !== 'missing' ? 'blocked' : disk?.success ? classifyFileVersions({
-        baseContent: baseline?.content ?? tab.content ?? '', editorContent, diskContent,
+        baseContent: baseline?.content ?? tab.content ?? '',
+        editorContent: replacement ?? editorContent, diskContent,
       }) : 'unavailable',
     };
   }
@@ -65,15 +66,17 @@ function reloadExternal(path, version) {
 }
 
 /** Compare and save as one operation; queued autosaves use the current buffer. */
-export function saveExistingFile(path, _content, encoding, tabId, expectedRevision) {
+export function saveExistingFile(path, initialContent, encoding, tabId, expectedRevision, { replacement } = {}) {
   return withFileOperation(path, async () => {
-    const isCurrent = () => !isInputComposing() && (expectedRevision == null ||
+    const isCurrent = () => !isInputComposing() &&
+      (replacement === undefined || getBuffer(tabId, initialContent) === initialContent) && (expectedRevision == null ||
       useEditorStore.getState().tabs.some((tab) => tab.id === tabId && tab.path === path &&
         (tab.contentRevision ?? 0) === expectedRevision));
-    const version = await inspectFile(path, isCurrent, tabId);
+    const version = await inspectFile(path, isCurrent, tabId, replacement);
     if (!version) return { success: false, superseded: true };
     const { state, tab, outcome, editorContent, diskContent } = version;
-    if (outcome === 'conflict' || outcome === 'unavailable' || outcome === 'blocked') {
+    if (outcome === 'conflict' || outcome === 'unavailable' || outcome === 'blocked' ||
+        (outcome === 'external-only' && replacement !== undefined)) {
       reportConflict(path, version);
       return { success: false, conflict: true };
     }
@@ -81,15 +84,25 @@ export function saveExistingFile(path, _content, encoding, tabId, expectedRevisi
       reloadExternal(path, version);
       return { success: false, externalReloaded: true };
     }
-    const result = outcome === 'converged' || editorContent === diskContent
+    const content = replacement ?? editorContent;
+    const result = outcome === 'converged' || content === diskContent
       ? { success: true, converged: true, file_path: path }
-      : await saveFile(path, editorContent, encoding || tab.encoding, { operationHeld: true });
+      : await saveFile(path, content, encoding || tab.encoding, { operationHeld: true });
     if (result?.success) {
-      rememberDiskBaseline(path, editorContent);
-      state.markTabSaved(tab.id, editorContent);
+      rememberDiskBaseline(path, content);
+      const current = useEditorStore.getState().tabs.find((item) => item.id === tab.id && item.path === path);
+      if (current) {
+        // Apply a diff only after writing it, and keep edits made while writing.
+        if (content !== editorContent && current.contentRevision === tab.contentRevision &&
+            getBuffer(tab.id, current.content) === editorContent) {
+          state.replaceTabContent(tab.id, { content });
+        } else {
+          state.markTabSaved(tab.id, content);
+        }
+      }
       clearConflict(path);
     }
-    return { ...result, savedContent: editorContent };
+    return { ...result, savedContent: content, previousContent: editorContent };
   });
 }
 

@@ -474,6 +474,7 @@ export function useFileManager() {
     if (pendingUntitledSaveRef.current.has(tab.id)) return null;
 
     pendingUntitledSaveRef.current.add(tab.id);
+    const content = options.replacement ?? tab.content;
     try {
       const currentDir = useFileStore.getState().currentDir;
       const canSaveToExplorerDir = hasOpenExplorerDirectory();
@@ -499,7 +500,7 @@ export function useFileManager() {
         });
         const file = await handle.getFile();
         targetPath = `web://${file.name}`;
-        registerWebFile(targetPath, handle, tab.content);
+        registerWebFile(targetPath, handle, content);
       } else if (options.allowDialog) {
         const selected = await save({
           defaultPath: ensureSuggestedFileName(tab),
@@ -520,14 +521,19 @@ export function useFileManager() {
         return null;
       }
 
-      const result = await saveFile(targetPath, tab.content, tab.encoding);
+      const result = await saveFile(targetPath, content, tab.encoding);
       if (!result.success) {
         notify('error', t('notification.error'), result.message);
         return null;
       }
 
       dismissedAutoSavePromptRef.current.delete(tab.id);
-      await finalizeSavedTab(tab, targetPath, options.source === 'auto-save' ? 'auto-save' : 'save-as');
+      const live = getLiveTabById(tab.id);
+      if (options.replacement !== undefined && live && !live.path && live.content === tab.content &&
+          live.contentRevision === tab.contentRevision) {
+        useEditorStore.getState().replaceTabContent(tab.id, { content });
+      }
+      await finalizeSavedTab({ ...tab, content }, targetPath, options.source === 'auto-save' ? 'auto-save' : 'save-as');
       // Save-as also counts as a save for plugins (e.g. sync the new file).
       broadcastToPlugins({ type: 'event', name: 'didSave', payload: { path: targetPath, name: targetPath.split(/[\\/]/).pop() } });
       return targetPath;
@@ -738,9 +744,10 @@ export function useFileManager() {
    * 保存指定标签或当前活动标签。
    *
    * @param {string} [tabId] 目标标签 id；省略时保存当前活动标签。
+   * @param {{replacement?: string}} [options] 成功落盘后应用到标签的正文。
    * @returns {Promise<{ok: boolean, tabId?: string, cancelled?: boolean}>} 保存结果。
    */
-  const saveTab = useCallback(async (tabId) => {
+  const saveTab = useCallback(async (tabId, { replacement } = {}) => {
     // 实时正文保存在 editorBuffer 中，`tab.content` 只是上一次持久化的快照。
     // 这里统一通过 getLiveTabById 取最新缓冲内容，避免把过期正文落盘/推云
 
@@ -755,29 +762,33 @@ export function useFileManager() {
       // Android 会自动把标签落到应用私有 Documents 目录；桌面端则弹出
       // 保存对话框。两条路径最终都会写入真实文件，不再停留在“只有草稿”的死胡同。
       dismissedAutoSavePromptRef.current.delete(tab.id);
-      const targetPath = await persistUntitledTab(tab, { allowDialog: true, source: 'manual-save' });
+      const targetPath = await persistUntitledTab(tab, { allowDialog: true, source: 'manual-save', replacement });
       return targetPath
-        ? { ok: true, tabId: targetPath }
+        ? { ok: true, tabId: targetPath, path: targetPath, savedContent: replacement ?? tab.content, previousContent: tab.content }
         : { ok: false, cancelled: true };
     }
 
     try {
-      const result = await saveExistingFile(tab.path, tab.content, tab.encoding, tab.id, tab.contentRevision ?? 0);
+      const result = await saveExistingFile(tab.path, tab.content, tab.encoding, tab.id, tab.contentRevision ?? 0, { replacement });
       if (result.success) {
         // Ctrl+S path: tell plugins a save happened (cloud sync reacts to it).
-        broadcastToPlugins({ type: 'event', name: 'didSave', payload: { path: tab.path, name: tab.path.split(/[\\\\/]/).pop() } });
-        return { ok: true, tabId: tab.id };
+        try {
+          broadcastToPlugins({ type: 'event', name: 'didSave', payload: { path: tab.path, name: tab.path.split(/[\\\\/]/).pop() } });
+        } catch (error) {
+          console.warn('[files] save notification failed:', error);
+        }
+        return { ok: true, tabId: tab.id, path: tab.path, savedContent: result.savedContent, previousContent: result.previousContent };
       } else if (!result.conflict && !result.externalReloaded && !result.superseded) {
         notify('error', t('notification.error'), result.message);
-        return { ok: false };
+        return { ok: false, message: result.message };
       } else {
         return { ok: false, conflict: !!result.conflict, externalReloaded: !!result.externalReloaded };
       }
     } catch (err) {
       notify('error', t('notification.error'), String(err));
-      return { ok: false };
+      return { ok: false, message: err?.message || String(err) };
     }
-  }, [isAndroid, notify, persistUntitledTab, t]);
+  }, [notify, persistUntitledTab, t]);
 
   /**
    * 保存当前活动标签。

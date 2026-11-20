@@ -13,6 +13,20 @@ globalThis.React = React;
 const mock = vi.hoisted(() => ({ saveTab: vi.fn(), init: vi.fn(), createDiff: vi.fn(), diff: null, models: [], changes: [], splitOffset: 400,
   selection: { startLineNumber: 1, startColumn: 1, endLineNumber: 1, endColumn: 2 } }));
 vi.mock('@hooks/useFileManager', () => ({ useFileManager: () => ({ saveTab: mock.saveTab }) }));
+vi.mock('./MarkdownComparisonEditor', () => ({ default: () => null }));
+vi.mock('./useMarkdownHistoryComparison', async () => {
+  const { alignBlocks, parseDocument } = await import('./markdownHistoryModel');
+  return { useMarkdownHistoryComparison: (original, modified, enabled) => {
+    if (!enabled || original === modified) return null;
+    const left = parseDocument(original);
+    const right = parseDocument(modified);
+    return { modified, layout: {
+      rows: alignBlocks(left, right, mock.changes),
+      originalBlocks: left.anchors,
+      modifiedBlocks: right.anchors,
+    } };
+  } };
+});
 vi.mock('@utils/tauriApi', () => ({
   historyCapture: vi.fn(async () => {}), historyList: vi.fn(), historyRead: vi.fn(),
   onHistoryChanged: vi.fn(async () => () => {}),
@@ -21,7 +35,7 @@ vi.mock('react-i18next', () => ({
   useTranslation: () => ({ t: (key, params) => ({
   'history.title': '本地历史', 'history.restore': '恢复此版本', 'history.closeDiff': '关闭对比',
   'history.rollback': '回滚记录', 'history.rollbackFrom': `已回滚至 ${params?.time} 的版本`,
-  'history.restoreSelection': '恢复选中差异', 'history.applyChanges': '应用修改',
+  'history.applySelectedChanges': '应用选中差异', 'history.applyChanges': '应用修改',
   'history.current': '现在',
   'history.noChanges': '没有更改',
   'empty.historyDiff.title': '这个版本和现在一模一样呢～',
@@ -64,10 +78,12 @@ beforeEach(() => {
   mock.createDiff.mockImplementation(() => {
     const updates = new Set();
     const layouts = new Set();
+    const cursors = new Map();
     const editor = (side) => ({
       onDidLayoutChange: (fn) => { layouts.add(fn); return { dispose: () => layouts.delete(fn) }; },
       getContainerDomNode: () => ({ getBoundingClientRect: () => ({ left: mock.splitOffset }) }),
       onDidFocusEditorText: () => ({ dispose() {} }), getSelection: () => mock.selection,
+      onDidChangeCursorSelection: (fn) => { cursors.set(side, fn); return { dispose: () => cursors.delete(side) }; },
       pushUndoStop: vi.fn(), executeEdits: (_source, edits) => mock.models[side].setValue(edits[0].text),
     });
     const diff = {
@@ -76,6 +92,7 @@ beforeEach(() => {
       getLineChanges: () => mock.changes,
       updated: () => queueMicrotask(() => updates.forEach((fn) => fn())),
       layoutUpdated: () => layouts.forEach((fn) => fn()),
+      selectionUpdated: () => cursors.get(1)?.(),
       setModel: () => diff.updated(), updateOptions() {}, dispose: vi.fn(),
     };
     mock.diff = diff;
@@ -84,10 +101,13 @@ beforeEach(() => {
   clearBuffer(path);
   useEditorStore.setState({ tabs: [], tabRenderList: [], activeTabId: null });
   useEditorStore.getState().openFile({ path, name: 'rollback.txt', content: 'before' });
-  useHistoryStore.setState({ diff: null });
+  useHistoryStore.setState({ diff: null, historyWrite: null });
   historyList.mockResolvedValue([{ timestamp: 20, bytes: 5, restoredFrom: 10 }, { timestamp: 10, bytes: 5 }]);
   historyRead.mockResolvedValue('older');
-  mock.saveTab.mockResolvedValue({ ok: true });
+  mock.saveTab.mockImplementation(async (id, { replacement } = {}) => {
+    if (replacement !== undefined) useEditorStore.getState().replaceTabContent(id, { content: replacement });
+    return { ok: true };
+  });
 });
 afterEach(() => { cleanup(); clearBuffer(path); vi.restoreAllMocks(); vi.unstubAllGlobals(); });
 
@@ -156,10 +176,11 @@ it.each(['before', 'older', 'older\n\n'])('records every successful rollback eve
   render(<HistoryDiffView />);
   fireEvent.click(screen.getByRole('button', { name: '恢复此版本' }));
   await waitFor(() => expect(useHistoryStore.getState().diff).toBeNull());
+  await waitFor(() => expect(useHistoryStore.getState().historyWrite).toEqual({ path }));
   expect(historyCapture.mock.calls).toEqual([
     [path, current], [path, 'older', { force: true, restoredFrom: 10 }],
   ]);
-  expect(mock.saveTab).toHaveBeenCalledWith(path);
+  expect(mock.saveTab).toHaveBeenCalledWith(path, { replacement: 'older' });
   expect(getBuffer(path)).toBe('older');
   expect(historyCapture.mock.invocationCallOrder[1]).toBeGreaterThan(mock.saveTab.mock.invocationCallOrder[0]);
 });
@@ -171,35 +192,72 @@ it('waits for a successful save before labeling a rollback, and keeps the diff o
   render(<HistoryDiffView />);
   fireEvent.click(screen.getByRole('button', { name: '恢复此版本' }));
   await waitFor(() => expect(mock.saveTab).toHaveBeenCalled());
-  expect(historyCapture).toHaveBeenCalledTimes(1);
+  expect(historyCapture).not.toHaveBeenCalled();
   await act(async () => finish({ ok: false }));
-  expect(historyCapture).toHaveBeenCalledTimes(1);
+  expect(historyCapture).not.toHaveBeenCalled();
   expect(useHistoryStore.getState().diff).not.toBeNull();
+  expect(screen.getByRole('alert')).toHaveTextContent('history.applyFailed');
   expect(screen.getByRole('button', { name: '恢复此版本' })).toBeEnabled();
+  fireEvent.click(screen.getByRole('button', { name: '关闭对比' }));
+  expect(getBuffer(path)).toBe('before');
 });
 
-it('lets selected lines be restored into a draft, preserving other edits until Apply is clicked', async () => {
+it('keeps a newer comparison open when an earlier save finishes', async () => {
+  let finish;
+  mock.saveTab.mockReturnValue(new Promise((resolve) => { finish = resolve; }));
+  useHistoryStore.setState({ diff: { tabId: path, timestamp: 10, content: 'older' } });
+  render(<HistoryDiffView />);
+  fireEvent.click(screen.getByRole('button', { name: '恢复此版本' }));
+  const next = { tabId: path, timestamp: 20, content: 'another revision' };
+  act(() => useHistoryStore.getState().setDiff(next));
+  await act(async () => finish({ ok: true }));
+  expect(useHistoryStore.getState().diff).toBe(next);
+});
+
+it('enables Apply for selected changed lines and saves only those lines', async () => {
   useEditorStore.getState().replaceTabContent(path, { content: 'a\nB\nC' });
   useHistoryStore.setState({ diff: { tabId: path, timestamp: 10, content: 'a\nb\nc' } });
   mock.changes = [{ originalStartLineNumber: 2, originalEndLineNumber: 3, modifiedStartLineNumber: 2, modifiedEndLineNumber: 3 }];
-  mock.selection = { startLineNumber: 2, startColumn: 1, endLineNumber: 2, endColumn: 2 };
+  mock.selection = { startLineNumber: 2, startColumn: 1, endLineNumber: 2, endColumn: 1 };
   render(<HistoryDiffView />);
-  await waitFor(() => expect(screen.getByRole('button', { name: '恢复选中差异' })).toBeEnabled());
-  expect(mock.createDiff.mock.calls[0][1]).toMatchObject({ readOnly: false, originalEditable: false, renderMarginRevertIcon: true });
-  fireEvent.click(screen.getByRole('button', { name: '恢复选中差异' }));
+  await waitFor(() => expect(mock.models).toHaveLength(2));
+  expect(mock.createDiff.mock.calls[0][1]).toMatchObject({ readOnly: false, originalEditable: false, renderMarginRevertIcon: false });
+  expect(screen.getByRole('button', { name: '应用修改' })).toBeDisabled();
+  act(() => {
+    mock.selection = { startLineNumber: 1, startColumn: 1, endLineNumber: 2, endColumn: 1 };
+    mock.diff.selectionUpdated();
+  });
+  expect(screen.getByRole('button', { name: '应用修改' })).toBeDisabled();
+  act(() => {
+    mock.selection = { startLineNumber: 2, startColumn: 1, endLineNumber: 2, endColumn: 2 };
+    mock.diff.selectionUpdated();
+  });
   expect(getBuffer(path)).toBe('a\nB\nC');
   expect(historyCapture).not.toHaveBeenCalled();
-  expect(mock.models[1].getValue()).toBe('a\nb\nC');
-  fireEvent.click(screen.getByRole('button', { name: '应用修改' }));
+  fireEvent.click(screen.getByRole('button', { name: '应用选中差异' }));
   await waitFor(() => expect(useHistoryStore.getState().diff).toBeNull());
   expect(getBuffer(path)).toBe('a\nb\nC');
-  expect(historyCapture).toHaveBeenLastCalledWith(path, 'a\nb\nC', { force: true });
+  await waitFor(() => expect(historyCapture).toHaveBeenLastCalledWith(path, 'a\nb\nC', { force: true }));
+});
+
+it('saves the edited draft when a changed line is also selected', async () => {
+  useEditorStore.getState().replaceTabContent(path, { content: 'a\nB\nC' });
+  useHistoryStore.getState().setDiff({ tabId: path, timestamp: 10, content: 'a\nb\nc' });
+  mock.changes = [{ originalStartLineNumber: 2, originalEndLineNumber: 3, modifiedStartLineNumber: 2, modifiedEndLineNumber: 3 }];
+  mock.selection = { startLineNumber: 2, startColumn: 1, endLineNumber: 2, endColumn: 2 };
+  render(<HistoryDiffView />);
+  await waitFor(() => expect(screen.getByRole('button', { name: '应用选中差异' })).toBeEnabled());
+  act(() => mock.models[1].setValue('a\nB\nEdited'));
+  fireEvent.click(screen.getByRole('button', { name: '应用修改' }));
+  await waitFor(() => expect(useHistoryStore.getState().diff).toBeNull());
+  expect(getBuffer(path)).toBe('a\nB\nEdited');
 });
 
 it('uses icon-only actions and the shared tooltip even while Apply is disabled', async () => {
   useHistoryStore.setState({ diff: { tabId: path, timestamp: 10, content: 'older' } });
+  mock.selection = { startLineNumber: 1, startColumn: 1, endLineNumber: 1, endColumn: 1 };
   const { container } = render(<HistoryDiffView />);
-  for (const name of ['关闭对比', '恢复选中差异', '应用修改', '恢复此版本']) {
+  for (const name of ['关闭对比', '应用修改', '恢复此版本']) {
     const button = screen.getByRole('button', { name });
     expect(button.textContent).toBe('');
     expect(button.querySelector('svg')).not.toBeNull();
@@ -209,6 +267,41 @@ it('uses icon-only actions and the shared tooltip even while Apply is disabled',
   expect(apply).toBeDisabled();
   fireEvent.mouseEnter(apply.parentElement);
   expect(await screen.findByRole('tooltip')).toHaveTextContent('应用修改');
+});
+
+it('renders Markdown blocks with folded context and applies only the reverted change', async () => {
+  const doc = 'C:/notes/rendered-diff.md';
+  const context = Array.from({ length: 15 }, (_, index) => `## Context ${index + 1}`);
+  const original = ['# Earlier heading', ...context, '- [ ] Original task'].join('\n');
+  const current = ['# Current heading', ...context, '- [x] Current task'].join('\n');
+  useEditorStore.getState().openFile({ path: doc, name: 'rendered-diff.md', content: current });
+  useHistoryStore.getState().setDiff({ tabId: doc, content: original, timestamp: 10 });
+  mock.changes = [1, 17].map((line) => ({
+    originalStartLineNumber: line, originalEndLineNumber: line,
+    modifiedStartLineNumber: line, modifiedEndLineNumber: line,
+  }));
+  const { container } = render(<><Timeline /><HistoryDiffView /></>);
+  const removed = container.querySelector('[data-change="removed"]');
+  expect(removed.closest('.history-markdown-diff__row').querySelector('[data-side="modified"]')).toHaveAttribute('data-change', 'added');
+  const fold = container.querySelector('.history-markdown-diff__fold');
+  expect(fold).toHaveAttribute('aria-expanded', 'false');
+  fireEvent.click(fold);
+  expect(container.querySelector('.history-markdown-diff__fold')).toBeNull();
+  const collapse = container.querySelectorAll('.history-markdown-diff__fold-action');
+  expect([...collapse].map((button) => button.dataset.side)).toEqual(['original', 'modified']);
+  fireEvent.click(collapse[0]);
+  expect(container.querySelectorAll('.history-markdown-diff__fold')).toHaveLength(2);
+  const revert = container.querySelector('.history-markdown-diff__revert');
+  expect(revert).toBeEnabled();
+  fireEvent.click(revert);
+  expect(getBuffer(doc)).toBe(current);
+  expect(container.querySelector('.history-diff__editor')).toBeNull();
+  fireEvent.click(screen.getByRole('button', { name: '应用修改' }));
+  const expected = ['# Earlier heading', ...context, '- [x] Current task'].join('\n');
+  await waitFor(() => expect(useHistoryStore.getState().diff).toBeNull());
+  expect(getBuffer(doc)).toBe(expected);
+  await waitFor(() => expect(historyList.mock.calls.filter(([path]) => path === doc)).toHaveLength(2));
+  clearBuffer(doc);
 });
 
 it('shows the historical content hash and time on the left, Now on the right, and follows the split', async () => {
@@ -238,20 +331,25 @@ it('does not create a diff before theme initialization finishes or after the vie
   mock.init.mockReturnValue(new Promise((resolve) => { ready = resolve; }));
   useHistoryStore.setState({ diff: { tabId: path, timestamp: 10, content: 'older' } });
   const view = render(<HistoryDiffView />);
+  await waitFor(() => expect(mock.init).toHaveBeenCalled());
   expect(mock.createDiff).not.toHaveBeenCalled();
   view.unmount();
   await act(async () => ready());
   expect(mock.createDiff).not.toHaveBeenCalled();
 });
 
-it('discards un-applied draft edits when the comparison is closed', async () => {
+it('undoes draft edits and closes without applying the remaining draft', async () => {
   useHistoryStore.setState({ diff: { tabId: path, timestamp: 10, content: 'older' } });
   render(<HistoryDiffView />);
   await waitFor(() => expect(mock.models).toHaveLength(2));
   act(() => mock.models[1].setValue('draft'));
+  act(() => mock.models[1].setValue('another draft'));
+  fireEvent.keyDown(document.body, { key: 'z', ctrlKey: true });
+  expect(mock.models[1].getValue()).toBe('draft');
   expect(screen.getByRole('button', { name: '应用修改' })).toBeEnabled();
   fireEvent.click(screen.getByRole('button', { name: '关闭对比' }));
   expect(getBuffer(path)).toBe('before');
+  expect(mock.saveTab).not.toHaveBeenCalled();
   expect(historyCapture).not.toHaveBeenCalled();
   expect(useHistoryStore.getState().diff).toBeNull();
 });
@@ -263,7 +361,6 @@ it.each(['before', 'a\nb\n', ''])('shows No changes for identical content %j, in
   expect(screen.getByRole('status')).toHaveTextContent('没有更改');
   expect(container.querySelector('.history-diff__editor')).not.toBeVisible();
   expect(screen.getByRole('group', { name: '现在' })).toBeVisible();
-  expect(screen.getByRole('button', { name: '恢复选中差异' })).toBeDisabled();
   expect(screen.getByRole('button', { name: '应用修改' })).toBeDisabled();
   await waitFor(() => expect(mock.models).toHaveLength(2));
 });
@@ -271,10 +368,10 @@ it.each(['before', 'a\nb\n', ''])('shows No changes for identical content %j, in
 it('keeps a fully restored draft applicable and keeps the editor alive to reveal new differences', async () => {
   useHistoryStore.setState({ diff: { tabId: path, timestamp: 10, content: 'older' } });
   const { container } = render(<HistoryDiffView />);
-  await waitFor(() => expect(screen.getByRole('button', { name: '恢复选中差异' })).toBeEnabled());
+  await waitFor(() => expect(mock.models).toHaveLength(2));
   expect(screen.queryByRole('status')).toBeNull();
   expect(container.querySelector('.history-diff__editor')).toBeVisible();
-  fireEvent.click(screen.getByRole('button', { name: '恢复选中差异' }));
+  act(() => mock.models[1].setValue('older'));
   expect(screen.getByRole('status')).toHaveTextContent('没有更改');
   expect(container.querySelector('.history-diff__editor')).not.toBeVisible();
   expect(mock.diff.dispose).not.toHaveBeenCalled();
@@ -286,5 +383,5 @@ it('keeps a fully restored draft applicable and keeps the editor alive to reveal
   fireEvent.click(screen.getByRole('button', { name: '应用修改' }));
   await waitFor(() => expect(useHistoryStore.getState().diff).toBeNull());
   expect(getBuffer(path)).toBe('older');
-  expect(historyCapture).toHaveBeenLastCalledWith(path, 'older', { force: true });
+  await waitFor(() => expect(historyCapture).toHaveBeenLastCalledWith(path, 'older', { force: true }));
 });
