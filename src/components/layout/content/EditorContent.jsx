@@ -22,6 +22,7 @@ import useHistoryStore from '@store/useHistoryStore';
 import useThemeStore from '@store/useThemeStore';
 import MonacoEditor from '@components/editor/LazyMonacoEditor';
 import FloatingToolbar from '@components/editor/FloatingToolbar';
+import { applyMarkdownToolbarAction } from '@components/editor/applyMarkdownToolbarAction';
 import FloatingRunButton from '@components/editor/FloatingRunButton';
 import { useFileManager } from '@hooks/useFileManager';
 import { useResponsiveLayout } from '@hooks/useResponsiveLayout';
@@ -356,18 +357,7 @@ function EditorContent() {
    * @param {object} action 工具栏发出的插入或包裹动作描述。
    */
   const handleToolbarInsert = useCallback((action) => {
-    const editor = monacoRef.current;
-    if (!editor) return;
-
-    if (typeof editor.handleToolbarAction === 'function' && editor.handleToolbarAction(action)) {
-      return;
-    }
-
-    if (action.type === 'insert') {
-      editor.insertText(action.text);
-    } else if (action.type === 'wrap') {
-      editor.wrapSelection(action.before, action.after);
-    }
+    applyMarkdownToolbarAction(monacoRef.current, action);
   }, []);
 
   // 分栏分隔条统一使用 Pointer Events，让桌面鼠标拖拽与移动端触摸拖拽

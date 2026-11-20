@@ -226,6 +226,25 @@ function TabBar({ onRequestCloseTab, onRequestCloseTabs }) {
     }
   }, [tabs, activeTabId]);
 
+  useLayoutEffect(() => {
+    const container = scrollRef.current;
+    if (!container || !activeTabId) return undefined;
+    let width = container.clientWidth;
+    const resize = new ResizeObserver(() => {
+      const next = container.clientWidth;
+      if (!next || width === next) return;
+      width = next;
+      const tab = positionsRef.current.get(activeTabId)?.element;
+      if (!tab?.isConnected || dragRef.current) return;
+      const left = tab.offsetLeft;
+      const right = left + tab.offsetWidth;
+      if (tab.offsetWidth >= width || left < container.scrollLeft) container.scrollLeft = left;
+      else if (right > container.scrollLeft + width) container.scrollLeft = right - width;
+    });
+    resize.observe(container);
+    return () => resize.disconnect();
+  }, [activeTabId]);
+
   const [renamingTabId, setRenamingTabId] = useState(null);
   const [renameValue, setRenameValue] = useState('');
   const renameInputRef = useRef(null);
