@@ -2,6 +2,7 @@ import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
 import { resolve } from 'path';
 import { readFileSync } from 'fs';
+import { fileURLToPath } from 'node:url';
 import { checkOfficialPluginResources } from './scripts/official-plugin-resources.mjs';
 
 // Monaco ships a vendored copy of marked.js with a //# sourceMappingURL=marked.umd.js.map
@@ -119,6 +120,8 @@ export default defineConfig(async ({ mode }) => ({
       '@hooks': resolve(__dirname, './src/hooks'),
       '@utils': resolve(__dirname, './src/utils'),
       '@store': resolve(__dirname, './src/store'),
+      // Markdown parsing runs inside workers too, where the browser export has no DOM.
+      'decode-named-character-reference': fileURLToPath(import.meta.resolve('decode-named-character-reference')),
     },
   },
 
