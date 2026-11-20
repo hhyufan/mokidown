@@ -400,44 +400,6 @@ const katexOptionsCtx = $ctx(
   'katexOptions',
 );
 
-const mathInlineSchema = $nodeSchema(mathInlineType, () => ({
-  group: 'inline',
-  inline: true,
-  atom: true,
-  isolating: true,
-  attrs: {
-    value: { default: '' },
-  },
-  parseDOM: [
-    {
-      tag: `span[data-type="${mathInlineType}"]`,
-      getAttrs: (dom) => ({ value: dom.dataset.value || dom.textContent || '' }),
-    },
-  ],
-  toDOM: (node) => [
-    'span',
-    {
-      'data-type': mathInlineType,
-      'data-value': node.attrs.value,
-      class: 'md-preview__math md-preview__math--inline',
-      contenteditable: 'false',
-    },
-    node.attrs.value,
-  ],
-  parseMarkdown: {
-    match: (node) => node.type === 'inlineMath',
-    runner: (state, node, type) => {
-      state.addNode(type, { value: node.value });
-    },
-  },
-  toMarkdown: {
-    match: (node) => node.type.name === mathInlineType,
-    runner: (state, node) => {
-      state.addNode('inlineMath', undefined, node.attrs.value);
-    },
-  },
-}));
-
 const mathBlockSchema = $nodeSchema(mathBlockType, () => ({
   group: 'block',
   marks: '',
@@ -475,37 +437,6 @@ const mathBlockSchema = $nodeSchema(mathBlockType, () => ({
     runner: (state, node) => {
       state.addNode('math', undefined, node.attrs.value);
     },
-  },
-}));
-
-const mathSourceInlineSchema = $nodeSchema(mathSourceInlineType, () => ({
-  group: 'inline',
-  content: 'text*',
-  inline: true,
-  isolating: true,
-  marks: '',
-  parseDOM: [
-    {
-      tag: `span[data-type="${mathSourceInlineType}"]`,
-    },
-  ],
-  toDOM: () => [
-    'span',
-    {
-      'data-type': mathSourceInlineType,
-      class: 'md-preview__math-source md-preview__math-source--inline',
-    },
-    0,
-  ],
-  toMarkdown: {
-    match: (node) => node.type.name === mathSourceInlineType,
-    runner: (state, node) => {
-      state.addNode('html', undefined, node.textContent);
-    },
-  },
-  parseMarkdown: {
-    match: () => false,
-    runner: () => {},
   },
 }));
 
@@ -742,21 +673,6 @@ function parseTableSource(source, schema, schemaTypes) {
 }
 
 /**
- * 行内数学公式输入规则。
- *
- * 将 `$...$` 输入即时折叠为受控数学原子节点。
- */
-const mathInlineInputRule = $inputRule(
-  (ctx) =>
-    new InputRule(/(?:\$)([^$]+)(?:\$)$/, (state, match, start, end) => {
-      const value = match[1] || '';
-      if (!value || state.doc.resolve(start).parent.type === mathSourceInlineSchema.type(ctx))
-        return null;
-      return state.tr.replaceWith(start, end, mathInlineSchema.type(ctx).create({ value }));
-    }),
-);
-
-/**
  * 块级数学公式输入规则。
  *
  * 当用户输入 `$$` 起始标记时，创建只含公式正文的可编辑块。
@@ -780,28 +696,6 @@ const mathBlockInputRule = $inputRule(
 );
 
 /**
- * 行内数学公式编辑态输入规则。
- *
- * 与块级的 `$$ ` 对称：不在行首时同样进入源码态，只是建立行内源码节点，
- * 让符号补全与预览气泡也能用在「新写一个行内公式」上。
- */
-const mathSourceInlineInputRule = $inputRule(
-  (ctx) =>
-    new InputRule(/\$\$\s$/, (state, _match, start, end) => {
-      const $start = state.doc.resolve(start);
-      // 整段只有一个 `$$ ` 时归块级规则管，它不成立才会走到这里。
-      if (!$start.parent.isTextblock || !$start.parentOffset) return null;
-      const sourceType = mathSourceInlineSchema.type(ctx);
-      if (!$start.parent.canReplaceWith($start.index(), $start.indexAfter(), sourceType))
-        return null;
-      // 触发用的收尾空格不进文档：输入规则接管后，这段事务吃掉整个 `$$ `。
-      const tr = state.tr.replaceWith(start, end, sourceType.create(null, state.schema.text('$')));
-      // 光标停在 `$` 之后，接着打字就是接着写公式正文。
-      return tr.setSelection(TextSelection.create(tr.doc, start + 2)).scrollIntoView();
-    }),
-);
-
-/**
  * 数学公式、图片和表格的“渲染态/源码态”切换插件。
  *
  * 负责在删除键命中原子渲染节点时回退到可编辑源码表示，并在源码恢复成合法
@@ -821,15 +715,10 @@ const mathValueEditPlugin = $prose((ctx) => {
     tableRow: tableRowSchema.type(ctx),
     tableCell: tableCellSchema.type(ctx),
   };
-  const isMathNode = (node) => node?.type === inlineType || node?.type === blockType;
-  const mathSourceTypes = {
-    inline: inlineType,
-    inlineSource: inlineSourceType,
-    blockSource: blockSourceType,
-  };
+  const isMathNode = (node) => node?.type === blockType;
   const isEditableRenderedNode = (node) => isMathNode(node) || node?.type === imageType;
   const isSourceNode = (node) =>
-    [inlineSourceType, blockSourceType, imageSourceType, tableSourceType].includes(node?.type);
+    [blockSourceType, imageSourceType, tableSourceType].includes(node?.type);
   const deleteOne = (source, fromEnd) => (fromEnd ? source.slice(0, -1) : source.slice(1));
 
   const removeEmptyMathBlock = (view, pos, node, fromEnd) => {
@@ -920,10 +809,9 @@ const mathValueEditPlugin = $prose((ctx) => {
   };
 
   const replaceMathWithSource = (view, pos, node, fromEnd) => {
-    const value = node.attrs.value || '';
-    if (node.type === blockType && !value) return removeEmptyMathBlock(view, pos, node, fromEnd);
+    if (!node.attrs.value) return removeEmptyMathBlock(view, pos, node, fromEnd);
     view.dispatch(
-      mathSourceTransaction(view, pos, node, mathSourceTypes, fromEnd, false).scrollIntoView(),
+      mathSourceTransaction(view, pos, node, blockSourceType, fromEnd, false).scrollIntoView(),
     );
     return true;
   };
@@ -1403,10 +1291,7 @@ function mathSourceTransaction(view, pos, node, sourceType, fromEnd, keepValue) 
     .replaceWith(
       pos,
       pos + node.nodeSize,
-      (isInline ? inlineSource : blockSource).create(
-        null,
-        source ? state.schema.text(source) : null,
-      ),
+      sourceType.create(null, nextValue ? state.schema.text(nextValue) : null),
     )
     .setMeta(mathSourceEditMeta, true);
   tr.setSelection(TextSelection.create(tr.doc, pos + 1 + nextValue.length));
@@ -1468,20 +1353,13 @@ function createNonEditablePreviewSelectionHandler(getEditor, readOnly) {
         const { nodes } = view.state.schema;
         // 双击公式是进入源码态的手势。PM 用 mousedown 序列判定双击，而这条隔离链
         // 正好把 mousedown 拦掉了，所以双击只能就地在这里换成源码节点。
-        if (
-          event.type === 'dblclick' &&
-          (node.type === nodes[mathBlockType] || node.type === nodes[mathInlineType])
-        ) {
+        if (event.type === 'dblclick' && node.type === nodes[mathBlockType]) {
           view.dispatch(
             mathSourceTransaction(
               view,
               pos,
               node,
-              {
-                inline: nodes[mathInlineType],
-                inlineSource: nodes[mathSourceInlineType],
-                blockSource: nodes[mathSourceBlockType],
-              },
+              nodes[mathSourceBlockType],
               false,
               true,
             ).scrollIntoView(),
@@ -1530,23 +1408,21 @@ function renderMilkdownHtml(root) {
  * @returns {void}
  */
 function renderMilkdownMath(root) {
-  root
-    .querySelectorAll(`div[data-type="${mathBlockType}"]`)
-    .forEach((node) => {
-      const value = node.dataset.value || node.textContent || '';
-      if (!value || node.dataset.renderedValue === value) return;
-      try {
-        katex.render(value, node, {
-          throwOnError: false,
-          strict: false,
-          displayMode: true,
-        });
-        node.dataset.renderedValue = value;
-      } catch {
-        node.textContent = value;
-        node.dataset.renderedValue = value;
-      }
-    });
+  root.querySelectorAll(`div[data-type="${mathBlockType}"]`).forEach((node) => {
+    const value = node.dataset.value || node.textContent || '';
+    if (!value || node.dataset.renderedValue === value) return;
+    try {
+      katex.render(value, node, {
+        throwOnError: false,
+        strict: false,
+        displayMode: true,
+      });
+      node.dataset.renderedValue = value;
+    } catch {
+      node.textContent = value;
+      node.dataset.renderedValue = value;
+    }
+  });
 }
 
 /**

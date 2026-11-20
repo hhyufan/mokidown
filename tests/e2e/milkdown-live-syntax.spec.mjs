@@ -15,6 +15,18 @@ function visibleMarkers(editor) {
     .evaluateAll((nodes) => nodes.map((node) => node.dataset.mokiMarker));
 }
 
+// 双击公式正文是进编辑态的手势；气泡到位才算这一下落准了。
+// 浏览器那份原生选词比 `dblclick` 事件更晚写进 DOM，插件要再等一拍才把光标收回正文，
+// 所以还得等两个虚拟定界符出现——光标落成 collapsed，才轮到下一步按键。
+async function editFormula(page, editor, index = 0) {
+  const formula = editor.locator('[data-moki-math-mark]').nth(index);
+  const box = await formula.boundingBox();
+  await page.mouse.click(box.x + box.width / 2, box.y + box.height / 2, { clickCount: 2 });
+  await expect(editor.locator('.moki-math-preview--inline')).toHaveCount(1);
+  await expect.poll(() => visibleMarkers(editor)).toEqual(['$', '$']);
+  return formula;
+}
+
 test('the writing caret uses the active theme foreground in light and dark modes', async ({
   page,
 }) => {
@@ -162,19 +174,21 @@ test('inline formula shows a preview bubble only while its source is revealed', 
   // 上面留一段正文：贴着编辑区上沿时气泡会翻到下方，这里要验的是默认摆法。
   const editor = await openEditor(page, '上面一行\n\n$x^2$ Tail');
   const bubble = editor.locator('.moki-math-preview--inline');
-  const formula = editor.locator('.md-preview__math--inline');
-  await page.evaluate(() => window.trial.selectTextblock(1));
-  await expect(formula).toHaveAttribute('data-moki-math-source', '$x^2$');
-  await expect(formula.locator('.katex')).toBeHidden();
+  const formula = editor.locator('[data-moki-math-mark]');
+  const cover = editor.locator('.moki-math-preview--cover .katex');
+  await expect(cover).toBeVisible();
+  await expect(bubble).toHaveCount(0);
+  // 双击才算进编辑态；气泡浮在正文上方，覆盖层同时收走，同一处不会排两份字。
+  await editFormula(page, editor);
+  await expect(editor.locator('.moki-math-source')).toHaveText('x^2');
   await expect(bubble.locator('.katex')).toBeVisible();
+  await expect(cover).toHaveCount(0);
   const bubbleBox = await bubble.boundingBox();
   const formulaBox = await formula.boundingBox();
-  // 预览气泡浮在公式上方。
   expect(bubbleBox.y + bubbleBox.height).toBeLessThan(formulaBox.y);
   await page.keyboard.press('End');
-  await expect(formula).not.toHaveAttribute('data-moki-math-source');
   await expect(bubble).toHaveCount(0);
-  await expect(formula.locator('.katex')).toBeVisible();
+  await expect(cover).toBeVisible();
 });
 
 test('double-clicking a rendered formula opens its source untouched', async ({ page }) => {
@@ -184,10 +198,8 @@ test('double-clicking a rendered formula opens its source untouched', async ({ p
   await expect(source).toBeVisible();
   expect(await source.textContent()).toBe('\\alpha \\beta');
   expect(await page.evaluate(() => window.trial.state().parent)).toBe('math_source_block');
-  await editor.locator('.md-preview__math--inline').dblclick({ position: { x: 2, y: 5 } });
-  const inline = editor.locator('.md-preview__math-source--inline');
-  await expect(inline).toBeVisible();
-  expect(await inline.textContent()).toBe('$x^2$');
+  await editFormula(page, editor);
+  await expect(editor.locator('.moki-math-source')).toHaveText('x^2');
   // 双击只是揭开源码，一个字符都没少。
   expect(await page.evaluate(() => window.trial.markdown())).toContain('正文 $x^2$ 结尾');
   expect(await page.evaluate(() => window.trial.markdown())).toContain('$$\n\\alpha \\beta\n$$');
@@ -229,28 +241,24 @@ test('the inline bubble is centred on the formula it previews', async ({ page })
       'rgb(229, 229, 231)',
     );
   };
-  // 正在输入的源码节点：先塞够长的正文让它换行，公式落在第二行行尾。
+  // 草稿：`$$` 还没闭合，气泡挂在 widget 自带的零宽锚点上，锚点摆在正文正中。
   const typing = await openEditor(page, '字'.repeat(120));
   await typing.click();
   await page.keyboard.press('Control+End');
   await page.keyboard.type(' $$ \\alpha');
-  await check(typing, '.md-preview__math-source--inline');
-  // 光标贴住渲染态公式时的源码显示，是另一个元素，锚点也另一个。
+  await check(typing, '.moki-math-draft');
+  // 双击进编辑态：这一次气泡挂在 math mark 自己的盒子上，走的是另一条定位路径。
   const revealed = await openEditor(page, `Above\n\n$x^2$ 尾巴`);
-  await page.evaluate(() => window.trial.selectTextblock(1));
-  await check(revealed, '.md-preview__math--inline');
+  await editFormula(page, revealed);
+  await check(revealed, '[data-moki-math-mark]');
 });
 
 test('double-clicking into the source keeps the bubble on its own formula', async ({ page }) => {
-  // 双击前气泡指的是渲染态元素的 revealed 锚点，换到源码态后那个锚点已经不存在了。
-  // widget 的 DOM 只在 key 变化时才重建，所以 key 必须带上锚点名，否则行内样式还是
-  // 旧的，anchor() 整体失效，气泡退回兜底摆法贴在公式起点的左下方。
-  const editor = await openEditor(page, '正文段落\n\n文字 $x^2$ 结尾');
-  await editor.locator('.md-preview__math--inline').dblclick({ position: { x: 2, y: 5 } });
-  const slot = editor.locator('.md-preview__math-source--inline');
-  await expect(slot).toBeVisible();
+  // 两条正文一模一样的公式：点开第二条，气泡得跟着走，不能留在第一条上。
+  const editor = await openEditor(page, '正文段落\n\n$x^2$ 中间 $x^2$ 结尾');
+  const second = await editFormula(page, editor, 1);
   const bubble = await editor.locator('.moki-math-preview--inline').boundingBox();
-  const formula = await slot.boundingBox();
+  const formula = await second.boundingBox();
   expect(Math.abs(bubble.x + bubble.width / 2 - (formula.x + formula.width / 2))).toBeLessThan(2);
   expect(bubble.y + bubble.height).toBeLessThan(formula.y);
 });
@@ -264,7 +272,7 @@ test('the inline bubble moves out of the way when it does not fit', async ({ pag
   await expect(bubble).toBeVisible();
   expect(await bubble.evaluate((node) => node.dataset.mokiMathPreviewSide)).toBe('below');
   const flipped = await bubble.boundingBox();
-  const slot = await editor.locator('.md-preview__math-source--inline').boundingBox();
+  const slot = await editor.locator('.moki-math-draft').boundingBox();
   expect(flipped.y).toBeGreaterThanOrEqual(slot.y + slot.height);
   const tail = await bubble.evaluate((node) => {
     const style = getComputedStyle(node, '::after');
@@ -301,7 +309,7 @@ test('the inline bubble moves out of the way when it does not fit', async ({ pag
   await expect(edgeBubble).toBeVisible();
   const shifted = await edgeBubble.boundingBox();
   const pane = await page.locator('.md-preview--milkdown').boundingBox();
-  const wide = await edge.locator('.md-preview__math-source--inline').boundingBox();
+  const wide = await edge.locator('.moki-math-draft').boundingBox();
   expect(shifted.x + shifted.width).toBeLessThanOrEqual(pane.x + pane.width + 0.5);
   expect(shifted.x).toBeGreaterThan(pane.x);
   // 气泡整块挪了位，尾巴还得正对着公式：inset 从边框内侧量起，所以补 1px。
@@ -715,25 +723,29 @@ test('a $$ that is not a delimiter keeps the symbol table closed', async ({ page
 test('typing the closing $ folds the formula and hands the sentence back', async ({ page }) => {
   const editor = await openEditor(page);
   await editor.click();
-  await page.keyboard.type('正文 $$ \\alpha$ 尾巴');
-  await expect(editor.locator('.md-preview__math--inline')).toHaveAttribute(
-    'data-value',
-    '\\alpha',
-  );
-  // 收尾 `$` 之后再打字写的是正文，不能被吸进公式里。紧跟行内原子的空格会被浏览器
+  // 草稿是 `$$` 开的，收尾也得凑齐第二个 `$` 才折：只打一个 `$` 时正文还是字面文本。
+  await page.keyboard.type('正文 $$ \\alpha$$ 尾巴');
+  // 收尾那一下把正文折成 math mark：草稿气泡收走，覆盖层接管排版。
+  await expect(editor.locator('[data-moki-math-mark]')).toHaveCount(1);
+  await expect(editor.locator('.moki-math-preview--inline')).toHaveCount(0);
+  await expect(editor.locator('.moki-math-preview--cover .katex')).toHaveCount(1);
+  // 收尾 `$` 之后再打字写的是正文，不能被吸进公式里。紧跟行内公式的空格会被浏览器
   // 存成不换行空格，与直接在正文里写 `$x^2$` 完全一致，所以这里只按空白匹配。
   expect(await page.evaluate(() => window.trial.markdown())).toMatch(/正文 \$\\alpha\$\s尾巴/);
 });
 
 test('revealing an existing formula keeps typing inside its body', async ({ page }) => {
   const editor = await openEditor(page, '$x^2$');
-  await editor.locator('.md-preview__math--inline').dblclick({ position: { x: 2, y: 5 } });
-  const source = editor.locator('.md-preview__math-source--inline');
-  await expect(source).toHaveText('$x^2$');
-  // 揭开时停在收尾 `$` 之前，所以这条打字不该触发"写完"的判断。
+  await editFormula(page, editor);
+  const source = editor.locator('.moki-math-source');
+  await expect(source).toHaveText('x^2');
+  // 走到正文尾巴接着打：mark 是 inclusive:false，这一笔本该落到公式外面，
+  // 编辑档把它按回正文里，也就当场触发不了"写完"的折叠判断。
+  await pressTo(page, 'End', 4);
   await page.keyboard.type('\\beta');
-  await expect(source).toHaveText('$x^2\\beta$');
-  expect(await page.evaluate(() => window.trial.state().parent)).toBe('math_source_inline');
+  await expect(source).toHaveText('x^2\\beta');
+  expect(await page.evaluate(() => window.trial.markdown())).toBe('$x^2\\beta$\n');
+  expect(await page.evaluate(() => window.trial.state().parent)).toBe('paragraph');
 });
 
 test('an abandoned $$ stays visible source instead of an empty formula', async ({ page }) => {
@@ -741,12 +753,12 @@ test('an abandoned $$ stays visible source instead of an empty formula', async (
   await page.locator('p').first().click();
   await page.keyboard.press('Home');
   await page.keyboard.type('z $$ $');
-  const source = editor.locator('.md-preview__math-source--inline');
-  await expect(source).toHaveText('$$');
-  // 空正文不是公式：折成空原子会留下看不见、又吃掉分隔符的节点。
+  // 空正文不是公式：折过去会留下看不见、又吃掉分隔符的 mark，所以它一直是普通文字。
+  await expect(editor.locator('[data-moki-math-mark]')).toHaveCount(0);
+  await expect(editor.locator('.moki-math-preview--inline')).toHaveCount(0);
   await page.keyboard.press('Home');
-  await expect(source).toHaveText('$$');
-  await expect(editor.locator('.md-preview__math--inline')).toHaveCount(0);
+  await expect(editor.locator('[data-moki-math-mark]')).toHaveCount(0);
+  expect(await page.evaluate(() => window.trial.markdown())).toContain('z $$ $tail');
 });
 
 test('horizontal arrows enter each visible marker character before crossing a line boundary', async ({
@@ -879,13 +891,15 @@ test('links and formulas render immediately after typing and reveal their syntax
   await page.keyboard.press('End');
   await page.keyboard.press('Enter');
   await page.keyboard.type('$x^2$');
-  const formula = editor.locator('.md-preview__math--inline');
-  await expect(formula.locator('.katex')).toBeVisible();
+  await expect(editor.locator('[data-moki-math-mark]')).toHaveCount(1);
+  await expect(editor.locator('.moki-math-preview--cover .katex')).toBeVisible();
+  // 公式与链接在这一点上故意不同：mark 是 inclusive:false，光标贴在左边界读起来是
+  // 「在旁边打字」，所以定界符不掀开——进编辑态只认双击与贴边退格。
   await page.evaluate(() => window.trial.selectTextblock(1));
-  await expect(formula).toHaveAttribute('data-moki-math-source', '$x^2$');
-  await expect(formula.locator('.katex')).toBeHidden();
+  await expect(editor.locator('.moki-math-source')).toHaveCount(0);
+  await expect(editor.locator('.moki-math-preview--cover .katex')).toBeVisible();
   await page.keyboard.press('End');
-  await expect(formula.locator('.katex')).toBeVisible();
+  await expect(editor.locator('.moki-math-preview--cover .katex')).toBeVisible();
   await page.keyboard.press('Enter');
   await page.keyboard.type('[***styled**](https://styled.example) plain');
   await expect(editor.locator('a[href="https://styled.example"][href]')).toHaveText('styled');

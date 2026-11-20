@@ -62,11 +62,13 @@ test('native table and HTML node controls use Antd tooltips for hover and keyboa
 test('code language controls and custom math rendering expose tooltips without changing Markdown', async ({
   page,
 }) => {
-  await open(page, '```text\nhello\n```\n\n$x+y$\n');
+  await open(page, '```text\nhello\n```\n\n$x+y$\n\n$$\na+b\n$$\n');
   await page.locator('.milkdown-code-block').hover();
   await page.locator('.language-button').hover();
   await expect(page.getByRole('tooltip')).toHaveText('Choose code language');
-  await page.locator('[data-type="math_inline"] .katex-html').hover();
+  await expect(page.locator('[data-moki-math-mark] .katex-html')).toBeVisible();
+  // 提示挂在块级公式上：行内公式是一段挂了 mark 的正文，退格吃掉的是它旁边的字。
+  await page.locator('[data-type="math_block"]').hover();
   await expect(page.getByRole('tooltip')).toContainText('Backspace');
   expect(await page.evaluate(() => window.trial.markdown())).toContain('$x+y$');
 });
