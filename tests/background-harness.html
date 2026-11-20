@@ -87,6 +87,17 @@
         setOpacity(opacity) { setBackground((value) => ({ ...value, opacity })); },
         showToolbar() { editorStore.setState({ toolbarVisible: true }); },
         showContextMenu() { showContextMenu({ x: 390, y: 130 }); },
+        showSuggestions() {
+          monaco.languages.registerCompletionItemProvider('javascript', {
+            provideCompletionItems: () => ({ suggestions: [{
+              label: 'surfaceSuggestion', kind: monaco.languages.CompletionItemKind.Variable,
+              insertText: 'surfaceSuggestion', range: new monaco.Range(1, 1, 1, 1),
+            }] }),
+          });
+          editor.setPosition({ lineNumber: 1, column: 1 });
+          editor.focus();
+          editor.trigger('test', 'editor.action.triggerSuggest', null);
+        },
         editor,
       };
     </script>
