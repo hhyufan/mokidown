@@ -1,4 +1,4 @@
-import { useLayoutEffect } from 'react';
+import { useLayoutEffect, useRef } from 'react';
 
 const anchorSelector = '[data-history-anchor]';
 
@@ -7,7 +7,8 @@ function setPixels(element, property, value) {
     element.style[property] = `${value}px`;
 }
 
-export function useMarkdownComparisonAlignment(ref) {
+export function useMarkdownComparisonAlignment(ref, visibleRows) {
+  const alignRows = useRef(null);
   useLayoutEffect(() => {
     const root = ref.current;
     if (!root) return undefined;
@@ -47,7 +48,7 @@ export function useMarkdownComparisonAlignment(ref) {
             rows.some((row, i) => row.dataset.historyRow !== pane[i].dataset.historyAnchor),
         )
       ) {
-        for (const row of rows) delete row.dataset.positioned;
+        // The editor can briefly be ahead of the worker. Retain the last measured rows.
         return;
       }
 
@@ -106,11 +107,21 @@ export function useMarkdownComparisonAlignment(ref) {
       schedule();
     });
     mutations.observe(layout, { childList: true, subtree: true });
+    alignRows.current = () => {
+      refresh = true;
+      if (frame) cancelAnimationFrame(frame);
+      align();
+    };
     schedule();
     return () => {
       mutations.disconnect();
       resize.disconnect();
+      alignRows.current = null;
       if (frame) cancelAnimationFrame(frame);
     };
   }, [ref]);
+
+  useLayoutEffect(() => {
+    alignRows.current?.();
+  }, [visibleRows]);
 }
