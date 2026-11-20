@@ -12,6 +12,7 @@ import { activeMarkdownPairs, emptyAsteriskPair, emptyMarkdownMarkPair, markdown
 import { CODE_FENCE_LANGUAGE_EVENT, completedFenceLanguage, readMarkdownFence } from '@utils/markdownCodeFence';
 import { mathDraftRange, mathMarkName } from './milkdownMathMark';
 import { characterEscapeMarkName, syntaxScanText } from './milkdownRawText';
+import { attachWritingCaret } from './milkdownWritingCaret';
 
 const sourceTypeName = 'moki_inline_syntax_source';
 const liveSyntaxKey = new PluginKey('moki-live-syntax');
@@ -907,11 +908,19 @@ export const milkdownLiveSyntax = $prose((ctx) => new Plugin({
   },
   view(editorView) {
     let previous = '';
-    const resize = typeof ResizeObserver === 'function' ? new ResizeObserver(() => alignVirtualCaret(editorView)) : null;
+    const writingCaret = attachWritingCaret(editorView);
+    const resize =
+      typeof ResizeObserver === 'function'
+        ? new ResizeObserver(() => {
+            alignVirtualCaret(editorView);
+            writingCaret?.schedule();
+          })
+        : null;
     resize?.observe(editorView.dom);
     return {
       update(view) {
         alignVirtualCaret(view);
+        writingCaret?.schedule();
         const pending = pendingCodeFence(view);
         const key = pending && `${pending.$from.pos}:${pending.$from.parent.textContent}`;
         if (key === previous) return;
@@ -939,6 +948,7 @@ export const milkdownLiveSyntax = $prose((ctx) => new Plugin({
       },
       destroy() {
         resize?.disconnect();
+        writingCaret?.destroy();
         inlinePointerCleanup.get(editorView)?.();
       },
     };

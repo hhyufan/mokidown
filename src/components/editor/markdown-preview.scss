@@ -794,16 +794,6 @@
       .moki-markdown-heading-source::before {
         content: none;
       }
-      .moki-markdown-math-source {
-        > * {
-          display: none;
-        }
-        &::before {
-          content: attr(data-moki-math-source);
-          font-family: var(--font-editor);
-          color: var(--text-sec);
-        }
-      }
     }
   }
 
@@ -1079,13 +1069,47 @@
     }
   }
 
-  // 行内气泡的定位参照：零尺寸的行内锚点站在公式自己的槽位上。
-  // 它是空的内联元素，既不占宽度也不产生断行机会，行高与折行都不受影响。
-  .moki-math-preview-anchor { position: relative; }
+  // 行内公式是一段挂了 math mark 的正文。它是覆盖层与气泡唯一的定位参照，
+  // 所以必须自己站住一个 position:relative 的盒子；两种状态共用同一份字号，
+  // 翻态时只有颜色变，宽度不跳。
+  // 着色留给下面两条 decoration 类：PM 把装饰 span 放在 mark span 里面，与正文同级，
+  // 这里写 color 会和它们抢同一段文字。
+  [data-moki-math-mark] {
+    position: relative;
+    font-family: var(--font-editor);
+  }
 
-  // 中线对齐的两个锚点：正在输入的源码节点，和光标贴住时改显源码的渲染节点。
-  .md-preview__math-source--inline { anchor-name: --moki-math-source; }
-  .moki-markdown-math-source { anchor-name: --moki-math-revealed; }
+  // 编辑态：正文露出来，配色沿用其它格式的源码态。
+  .moki-math-source {
+    color: var(--accent);
+    background: var(--hover);
+    border-radius: 4px;
+  }
+
+  // 渲染态：正文还在（删掉它就没有可编辑的载体，光标也落不回来），只是染透明，
+  // 由覆盖层把 KaTeX 排上去。
+  .moki-math-rendered {
+    color: transparent;
+  }
+
+  // 草稿：`$$` 还没闭合，正文是一段普通文字，除了给气泡站住定位参照，什么都不改。
+  .moki-math-draft {
+    position: relative;
+  }
+
+  // 覆盖层压在正文槽位上：宽度取满 mark span，居中，垂直对齐正文中线。
+  // color 是防身的：KaTeX 大量依赖 currentColor，一旦哪天装饰 span 反过来套在
+  // mark 外面，继承来的透明会让整条公式隐形——那是最难发现的一种坏法。
+  .moki-math-preview--cover {
+    position: absolute;
+    inset-inline-start: 0;
+    inset-block-start: 50%;
+    width: 100%;
+    transform: translateY(-50%);
+    text-align: center;
+    white-space: nowrap;
+    color: var(--text);
+  }
 
   // 块级公式独占一行、居中显示，预览不做成对话框：边框、底色和投影在收尾那一刻
   // 都得消失，字会跟着"弹"一下。让它和收尾后的公式共用同一套排版，退出编辑态
