@@ -114,7 +114,9 @@
     height: 100%;
   }
 
-  .ant-image-preview-operations-wrapper { pointer-events: none; }
+  .ant-image-preview-operations-wrapper {
+    pointer-events: none;
+  }
 
   .ant-image-preview-close,
   .ant-image-preview-footer {

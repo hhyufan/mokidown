@@ -302,11 +302,7 @@ function Footer() {
         {showModeToggle && (
           <>
             <span className="footer__sep" />
-            <Tooltip
-              title={modeLabel}
-              placement="top"
-              mouseEnterDelay={0.3}
-            >
+            <Tooltip title={modeLabel} placement="top" mouseEnterDelay={0.3}>
               <button
                 className="footer__mode-toggle"
                 aria-label={modeLabel}

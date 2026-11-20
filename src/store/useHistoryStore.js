@@ -1,9 +1,12 @@
 import { create } from 'zustand';
 
 export function isMarkdownComparison(tab, diff) {
-  return Boolean(tab && diff?.tabId === tab.id && (
-    /^(?:md|markdown|mdx)$/i.test(tab.ext || '') || /\.(?:md|markdown|mdx)$/i.test(tab.name || tab.path || '')
-  ));
+  return Boolean(
+    tab &&
+    diff?.tabId === tab.id &&
+    (/^(?:md|markdown|mdx)$/i.test(tab.ext || '') ||
+      /\.(?:md|markdown|mdx)$/i.test(tab.name || tab.path || '')),
+  );
 }
 
 /**
@@ -18,10 +21,10 @@ const useHistoryStore = create((set) => ({
   historyWrite: null,
   viewMode: 'preview',
   setDiff: (diff) => set({ diff, viewMode: 'preview' }),
-  toggleViewMode: () => set((state) => ({ viewMode: state.viewMode === 'preview' ? 'edit' : 'preview' })),
-  clearDiff: (comparison) => set((state) =>
-    comparison && state.diff !== comparison ? state : { diff: null },
-  ),
+  toggleViewMode: () =>
+    set((state) => ({ viewMode: state.viewMode === 'preview' ? 'edit' : 'preview' })),
+  clearDiff: (comparison) =>
+    set((state) => (comparison && state.diff !== comparison ? state : { diff: null })),
   notifyHistoryWrite: (path) => set({ historyWrite: { path } }),
 }));
 
