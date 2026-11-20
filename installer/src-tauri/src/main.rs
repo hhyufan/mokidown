@@ -17,6 +17,111 @@ fn emit(app: &tauri::AppHandle, stage: &str, percent: u8) {
 fn default_directory() -> Option<PathBuf> {
     std::env::var_os("LOCALAPPDATA").map(|base| PathBuf::from(base).join("mokidown"))
 }
+fn stage_payload() -> Result<tempfile::TempDir, String> {
+    if PAYLOAD.is_empty() {
+        return Err("当前开发构建未包含安装文件，请运行 npm run installer:bundle".into());
+    }
+    let stage = tempfile::Builder::new()
+        .prefix("mokidown-setup-")
+        .tempdir()
+        .or_else(|error| {
+            let root = std::env::var_os("LOCALAPPDATA").ok_or(error)?;
+            let cache = PathBuf::from(root)
+                .join("com.mokidown.installer")
+                .join("staging");
+            std::fs::create_dir_all(&cache)?;
+            tempfile::Builder::new()
+                .prefix("mokidown-setup-")
+                .tempdir_in(cache)
+        })
+        .map_err(|error| format!("无法创建安装缓存：{error}"))?;
+    std::fs::write(stage.path().join("setup.exe"), PAYLOAD)
+        .map_err(|error| format!("无法解包安装文件：{error}"))?;
+    Ok(stage)
+}
+
+#[cfg(windows)]
+fn webview2_available() -> bool {
+    use winreg::{
+        enums::{HKEY_CURRENT_USER, HKEY_LOCAL_MACHINE, KEY_READ, KEY_WOW64_32KEY},
+        RegKey,
+    };
+    let key = r"Software\Microsoft\EdgeUpdate\Clients\{F3017226-FE2A-4295-8BDF-00C3A9A7E4C5}";
+    [
+        (HKEY_CURRENT_USER, KEY_READ),
+        (HKEY_LOCAL_MACHINE, KEY_READ | KEY_WOW64_32KEY),
+    ]
+    .into_iter()
+    .any(|(hive, flags)| {
+        RegKey::predef(hive)
+            .open_subkey_with_flags(key, flags)
+            .and_then(|key| key.get_value::<String, _>("pv"))
+            .is_ok_and(|version| {
+                version
+                    .split('.')
+                    .any(|part| part.parse::<u32>().is_ok_and(|part| part != 0))
+            })
+    })
+}
+
+#[cfg(windows)]
+fn run_embedded_installer() -> Result<(), String> {
+    use std::os::windows::process::CommandExt;
+    let stage = stage_payload()?;
+    let mut installer = Command::new(stage.path().join("setup.exe"));
+    let update_target = if is_update_launch() {
+        let folder = updater_directory()
+            .or_else(default_directory)
+            .ok_or("无法读取当前用户的安装目录")?;
+        let folder = validate_directory(&folder.to_string_lossy())?;
+        installer
+            .args(["/S", "/UPDATE"])
+            .raw_arg(format!("/D={}", folder.display()));
+        Some(folder.join("mokidown.exe"))
+    } else {
+        None
+    };
+    let status = installer
+        .status()
+        .map_err(|error| format!("无法启动安装程序：{error}"))?;
+    if !status.success() {
+        return Err(format!(
+            "安装程序已退出（代码 {}）。",
+            status.code().unwrap_or(-1)
+        ));
+    }
+    if let Some(app) = update_target {
+        Command::new(app)
+            .arg("--moki-after-update")
+            .spawn()
+            .map_err(|error| format!("无法启动 MokiDown：{error}"))?;
+    }
+    Ok(())
+}
+
+fn show_startup_error(error: &str) {
+    eprintln!("MokiDown Setup: {error}");
+    #[cfg(windows)]
+    {
+        #[link(name = "user32")]
+        extern "system" {
+            fn MessageBoxW(
+                hwnd: *mut std::ffi::c_void,
+                message: *const u16,
+                title: *const u16,
+                flags: u32,
+            ) -> i32;
+        }
+        let title: Vec<_> = "MokiDown 安装".encode_utf16().chain([0]).collect();
+        let message: Vec<_> = format!("无法启动安装程序。\n\n{error}")
+            .encode_utf16()
+            .chain([0])
+            .collect();
+        unsafe {
+            MessageBoxW(std::ptr::null_mut(), message.as_ptr(), title.as_ptr(), 0x10);
+        }
+    }
+}
 /**
  * 是不是被更新器拉起来的。
  *
@@ -113,12 +218,10 @@ async fn install_application(app: tauri::AppHandle, state: tauri::State<'_,Insta
     let state=state.inner().clone();
     let running=state.running.clone();
     let result=tauri::async_runtime::spawn_blocking(move || {
-        if PAYLOAD.is_empty() { return Err("当前开发构建未包含安装文件，请运行 npm run installer:bundle".into()); }
         emit(&app,"preparing",3);
-        let temp=tempfile::Builder::new().prefix("mokidown-setup-").tempdir().map_err(|e|e.to_string())?;
+        let temp = stage_payload()?;
         let setup=temp.path().join("setup.exe");
         let progress=temp.path().join("progress.txt");
-        std::fs::write(&setup,PAYLOAD).map_err(|e|e.to_string())?;
         let mut command=Command::new(&setup);
         command.arg("/S").arg(format!("/MOKI_PROGRESS={}",progress.display()));
         // 转发 /UPDATE：让 NSIS 走原地升级，不卸载、保留快捷方式与安装位置。
@@ -159,14 +262,41 @@ fn launch_application(state:tauri::State<'_,InstallState>, after_update:Option<b
     command.spawn().map_err(|e|e.to_string())?;Ok(())
 }
 fn main() {
-    tauri::Builder::default()
+    #[cfg(windows)]
+    if !webview2_available() {
+        if let Err(error) = run_embedded_installer() {
+            show_startup_error(&error);
+        }
+        return;
+    }
+    let result = tauri::Builder::default()
         .manage(InstallState::default())
         .plugin(tauri_plugin_dialog::init())
-        .invoke_handler(tauri::generate_handler![startup_info,install_application,launch_application])
-        .on_window_event(|window,event| {
-            if let tauri::WindowEvent::CloseRequested{api,..}=event {
-                if window.state::<InstallState>().running.load(Ordering::SeqCst) { api.prevent_close(); }
+        .invoke_handler(tauri::generate_handler![
+            startup_info,
+            install_application,
+            launch_application
+        ])
+        .on_window_event(|window, event| {
+            if let tauri::WindowEvent::CloseRequested { api, .. } = event {
+                if window
+                    .state::<InstallState>()
+                    .running
+                    .load(Ordering::SeqCst)
+                {
+                    api.prevent_close();
+                }
             }
         })
-        .run(tauri::generate_context!()).expect("Could not start MokiDown installer");
+        .run(tauri::generate_context!());
+    if let Err(error) = result {
+        #[cfg(windows)]
+        if !PAYLOAD.is_empty() {
+            if let Err(fallback_error) = run_embedded_installer() {
+                show_startup_error(&format!("{error}\n\n{fallback_error}"));
+            }
+            return;
+        }
+        show_startup_error(&error.to_string());
+    }
 }

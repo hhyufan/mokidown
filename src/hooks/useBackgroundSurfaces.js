@@ -5,8 +5,29 @@ import { useLayoutEffect } from 'react';
 // 任务列表面板同理：它与面包屑下拉保持一致。条目上的关闭按钮在标题行里、
 // 背景透明，不压线，所以不需要对位底图。
 // 两套 toast 也走同一套重绘壁纸（叠加一层淡白），因此同样需要这里的坐标。
-const POPUPS = '.knowledge-tree__header, .footer__dropdown, .sort-dropdown, .search-dropdown__panel,  .search-dropdown__scope-menu, .titlebar__search .ant-select-dropdown, .moki-tree-jump-popup .ant-popover-inner, .ant-select-dropdown, .ant-dropdown-menu, .ant-picker-panel-container, .ft, .ft__heading-panel, .ft__table-panel, .ant-modal-content, .editor-content__run, .monaco-context-menu, .moki-tree__chevron, .task-panel, .milkdown-media-tools, .milkdown-media-preview-editor, .notif, .ant-tooltip-inner, .md-preview__task-checkbox';
-const POSITIONERS = '.ant-dropdown, .ant-picker-dropdown, .moki-tree-jump-popup, .ant-tooltip';
+export const MONACO_POPUPS = [
+  '.monaco-editor .find-widget',
+  '.monaco-editor .findOptionsWidget',
+  '.suggest-widget',
+  '.suggest-details-container .suggest-details',
+  '.parameter-hints-widget',
+  '.monaco-hover',
+  '.monaco-editor .rename-box',
+  '.peekview-widget',
+  '.monaco-editor .zone-widget .marker-widget',
+  '.monaco-editor .post-edit-widget',
+  '.monaco-editor .inline-completions-hints-widget',
+  '.monaco-editor .editor-widget .message',
+  '.standalone-colorpicker-container',
+  '.inspect-tokens-widget',
+  '.monaco-menu-container',
+  '.action-widget',
+  '.quick-input-widget',
+].join(', ');
+const MONACO_SURFACES = `${MONACO_POPUPS}, .monaco-editor .diff-hidden-lines > .center`;
+const POPUPS = `.knowledge-tree__header, .footer__dropdown, .sort-dropdown, .search-dropdown__panel, .search-dropdown__scope-menu, .titlebar__search .ant-select-dropdown, .moki-tree-jump-popup .ant-popover-inner, .ant-select-dropdown, .ant-dropdown-menu, .ant-picker-panel-container, .ft, .ft__heading-panel, .ft__table-panel, .ant-modal-content, .editor-content__run, .monaco-context-menu, .moki-tree__chevron, .task-panel, .milkdown-media-tools, .milkdown-media-preview-editor, .notif, .ant-tooltip-inner, .md-preview__task-checkbox, .preview-wallpaper, ${MONACO_SURFACES}`;
+const POSITIONERS =
+  '.ant-dropdown, .ant-picker-dropdown, .moki-tree-jump-popup, .ant-tooltip, .diff-hidden-lines-widget';
 
 // Portal popups need the same image, cover dimensions and viewport coordinates
 // as the workspace. Explicit coordinates also work inside transformed antd
@@ -41,7 +62,8 @@ export function useBackgroundSurfaces({ enabled, imageUrl, opacity, workspaceSel
       }
       if (rect && image.naturalWidth && image.naturalHeight) {
         const scale = Math.max(rect.width / image.naturalWidth, rect.height / image.naturalHeight);
-        const width = image.naturalWidth * scale, height = image.naturalHeight * scale;
+        const width = image.naturalWidth * scale,
+          height = image.naturalHeight * scale;
         set(root, '--moki-background-size', `${width}px ${height}px`);
         set(root, '--moki-background-x', `${rect.left + (rect.width - width) / 2}px`);
         set(root, '--moki-background-y', `${rect.top + (rect.height - height) / 2}px`);
@@ -58,13 +80,17 @@ export function useBackgroundSurfaces({ enabled, imageUrl, opacity, workspaceSel
     // 而不是卡片从静止的壁纸上滑过去。只在确有动画在跑时开这个小循环，停下即收。
     const anyRunning = () => {
       for (const popup of popups) {
-        if (popup.isConnected && popup.getAnimations().some((a) => a.playState === 'running')) return true;
+        if (popup.isConnected && popup.getAnimations().some((a) => a.playState === 'running'))
+          return true;
       }
       return false;
     };
     let following = false;
     const follow = () => {
-      if (!anyRunning()) { following = false; return; }
+      if (!anyRunning()) {
+        following = false;
+        return;
+      }
       following = true;
       sync();
       schedule();
@@ -84,8 +110,14 @@ export function useBackgroundSurfaces({ enabled, imageUrl, opacity, workspaceSel
       if (!following) follow();
     });
     const positionObserver = new MutationObserver((records) => {
-      if (records.some((record) => record.attributeName !== 'style'
-        || record.target.getAttribute('style') !== writtenStyles.get(record.target))) sync();
+      if (
+        records.some(
+          (record) =>
+            record.attributeName !== 'style' ||
+            record.target.getAttribute('style') !== writtenStyles.get(record.target),
+        )
+      )
+        sync();
     });
     const observePosition = (element) => {
       if (positions.has(element)) return;
@@ -99,6 +131,7 @@ export function useBackgroundSurfaces({ enabled, imageUrl, opacity, workspaceSel
       for (const popup of matches) {
         if (!popups.has(popup)) {
           popups.add(popup);
+          if (popup.matches(MONACO_SURFACES)) popup.classList.add('moki-monaco-surface');
           resize.observe(popup);
           if (popup.matches('.md-preview__task-checkbox')) {
             const row = popup.closest('li');
@@ -109,7 +142,11 @@ export function useBackgroundSurfaces({ enabled, imageUrl, opacity, workspaceSel
           }
           observePosition(popup);
           // Ant Design positions a portal wrapper rather than its inner card.
-          for (let parent = popup.parentElement; parent && parent !== document.body; parent = parent.parentElement) {
+          for (
+            let parent = popup.parentElement;
+            parent && parent !== document.body;
+            parent = parent.parentElement
+          ) {
             if (parent.matches(POSITIONERS)) observePosition(parent);
           }
         }
@@ -129,7 +166,8 @@ export function useBackgroundSurfaces({ enabled, imageUrl, opacity, workspaceSel
         const row = taskRows.get(popup);
         if (row) {
           taskRows.delete(popup);
-          if (!row.isConnected || !row.querySelector('.md-preview__task-checkbox')) resize.unobserve(row);
+          if (!row.isConnected || !row.querySelector('.md-preview__task-checkbox'))
+            resize.unobserve(row);
         }
         removed = true;
       }
@@ -138,7 +176,11 @@ export function useBackgroundSurfaces({ enabled, imageUrl, opacity, workspaceSel
         positions.clear();
         for (const popup of popups) {
           observePosition(popup);
-          for (let parent = popup.parentElement; parent && parent !== document.body; parent = parent.parentElement) {
+          for (
+            let parent = popup.parentElement;
+            parent && parent !== document.body;
+            parent = parent.parentElement
+          ) {
             if (parent.matches(POSITIONERS)) observePosition(parent);
           }
         }
@@ -153,9 +195,12 @@ export function useBackgroundSurfaces({ enabled, imageUrl, opacity, workspaceSel
     resize.observe(workspace);
     discover(document.body);
     const scroll = ({ target }) => {
-      const workspaceMoved = target === document || (target instanceof Element && target !== workspace && target.contains(workspace));
-      const popupMoved = target instanceof Element
-        && [...popups].some((popup) => target !== popup && target.contains(popup));
+      const workspaceMoved =
+        target === document ||
+        (target instanceof Element && target !== workspace && target.contains(workspace));
+      const popupMoved =
+        target instanceof Element &&
+        [...popups].some((popup) => target !== popup && target.contains(popup));
       // Scrolling editor text or a card's own list does not move the card.
       if (!workspaceMoved && !popupMoved) return;
       workspaceDirty ||= workspaceMoved;
@@ -178,16 +223,22 @@ export function useBackgroundSurfaces({ enabled, imageUrl, opacity, workspaceSel
     image.src = imageUrl;
     sync();
     return () => {
-      observer.disconnect(); positionObserver.disconnect(); resize.disconnect(); image.onload = null;
+      observer.disconnect();
+      positionObserver.disconnect();
+      resize.disconnect();
+      image.onload = null;
       if (frame !== null) cancelAnimationFrame(frame);
       document.removeEventListener('scroll', scroll, true);
-      for (const name of ['image', 'size', 'x', 'y']) root.style.removeProperty(`--moki-background-${name}`);
+      for (const name of ['image', 'size', 'x', 'y'])
+        root.style.removeProperty(`--moki-background-${name}`);
       if (workspaceSelector === '.app') {
         workspace.style.removeProperty('--moki-wallpaper-width');
         workspace.style.removeProperty('--moki-wallpaper-height');
       }
       for (const popup of popups) {
-        popup.style.removeProperty('--moki-popup-x'); popup.style.removeProperty('--moki-popup-y');
+        popup.style.removeProperty('--moki-popup-x');
+        popup.style.removeProperty('--moki-popup-y');
+        popup.classList.remove('moki-monaco-surface');
       }
     };
   }, [enabled, imageUrl, workspaceSelector]);

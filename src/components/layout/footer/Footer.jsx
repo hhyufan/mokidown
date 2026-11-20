@@ -3,6 +3,7 @@ import { useHorizontalDragScroll } from '@hooks/useHorizontalDragScroll';
 import { useTranslation } from 'react-i18next';
 import { Dropdown, Tooltip } from 'antd';
 import useEditorStore from '@store/useEditorStore';
+import useHistoryStore, { isMarkdownComparison } from '@store/useHistoryStore';
 import useUpdateStore from '@store/useUpdateStore';
 import usePluginContributions from '@store/usePluginContributions';
 import { sendToPlugin } from '@utils/pluginBus';
@@ -84,6 +85,8 @@ function Footer() {
   const pluginStatus = usePluginContributions((s) => s.statusBar);
   const tabs = useEditorStore((s) => s.tabRenderList);
   const activeTabId = useEditorStore((s) => s.activeTabId);
+  const historyDiff = useHistoryStore((s) => s.diff);
+  const historyMode = useHistoryStore((s) => s.viewMode);
   const cursorPosition = useEditorStore((s) => s.cursorPosition);
   const characterCount = useEditorStore((s) => s.characterCount);
 
@@ -97,9 +100,14 @@ function Footer() {
     [tabs, activeTabId],
   );
   const pathContext = usePathContextMenu(activeTab?.path);
+  const webUrl = activeTab?.builtin === 'web' ? activeTab.webLocation || activeTab.url : '';
 
-  const showModeToggle =
-    activeTab && !activeTab.builtin && PREVIEW_EXT.test(activeTab.ext) && viewMode !== 'split';
+  const comparing = Boolean(historyDiff && historyDiff.tabId === activeTabId);
+  const showModeToggle = comparing
+    ? isMarkdownComparison(activeTab, historyDiff)
+    : activeTab && !activeTab.builtin && PREVIEW_EXT.test(activeTab.ext) && viewMode !== 'split';
+  const editing = (comparing ? historyMode : viewMode) === 'edit';
+  const modeLabel = t(editing ? 'footer.switchToPreview' : 'footer.switchToCode');
 
   const [pathSegments, setPathSegments] = useState([]);
   const [directoryContents, setDirectoryContents] = useState({});
@@ -118,6 +126,7 @@ function Footer() {
     el.classList.toggle('footer__breadcrumb-path--overflow', overflow);
     if (overflow && !bcOverflowRef.current) el.scrollLeft = 0;
     bcOverflowRef.current = overflow;
+    el.classList.toggle('is-clipped-end', el.scrollWidth - el.clientWidth - el.scrollLeft > 1);
     const ratio = el.clientWidth / el.scrollWidth;
     if (ratio >= 1) {
       thumb.style.display = 'none';
@@ -154,16 +163,16 @@ function Footer() {
       el.removeEventListener('wheel', onWheel);
       ro.disconnect();
     };
-  }, [updateBcScrollbar, pathSegments]);
+  }, [updateBcScrollbar, pathSegments, webUrl]);
 
   useEffect(() => {
     const el = bcScrollRef.current;
     if (!el) return;
     requestAnimationFrame(() => {
-      el.scrollLeft = el.scrollWidth;
+      el.scrollLeft = webUrl ? 0 : el.scrollWidth;
       updateBcScrollbar();
     });
-  }, [pathSegments, updateBcScrollbar]);
+  }, [pathSegments, updateBcScrollbar, webUrl]);
 
   useEffect(() => {
     if (activeTab?.path) {
@@ -231,11 +240,11 @@ function Footer() {
   );
   const handleWebLinkMenu = useCallback(
     ({ key }) => {
-      if (!activeTab?.url) return;
-      if (key === 'copy') void navigator.clipboard?.writeText(activeTab.url).catch(() => {});
-      else void openExternal(activeTab.url).catch(() => {});
+      if (!webUrl) return;
+      if (key === 'copy') void navigator.clipboard?.writeText(webUrl).catch(() => {});
+      else void openExternal(webUrl).catch(() => {});
     },
-    [activeTab?.url],
+    [webUrl],
   );
 
   const renderDropdown = useCallback(
@@ -293,20 +302,14 @@ function Footer() {
         {showModeToggle && (
           <>
             <span className="footer__sep" />
-            <Tooltip
-              title={viewMode === 'edit' ? t('footer.switchToPreview') : t('footer.switchToCode')}
-              placement="top"
-              mouseEnterDelay={0.3}
-            >
+            <Tooltip title={modeLabel} placement="top" mouseEnterDelay={0.3}>
               <button
                 className="footer__mode-toggle"
-                aria-label={
-                  viewMode === 'edit' ? t('footer.switchToPreview') : t('footer.switchToCode')
-                }
+                aria-label={modeLabel}
                 onClick={toggleEditPreview}
                 type="button"
               >
-                {viewMode === 'edit' ? <EyeIcon /> : <CodeIcon />}
+                {editing ? <EyeIcon /> : <CodeIcon />}
               </button>
             </Tooltip>
           </>
@@ -314,10 +317,10 @@ function Footer() {
       </div>
 
       <div className="footer__breadcrumb">
-        {pathSegments.length > 0 ? (
+        {webUrl || pathSegments.length > 0 ? (
           <>
             <div className="footer__breadcrumb-path" ref={bcScrollRef}>
-              {activeTab?.builtin === 'web' ? (
+              {webUrl ? (
                 <span className="footer__breadcrumb-item">
                   <Dropdown
                     trigger={['contextMenu']}
@@ -328,10 +331,10 @@ function Footer() {
                       className="footer__breadcrumb-segment footer__breadcrumb-segment--web"
 
                       onClick={() => {
-                        void navigator.clipboard?.writeText(activeTab.url).catch(() => {});
+                        void navigator.clipboard?.writeText(webUrl).catch(() => {});
                       }}
                     >
-                      {activeTab.url}
+                      {webUrl}
                     </span>
                   </Dropdown>
                 </span>

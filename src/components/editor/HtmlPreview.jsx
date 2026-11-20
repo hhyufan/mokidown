@@ -5,9 +5,11 @@ import useConfigStore from '@store/useConfigStore';
 import useFileStore from '@store/useFileStore';
 import { isAndroidRuntime } from '@utils/platform';
 import { isImeComposing } from '@utils/keyboard';
+import { parsePreviewAddress } from '@utils/previewAddress';
 import usePreviewFrame, { previewFrameBridgeScript } from '@hooks/usePreviewFrame';
 import liveReloadClient from 'livereload-js/dist/livereload.min.js?raw';
 import { htmlPreviewSizingScript } from './htmlPreviewSizing';
+import PreviewAddressButton from './PreviewAddressButton';
 import './html-preview.scss';
 
 export default function HtmlPreview({ source, filePath, title, compact = false, className = '' }) {
@@ -34,7 +36,11 @@ export default function HtmlPreview({ source, filePath, title, compact = false, 
   const sessionRef = useRef(null);
   const viewportRef = useRef(null);
   const iframeRef = useRef(null);
-  const syncFrameTheme = usePreviewFrame(iframeRef);
+  const { syncFrameTheme, wallpaperProps } = usePreviewFrame(iframeRef, { onNavigate: (url) => {
+    setNavigationUrl(url);
+    setAddress(url);
+    setError('');
+  } });
   const injectSizing = (frame) => {
     try {
       const doc = frame?.contentDocument;
@@ -211,26 +217,21 @@ export default function HtmlPreview({ source, filePath, title, compact = false, 
       {!compact && (
         <header className={`html-preview__bar${hideBar ? ' html-preview__bar--collapsed' : ''}`}>
           <form
-            className="html-preview__address"
+            className="preview-address"
             onSubmit={(event) => {
               event.preventDefault();
-              try {
-                const input = address.trim();
-                if (input === 'about:srcdoc' && !frame?.url) {
-                  setNavigationUrl(null);
-                  return;
-                }
-                const target =
-                  input.startsWith('/') && frame?.url
-                    ? new URL(input, frame.url)
-                    : new URL(/^https?:\/\//i.test(input) ? input : `http://${input}`);
-                if (!['http:', 'https:'].includes(target.protocol)) return;
-                setNavigationUrl(target.href);
-                setAddress(target.href);
-                setError('');
-              } catch {
-                setError(t('htmlPreview.invalidAddress'));
+              if (address.trim() === 'about:srcdoc' && !frame?.url) {
+                setNavigationUrl(null);
+                return;
               }
+              const target = parsePreviewAddress(address, frame?.url);
+              if (!target) {
+                setError(t('htmlPreview.invalidAddress'));
+                return;
+              }
+              setNavigationUrl(target.href);
+              setAddress(target.href);
+              setError('');
             }}
           >
             <input
@@ -251,43 +252,10 @@ export default function HtmlPreview({ source, filePath, title, compact = false, 
                 }
               }}
             />
-            <button
-              type="button"
-              aria-label={t('htmlPreview.refresh')}
-              onClick={() => {
-                refreshPreview();
-              }}
-            >
-              <svg
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="2"
-                aria-hidden="true"
-              >
-                <polyline points="23 4 23 10 17 10" />
-                <path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10" />
-              </svg>
-            </button>
+            <PreviewAddressButton icon="refresh" label={t('htmlPreview.refresh')} onClick={refreshPreview} />
           </form>
           {native && (
-            <button
-              type="button"
-              className="html-preview__live-off"
-              aria-label={t('htmlPreview.disableLiveReload')}
-              onClick={() => setLiveOverride(false)}
-            >
-              <svg
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="2"
-                aria-hidden="true"
-              >
-                <line x1="18" y1="6" x2="6" y2="18" />
-                <line x1="6" y1="6" x2="18" y2="18" />
-              </svg>
-            </button>
+            <PreviewAddressButton icon="close" label={t('htmlPreview.disableLiveReload')} onClick={() => setLiveOverride(false)} />
           )}
         </header>
       )}
@@ -296,7 +264,7 @@ export default function HtmlPreview({ source, filePath, title, compact = false, 
           {error}
         </div>
       )}
-      <div className="html-preview__viewport" ref={viewportRef}>
+      <div className="html-preview__viewport preview-wallpaper" ref={viewportRef} {...wallpaperProps}>
         {frame && (
           <iframe
             ref={iframeRef}

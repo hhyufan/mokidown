@@ -47,15 +47,19 @@ export default function Timeline() {
   const requestRef = useRef(0);
 
   const tab = tabs.find((item) => item.id === activeTabId) || null;
-  const eligible = tab
-    && typeof tab.path === 'string'
-    && tab.path
-    && !/^[a-z][a-z\d+.-]*:\/\//i.test(tab.path)
-    && !tab.path.startsWith('content://');
+  const eligible =
+    tab &&
+    typeof tab.path === 'string' &&
+    tab.path &&
+    !/^[a-z][a-z\d+.-]*:\/\//i.test(tab.path) &&
+    !tab.path.startsWith('content://');
 
   const load = useCallback(async () => {
     const request = ++requestRef.current;
-    if (!eligible || !tab.path) { setEntries([]); return; }
+    if (!eligible || !tab.path) {
+      setEntries([]);
+      return;
+    }
     setLoading(true);
     try {
       const next = (await historyList(tab.path)) || [];
@@ -63,14 +67,20 @@ export default function Timeline() {
     } catch {
       // A failed refresh should leave the last successful list available.
     } finally {
-      if (request === requestRef.current) { setLoading(false); setLoaded(true); }
+      if (request === requestRef.current) {
+        setLoading(false);
+        setLoaded(true);
+      }
     }
   }, [eligible, tab?.path]);
 
-  const cancelLoad = useCallback(() => { requestRef.current++; }, []);
+  const cancelLoad = useCallback(() => {
+    requestRef.current++;
+  }, []);
 
   useEffect(() => {
-    setDiff(null);
+    const comparison = useHistoryStore.getState().diff;
+    if (comparison && comparison.tabId !== activeTabId) setDiff(null);
     setEntries([]);
     setLoaded(false);
     load();
@@ -81,16 +91,31 @@ export default function Timeline() {
   // 让新快照即时出现，而不是等到切换标签或手动刷新。
   useEffect(() => {
     if (!eligible || !tab?.path) return undefined;
-    const unlisten = onHistoryChanged(({ path }) => {
-      if (path === tab.path) load();
+    let frame = 0;
+    const refresh = ({ path }) => {
+      if (path !== tab.path || frame) return;
+      frame = requestAnimationFrame(() => {
+        frame = 0;
+        void load();
+      });
+    };
+    const unlisten = onHistoryChanged(refresh);
+    const unsubscribe = useHistoryStore.subscribe((state, previous) => {
+      if (state.historyWrite && state.historyWrite !== previous.historyWrite)
+        refresh(state.historyWrite);
     });
-    return () => { unlisten.then((fn) => fn()).catch(() => {}); };
+    return () => {
+      unsubscribe();
+      if (frame) cancelAnimationFrame(frame);
+      unlisten.then((fn) => fn()).catch(() => {});
+    };
   }, [eligible, tab?.path, load]);
 
   const openDiff = async (timestamp) => {
     if (!tab?.path) return;
     try {
       const content = await historyRead(tab.path, timestamp);
+      if (useEditorStore.getState().activeTabId !== activeTabId) return;
       setDiff({ tabId: activeTabId, timestamp, content });
     } catch {
       /* 版本可能已被清理，忽略。 */
@@ -103,20 +128,26 @@ export default function Timeline() {
     <section className={`timeline${expanded ? ' timeline--open' : ''}`}>
       <header className="timeline__header">
         <Tooltip title={t(expanded ? 'tree.collapseAll' : 'tree.expandAll')}>
-        <button
-          type="button"
-          className="timeline__toggle"
-          aria-expanded={expanded}
-          aria-label={t('history.title')}
-          onClick={() => setExpanded(!expanded)}
-        >
-          <ChevronIcon className="timeline__chevron" />
-        </button>
+          <button
+            type="button"
+            className="timeline__toggle"
+            aria-expanded={expanded}
+            aria-label={t('history.title')}
+            onClick={() => setExpanded(!expanded)}
+          >
+            <ChevronIcon className="timeline__chevron" />
+          </button>
         </Tooltip>
         <span className="timeline__label">{t('history.title')}</span>
         <span className="timeline__count">{entries.length}</span>
         <Tooltip title={t('history.refresh')} placement="top" mouseEnterDelay={0.3}>
-          <button type="button" className="timeline__refresh" aria-label={t('history.refresh')} onClick={load} disabled={loading}>
+          <button
+            type="button"
+            className="timeline__refresh"
+            aria-label={t('history.refresh')}
+            onClick={load}
+            disabled={loading}
+          >
             <ReloadOutlined spin={loading} />
           </button>
         </Tooltip>
@@ -128,34 +159,46 @@ export default function Timeline() {
         折叠时用 aria-hidden 让辅助技术跳过它（jsdom 下的 role 查询同样会忽略）。
       */}
       <div className="timeline__body" aria-hidden={!expanded} aria-busy={loading}>
-        {entries.length === 0 ? (loading && !loaded ? null : (
-          /*
-           * 没有任何历史版本时，用与文件树 / 大纲同一套空状态文案。
-           * 这里刻意不出人物：抽屉上限是 6 行（162px），而 4:3 的立绘要放进这个高度
-           * 只能缩到 168px 宽（8.6 倍缩放，实测明显发糊），整块还会超出 44px 被裁。
-           * 立绘留给空间充足的对比视图（见 history.scss 的 .history-diff__empty）。
-           */
-          <MokiStatusEmpty
-            compact
-            art={null}
-            title={t('empty.history.title')}
-            hint={t('empty.history.hint')}
-          />
-        )) : (
+        {entries.length === 0 ? (
+          loading && !loaded ? null : (
+            /*
+             * 没有任何历史版本时，用与文件树 / 大纲同一套空状态文案。
+             * 这里刻意不出人物：抽屉上限是 6 行（162px），而 4:3 的立绘要放进这个高度
+             * 只能缩到 168px 宽（8.6 倍缩放，实测明显发糊），整块还会超出 44px 被裁。
+             * 立绘留给空间充足的对比视图（见 history.scss 的 .history-diff__empty）。
+             */
+            <MokiStatusEmpty
+              compact
+              art={null}
+              title={t('empty.history.title')}
+              hint={t('empty.history.hint')}
+            />
+          )
+        ) : (
           <ul className="timeline__list">
             {entries.map((entry) => (
               <li key={entry.timestamp}>
                 <button
                   type="button"
-                  className={'timeline__item' + (diff && diff.timestamp === entry.timestamp ? ' is-selected' : '')}
+                  className={
+                    'timeline__item' +
+                    (diff && diff.timestamp === entry.timestamp ? ' is-selected' : '')
+                  }
                   onClick={() => openDiff(entry.timestamp)}
                 >
                   {entry.restoredFrom != null && (
                     <Tooltip
-                      title={t('history.rollbackFrom', { time: new Date(entry.restoredFrom).toLocaleString() })}
-                      placement="top" mouseEnterDelay={0.3}
+                      title={t('history.rollbackFrom', {
+                        time: new Date(entry.restoredFrom).toLocaleString(),
+                      })}
+                      placement="top"
+                      mouseEnterDelay={0.3}
                     >
-                      <span className="timeline__rollback" role="img" aria-label={t('history.rollback')}>
+                      <span
+                        className="timeline__rollback"
+                        role="img"
+                        aria-label={t('history.rollback')}
+                      >
                         <HistoryOutlined aria-hidden="true" />
                       </span>
                     </Tooltip>

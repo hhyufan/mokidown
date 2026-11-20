@@ -28,10 +28,9 @@ body.moki-has-background,
 
   .titlebar__search,
   .html-preview__bar,
-  .html-preview__address,
+  .preview-address,
   .web-page__bar,
   .sidebar__tab-slider,
-
   .editor-content__renderer-error,
   .editor-content__renderer-error button,
   .timeline__count,
@@ -91,7 +90,6 @@ body.moki-has-background,
   .file-tree__item--active:hover,
   .file-tree__item--creating,
   .file-tree__open-btn:hover,
-
   .editor-content__renderer-error button:hover,
   .ft__btn--active,
   .ft__btn--active:hover,
@@ -101,11 +99,6 @@ body.moki-has-background,
     background: var(--moki-glass-selected);
   }
 
-  .file-tree__breadcrumb-scroll-wrap::after,
-  .footer__breadcrumb::after {
-    background: linear-gradient(to right, transparent, var(--moki-glass-surface));
-  }
-
   .output-console__body,
   .html-preview,
   .web-page,
@@ -113,7 +106,23 @@ body.moki-has-background,
     background: color-mix(in srgb, var(--surface) 18%, transparent);
   }
 
-  .moki-tree { background: transparent; }
+  .preview-wallpaper[data-preview-theme] {
+    --moki-background-base: #fff;
+    --moki-background-wash: color-mix(
+      in srgb,
+      var(--moki-background-base) var(--moki-preview-wash, 80%),
+      transparent
+    );
+    @include background-popup.image-surface;
+  }
+
+  .preview-wallpaper[data-preview-theme='dark'] {
+    --moki-background-base: #181818;
+  }
+
+  .moki-tree {
+    background: transparent;
+  }
   .moki-tree .ant-tree .ant-tree-node-content-wrapper:hover {
     background: var(--moki-glass-hover);
   }
@@ -222,8 +231,12 @@ body.moki-has-background {
     --surface: color-mix(in srgb, var(--moki-background-base) 38%, transparent);
     --hover: var(--moki-glass-hover);
   }
-  .ft { transition: none; }
-  .monaco-context-menu { animation: none; }
+  .ft {
+    transition: none;
+  }
+  .monaco-context-menu {
+    animation: none;
+  }
   // Scaling the popup during entry also scales its wallpaper and exposes the
   // editor during the opacity fade. Show image-backed popups at final geometry.
   .ant-dropdown,
@@ -238,8 +251,11 @@ body.moki-has-background {
   }
 
   .moki-tree-jump-popup {
-    &[class*='-enter'], &[class*='-appear'] {
-      animation: none !important; transform: none !important; opacity: 1 !important;
+    &[class*='-enter'],
+    &[class*='-appear'] {
+      animation: none !important;
+      transform: none !important;
+      opacity: 1 !important;
     }
   }
 
@@ -268,6 +284,27 @@ body.moki-has-background {
   .ant-dropdown .ant-dropdown-menu,
   .ant-picker-dropdown .ant-picker-panel-container {
     @include background-popup.image-surface;
+  }
+
+  .moki-monaco-surface.moki-monaco-surface {
+    @include background-popup.image-surface;
+    background-color: var(--moki-background-base) !important;
+    --moki-monaco-control: color-mix(in srgb, var(--text) 7%, transparent);
+    --vscode-input-background: var(--moki-monaco-control);
+    --vscode-editorHoverWidget-statusBarBackground: var(--moki-monaco-control);
+    --vscode-peekViewEditor-background: transparent;
+    --vscode-peekViewEditorGutter-background: transparent;
+    --vscode-peekViewResult-background: transparent;
+
+    :is(.suggest-details-container, .monaco-list-rows, .quick-input-list) {
+      background-color: transparent;
+    }
+    .monaco-inputbox {
+      background-color: var(--moki-monaco-control) !important;
+    }
+    .diff-hidden-lines > & {
+      box-shadow: none;
+    }
   }
 
   // 欢迎页那三个操作卡片（新建文档 / 打开文件 / 打开文件夹）在背景模式下走半透明，
@@ -310,7 +347,9 @@ body.moki-has-background {
       linear-gradient(var(--moki-background-wash), var(--moki-background-wash)),
       var(--moki-background-image, none);
     background-size: auto, auto, var(--moki-background-size, cover);
-    background-position: center, center,
+    background-position:
+      center,
+      center,
       calc(var(--moki-background-x, 0px) - var(--moki-popup-x, 0px))
         calc(var(--moki-background-y, 0px) - var(--moki-popup-y, 0px));
   }
@@ -324,7 +363,6 @@ body.moki-has-background {
 
   // 轮廓沿用轻边框与阴影。
   .ant-select-dropdown,
-
   .footer__dropdown,
   .sort-dropdown {
     border: 1px solid color-mix(in srgb, var(--text) 12%, transparent);
@@ -369,7 +407,10 @@ html[data-theme='dark'] body.moki-has-background {
   .notif,
   .editor-content__run {
     background-image:
-      linear-gradient(color-mix(in srgb, #000 42%, transparent), color-mix(in srgb, #000 42%, transparent)),
+      linear-gradient(
+        color-mix(in srgb, #000 42%, transparent),
+        color-mix(in srgb, #000 42%, transparent)
+      ),
       linear-gradient(var(--moki-background-wash), var(--moki-background-wash)),
       var(--moki-background-image, none);
   }
