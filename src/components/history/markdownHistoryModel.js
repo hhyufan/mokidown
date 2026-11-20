@@ -10,8 +10,13 @@ export function parseDocument(source) {
       start: block.position.start.line,
       end: block.position.end.line,
       empty: block.type === 'paragraph' && !block.children.length,
+      list: block.type === 'list' ? (block.ordered ? 'ordered_list' : 'bullet_list') : null,
     }));
-  return { lines, blocks, anchors, key: markdownBlockKey(blocks) };
+  const blankLines = lines.map((line) => !line.trim());
+  for (const { position } of blocks) {
+    blankLines.fill(false, position.start.line - 1, position.end.line);
+  }
+  return { lines, blocks, anchors, blankLines };
 }
 
 function alignLines(changes, originalLength, modifiedLength) {
@@ -83,6 +88,7 @@ export function alignBlocks(left, right, changes) {
     const oldBlocks = [];
     const newBlocks = [];
     let changed = false;
+    let changedBlank = false;
     let removed = false;
     let added = false;
     let firstOriginal;
@@ -108,6 +114,9 @@ export function alignBlocks(left, right, changes) {
       }
       if (!slot.change) continue;
       changed = true;
+      changedBlank ||=
+        (slot.original == null && right.blankLines[slot.modified]) ||
+        (slot.modified == null && left.blankLines[slot.original]);
       removed ||= slot.original != null;
       added ||= slot.modified != null;
       if (slot.change.originalEndLineNumber && !seenChanges.has(slot.change)) {
@@ -122,7 +131,7 @@ export function alignBlocks(left, right, changes) {
         candidateActions.set(addition, 'left');
       }
     }
-    changed &&= markdownBlockKey(oldBlocks) !== markdownBlockKey(newBlocks);
+    changed &&= changedBlank || markdownBlockKey(oldBlocks) !== markdownBlockKey(newBlocks);
     const actions = [];
     if (changed)
       for (const [change, direction] of candidateActions) {
@@ -132,7 +141,7 @@ export function alignBlocks(left, right, changes) {
       }
     if (changed || firstModified != null)
       rows.push({
-        key: start,
+        key: firstOriginal ?? `added:${firstModified}`,
         firstOriginal,
         lastOriginal,
         firstModified,
