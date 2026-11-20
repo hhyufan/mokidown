@@ -562,9 +562,10 @@ export default function HistoryDiffView() {
     : computedDiff?.original === originalText
       ? computedDiff
       : null;
-  const preview = useMarkdownHistoryComparison(originalText, modifiedText, rendered);
+  const preview = useMarkdownHistoryComparison(originalText, modifiedText, rendered, draft != null);
   const currentDiff = (rendered ? preview : renderedDiff)?.modified === modifiedText;
   const noChanges = identical || (rendered && currentDiff && Boolean(preview?.identical));
+  const showEmpty = noChanges && (!rendered || draft == null);
   if (!diff || !tab) return null;
 
   const hash = historyHash?.content === diff.content ? historyHash.hash : '';
@@ -572,11 +573,11 @@ export default function HistoryDiffView() {
   const applySelection = !hasDraft && !rendered && !noChanges && selectionReady;
   const applyLabel = t(applySelection ? 'history.applySelectedChanges' : 'history.applyChanges');
   const canExpand =
-    !noChanges &&
+    !showEmpty &&
     currentDiff &&
     (rendered ? markdownFoldSummary.collapsedCount > 0 : Boolean(renderedDiff?.folds?.length));
   const canCollapse =
-    !noChanges &&
+    !showEmpty &&
     currentDiff &&
     (rendered ? markdownFoldSummary.expandedCount > 0 : Boolean(renderedDiff?.foldableCount));
   const setAllFolds = (expanded) => {
@@ -797,7 +798,7 @@ export default function HistoryDiffView() {
           <span className="history-diff__version">{t('history.current')}</span>
         </div>
       </div>
-      {noChanges && (
+      {showEmpty && (
         /*
          * 所选版本与当前内容一致时，不必只丢一行冷冰冰的「没有更改」——
          * 用与文件树 / 提纲同一套空状态：角色立绘 + 一句 ACG 口吻的主句 + 淡色说明。
@@ -810,7 +811,7 @@ export default function HistoryDiffView() {
           />
         </div>
       )}
-      {rendered && !noChanges && !preview?.layout && (
+      {rendered && !showEmpty && !preview?.layout && (
         <div className="history-diff__error" role={preview?.error ? 'alert' : 'status'}>
           {preview?.error ? `${t('editor.loadFailed')} ${preview.error}` : t('editor.loading')}
         </div>
@@ -823,7 +824,7 @@ export default function HistoryDiffView() {
           draftContent={modified}
           comparison={preview.layout}
           previewBoundsRef={comparisonBoundsRef}
-          hidden={noChanges}
+          hidden={showEmpty}
           foldState={markdownFolds}
           ready={currentDiff}
           busy={busy}
