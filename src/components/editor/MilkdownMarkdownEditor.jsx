@@ -11,6 +11,7 @@ import {
   useCallback,
   useEffect,
   useImperativeHandle,
+  useLayoutEffect,
   useMemo,
   useRef,
   useState,
@@ -18,16 +19,16 @@ import {
 import { createRoot } from 'react-dom/client';
 import { createPortal } from 'react-dom';
 import { useShallow } from 'zustand/react/shallow';
-import useThemeStore from '@store/useThemeStore';
 import MarkdownTreeBlock from './MarkdownTreeBlock';
 import { useCodeBlockNavigation } from '@hooks/useCodeBlockNavigation';
 import { normalizeCodeLanguage } from '@utils/knowledgeTree';
 import { createMilkdownHeadingFoldsPlugin, restoreMilkdownFolds } from './milkdownHeadingFolds';
 import { jumpToFootnote } from '@utils/footnoteParser';
 import { createMilkdownFoldBridge } from './milkdownFoldBridge';
+import { comparisonDecorations } from './milkdownComparisonLayout';
 import { reportReactError } from '@/services/runtimeLogs';
 import { Milkdown, MilkdownProvider, useEditor } from '@milkdown/react';
-import { Editor, commandsCtx, defaultValueCtx, editorViewCtx, editorViewOptionsCtx, rootCtx, serializerCtx } from '@milkdown/kit/core';
+import { Editor, commandsCtx, defaultValueCtx, editorViewCtx, editorViewOptionsCtx, parserCtx, rootCtx, serializerCtx } from '@milkdown/kit/core';
 import {
   commonmark,
   bulletListSchema,
@@ -206,10 +207,6 @@ const codeMirrorTheme = CodeMirrorView.theme({
   },
   '.cm-content': {
     padding: '16px',
-    caretColor: 'var(--code-caret)',
-  },
-  '.cm-cursor, .cm-dropCursor': {
-    borderLeftColor: 'var(--code-caret)',
   },
   '.cm-line': {
     padding: '0',
@@ -1439,10 +1436,20 @@ function MilkdownInner({
   lineHeight,
   onAutoSave,
   readOnly,
+  onDraftChange,
+  comparisonLayout,
+  comparisonSource,
+  onComparisonReady,
+  previewBoundsRef,
 }, ref) {
+  const isComparison = comparisonSource !== undefined;
+  const onDraftChangeRef = useRef(onDraftChange);
+  onDraftChangeRef.current = onDraftChange;
+  const comparisonLayoutRef = useRef(comparisonLayout);
+  comparisonLayoutRef.current = comparisonLayout;
+  const syncedComparisonRef = useRef(comparisonSource);
   const wrapperRef = useRef(null);
   const footnoteOrigins = useRef(new WeakMap());
-  const darkTheme = useThemeStore((state) => state.theme === 'dark');
   const editorRef = useRef(null);
   const currentTabIdRef = useRef(activeTabId);
   const onAutoSaveRef = useRef(onAutoSave);
@@ -1484,8 +1491,8 @@ function MilkdownInner({
     if (!editor || readOnly || event.target.closest('input, textarea, button, select')) return;
     const items = milkdownContextItems({
       editor, target: event.target, x: event.clientX, y: event.clientY, t: i18n.t.bind(i18n),
-      canReplayHistory: (direction) => hasMarkdownUndoStep(activeTabId, direction),
-      replayHistory,
+      canReplayHistory: isComparison ? undefined : (direction) => hasMarkdownUndoStep(activeTabId, direction),
+      replayHistory: isComparison ? undefined : replayHistory,
     });
     openMenu(event, items, 'wysiwyg');
   };
@@ -1508,6 +1515,10 @@ function MilkdownInner({
   const scheduleEditorSideEffects = useCallback((markdown) => {
     const tabId = currentTabIdRef.current;
     if (!tabId || readOnly) return;
+    if (isComparison) {
+      onDraftChangeRef.current(markdown);
+      return;
+    }
 
     setBuffer(tabId, markdown);
 
@@ -1528,19 +1539,19 @@ function MilkdownInner({
         if (current && (current.contentRevision ?? 0) === contentRevision) onAutoSaveRef.current?.(tabId);
       }, 300);
     }
-  }, [contentRevision, markTabDirty, readOnly, setCharacterCount]);
+  }, [contentRevision, isComparison, markTabDirty, readOnly, setCharacterCount]);
 
   const publishEditorContent = useCallback((ctx) => {
-    if (!ctx.isInjected(editorViewCtx)) return;
+    if (readOnly || !ctx.isInjected(editorViewCtx)) return;
     const tab = useEditorStore.getState().tabs.find((item) => item.id === activeTabId);
-    if (!tab || (tab.contentRevision ?? 0) !== contentRevision || currentTabIdRef.current !== activeTabId) return;
+    if (!isComparison && (!tab || (tab.contentRevision ?? 0) !== contentRevision || currentTabIdRef.current !== activeTabId)) return;
     const state = ctx.get(editorViewCtx).state;
     const markdown = ctx.get(serializerCtx)(persistentMilkdownDocument(state));
     if (markdown === publishedMarkdownRef.current) return;
     publishedMarkdownRef.current = markdown;
     scheduleEditorSideEffects(markdown);
     setRenderTick((value) => value + 1);
-  }, [activeTabId, contentRevision, scheduleEditorSideEffects]);
+  }, [activeTabId, contentRevision, isComparison, readOnly, scheduleEditorSideEffects]);
 
   const replayHistory = (direction) => editorRef.current?.action((ctx) => {
     const view = ctx.get(editorViewCtx);
@@ -1554,11 +1565,11 @@ function MilkdownInner({
   });
 
   const editorInfo = useEditor((root) => {
-    const foldBridge = createMilkdownFoldBridge(activeTabId, content || '', (state) =>
+    const foldBridge = !isComparison && createMilkdownFoldBridge(activeTabId, content || '', (state) =>
       editor.ctx.get(serializerCtx)(persistentMilkdownDocument(state)));
     const editor = Editor.make()
       .config((ctx) => {
-        configureEditingWhitespace(ctx, { readOnly });
+        configureEditingWhitespace(ctx, { readOnly: readOnly && !isComparison });
         configureEditingTables(ctx);
         ctx.set(rootCtx, root);
         ctx.set(defaultValueCtx, content || '');
@@ -1600,18 +1611,17 @@ function MilkdownInner({
             'aria-label': 'Markdown WYSIWYG editor',
           },
         }));
-        ctx.get(listenerCtx)
+        const listeners = ctx.get(listenerCtx)
           .mounted((editorCtx) => {
             const view = editorCtx.get(editorViewCtx);
             const selection = !readOnly && initialEditingSelection(view.state);
             if (selection) view.dispatch(view.state.tr.setSelection(selection));
             // 在完整文档与 NodeView 挂载后显式恢复，不能只依赖插件初始化快照。
-            const folds = foldBridge.initialFolds(view.state.doc);
-            restoreMilkdownFolds(view, folds);
+            if (!isComparison) restoreMilkdownFolds(view, foldBridge.initialFolds(view.state.doc));
             const state = view.state;
-            publishedMarkdownRef.current = editorCtx.get(serializerCtx)(persistentMilkdownDocument(state));
-          })
-          .markdownUpdated(publishEditorContent);
+            if (!readOnly) publishedMarkdownRef.current = editorCtx.get(serializerCtx)(persistentMilkdownDocument(state));
+          });
+        if (!isComparison) listeners.markdownUpdated(publishEditorContent);
       })
       .use(markdownHtmlPlugin)
       .use(milkdownTableKeys)
@@ -1632,19 +1642,77 @@ function MilkdownInner({
       .use(milkdownMediaImageView)
       .use(codeBlockComponent)
       .use(milkdownBlockSelection)
-      .use($prose(() => createMilkdownHeadingFoldsPlugin(foldBridge)))
       .use(listener);
 
-    if (!readOnly) editor.use(milkdownSharedHistory(activeTabId, () => {
+    if (foldBridge) editor.use($prose(() => createMilkdownHeadingFoldsPlugin(foldBridge)));
+    if (!readOnly && !isComparison) editor.use(milkdownSharedHistory(activeTabId, () => {
       const store = useEditorStore.getState();
       const tab = store.tabs.find((item) => item.id === activeTabId);
       return tab && (tab.contentRevision ?? 0) === contentRevision;
-    })).use(milkdownMarkdownPaste).use(clipboard).use(milkdownEditingFlow).use(milkdownGapCursor)
+    }));
+    if (!readOnly) editor.use(milkdownMarkdownPaste).use(clipboard).use(milkdownEditingFlow).use(milkdownGapCursor)
       .use(milkdownInlineSyntaxSource).use(milkdownLiveSyntax).use(milkdownInlineLinkRule);
+    if (isComparison) editor.use($prose((ctx) => {
+      let previousDoc;
+      let previousLayout;
+      let decorations;
+      return new Plugin({
+        props: {
+          decorations: ({ doc }) => {
+            const layout = comparisonLayoutRef.current;
+            if (doc !== previousDoc || layout !== previousLayout) {
+              previousDoc = doc;
+              previousLayout = layout;
+              decorations = comparisonDecorations(doc, layout);
+            }
+            return decorations;
+          },
+        },
+        view: readOnly ? undefined : () => ({
+          update(view, previous) {
+            if (view.state.doc === previous.doc) return;
+            queueMicrotask(() => {
+              if (!view.isDestroyed) publishEditorContent(ctx);
+            });
+          },
+        }),
+      });
+    }));
 
     editorRef.current = editor;
     return editor;
-  }, [activeTabId, content, readOnly, publishEditorContent]);
+  }, [activeTabId, content, isComparison, readOnly, publishEditorContent]);
+
+  useLayoutEffect(() => {
+    if (!isComparison || editorInfo.loading) return;
+    editorRef.current?.action((ctx) => {
+      const view = ctx.get(editorViewCtx);
+      view.dispatch(view.state.tr.setMeta('addToHistory', false));
+    });
+  }, [comparisonLayout, editorInfo.loading, isComparison]);
+
+  useEffect(() => {
+    if (!editorInfo.loading) onComparisonReady?.();
+  }, [editorInfo.loading, onComparisonReady]);
+
+  useLayoutEffect(() => {
+    if (!isComparison || editorInfo.loading || syncedComparisonRef.current === comparisonSource) return;
+    syncedComparisonRef.current = comparisonSource;
+    if (comparisonSource === publishedMarkdownRef.current) return;
+    editorRef.current?.action((ctx) => {
+      const next = ctx.get(parserCtx)(comparisonSource);
+      if (!next) return;
+      const view = ctx.get(editorViewCtx);
+      const { doc, selection } = view.state;
+      const tr = view.state.tr.replaceWith(0, doc.content.size, next.content);
+      tr.setSelection(TextSelection.between(
+        tr.doc.resolve(Math.min(selection.anchor, tr.doc.content.size)),
+        tr.doc.resolve(Math.min(selection.head, tr.doc.content.size)),
+      ));
+      view.dispatch(tr);
+      publishedMarkdownRef.current = ctx.get(serializerCtx)(persistentMilkdownDocument(view.state));
+    });
+  }, [comparisonSource, editorInfo.loading, isComparison]);
 
   const resolveCodeTarget = useCallback((language, index) => {
     const view = getMediaView();
@@ -1658,17 +1726,17 @@ function MilkdownInner({
     });
     return target instanceof HTMLElement ? target : null;
   }, [getMediaView]);
-  const jumpToCode = useCodeBlockNavigation(activeTabId, resolveCodeTarget, !editorInfo.loading);
+  const jumpToCode = useCodeBlockNavigation(activeTabId, resolveCodeTarget, !isComparison && !editorInfo.loading);
 
   useEffect(() => {
-    if (editorInfo.loading || readOnly) return undefined;
+    if (isComparison || editorInfo.loading || readOnly) return undefined;
     const editor = editorRef.current;
     return registerEditorBufferFlusher(() => activeTabId, () => editor?.action(publishEditorContent));
-  }, [activeTabId, editorInfo.loading, readOnly, publishEditorContent]);
+  }, [activeTabId, editorInfo.loading, isComparison, readOnly, publishEditorContent]);
 
-  useDocumentScrollState(wrapperRef, activeTabId, 'milkdownScroll', !editorInfo.loading);
+  useDocumentScrollState(wrapperRef, activeTabId, 'milkdownScroll', !isComparison && !editorInfo.loading);
   useEffect(() => {
-    if (editorInfo.loading || readOnly) return undefined;
+    if (isComparison || editorInfo.loading || readOnly) return undefined;
     const editor = editorRef.current;
     if (!editor) return undefined;
     let stopView;
@@ -1693,7 +1761,7 @@ function MilkdownInner({
       stopView?.();
       document.removeEventListener('selectionchange', requestDocumentViewStateSave);
     };
-  }, [activeTabId, editorInfo.loading, readOnly]);
+  }, [activeTabId, editorInfo.loading, isComparison, readOnly]);
 
   useImperativeHandle(ref, () => ({
     getEditor: () => editorRef.current,
@@ -1773,7 +1841,7 @@ function MilkdownInner({
   }), [content]);
 
   useEffect(() => {
-    if (editorInfo.loading || !wrapperRef.current || isAndroidRuntime()) return undefined;
+    if (isComparison || editorInfo.loading || !wrapperRef.current || isAndroidRuntime()) return undefined;
     return attachCodeBlockExecutions({
       root: wrapperRef.current, documentId: activeTabId, filePath: documentPath,
       fileName: useEditorStore.getState().tabs.find((tab) => tab.id === activeTabId)?.name || 'Markdown',
@@ -1782,7 +1850,7 @@ function MilkdownInner({
         catch { return null; }
       },
     });
-  }, [activeTabId, documentPath, editorInfo.loading]);
+  }, [activeTabId, documentPath, editorInfo.loading, isComparison]);
 
   // Prism 的代码块配色随应用样式表一起打包（见 `@styles/prism-theme.scss`）。
   // 这里保留主题观察器，因为 Milkdown 需要重渲染才能把新主题传给 Mermaid 等渲染器，
@@ -1824,7 +1892,7 @@ function MilkdownInner({
   }, [documentPath, readOnly]);
 
   useEffect(() => {
-    if (!readOnly) return undefined;
+    if (!readOnly || isComparison) return undefined;
     const wrapper = wrapperRef.current;
     if (!wrapper) return undefined;
 
@@ -1834,7 +1902,7 @@ function MilkdownInner({
     });
 
     return observeMarkdownEnhancements(wrapper, 'pre', run);
-  }, [readOnly, renderTick]);
+  }, [isComparison, readOnly, renderTick]);
 
   useEffect(() => {
     const wrapper = wrapperRef.current;
@@ -1903,6 +1971,7 @@ function MilkdownInner({
   }, [documentPath, openFileFromPath]);
 
   useEffect(() => {
+    if (isComparison) return undefined;
     const handler = (e) => {
       const wrapper = wrapperRef.current;
       const detail = e.detail ?? {};
@@ -1932,7 +2001,7 @@ function MilkdownInner({
 
     window.addEventListener('outline:jump', handler);
     return () => window.removeEventListener('outline:jump', handler);
-  }, []);
+  }, [isComparison]);
 
   useEffect(() => {
     if (readOnly || editorInfo.loading) return undefined;
@@ -2025,23 +2094,26 @@ function MilkdownInner({
       onContextMenu={handleContextMenu}
       onKeyDownCapture={(event) => {
         const direction = markdownUndoDirection(event.nativeEvent);
-        if (readOnly || !direction || !event.target.closest('.milkdown-editor') ||
+        if (isComparison || readOnly || !direction || !event.target.closest('.milkdown-editor') ||
             event.target.closest('input, textarea, select') || !replayHistory(direction)) return;
         event.preventDefault();
         event.stopPropagation();
       }}
       className={`md-preview md-preview--milkdown ${editorInfo.loading ? 'md-preview--stale' : ''} ${className || ''}`}
-      data-editor-theme={darkTheme ? 'dark' : 'light'}
       style={{
         fontSize: `${fontSize || 14}px`,
         lineHeight: (lineHeight || 24) / (fontSize || 14),
       }}
     >
       <Milkdown />
+      {isComparison && !editorInfo.loading && editorRef.current?.status !== 'Created' && (
+        <p role="alert">{i18n.t('editor.loadFailed')}</p>
+      )}
       {treePreviews.map((entry) => createPortal(<MarkdownTreeBlock source={entry.source} filePath={documentPath}
         onJump={jumpToCode} />, entry.element, entry.id))}
       <MilkdownTooltips rootRef={wrapperRef} readOnly={readOnly} />
-      <MilkdownMediaTools key={activeTabId} ref={mediaToolsRef} rootRef={wrapperRef} getView={getMediaView}
+      <MilkdownMediaTools key={activeTabId} ref={mediaToolsRef} rootRef={wrapperRef} previewBoundsRef={previewBoundsRef}
+        documentPath={documentPath} getView={getMediaView}
         ready={!editorInfo.loading} readOnly={readOnly} />
       <EditorContextMenu menu={menu} onClose={closeMenu} />
       <MarkdownCodeLanguageMenu request={codeLanguageMenu} onClose={closeCodeLanguageMenu} />
@@ -2081,6 +2153,7 @@ class MilkdownErrorBoundary extends Component {
    */
   componentDidCatch(error, info) {
     reportReactError(error, info);
+    this.props.onComparisonReady?.();
   }
 
   /**
@@ -2112,12 +2185,14 @@ const MilkdownMarkdownEditor = forwardRef(function MilkdownMarkdownEditor({
   className,
   onAutoSave,
   readOnly = false,
+  comparison,
 }, ref) {
   const documentVersion = useEditorStore(useShallow((s) => ({
     id: s.activeTabId,
     revision: s.tabs.find((tab) => tab.id === s.activeTabId)?.contentRevision ?? 0,
   })));
-  const { id: activeTabId, revision: contentRevision } = documentVersion;
+  const activeTabId = comparison?.tabId ?? documentVersion.id;
+  const contentRevision = comparison ? 0 : documentVersion.revision;
   const editorFontSize = useConfigStore((s) => s.fontSize);
   const editorLineHeight = useConfigStore((s) => s.lineHeight);
   const previewFontSize = useConfigStore((s) => s.previewFontSize);
@@ -2128,16 +2203,16 @@ const MilkdownMarkdownEditor = forwardRef(function MilkdownMarkdownEditor({
     const tab = useEditorStore.getState().tabs.find((t) => t.id === documentVersion.id);
     return getBuffer(documentVersion.id, tab?.content || '');
   }, [documentVersion]);
-  const bufferedContent = useEditorBufferContent(readOnly ? activeTabId : null, fallback, 240);
-  const content = readOnly ? bufferedContent : fallback;
+  const bufferedContent = useEditorBufferContent(readOnly && !comparison ? activeTabId : null, fallback, 240);
+  const content = comparison ? comparison.initialContent : readOnly ? bufferedContent : fallback;
   const fontSize = previewZoomSync ? editorFontSize : (previewFontSize || editorFontSize);
   const lineHeight = previewZoomSync ? editorLineHeight : (previewLineHeight || editorLineHeight);
 
   return (
-    <MilkdownErrorBoundary key={`${activeTabId}:${contentRevision}`} className={className}>
+    <MilkdownErrorBoundary key={`${activeTabId}:${contentRevision}`} className={className} onComparisonReady={comparison?.onReady}>
       <MilkdownProvider>
         <ForwardedMilkdownInner
-          key={readOnly ? `${activeTabId}:${content}` : activeTabId}
+          key={readOnly && !comparison ? `${activeTabId}:${content}` : activeTabId}
           ref={ref}
           activeTabId={activeTabId}
           className={className}
@@ -2146,6 +2221,11 @@ const MilkdownMarkdownEditor = forwardRef(function MilkdownMarkdownEditor({
           fontSize={fontSize}
           lineHeight={lineHeight}
           onAutoSave={onAutoSave}
+          onDraftChange={comparison?.onChange}
+          comparisonLayout={comparison?.layout}
+          comparisonSource={comparison?.content}
+          onComparisonReady={comparison?.onReady}
+          previewBoundsRef={comparison?.previewBoundsRef}
           readOnly={readOnly}
         />
       </MilkdownProvider>

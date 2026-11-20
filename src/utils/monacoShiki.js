@@ -55,12 +55,23 @@ function normalizeThemeName(name) {
 const fallbackSetTheme = (name) => runtime.setTheme(normalizeThemeName(name));
 const fallbackCreate = (element, options, overrides) => runtime.create(element,
   { ...options, theme: normalizeThemeName(options?.theme) }, overrides);
+
+function themeOverrides(dark) {
+  const caret = dark ? '#528bff' : '#526fff';
+  return {
+    'minimap.background': '#00000000',
+    'editorCursor.foreground': caret,
+    'editorMultiCursor.primary.foreground': caret,
+    'editorMultiCursor.secondary.foreground': caret,
+  };
+}
+
 if (!runtime.ready) {
   // These names stay safe even when Shiki cannot load. Never send `vs` to a
   // previously patched Shiki setter during hot replacement.
   for (const [name, dark] of [[LIGHT_THEME_NAME, false], [DARK_THEME_NAME, true]]) {
     monaco.editor.defineTheme(name, { base: dark ? 'vs-dark' : 'vs', inherit: true,
-      colors: { 'minimap.background': '#00000000' }, rules: treeTokenRules(dark) });
+      colors: themeOverrides(dark), rules: treeTokenRules(dark) });
   }
   monaco.editor.setTheme = fallbackSetTheme;
   monaco.editor.create = fallbackCreate;
@@ -105,7 +116,7 @@ function withMgtreeRules(themeName, monacoTheme) {
     inherit: true,
     // The minimap paints its background into a canvas; CSS transparency alone
     // cannot expose the editor surface (including a custom background image).
-    colors: { ...monacoTheme.colors, 'minimap.background': '#00000000' },
+    colors: { ...monacoTheme.colors, ...themeOverrides(isDarkTheme(themeName)) },
     rules: [...(monacoTheme.rules || []), ...treeTokenRules(isDarkTheme(themeName))],
   };
 }

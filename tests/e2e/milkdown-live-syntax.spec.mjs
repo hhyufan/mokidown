@@ -14,23 +14,46 @@ function visibleMarkers(editor) {
 test('the writing caret uses the active theme foreground in light and dark modes', async ({ page }) => {
   const editor = await openEditor(page, '正文');
   await page.emulateMedia({ colorScheme: 'dark' });
+  await page.addStyleTag({
+    content: '.md-preview--milkdown .milkdown .ProseMirror.milkdown-editor:not(.ProseMirror-hideselection) { caret-color: white; }',
+  });
+  await editor.locator('p').click();
   for (const theme of ['light', 'dark', 'light']) {
-    await page.evaluate((theme) => { document.documentElement.dataset.theme = theme; }, theme);
-    await editor.locator('p').click();
+    await page.evaluate((theme) => {
+      document.documentElement.dataset.theme = theme;
+      window.trial.selectTextblock(0);
+    }, theme);
+    const caret = page.locator('.moki-writing-caret:not([hidden])');
+    await expect(caret).toBeVisible();
     const colors = await editor.evaluate((element) => {
       const style = getComputedStyle(element);
-      return { caret: style.caretColor, text: style.color, colorScheme: style.colorScheme };
+      return { nativeCaret: style.caretColor, text: style.color, colorScheme: style.colorScheme };
     });
-    expect(colors.caret).toBe(colors.text);
-    expect(colors.colorScheme).toBe(theme);
-    if (theme === 'light') expect(colors.caret).toBe('rgb(44, 44, 46)');
+    await expect(caret).toHaveCSS('background-color', colors.text);
+    expect(colors.nativeCaret).toBe('rgba(0, 0, 0, 0)');
+    expect(colors.colorScheme.split(' ')).toContain(theme);
+    if (theme === 'light') {
+      expect(colors.colorScheme.split(' ')).toContain('only');
+      expect(colors.text).toBe('rgb(44, 44, 46)');
+    }
   }
+  await page.keyboard.press('Home');
+  const caret = page.locator('.moki-writing-caret:not([hidden])');
+  await expect(caret).toBeVisible();
+  const before = await caret.evaluate((element) => element.style.transform);
+  await page.keyboard.press('ArrowRight');
+  await expect.poll(() => caret.evaluate((element) => element.style.transform)).not.toBe(before);
+  await page.keyboard.press('Shift+ArrowRight');
+  await expect(caret).toHaveCount(0);
 });
 
 test('code and virtual Markdown carets follow the application theme', async ({ page }) => {
   const editor = await openEditor(page, '```text\nhello\n```\n\n**bold**');
   const code = editor.locator('.cm-content');
   await code.click();
+  await page.addStyleTag({
+    content: '.md-preview--milkdown .milkdown .ProseMirror.milkdown-editor .cm-editor .cm-cursor { border-left-color: white; }',
+  });
   const codeCaret = editor.locator('.cm-cursor-primary').first();
   for (const [theme, color] of [['dark', 'rgb(82, 139, 255)'], ['light', 'rgb(82, 111, 255)']]) {
     await page.evaluate((value) => { document.documentElement.dataset.theme = value; }, theme);
@@ -40,6 +63,7 @@ test('code and virtual Markdown carets follow the application theme', async ({ p
   await page.keyboard.press('ArrowLeft');
   const virtual = editor.locator('.moki-markdown-marker--with-caret i');
   await expect(virtual).toHaveCount(1);
+  await expect(page.locator('.moki-writing-caret:not([hidden])')).toHaveCount(0);
   expect(await virtual.evaluate((node) => getComputedStyle(node, '::after').borderInlineStartColor)).toBe('rgb(44, 44, 46)');
 });
 

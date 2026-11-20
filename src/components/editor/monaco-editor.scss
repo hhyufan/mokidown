@@ -55,12 +55,27 @@
 
   .inline-folded::after { color: var(--text-sec); }
 
-  // Monaco's runtime theme also supplies cursor rules. Keep the visible
-  // cursor tied to the application theme, including while Shiki initializes.
-  .cursors-layer[class] > .cursor {
-    background-color: var(--code-caret);
-    border-color: var(--code-caret);
+  // Monaco draws the normal caret itself and lets the textarea draw it during IME.
+  .cursors-layer > .cursor {
+    border-color: var(--code-caret) !important;
     color: var(--surface);
+  }
+
+  .cursors-layer.cursor-smooth-caret-animation > .cursor {
+    transition-property: top, left;
+  }
+
+  .cursors-layer:not(.cursor-block-outline-style, .cursor-underline-style, .cursor-underline-thin-style) > .cursor {
+    background-color: var(--code-caret) !important;
+  }
+
+  .inputarea.ime-input {
+    caret-color: var(--code-caret) !important;
+  }
+
+  @media (forced-colors: active) {
+    --code-caret: CanvasText;
+    .cursors-layer > .cursor { forced-color-adjust: none; }
   }
 
   .margin {

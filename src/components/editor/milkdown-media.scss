@@ -85,11 +85,6 @@
 .md-preview--milkdown .milkdown-editor img[src] {
   cursor: zoom-in;
 }
-.md-preview--milkdown .moki-media-selected {
-  outline: 1px solid var(--accent, #729bea);
-  outline-offset: 2px;
-  border-radius: 3px;
-}
 .md-preview--milkdown .milkdown-editor .moki-image-empty {
   min-width: 180px;
   min-height: 52px;
@@ -100,11 +95,32 @@
   font: 13px var(--font-app);
   cursor: pointer;
 }
-/* Local containing block for the preview's fixed mask, image and controls. */
+/* Keep the mask, image, and controls in the same bounded area. */
 .milkdown-media-preview-host {
   position: fixed;
   z-index: 1100;
   contain: layout paint;
+
+  .ant-image-preview-mask,
+  .ant-image-preview-wrap,
+  .ant-image-preview-operations-wrapper {
+    position: absolute;
+    inset: 0;
+  }
+
+  .ant-image-preview {
+    position: relative;
+    width: 100%;
+    height: 100%;
+  }
+
+  .ant-image-preview-operations-wrapper { pointer-events: none; }
+
+  .ant-image-preview-close,
+  .ant-image-preview-footer {
+    position: absolute;
+    pointer-events: auto;
+  }
 }
 
 .milkdown-media-preview-toolbar {

@@ -275,6 +275,21 @@ body.moki-has-background {
     @include background-popup.image-surface;
   }
 
+  .moki-monaco-surface.moki-monaco-surface {
+    @include background-popup.image-surface;
+    background-color: var(--moki-background-base) !important;
+    --moki-monaco-control: color-mix(in srgb, var(--text) 7%, transparent);
+    --vscode-input-background: var(--moki-monaco-control);
+    --vscode-editorHoverWidget-statusBarBackground: var(--moki-monaco-control);
+    --vscode-peekViewEditor-background: transparent;
+    --vscode-peekViewEditorGutter-background: transparent;
+    --vscode-peekViewResult-background: transparent;
+
+    :is(.suggest-details-container, .monaco-list-rows, .quick-input-list) { background-color: transparent; }
+    .monaco-inputbox { background-color: var(--moki-monaco-control) !important; }
+    .diff-hidden-lines > & { box-shadow: none; }
+  }
+
   // 欢迎页那三个操作卡片（新建文档 / 打开文件 / 打开文件夹）在背景模式下走半透明，
   // 但**按各自原本的底色**透，不是一律换成表面色玻璃：
   // 次级两个本色就是 var(--surface)，与 --moki-glass-surface 同档；
