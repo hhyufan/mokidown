@@ -24,7 +24,10 @@ function applySharedLogs(snapshot) {
 function synchronize(command, args) {
   if (!syncActive) return;
   // 保持同一窗口的记录/清空顺序，桥接失败不能递归产生新错误日志。
-  logQueue = logQueue.then(() => nativeInvoke(command, args)).then(applySharedLogs).catch(() => {});
+  logQueue = logQueue
+    .then(() => nativeInvoke(command, args))
+    .then(applySharedLogs)
+    .catch(() => {});
 }
 
 export const useRuntimeLogStore = create((set) => ({
@@ -32,15 +35,25 @@ export const useRuntimeLogStore = create((set) => ({
   open: false,
   show: () => set({ open: true }),
   hide: () => set({ open: false }),
-  clear: () => { set({ entries: [] }); synchronize('clear_runtime_logs'); },
+  clear: () => {
+    set({ entries: [] });
+    synchronize('clear_runtime_logs');
+  },
 }));
 
 /** Export the current runtime error entries as a JSON report. */
 export async function exportRuntimeLogs(entries) {
   const name = `mokidown-errors-${new Date().toISOString().slice(0, 10)}.json`;
-  const data = JSON.stringify({ schemaVersion: 1, exportedAt: new Date().toISOString(), entries }, null, 2);
+  const data = JSON.stringify(
+    { schemaVersion: 1, exportedAt: new Date().toISOString(), entries },
+    null,
+    2,
+  );
   if (window.__TAURI_INTERNALS__) {
-    const path = await save({ defaultPath: name, filters: [{ name: 'JSON', extensions: ['json'] }] });
+    const path = await save({
+      defaultPath: name,
+      filters: [{ name: 'JSON', extensions: ['json'] }],
+    });
     if (!path) return false;
     await writeTextFile(path, data);
   } else {
@@ -57,45 +70,86 @@ export async function exportRuntimeLogs(entries) {
 }
 
 function clean(value, length) {
-  return String(value || '').slice(0, length)
+  return String(value || '')
+    .slice(0, length)
     .replace(/\b(Bearer\s+)[^\s,;"']+/gi, '$1[redacted]')
-    .replace(/([?&](?:access_token|refresh_token|token|api[_-]?key|password)=)[^&#\s]+/gi, '$1[redacted]');
+    .replace(
+      /([?&](?:access_token|refresh_token|token|api[_-]?key|password)=)[^&#\s]+/gi,
+      '$1[redacted]',
+    );
 }
 
 function isCancellation(value) {
-  return /^(?:Canceled|CancellationError|AbortError)$/.test(value?.name || '') ||
-    /^(?:canceled|cancelled|aborted)$/i.test(value?.message || value || '');
+  return (
+    /^(?:Canceled|CancellationError|AbortError)$/.test(value?.name || '') ||
+    /^(?:canceled|cancelled|aborted)$/i.test(value?.message || value || '')
+  );
 }
 
-export function reportRuntimeLog({ level = 'error', source = 'WebView', message, stack, detail, timestamp = Date.now(), announce = true, nativeId }) {
+export function reportRuntimeLog({
+  level = 'error',
+  source = 'WebView',
+  message,
+  stack,
+  detail,
+  timestamp = Date.now(),
+  announce = true,
+  nativeId,
+}) {
   if (!message || isCancellation(message)) return;
   const entry = {
-    id: `${origin}:${++sequence}`, level, source, timestamp, nativeId,
-    message: clean(message, 4096), stack: clean(stack, 10000), detail: clean(detail, 1024), count: 1,
+    id: `${origin}:${++sequence}`,
+    level,
+    source,
+    timestamp,
+    nativeId,
+    message: clean(message, 4096),
+    stack: clean(stack, 10000),
+    detail: clean(detail, 1024),
+    count: 1,
   };
   useRuntimeLogStore.setState(({ entries }) => {
-    const index = entries.findIndex((item) => item.message === entry.message && item.level === entry.level &&
-      Math.abs(entry.timestamp - item.timestamp) <= repeatWindow);
+    const index = entries.findIndex(
+      (item) =>
+        item.message === entry.message &&
+        item.level === entry.level &&
+        Math.abs(entry.timestamp - item.timestamp) <= repeatWindow,
+    );
     if (index < 0) return { entries: [entry, ...entries].slice(0, limit) };
     const previous = entries[index];
-    return { entries: [{ ...previous, ...entry, id: previous.id, stack: entry.stack || previous.stack,
-      detail: entry.detail || previous.detail, count: previous.count + 1 }, ...entries.filter((_, i) => i !== index)] };
+    return {
+      entries: [
+        {
+          ...previous,
+          ...entry,
+          id: previous.id,
+          stack: entry.stack || previous.stack,
+          detail: entry.detail || previous.detail,
+          count: previous.count + 1,
+        },
+        ...entries.filter((_, i) => i !== index),
+      ],
+    };
   });
   synchronize('record_runtime_log', { entry });
   const now = Date.now();
   if (announce && level === 'error' && now - lastNotification >= repeatWindow) {
     lastNotification = now;
-    queueMicrotask(() => useNotificationStore.getState().notify('error', i18n.t('runtimeLogs.reported'), '', 6000, {
-      label: i18n.t('runtimeLogs.view'),
-      run: useRuntimeLogStore.getState().show,
-    }));
+    queueMicrotask(() =>
+      useNotificationStore.getState().notify('error', i18n.t('runtimeLogs.reported'), '', 6000, {
+        label: i18n.t('runtimeLogs.view'),
+        run: useRuntimeLogStore.getState().show,
+      }),
+    );
   }
 }
 
 export function reportReactError(error, info) {
   if (isCancellation(error)) return;
   reportRuntimeLog({
-    source: 'React', message: error?.message || String(error), stack: error?.stack,
+    source: 'React',
+    message: error?.message || String(error),
+    stack: error?.stack,
     detail: info?.componentStack,
   });
 }
@@ -106,11 +160,16 @@ export function reportTauriFailure(command, reason, args) {
   // A vanished file is an expected business state: callers surface it as a
   // missing/blocked tab. Logging every autosave/switch attempt only floods the
   // panel, and the old entry had no path to locate the file anyway.
-  if (command === 'read_file_content' && /os error (?:2|3)\b|not found|No such file/i.test(message)) return;
+  if (command === 'read_file_content' && /os error (?:2|3)\b|not found|No such file/i.test(message))
+    return;
   const filePath = args?.filePath || args?.path;
   reportRuntimeLog({
-    source: 'Tauri', detail: filePath ? `${command} ${filePath}` : command, announce: false,
-    level: ['missing', 'binary', 'not-file', 'too-large'].includes(reason?.kind) ? 'warning' : 'error',
+    source: 'Tauri',
+    detail: filePath ? `${command} ${filePath}` : command,
+    announce: false,
+    level: ['missing', 'binary', 'not-file', 'too-large'].includes(reason?.kind)
+      ? 'warning'
+      : 'error',
     message,
     stack: reason?.stack,
   });
@@ -118,8 +177,9 @@ export function reportTauriFailure(command, reason, args) {
 
 export function installRuntimeLogging() {
   const bootstrap = window.__mokiRuntimeLogs;
+  const acceptBootstrapLog = (entry) => queueMicrotask(() => reportRuntimeLog(entry));
   if (bootstrap) {
-    bootstrap.accept = reportRuntimeLog;
+    bootstrap.accept = acceptBootstrapLog;
     bootstrap.pending.forEach(reportRuntimeLog);
     bootstrap.pending.length = 0;
     bootstrap.export = () => exportRuntimeLogs(useRuntimeLogStore.getState().entries);
@@ -135,19 +195,28 @@ export function installRuntimeLogging() {
       const message = error?.message || strings.join(' ');
       // Dev HMR reloads leave Tauri's async callbacks orphaned; that is a
       // tooling artifact, not an app error. Vue flags are injected at build time.
-      if (/Couldn't find callback id/.test(message) || /__VUE_(?:OPTIONS_API|PROD_DEVTOOLS|PROD_HYDRATION_MISMATCH_DETAILS)__/.test(message)) return;
+      if (
+        /Couldn't find callback id/.test(message) ||
+        /__VUE_(?:OPTIONS_API|PROD_DEVTOOLS|PROD_HYDRATION_MISMATCH_DETAILS)__/.test(message)
+      )
+        return;
       // React 可能在渲染期间调用 console；延后发布，避免同步更新任务面板。
       const entry = {
         source: /^Warning: /.test(strings[0]) ? 'React' : 'WebView',
         level: method === 'warn' || /^Warning: /.test(strings[0]) ? 'warning' : 'error',
-        message, stack: error?.stack, detail: error ? strings.join(' ') : '',
+        message,
+        stack: error?.stack,
+        detail: error ? strings.join(' ') : '',
       };
       queueMicrotask(() => reportRuntimeLog(entry));
     };
     console[method] = wrapped[method];
   }
   return () => {
-    if (bootstrap?.accept === reportRuntimeLog) { bootstrap.accept = null; bootstrap.export = null; }
+    if (bootstrap?.accept === acceptBootstrapLog) {
+      bootstrap.accept = null;
+      bootstrap.export = null;
+    }
     for (const method of ['warn', 'error']) {
       if (console[method] === wrapped[method]) console[method] = original[method];
     }
@@ -163,16 +232,25 @@ export function startRuntimeLogSync() {
   const local = useRuntimeLogStore.getState().entries.slice().reverse();
   void listen('runtime-logs:changed', ({ payload }) => {
     if (!disposed) applySharedLogs(payload);
-  }).then(async (unlisten) => {
-    stop = unlisten;
-    if (disposed) { stop(); return; }
-    // 先订阅再取快照；版本号防止晚到的旧快照覆盖新日志。
-    const snapshot = await nativeInvoke('shared_runtime_logs');
-    if (disposed) return;
-    applySharedLogs(snapshot);
-    for (const entry of local) synchronize('record_runtime_log', { entry });
-  }).catch(() => {});
-  return () => { disposed = true; syncActive = false; stop?.(); };
+  })
+    .then(async (unlisten) => {
+      stop = unlisten;
+      if (disposed) {
+        stop();
+        return;
+      }
+      // 先订阅再取快照；版本号防止晚到的旧快照覆盖新日志。
+      const snapshot = await nativeInvoke('shared_runtime_logs');
+      if (disposed) return;
+      applySharedLogs(snapshot);
+      for (const entry of local) synchronize('record_runtime_log', { entry });
+    })
+    .catch(() => {});
+  return () => {
+    disposed = true;
+    syncActive = false;
+    stop?.();
+  };
 }
 
 export function startNativeLogPolling() {
