@@ -10,7 +10,7 @@ import { isImeComposing } from '@utils/keyboard';
 import useConfigStore from '@store/useConfigStore';
 import { activeMarkdownPairs, emptyAsteriskPair, emptyMarkdownMarkPair, markdownAsteriskEdit, markdownBacktickEdit, markdownBrackets, markdownPairDeletion, markdownPairEnabled, matchingMarkdownBracket } from '@utils/markdownPairs';
 import { CODE_FENCE_LANGUAGE_EVENT, completedFenceLanguage, readMarkdownFence } from '@utils/markdownCodeFence';
-import { mathDraftRange, mathMarkName } from './milkdownMathMark';
+import { mathDraftAt, mathDraftRange, mathMarkName } from './milkdownMathMark';
 import { characterEscapeMarkName, syntaxScanText } from './milkdownRawText';
 import { attachWritingCaret } from './milkdownWritingCaret';
 
@@ -487,6 +487,10 @@ function pendingMarkers($caret) {
   const ghost = (from, to) =>
     Decoration.inline(start + from, start + to, { class: 'moki-markdown-ghost' });
   const after = $caret.nodeAfter;
+  // 成对草稿的那两枚 `$` 由预览插件负责染透明，这里再抹一层灰就是两个插件抢同一段字。
+  const draft = mathDraftAt($caret);
+  const isDraftMarker = (from, to) =>
+    !!draft && to - from === 1 && (from === draft.anchor || from === draft.close);
   if (after?.isText && !after.marks.length) {
     const width = emptyAsteriskPair(text + after.text.slice(0, 3), text.length);
     if (width) return [ghost(text.length - width, text.length + width)];
@@ -500,6 +504,7 @@ function pendingMarkers($caret) {
     const token = match[0];
     const from = match.index;
     const to = from + token.length;
+    if (isDraftMarker(start + from, start + to)) continue;
     if (from && /[\w:/\\]/.test(text[from - 1])) continue;
     const rest = text.slice(to);
     if (/^\s/.test(rest) || (token === '$' && /^\d/.test(rest))) continue;
@@ -704,8 +709,8 @@ function typeEscapeDollar(view, $pos, value, text) {
 }
 
 // 打字判定只看向刚敲下的这个字符：`$` 要么收尾已有公式，要么把之前打下的字面 `$`
-// 连同中间的正文一起折成 math mark，两个定界符都不留在文档里；连写成 `$$` 时先让
-// 正文以字面文本摊着（见 mathDraftRange），等收尾那对 `$` 齐了才折。
+// 连同中间的正文一起折成 math mark，两个定界符都不留在文档里；成对手势打出的那对 `$`
+// 先以字面文本摊着（见 mathDraftRange），光标离开这一段才折。
 // 判据照抄 pendingMarkers 对 `$` 的保护（数字开头是价格、转义的是正文），
 // 让打字看到的样子和折叠的结果一致。
 function typeDollar(view, $pos, value, text) {
@@ -733,21 +738,34 @@ function typeDollar(view, $pos, value, text) {
   }
   if (marks.some((mark) => mark.type.spec.code) || right.some((mark) => mark.type.spec.code)) return false;
   const offset = $pos.parentOffset;
-  // `$$` 打头是行内草稿：锚点与正文一直是字面文本，补齐收尾的第二个 `$` 才折成 mark。
-  // 先量草稿，连写的 `$` 才不会被下面当成单 `$` 公式的开界符。
+  // 贴在草稿的收尾 `$` 前面再打 `$`，是老手感里「$$x$$ 写完了」的那一下：这一笔不吃正文
+  // 也不另开一对，只把光标递到定界符外面。光标已经离开那一段，预览插件紧接着折成公式。
   const draft = mathDraftRange(value, offset);
-  if (draft?.closing) {
-    const anchor = $pos.pos - (offset - draft.anchor);
-    const bodyFrom = $pos.pos - (offset - draft.from);
-    const bodyTo = $pos.pos - (offset - draft.to);
-    const tr = closeHistory(state.tr);
-    tr.delete(bodyTo, $pos.pos);
-    tr.delete(anchor, bodyFrom);
-    const to = anchor + bodyTo - bodyFrom;
-    tr.addMark(anchor, to, type.create());
-    tr.setSelection(TextSelection.create(tr.doc, to));
-    tr.setStoredMarks(type.removeFromSet(tr.selection.$from.marks()));
-    view.dispatch(tr.scrollIntoView());
+  const atClose =
+    value[offset] === '$' &&
+    (draft?.close === offset ||
+      (value[offset - 1] === '$' &&
+        value[offset - 2] !== '$' &&
+        !(offset > 1 && /[\w:/\\]/.test(value[offset - 2]))));
+  if (atClose) {
+    view.dispatch(
+      closeHistory(state.tr).setSelection(TextSelection.create(state.doc, $pos.pos + 1)),
+    );
+    return true;
+  }
+  // 成对手势的第二下：`$` 紧跟在另一枚 `$` 后面时补出右半截，光标留在两枚中间，
+  // 与 `**` 同一套手感——紧接着打的字才算公式正文，那两枚定界符由预览插件染透明、
+  // 光标一走就折掉。连写的第三枚、贴着字母数字的那一枚都不算开界，与 mathDraftRange 同源。
+  if (
+    value[offset - 1] === '$' &&
+    value[offset - 2] !== '$' &&
+    !/[^\s]/.test(value[offset] || '') &&
+    !(offset > 1 && /[\w:/\\]/.test(value[offset - 2]))
+  ) {
+    const tr = closeHistory(state.tr).insertText('$', $pos.pos);
+    view.dispatch(
+      tr.setSelection(TextSelection.create(tr.doc, $pos.pos)).scrollIntoView(),
+    );
     return true;
   }
   for (let index = offset - 1; index >= 0; index--) {
