@@ -1,6 +1,6 @@
 /**
  * @file web-page.scss
- * @description 内置网页视图：地址栏 + iframe 内容区。
+ * @description 内置网页视图的地址栏和内容区域。
  */
 
 .web-page {
@@ -12,38 +12,35 @@
   background: var(--surface);
   overflow: hidden;
 
+  &[hidden] { display: none; }
+
   &__bar {
     display: flex;
     align-items: center;
+    gap: 6px;
+    flex-shrink: 0;
+    padding: 8px 12px;
+    border-bottom: 1px solid var(--border);
+    font: 12px var(--font-app);
+  }
+
+  &__error { padding: 8px 12px; color: var(--error); }
+
+  &__viewport { display: flex; flex: 1; min-width: 0; min-height: 0; overflow: hidden; }
+
+  &__native {
+    align-items: center;
+    justify-content: center;
+    color: var(--text-sec);
+  }
+
+  &__native-error {
+    display: grid;
+    justify-items: center;
     gap: 8px;
-    flex-shrink: 0;
-    min-height: 34px;
-    padding: 0 10px;
-    border-bottom: 1px solid var(--border-light);
-    color: var(--text-sec);
-    font: 11px var(--font-app);
-  }
-
-  &__url {
-    flex: 1;
-    min-width: 0;
-    overflow: hidden;
-    white-space: nowrap;
-    text-overflow: ellipsis;
-  }
-
-  &__action {
-    flex-shrink: 0;
-    padding: 3px 8px;
-    border: 0;
-    border-radius: 5px;
-    background: none;
-    color: var(--text-sec);
-    font: inherit;
-    cursor: pointer;
-
-    &:hover { background: var(--hover); color: var(--accent); }
-    &:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+    padding: 16px;
+    text-align: center;
+    overflow-wrap: anywhere;
   }
 
   &__frame {
@@ -52,6 +49,7 @@
     width: 100%;
     border: 0;
     background: transparent;
+    color-scheme: light dark;
   }
 }
 

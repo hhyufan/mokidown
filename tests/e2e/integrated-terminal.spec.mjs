@@ -76,10 +76,11 @@ test('terminal lets the wallpaper through and follows the editor cursor colors',
   }
 });
 
-test('terminal URL text and OSC 8 links open through the native browser command', async ({ page }) => {
+test('terminal URL text and OSC 8 links support browser, menu and modifier actions', async ({ page }) => {
   await page.goto('/tests/terminal-harness.html');
   const terminal = page.locator('#terminal-panel');
   await expect(terminal.getByRole('status')).toHaveText('Local terminal');
+  await page.evaluate(() => window.terminalTrial.openFolder('C:\\work'));
   await page.evaluate(() => window.terminalTrial.emit('\r\nhttp://localhost:5173/test\r\n\x1b]8;;https://example.com/docs\x1b\\Documentation\x1b]8;;\x1b\\\r\n'));
   for (const [text, url] of [['http://localhost:5173/test', 'http://localhost:5173/test'], ['Documentation', 'https://example.com/docs']]) {
     const link = terminal.locator('.xterm-rows > div').filter({ hasText: text });
@@ -89,7 +90,28 @@ test('terminal URL text and OSC 8 links open through the native browser command'
     await page.mouse.move(point.x, point.y);
     await page.mouse.click(point.x, point.y);
     await expect.poll(() => page.evaluate(() => window.terminalTrial.commands.filter(({ command }) => command === 'open_external').at(-1)?.url)).toBe(url);
+
+    if (text === 'Documentation') continue;
+    await page.mouse.click(point.x, point.y, { button: 'right' });
+    await expect(page.getByRole('menuitem')).toHaveCount(5);
+    await page.keyboard.press('Escape');
+    for (const [keys, webTabs, active, split] of [
+      [['Control'], 1, false, false], [['Control', 'Shift'], 1, true, false], [['Control', 'Alt'], 0, false, true],
+    ]) {
+      for (const key of keys) await page.keyboard.down(key);
+      await page.mouse.click(point.x, point.y);
+      for (const key of keys.toReversed()) await page.keyboard.up(key);
+      await expect.poll(() => page.evaluate(async () => {
+        const state = (await import('/src/store/useEditorStore.js')).default.getState();
+        return {
+          webTabs: state.tabs.filter((tab) => tab.builtin === 'web').length,
+          active: state.activeTabId.startsWith('web:'),
+          split: Boolean(state.webSplitUrl),
+        };
+      })).toEqual({ webTabs, active, split });
+    }
   }
+  expect(await page.evaluate(() => window.terminalTrial.commands.filter(({ command }) => command === 'open_external').length)).toBe(2);
 });
 
 test('dragging the bottom panel follows the pointer without a height transition or repeated store updates', async ({ page }) => {

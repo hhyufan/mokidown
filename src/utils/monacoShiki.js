@@ -35,32 +35,74 @@ export const DARK_THEME_NAME = 'one-dark-pro';
  * 的语言（例如 vue / svelte / toml）由 `shikiToMonaco` 自动跳过，因此不在此列。
  */
 const SHIKI_LANGS = [
-  'markdown', 'javascript', 'typescript', 'json', 'html', 'css', 'scss',
-  'python', 'java', 'c', 'cpp', 'csharp', 'go', 'rust', 'ruby', 'php',
-  'shell', 'yaml', 'xml', 'sql', 'lua', 'kotlin', 'swift', 'powershell', 'ini',
+  'markdown',
+  'javascript',
+  'typescript',
+  'json',
+  'html',
+  'css',
+  'scss',
+  'python',
+  'java',
+  'c',
+  'cpp',
+  'csharp',
+  'go',
+  'rust',
+  'ruby',
+  'php',
+  'shell',
+  'yaml',
+  'xml',
+  'sql',
+  'lua',
+  'kotlin',
+  'swift',
+  'powershell',
+  'ini',
 ];
 
 // Monaco keeps Shiki's patched methods across Vite module replacement. Keep its
 // readiness and single initialization task on the same instance as those methods.
 const RUNTIME_KEY = Symbol.for('mokidown.monaco.shiki.runtime');
-const runtime = monaco.editor[RUNTIME_KEY] ||= {
-  ready: false, promise: null,
-  create: monaco.editor.create, setTheme: monaco.editor.setTheme,
-};
+const runtime = (monaco.editor[RUNTIME_KEY] ||= {
+  ready: false,
+  promise: null,
+  create: monaco.editor.create,
+  setTheme: monaco.editor.setTheme,
+});
 function normalizeThemeName(name) {
   if ([LIGHT_THEME_NAME, 'vs', 'hc-light'].includes(name)) return LIGHT_THEME_NAME;
   if ([DARK_THEME_NAME, 'vs-dark', 'hc-black'].includes(name)) return DARK_THEME_NAME;
   return readPreferredThemeName();
 }
 const fallbackSetTheme = (name) => runtime.setTheme(normalizeThemeName(name));
-const fallbackCreate = (element, options, overrides) => runtime.create(element,
-  { ...options, theme: normalizeThemeName(options?.theme) }, overrides);
+const fallbackCreate = (element, options, overrides) =>
+  runtime.create(element, { ...options, theme: normalizeThemeName(options?.theme) }, overrides);
+
+function themeOverrides(dark) {
+  const caret = dark ? '#528bff' : '#526fff';
+  return {
+    'minimap.background': '#00000000',
+    'editorCursor.foreground': caret,
+    'editorMultiCursor.primary.foreground': caret,
+    'editorMultiCursor.secondary.foreground': caret,
+  };
+}
+
 if (!runtime.ready) {
   // These names stay safe even when Shiki cannot load. Never send `vs` to a
   // previously patched Shiki setter during hot replacement.
-  for (const [name, dark] of [[LIGHT_THEME_NAME, false], [DARK_THEME_NAME, true]]) {
-    monaco.editor.defineTheme(name, { base: dark ? 'vs-dark' : 'vs', inherit: true,
-      colors: { 'minimap.background': '#00000000' }, rules: treeTokenRules(dark) });
+  for (const [name, dark] of [
+    [LIGHT_THEME_NAME, false],
+    [DARK_THEME_NAME, true],
+  ]) {
+    monaco.editor.defineTheme(name, {
+      base: dark ? 'vs-dark' : 'vs',
+      inherit: true,
+      colors: themeOverrides(dark),
+      rules: treeTokenRules(dark),
+    });
   }
   monaco.editor.setTheme = fallbackSetTheme;
   monaco.editor.create = fallbackCreate;
@@ -105,7 +147,7 @@ function withMgtreeRules(themeName, monacoTheme) {
     inherit: true,
     // The minimap paints its background into a canvas; CSS transparency alone
     // cannot expose the editor surface (including a custom background image).
-    colors: { ...monacoTheme.colors, 'minimap.background': '#00000000' },
+    colors: { ...monacoTheme.colors, ...themeOverrides(isDarkTheme(themeName)) },
     rules: [...(monacoTheme.rules || []), ...treeTokenRules(isDarkTheme(themeName))],
   };
 }
@@ -149,11 +191,15 @@ export function initMonacoShiki() {
         );
       }
 
-      const normalizeTheme = (name) => highlighter.getLoadedThemes().includes(name) ? name
-        : normalizeThemeName(name);
+      const normalizeTheme = (name) =>
+        highlighter.getLoadedThemes().includes(name) ? name : normalizeThemeName(name);
       monaco.editor.setTheme = (name) => shikiEditor.setTheme(normalizeTheme(name));
-      monaco.editor.create = (element, options, overrides) => shikiEditor.create(element,
-        { ...options, theme: normalizeTheme(options?.theme) }, overrides);
+      monaco.editor.create = (element, options, overrides) =>
+        shikiEditor.create(
+          element,
+          { ...options, theme: normalizeTheme(options?.theme) },
+          overrides,
+        );
       monaco.editor.setTheme(readPreferredThemeName());
       runtime.ready = true;
     } catch (error) {
@@ -164,7 +210,9 @@ export function initMonacoShiki() {
         error,
       );
     }
-  })().finally(() => { if (!runtime.ready) runtime.promise = null; });
+  })().finally(() => {
+    if (!runtime.ready) runtime.promise = null;
+  });
 
   return runtime.promise;
 }

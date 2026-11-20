@@ -61,7 +61,7 @@ tungstenite = { version = "0.28", default-features = false, features = ["handsha
 
 [target.'cfg(windows)'.dependencies]
 webview2-com = "0.38"
-windows = { version = "0.61.3", features = ["Win32_Graphics_Gdi", "Win32_Storage_FileSystem", "Win32_System_Com", "Win32_System_Ole", "Win32_UI_Shell"] }
+windows = { version = "0.61.3", features = ["Win32_Graphics_Gdi", "Win32_Storage_FileSystem", "Win32_System_Com", "Win32_System_Ole", "Win32_System_Variant", "Win32_UI_Shell"] }
 windows-sys = { version = "0.52", features = ["Win32_System_Console", "Win32_Foundation", "Win32_Storage_FileSystem", "Win32_System_JobObjects", "Win32_System_Threading", "Win32_Security", "Win32_UI_Input_KeyboardAndMouse", "Win32_UI_WindowsAndMessaging", "Win32_System_DataExchange", "Win32_System_Memory", "Win32_Globalization"] }
 
 # 桌面端单实例：已运行实例接收第二次启动（文件关联打开）的参数转发。

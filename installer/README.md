@@ -38,6 +38,10 @@ then sign those exact bytes with the Tauri updater key. The update manifest
 points directly to that versioned GitHub asset. Local builds do not publish
 unsigned update manifests.
 
+For a signed local build, set `MOKI_WINDOWS_CERT_THUMBPRINT` to the thumbprint of
+an Authenticode certificate available to Windows SignTool before running the
+build. The script verifies the publisher signature and timestamp on the final EXE.
+
 ## Installation behavior
 
 Rust extracts the payload into an isolated temporary directory, launches it with
@@ -51,7 +55,10 @@ Closing the installer is blocked while installation runs.
 React-driven installs refuse to force-kill a running editor. Updater behavior
 without the React progress argument remains unchanged. Backend failures stay in
 the React UI and allow retry. Rust validates paths; no shell executes path text.
-The custom UI requires WebView2, as other Tauri apps do. The NSIS payload remains an internal build artifact.
+The custom UI requires WebView2. If WebView2 is missing or the custom window
+fails to start, the branded EXE starts its embedded NSIS installer. NSIS can
+install WebView2 before launching MokiDown. The payload remains an internal
+build artifact.
 
 The payload template is based on tauri-bundler **2.10.1** (MIT / Apache-2.0).
 Keep its upgrade, WebView2, association and uninstall logic in sync when upgrading

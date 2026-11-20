@@ -6,3 +6,4 @@ showcase/node_modules
 mde-tauri
 *.lock
 *.md
+scripts/sign-windows-installer.ps1
