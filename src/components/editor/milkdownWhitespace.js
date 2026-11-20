@@ -4,18 +4,35 @@ import { NodeSelection, TextSelection } from '@milkdown/kit/prose/state';
 import { GapCursor } from '@milkdown/kit/prose/gapcursor';
 
 export function initialEditingSelection(state) {
-  if (!(state.selection instanceof NodeSelection) || state.selection.node.type.name !== 'html_block') return null;
+  if (
+    !(state.selection instanceof NodeSelection) ||
+    state.selection.node.type.name !== 'html_block'
+  )
+    return null;
   const text = TextSelection.findFrom(state.doc.resolve(state.selection.to), 1, true);
   if (text) return text;
   const boundary = state.doc.resolve(state.selection.to);
   return GapCursor.valid(boundary) ? new GapCursor(boundary) : null;
 }
 
-export function joinEditingParagraphs(left, right) {
-  const empty = (node) => node.data?.mokiEmptyParagraph;
+const isEditingParagraph = (node) => node?.data?.mokiEmptyParagraph;
+
+function separatesLists(node, parent, state) {
+  if (!isEditingParagraph(node) || !parent || !state) return false;
+  const index = state.indexStack.at(-1);
+  const children = parent.children;
+  const before = children[index - 1];
+  if (before?.type !== 'list') return false;
+  let next = index + 1;
+  while (isEditingParagraph(children[next])) next++;
+  const after = children[next];
+  return after?.type === 'list' && before.ordered === after.ordered;
+}
+
+export function joinEditingParagraphs(left, right, parent, state) {
   // Keep one required separator; each authored empty paragraph adds one line.
-  if (empty(left)) return 0;
-  if (empty(right)) return 1;
+  if (isEditingParagraph(left)) return separatesLists(left, parent, state) ? 1 : 0;
+  if (isEditingParagraph(right)) return 1;
   return undefined;
 }
 
@@ -30,7 +47,11 @@ export function configureEditingWhitespace(ctx, { readOnly = false } = {}) {
         runner(state, node) {
           if (!node.content.size) {
             const parent = state.top();
-            if (parent.type === 'listItem' && typeof parent.props.checked === 'boolean' && !parent.children?.length) {
+            if (
+              parent.type === 'listItem' &&
+              typeof parent.props.checked === 'boolean' &&
+              !parent.children?.length
+            ) {
               // GFM only emits a checkbox when its first paragraph is present.
               state.openNode('paragraph').addNode('text', undefined, ' ').closeNode();
             } else {
@@ -39,28 +60,51 @@ export function configureEditingWhitespace(ctx, { readOnly = false } = {}) {
           } else {
             // Paragraph serialization must also work after the view is torn down:
             // Milkdown's debounced listener may still serialize its last transaction.
-            const content = node.lastChild?.type.name === 'hardbreak'
-              ? node.content.cut(0, node.content.size - node.lastChild.nodeSize) : node.content;
+            const content =
+              node.lastChild?.type.name === 'hardbreak'
+                ? node.content.cut(0, node.content.size - node.lastChild.nodeSize)
+                : node.content;
             state.openNode('paragraph').next(content).closeNode();
           }
         },
       },
     };
   });
-  ctx.update(headingSchema.key, (getSchema) => (editorCtx) => ({ ...getSchema(editorCtx), createGapCursor: true }));
+  ctx.update(headingSchema.key, (getSchema) => (editorCtx) => ({
+    ...getSchema(editorCtx),
+    createGapCursor: true,
+  }));
   ctx.update(hardbreakSchema.key, (getSchema) => (editorCtx) => {
     const schema = getSchema(editorCtx);
     return {
       ...schema,
-      parseDOM: [{ tag: 'br[data-is-inline="true"]', getAttrs: () => ({ isInline: true }) }, ...schema.parseDOM],
-      toDOM: (node) => node.attrs.isInline && !readOnly
-        ? ['br', { 'data-type': 'hardbreak', 'data-is-inline': 'true' }]
-        : schema.toDOM(node),
+      parseDOM: [
+        { tag: 'br[data-is-inline="true"]', getAttrs: () => ({ isInline: true }) },
+        ...schema.parseDOM,
+      ],
+      toDOM: (node) =>
+        node.attrs.isInline && !readOnly
+          ? ['br', { 'data-type': 'hardbreak', 'data-is-inline': 'true' }]
+          : schema.toDOM(node),
     };
   });
   ctx.update(remarkStringifyOptionsCtx, (options) => ({
     ...options,
     join: [...(options.join || []), joinEditingParagraphs],
-    handlers: { ...options.handlers, text: (node) => node.value },
+    handlers: {
+      ...options.handlers,
+      text: (node) => node.value,
+      // CommonMark joins matching lists across blank lines. A standalone break
+      // round-trips as an editable paragraph and keeps both lists separate.
+      html: Object.assign(
+        (node, parent, state, info) => {
+          if (separatesLists(node, parent, state)) return '<br>';
+          return options.handlers?.html
+            ? options.handlers.html(node, parent, state, info)
+            : node.value || '';
+        },
+        { peek: options.handlers?.html?.peek ?? (() => '<') },
+      ),
+    },
   }));
 }
