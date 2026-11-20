@@ -10,59 +10,96 @@ import Timeline from './Timeline';
 import HistoryDiffView from './HistoryDiffView';
 
 globalThis.React = React;
-const mock = vi.hoisted(() => ({ saveTab: vi.fn(), init: vi.fn(), createDiff: vi.fn(), diff: null, models: [], changes: [], splitOffset: 400,
-  selection: { startLineNumber: 1, startColumn: 1, endLineNumber: 1, endColumn: 2 } }));
+const mock = vi.hoisted(() => ({
+  saveTab: vi.fn(),
+  init: vi.fn(),
+  createDiff: vi.fn(),
+  diff: null,
+  models: [],
+  changes: [],
+  splitOffset: 400,
+  selection: { startLineNumber: 1, startColumn: 1, endLineNumber: 1, endColumn: 2 },
+}));
 vi.mock('@hooks/useFileManager', () => ({ useFileManager: () => ({ saveTab: mock.saveTab }) }));
 vi.mock('./MarkdownComparisonEditor', () => ({ default: () => null }));
 vi.mock('./useMarkdownHistoryComparison', async () => {
   const { alignBlocks, parseDocument } = await import('./markdownHistoryModel');
-  return { useMarkdownHistoryComparison: (original, modified, enabled) => {
-    if (!enabled || original === modified) return null;
-    const left = parseDocument(original);
-    const right = parseDocument(modified);
-    return { modified, layout: {
-      rows: alignBlocks(left, right, mock.changes),
-      originalBlocks: left.anchors,
-      modifiedBlocks: right.anchors,
-    } };
-  } };
+  return {
+    useMarkdownHistoryComparison: (original, modified, enabled) => {
+      if (!enabled || original === modified) return null;
+      const left = parseDocument(original);
+      const right = parseDocument(modified);
+      return {
+        modified,
+        layout: {
+          rows: alignBlocks(left, right, mock.changes),
+          originalBlocks: left.anchors,
+          modifiedBlocks: right.anchors,
+        },
+      };
+    },
+  };
 });
 vi.mock('@utils/tauriApi', () => ({
-  historyCapture: vi.fn(async () => {}), historyList: vi.fn(), historyRead: vi.fn(),
+  historyCapture: vi.fn(async () => {}),
+  historyList: vi.fn(),
+  historyRead: vi.fn(),
   onHistoryChanged: vi.fn(async () => () => {}),
 }));
 vi.mock('react-i18next', () => ({
-  useTranslation: () => ({ t: (key, params) => ({
-  'history.title': '本地历史', 'history.restore': '恢复此版本', 'history.closeDiff': '关闭对比',
-  'history.rollback': '回滚记录', 'history.rollbackFrom': `已回滚至 ${params?.time} 的版本`,
-  'history.applySelectedChanges': '应用选中差异', 'history.applyChanges': '应用修改',
-  'history.current': '现在',
-  'history.noChanges': '没有更改',
-  'empty.historyDiff.title': '这个版本和现在一模一样呢～',
-  'empty.historyDiff.hint': '没有更改。',
-}[key] || key) }),
+  useTranslation: () => ({
+    t: (key, params) =>
+      ({
+        'history.title': '本地历史',
+        'history.restore': '恢复此版本',
+        'history.closeDiff': '关闭对比',
+        'history.rollback': '回滚记录',
+        'history.rollbackFrom': `已回滚至 ${params?.time} 的版本`,
+        'history.applySelectedChanges': '应用选中差异',
+        'history.applyChanges': '应用修改',
+        'history.current': '现在',
+        'history.noChanges': '没有更改',
+        'empty.historyDiff.title': '这个版本和现在一模一样呢～',
+        'empty.historyDiff.hint': '没有更改。',
+      })[key] || key,
+  }),
   // @/i18n 初始化时要用它。缺了它，只要有依赖链把 @/i18n 拉进来
   // （测试 → useEditorStore → untitledFileName → @/i18n）就会整体报错。
   initReactI18next: { type: '3rdParty', init: () => {} },
 }));
-vi.mock('monaco-editor', () => ({ editor: {
-  createDiffEditor: (...args) => mock.createDiff(...args),
-  createModel: (initial) => {
-    let value = initial, version = 1;
-    const listeners = new Set();
-    const model = {
-      getValue: () => value, getVersionId: () => version,
-      getFullModelRange: () => ({}),
-      setValue: (next) => { value = next; version++; listeners.forEach((fn) => fn()); mock.diff?.updated(); },
-      onDidChangeContent: (fn) => { listeners.add(fn); return { dispose: () => listeners.delete(fn) }; },
-      dispose: vi.fn(),
-    };
-    mock.models.push(model);
-    return model;
-  }, setTheme() {}, setModelLanguage() {},
-} }));
+vi.mock('monaco-editor', () => ({
+  editor: {
+    createDiffEditor: (...args) => mock.createDiff(...args),
+    createModel: (initial) => {
+      let value = initial,
+        version = 1;
+      const listeners = new Set();
+      const model = {
+        getValue: () => value,
+        getVersionId: () => version,
+        getFullModelRange: () => ({}),
+        setValue: (next) => {
+          value = next;
+          version++;
+          listeners.forEach((fn) => fn());
+          mock.diff?.updated();
+        },
+        onDidChangeContent: (fn) => {
+          listeners.add(fn);
+          return { dispose: () => listeners.delete(fn) };
+        },
+        dispose: vi.fn(),
+      };
+      mock.models.push(model);
+      return model;
+    },
+    setTheme() {},
+    setModelLanguage() {},
+  },
+}));
 vi.mock('@utils/monacoShiki', () => ({
-  initMonacoShiki: () => mock.init(), getMonacoThemeName: () => 'one-light',
+  initMonacoShiki: () => mock.init(),
+  getMonacoThemeName: () => 'one-light',
 }));
 
 const path = 'C:/notes/rollback.txt';
@@ -72,7 +109,14 @@ beforeEach(() => {
   mock.splitOffset = 400;
   mock.diff = null;
   mock.models = [];
-  mock.changes = [{ originalStartLineNumber: 1, originalEndLineNumber: 1, modifiedStartLineNumber: 1, modifiedEndLineNumber: 1 }];
+  mock.changes = [
+    {
+      originalStartLineNumber: 1,
+      originalEndLineNumber: 1,
+      modifiedStartLineNumber: 1,
+      modifiedEndLineNumber: 1,
+    },
+  ];
   mock.selection = { startLineNumber: 1, startColumn: 1, endLineNumber: 1, endColumn: 2 };
   mock.init.mockResolvedValue();
   mock.createDiff.mockImplementation(() => {
@@ -80,20 +124,34 @@ beforeEach(() => {
     const layouts = new Set();
     const cursors = new Map();
     const editor = (side) => ({
-      onDidLayoutChange: (fn) => { layouts.add(fn); return { dispose: () => layouts.delete(fn) }; },
+      onDidLayoutChange: (fn) => {
+        layouts.add(fn);
+        return { dispose: () => layouts.delete(fn) };
+      },
       getContainerDomNode: () => ({ getBoundingClientRect: () => ({ left: mock.splitOffset }) }),
-      onDidFocusEditorText: () => ({ dispose() {} }), getSelection: () => mock.selection,
-      onDidChangeCursorSelection: (fn) => { cursors.set(side, fn); return { dispose: () => cursors.delete(side) }; },
-      pushUndoStop: vi.fn(), executeEdits: (_source, edits) => mock.models[side].setValue(edits[0].text),
+      onDidFocusEditorText: () => ({ dispose() {} }),
+      getSelection: () => mock.selection,
+      onDidChangeCursorSelection: (fn) => {
+        cursors.set(side, fn);
+        return { dispose: () => cursors.delete(side) };
+      },
+      pushUndoStop: vi.fn(),
+      executeEdits: (_source, edits) => mock.models[side].setValue(edits[0].text),
     });
     const diff = {
-      getOriginalEditor: () => editor(0), getModifiedEditor: () => editor(1),
-      onDidUpdateDiff: (fn) => { updates.add(fn); return { dispose: () => updates.delete(fn) }; },
+      getOriginalEditor: () => editor(0),
+      getModifiedEditor: () => editor(1),
+      onDidUpdateDiff: (fn) => {
+        updates.add(fn);
+        return { dispose: () => updates.delete(fn) };
+      },
       getLineChanges: () => mock.changes,
       updated: () => queueMicrotask(() => updates.forEach((fn) => fn())),
       layoutUpdated: () => layouts.forEach((fn) => fn()),
       selectionUpdated: () => cursors.get(1)?.(),
-      setModel: () => diff.updated(), updateOptions() {}, dispose: vi.fn(),
+      setModel: () => diff.updated(),
+      updateOptions() {},
+      dispose: vi.fn(),
     };
     mock.diff = diff;
     return diff;
@@ -102,21 +160,35 @@ beforeEach(() => {
   useEditorStore.setState({ tabs: [], tabRenderList: [], activeTabId: null });
   useEditorStore.getState().openFile({ path, name: 'rollback.txt', content: 'before' });
   useHistoryStore.setState({ diff: null, historyWrite: null });
-  historyList.mockResolvedValue([{ timestamp: 20, bytes: 5, restoredFrom: 10 }, { timestamp: 10, bytes: 5 }]);
+  historyList.mockResolvedValue([
+    { timestamp: 20, bytes: 5, restoredFrom: 10 },
+    { timestamp: 10, bytes: 5 },
+  ]);
   historyRead.mockResolvedValue('older');
   mock.saveTab.mockImplementation(async (id, { replacement } = {}) => {
-    if (replacement !== undefined) useEditorStore.getState().replaceTabContent(id, { content: replacement });
+    if (replacement !== undefined)
+      useEditorStore.getState().replaceTabContent(id, { content: replacement });
     return { ok: true };
   });
 });
-afterEach(() => { cleanup(); clearBuffer(path); vi.restoreAllMocks(); vi.unstubAllGlobals(); });
+afterEach(() => {
+  cleanup();
+  clearBuffer(path);
+  vi.restoreAllMocks();
+  vi.unstubAllGlobals();
+});
 
 it('keeps the current history rows visible while refreshing', async () => {
   const view = render(<Timeline />);
   fireEvent.click(screen.getByRole('button', { name: '本地历史' }));
   await waitFor(() => expect(view.container.querySelectorAll('.timeline__item')).toHaveLength(2));
   let resolve;
-  historyList.mockImplementationOnce(() => new Promise((done) => { resolve = done; }));
+  historyList.mockImplementationOnce(
+    () =>
+      new Promise((done) => {
+        resolve = done;
+      }),
+  );
   fireEvent.click(screen.getByRole('button', { name: 'history.refresh' }));
   expect(view.container.querySelectorAll('.timeline__item')).toHaveLength(2);
   expect(view.container.querySelector('.moki-status-empty')).toBeNull();
@@ -130,11 +202,22 @@ it('ignores an old file refresh when the active file changes', async () => {
   const view = render(<Timeline />);
   await waitFor(() => expect(view.container.querySelectorAll('.timeline__item')).toHaveLength(2));
   let resolve;
-  historyList.mockImplementationOnce(() => new Promise((done) => { resolve = done; }));
+  historyList.mockImplementationOnce(
+    () =>
+      new Promise((done) => {
+        resolve = done;
+      }),
+  );
   fireEvent.click(screen.getByRole('button', { name: 'history.refresh' }));
   historyList.mockResolvedValueOnce([{ timestamp: 40, bytes: 12 }]);
-  act(() => useEditorStore.getState().openFile({ path: 'C:/notes/other.md', name: 'other.md', content: '' }));
-  await waitFor(() => expect(view.container.querySelector('.timeline__size')).toHaveTextContent('12 B'));
+  act(() =>
+    useEditorStore
+      .getState()
+      .openFile({ path: 'C:/notes/other.md', name: 'other.md', content: '' }),
+  );
+  await waitFor(() =>
+    expect(view.container.querySelector('.timeline__size')).toHaveTextContent('12 B'),
+  );
   await act(async () => resolve([{ timestamp: 30, bytes: 9 }]));
   expect(view.container.querySelector('.timeline__size')).toHaveTextContent('12 B');
 });
@@ -144,7 +227,12 @@ it('keeps an already confirmed empty history state visible while refreshing', as
   const view = render(<Timeline />);
   await waitFor(() => expect(view.container.querySelector('.moki-status-empty')).not.toBeNull());
   let resolve;
-  historyList.mockImplementationOnce(() => new Promise((done) => { resolve = done; }));
+  historyList.mockImplementationOnce(
+    () =>
+      new Promise((done) => {
+        resolve = done;
+      }),
+  );
   fireEvent.click(screen.getByRole('button', { name: 'history.refresh' }));
   expect(view.container.querySelector('.moki-status-empty')).not.toBeNull();
   await act(async () => resolve([]));
@@ -152,7 +240,10 @@ it('keeps an already confirmed empty history state visible while refreshing', as
 
 it('starts collapsed so the file tree keeps the vertical space', async () => {
   render(<Timeline />);
-  expect(screen.getByRole('button', { name: '本地历史' })).toHaveAttribute('aria-expanded', 'false');
+  expect(screen.getByRole('button', { name: '本地历史' })).toHaveAttribute(
+    'aria-expanded',
+    'false',
+  );
   expect(screen.queryByRole('img', { name: '回滚记录' })).toBeNull();
 });
 
@@ -166,28 +257,44 @@ it('shows a rollback icon and its source on the marked entry, while old plain en
   fireEvent.mouseEnter(icon);
   expect(await screen.findByRole('tooltip')).toHaveTextContent(new Date(10).toLocaleString());
   fireEvent.click(icon.closest('button'));
-  await waitFor(() => expect(useHistoryStore.getState().diff).toEqual({ tabId: path, timestamp: 20, content: 'older' }));
+  await waitFor(() =>
+    expect(useHistoryStore.getState().diff).toEqual({
+      tabId: path,
+      timestamp: 20,
+      content: 'older',
+    }),
+  );
   expect(historyRead).toHaveBeenCalledWith(path, 20);
 });
 
-it.each(['before', 'older', 'older\n\n'])('records every successful rollback even from content %j', async (current) => {
-  useEditorStore.getState().replaceTabContent(path, { content: current });
-  useHistoryStore.setState({ diff: { tabId: path, timestamp: 10, content: 'older' } });
-  render(<HistoryDiffView />);
-  fireEvent.click(screen.getByRole('button', { name: '恢复此版本' }));
-  await waitFor(() => expect(useHistoryStore.getState().diff).toBeNull());
-  await waitFor(() => expect(useHistoryStore.getState().historyWrite).toEqual({ path }));
-  expect(historyCapture.mock.calls).toEqual([
-    [path, current], [path, 'older', { force: true, restoredFrom: 10 }],
-  ]);
-  expect(mock.saveTab).toHaveBeenCalledWith(path, { replacement: 'older' });
-  expect(getBuffer(path)).toBe('older');
-  expect(historyCapture.mock.invocationCallOrder[1]).toBeGreaterThan(mock.saveTab.mock.invocationCallOrder[0]);
-});
+it.each(['before', 'older', 'older\n\n'])(
+  'records every successful rollback even from content %j',
+  async (current) => {
+    useEditorStore.getState().replaceTabContent(path, { content: current });
+    useHistoryStore.setState({ diff: { tabId: path, timestamp: 10, content: 'older' } });
+    render(<HistoryDiffView />);
+    fireEvent.click(screen.getByRole('button', { name: '恢复此版本' }));
+    await waitFor(() => expect(useHistoryStore.getState().diff).toBeNull());
+    await waitFor(() => expect(useHistoryStore.getState().historyWrite).toEqual({ path }));
+    expect(historyCapture.mock.calls).toEqual([
+      [path, current],
+      [path, 'older', { force: true, restoredFrom: 10 }],
+    ]);
+    expect(mock.saveTab).toHaveBeenCalledWith(path, { replacement: 'older' });
+    expect(getBuffer(path)).toBe('older');
+    expect(historyCapture.mock.invocationCallOrder[1]).toBeGreaterThan(
+      mock.saveTab.mock.invocationCallOrder[0],
+    );
+  },
+);
 
 it('waits for a successful save before labeling a rollback, and keeps the diff open if saving fails', async () => {
   let finish;
-  mock.saveTab.mockReturnValue(new Promise((resolve) => { finish = resolve; }));
+  mock.saveTab.mockReturnValue(
+    new Promise((resolve) => {
+      finish = resolve;
+    }),
+  );
   useHistoryStore.setState({ diff: { tabId: path, timestamp: 10, content: 'older' } });
   render(<HistoryDiffView />);
   fireEvent.click(screen.getByRole('button', { name: '恢复此版本' }));
@@ -204,7 +311,11 @@ it('waits for a successful save before labeling a rollback, and keeps the diff o
 
 it('keeps a newer comparison open when an earlier save finishes', async () => {
   let finish;
-  mock.saveTab.mockReturnValue(new Promise((resolve) => { finish = resolve; }));
+  mock.saveTab.mockReturnValue(
+    new Promise((resolve) => {
+      finish = resolve;
+    }),
+  );
   useHistoryStore.setState({ diff: { tabId: path, timestamp: 10, content: 'older' } });
   render(<HistoryDiffView />);
   fireEvent.click(screen.getByRole('button', { name: '恢复此版本' }));
@@ -217,11 +328,22 @@ it('keeps a newer comparison open when an earlier save finishes', async () => {
 it('enables Apply for selected changed lines and saves only those lines', async () => {
   useEditorStore.getState().replaceTabContent(path, { content: 'a\nB\nC' });
   useHistoryStore.setState({ diff: { tabId: path, timestamp: 10, content: 'a\nb\nc' } });
-  mock.changes = [{ originalStartLineNumber: 2, originalEndLineNumber: 3, modifiedStartLineNumber: 2, modifiedEndLineNumber: 3 }];
+  mock.changes = [
+    {
+      originalStartLineNumber: 2,
+      originalEndLineNumber: 3,
+      modifiedStartLineNumber: 2,
+      modifiedEndLineNumber: 3,
+    },
+  ];
   mock.selection = { startLineNumber: 2, startColumn: 1, endLineNumber: 2, endColumn: 1 };
   render(<HistoryDiffView />);
   await waitFor(() => expect(mock.models).toHaveLength(2));
-  expect(mock.createDiff.mock.calls[0][1]).toMatchObject({ readOnly: false, originalEditable: false, renderMarginRevertIcon: false });
+  expect(mock.createDiff.mock.calls[0][1]).toMatchObject({
+    readOnly: false,
+    originalEditable: false,
+    renderMarginRevertIcon: false,
+  });
   expect(screen.getByRole('button', { name: '应用修改' })).toBeDisabled();
   act(() => {
     mock.selection = { startLineNumber: 1, startColumn: 1, endLineNumber: 2, endColumn: 1 };
@@ -237,13 +359,22 @@ it('enables Apply for selected changed lines and saves only those lines', async 
   fireEvent.click(screen.getByRole('button', { name: '应用选中差异' }));
   await waitFor(() => expect(useHistoryStore.getState().diff).toBeNull());
   expect(getBuffer(path)).toBe('a\nb\nC');
-  await waitFor(() => expect(historyCapture).toHaveBeenLastCalledWith(path, 'a\nb\nC', { force: true }));
+  await waitFor(() =>
+    expect(historyCapture).toHaveBeenLastCalledWith(path, 'a\nb\nC', { force: true }),
+  );
 });
 
 it('saves the edited draft when a changed line is also selected', async () => {
   useEditorStore.getState().replaceTabContent(path, { content: 'a\nB\nC' });
   useHistoryStore.getState().setDiff({ tabId: path, timestamp: 10, content: 'a\nb\nc' });
-  mock.changes = [{ originalStartLineNumber: 2, originalEndLineNumber: 3, modifiedStartLineNumber: 2, modifiedEndLineNumber: 3 }];
+  mock.changes = [
+    {
+      originalStartLineNumber: 2,
+      originalEndLineNumber: 3,
+      modifiedStartLineNumber: 2,
+      modifiedEndLineNumber: 3,
+    },
+  ];
   mock.selection = { startLineNumber: 2, startColumn: 1, endLineNumber: 2, endColumn: 2 };
   render(<HistoryDiffView />);
   await waitFor(() => expect(screen.getByRole('button', { name: '应用选中差异' })).toBeEnabled());
@@ -277,12 +408,21 @@ it('renders Markdown blocks with folded context and applies only the reverted ch
   useEditorStore.getState().openFile({ path: doc, name: 'rendered-diff.md', content: current });
   useHistoryStore.getState().setDiff({ tabId: doc, content: original, timestamp: 10 });
   mock.changes = [1, 17].map((line) => ({
-    originalStartLineNumber: line, originalEndLineNumber: line,
-    modifiedStartLineNumber: line, modifiedEndLineNumber: line,
+    originalStartLineNumber: line,
+    originalEndLineNumber: line,
+    modifiedStartLineNumber: line,
+    modifiedEndLineNumber: line,
   }));
-  const { container } = render(<><Timeline /><HistoryDiffView /></>);
+  const { container } = render(
+    <>
+      <Timeline />
+      <HistoryDiffView />
+    </>,
+  );
   const removed = container.querySelector('[data-change="removed"]');
-  expect(removed.closest('.history-markdown-diff__row').querySelector('[data-side="modified"]')).toHaveAttribute('data-change', 'added');
+  expect(
+    removed.closest('.history-markdown-diff__row').querySelector('[data-side="modified"]'),
+  ).toHaveAttribute('data-change', 'added');
   const fold = container.querySelector('.history-markdown-diff__fold');
   expect(fold).toHaveAttribute('aria-expanded', 'false');
   fireEvent.click(fold);
@@ -300,7 +440,9 @@ it('renders Markdown blocks with folded context and applies only the reverted ch
   const expected = ['# Earlier heading', ...context, '- [x] Current task'].join('\n');
   await waitFor(() => expect(useHistoryStore.getState().diff).toBeNull());
   expect(getBuffer(doc)).toBe(expected);
-  await waitFor(() => expect(historyList.mock.calls.filter(([path]) => path === doc)).toHaveLength(2));
+  await waitFor(() =>
+    expect(historyList.mock.calls.filter(([path]) => path === doc)).toHaveLength(2),
+  );
   clearBuffer(doc);
 });
 
@@ -318,9 +460,14 @@ it('shows the historical content hash and time on the left, Now on the right, an
   expect(container.querySelector('.history-diff__hint')).toBeNull();
   const headers = container.querySelector('.history-diff__files');
   expect(headers.style.getPropertyValue('--history-split')).toBe('400px');
-  act(() => { mock.splitOffset = 260; mock.diff.layoutUpdated(); });
+  act(() => {
+    mock.splitOffset = 260;
+    mock.diff.layoutUpdated();
+  });
   expect(headers.style.getPropertyValue('--history-split')).toBe('260px');
-  act(() => useHistoryStore.setState({ diff: { tabId: path, timestamp: 20, content: 'new content' } }));
+  act(() =>
+    useHistoryStore.setState({ diff: { tabId: path, timestamp: 20, content: 'new content' } }),
+  );
   expect(left.querySelector('code')).toBeNull();
   await waitFor(() => expect(left.querySelector('code')).not.toBeNull());
   expect(left.querySelector('code')).not.toHaveTextContent('ba7816bf');
@@ -328,7 +475,11 @@ it('shows the historical content hash and time on the left, Now on the right, an
 
 it('does not create a diff before theme initialization finishes or after the view was closed', async () => {
   let ready;
-  mock.init.mockReturnValue(new Promise((resolve) => { ready = resolve; }));
+  mock.init.mockReturnValue(
+    new Promise((resolve) => {
+      ready = resolve;
+    }),
+  );
   useHistoryStore.setState({ diff: { tabId: path, timestamp: 10, content: 'older' } });
   const view = render(<HistoryDiffView />);
   await waitFor(() => expect(mock.init).toHaveBeenCalled());
@@ -354,16 +505,21 @@ it('undoes draft edits and closes without applying the remaining draft', async (
   expect(useHistoryStore.getState().diff).toBeNull();
 });
 
-it.each(['before', 'a\nb\n', ''])('shows No changes for identical content %j, including normalized line endings', async (content) => {
-  useEditorStore.getState().replaceTabContent(path, { content });
-  useHistoryStore.setState({ diff: { tabId: path, timestamp: 10, content: content.replace(/\n/g, '\r\n') } });
-  const { container } = render(<HistoryDiffView />);
-  expect(screen.getByRole('status')).toHaveTextContent('没有更改');
-  expect(container.querySelector('.history-diff__editor')).not.toBeVisible();
-  expect(screen.getByRole('group', { name: '现在' })).toBeVisible();
-  expect(screen.getByRole('button', { name: '应用修改' })).toBeDisabled();
-  await waitFor(() => expect(mock.models).toHaveLength(2));
-});
+it.each(['before', 'a\nb\n', ''])(
+  'shows No changes for identical content %j, including normalized line endings',
+  async (content) => {
+    useEditorStore.getState().replaceTabContent(path, { content });
+    useHistoryStore.setState({
+      diff: { tabId: path, timestamp: 10, content: content.replace(/\n/g, '\r\n') },
+    });
+    const { container } = render(<HistoryDiffView />);
+    expect(screen.getByRole('status')).toHaveTextContent('没有更改');
+    expect(container.querySelector('.history-diff__editor')).not.toBeVisible();
+    expect(screen.getByRole('group', { name: '现在' })).toBeVisible();
+    expect(screen.getByRole('button', { name: '应用修改' })).toBeDisabled();
+    await waitFor(() => expect(mock.models).toHaveLength(2));
+  },
+);
 
 it('keeps a fully restored draft applicable and keeps the editor alive to reveal new differences', async () => {
   useHistoryStore.setState({ diff: { tabId: path, timestamp: 10, content: 'older' } });
@@ -383,5 +539,7 @@ it('keeps a fully restored draft applicable and keeps the editor alive to reveal
   fireEvent.click(screen.getByRole('button', { name: '应用修改' }));
   await waitFor(() => expect(useHistoryStore.getState().diff).toBeNull());
   expect(getBuffer(path)).toBe('older');
-  await waitFor(() => expect(historyCapture).toHaveBeenLastCalledWith(path, 'older', { force: true }));
+  await waitFor(() =>
+    expect(historyCapture).toHaveBeenLastCalledWith(path, 'older', { force: true }),
+  );
 });

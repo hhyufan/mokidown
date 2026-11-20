@@ -59,7 +59,11 @@
 :root {
   color-scheme: only light;
   --moki-background-base: #fff;
-  --moki-background-wash: color-mix(in srgb, var(--moki-background-base) calc((1 - var(--moki-background-opacity, 0.2)) * 100%), transparent);
+  --moki-background-wash: color-mix(
+    in srgb,
+    var(--moki-background-base) calc((1 - var(--moki-background-opacity, 0.2)) * 100%),
+    transparent
+  );
   --bg: #f5f5f7;
   --surface: #fff;
   --sidebar: #fafafa;

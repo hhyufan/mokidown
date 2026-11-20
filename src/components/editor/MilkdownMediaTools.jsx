@@ -43,15 +43,18 @@ const MilkdownMediaTools = forwardRef(function MilkdownMediaTools(
   const [previewEdit, setPreviewEdit] = useState(null);
   const [previewHost, setPreviewHost] = useState(null);
   const previewSource = preview?.source;
-  const previewSrc = resolvedPreview?.source === previewSource
-    ? resolvedPreview?.src : previewSource?.rendered;
+  const previewSrc =
+    resolvedPreview?.source === previewSource ? resolvedPreview?.src : previewSource?.rendered;
   useLayoutEffect(() => {
     const bounds = previewBoundsRef.current;
     if (!previewHost || !bounds) return;
     const fit = () => {
       const { left, top, width, height } = bounds.getBoundingClientRect();
       Object.assign(previewHost.style, {
-        left: `${left}px`, top: `${top}px`, width: `${width}px`, height: `${height}px`,
+        left: `${left}px`,
+        top: `${top}px`,
+        width: `${width}px`,
+        height: `${height}px`,
       });
     };
     fit();
@@ -70,7 +73,8 @@ const MilkdownMediaTools = forwardRef(function MilkdownMediaTools(
   const pickerOpen = useRef(false);
   const applying = useRef(false);
   useEffect(() => {
-    if (!previewSource || (previewSource.loaded && !previewSource.rendered.startsWith('blob:'))) return;
+    if (!previewSource || (previewSource.loaded && !previewSource.rendered.startsWith('blob:')))
+      return;
     let closed = false;
     let previewUrl;
     // Own a separate blob URL for local previews so an editor re-render cannot revoke it.
@@ -81,7 +85,8 @@ const MilkdownMediaTools = forwardRef(function MilkdownMediaTools(
           return;
         }
         previewUrl = objectUrl;
-        if (src && (objectUrl || !previewSource.loaded)) setResolvedPreview({ source: previewSource, src });
+        if (src && (objectUrl || !previewSource.loaded))
+          setResolvedPreview({ source: previewSource, src });
       })
       .catch(() => {
         // Keep the browser-rendered source if a local address could not be resolved.
@@ -259,8 +264,10 @@ const MilkdownMediaTools = forwardRef(function MilkdownMediaTools(
           loaded: image.complete && image.naturalWidth > 0,
         },
         alt: image.alt,
-        target: !readOnly && !image.closest('.md-preview__html-block')
-          ? mediaAt(view, view.posAtDOM(image, 0), 'image') : null,
+        target:
+          !readOnly && !image.closest('.md-preview__html-block')
+            ? mediaAt(view, view.posAtDOM(image, 0), 'image')
+            : null,
         doc: view.state.doc,
         view,
       });
@@ -446,18 +453,22 @@ const MilkdownMediaTools = forwardRef(function MilkdownMediaTools(
               }
               onChange={(event) => change({ text: event.target.value })}
             />
-            <Tooltip title={surface.address} mouseEnterDelay={0.3}><Input
-              ref={inputRef}
-              id="milkdown-media-address"
-              size="small"
-              variant="borderless"
-              value={surface.address}
-              status={error ? 'error' : undefined}
-              aria-label={t(surface.kind === 'image' ? 'media.imageAddress' : 'media.linkAddress')}
-              placeholder={t('media.addressPlaceholder')}
+            <Tooltip title={surface.address} mouseEnterDelay={0.3}>
+              <Input
+                ref={inputRef}
+                id="milkdown-media-address"
+                size="small"
+                variant="borderless"
+                value={surface.address}
+                status={error ? 'error' : undefined}
+                aria-label={t(
+                  surface.kind === 'image' ? 'media.imageAddress' : 'media.linkAddress',
+                )}
+                placeholder={t('media.addressPlaceholder')}
 
-              onChange={(event) => change({ address: event.target.value })}
-            /></Tooltip>
+                onChange={(event) => change({ address: event.target.value })}
+              />
+            </Tooltip>
             {surface.kind === 'image' && (
               <Tooltip title={t('media.chooseFile')}>
                 <button
@@ -489,7 +500,11 @@ const MilkdownMediaTools = forwardRef(function MilkdownMediaTools(
           </form>,
           surface.dom,
         )}
-      {preview && createPortal(<div className="milkdown-media-preview-host" ref={setPreviewHost} />, document.body)}
+      {preview &&
+        createPortal(
+          <div className="milkdown-media-preview-host" ref={setPreviewHost} />,
+          document.body,
+        )}
       {preview && previewHost && (
         <Image
           style={{ display: 'none' }}
@@ -573,13 +588,13 @@ const MilkdownMediaTools = forwardRef(function MilkdownMediaTools(
                           </Tooltip>
                         )}
                         <Tooltip title={t('media.save')}>
-                        <button
-                          type="button"
-                          aria-label={t('media.save')}
-                          onClick={() => void savePreview()}
-                        >
-                          <CheckOutlined />
-                        </button>
+                          <button
+                            type="button"
+                            aria-label={t('media.save')}
+                            onClick={() => void savePreview()}
+                          >
+                            <CheckOutlined />
+                          </button>
                         </Tooltip>
                         {previewEdit.error && <span role="alert">{previewEdit.error}</span>}
                       </div>

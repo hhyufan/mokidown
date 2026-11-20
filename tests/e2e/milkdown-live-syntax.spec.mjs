@@ -1,21 +1,28 @@
 import { expect, test } from '@playwright/test';
 
 async function openEditor(page, content = '', query = '') {
-  await page.goto(`/tests/milkdown-flow-harness.html?content=${encodeURIComponent(content)}${query}`);
+  await page.goto(
+    `/tests/milkdown-flow-harness.html?content=${encodeURIComponent(content)}${query}`,
+  );
   const editor = page.locator('.milkdown-editor');
   await expect(editor).toBeVisible();
   return editor;
 }
 
 function visibleMarkers(editor) {
-  return editor.locator('.moki-markdown-marker:visible').evaluateAll((nodes) => nodes.map((node) => node.dataset.mokiMarker));
+  return editor
+    .locator('.moki-markdown-marker:visible')
+    .evaluateAll((nodes) => nodes.map((node) => node.dataset.mokiMarker));
 }
 
-test('the writing caret uses the active theme foreground in light and dark modes', async ({ page }) => {
+test('the writing caret uses the active theme foreground in light and dark modes', async ({
+  page,
+}) => {
   const editor = await openEditor(page, '正文');
   await page.emulateMedia({ colorScheme: 'dark' });
   await page.addStyleTag({
-    content: '.md-preview--milkdown .milkdown .ProseMirror.milkdown-editor:not(.ProseMirror-hideselection) { caret-color: white; }',
+    content:
+      '.md-preview--milkdown .milkdown .ProseMirror.milkdown-editor:not(.ProseMirror-hideselection) { caret-color: white; }',
   });
   await editor.locator('p').click();
   for (const theme of ['light', 'dark', 'light']) {
@@ -52,11 +59,17 @@ test('code and virtual Markdown carets follow the application theme', async ({ p
   const code = editor.locator('.cm-content');
   await code.click();
   await page.addStyleTag({
-    content: '.md-preview--milkdown .milkdown .ProseMirror.milkdown-editor .cm-editor .cm-cursor { border-left-color: white; }',
+    content:
+      '.md-preview--milkdown .milkdown .ProseMirror.milkdown-editor .cm-editor .cm-cursor { border-left-color: white; }',
   });
   const codeCaret = editor.locator('.cm-cursor-primary').first();
-  for (const [theme, color] of [['dark', 'rgb(82, 139, 255)'], ['light', 'rgb(82, 111, 255)']]) {
-    await page.evaluate((value) => { document.documentElement.dataset.theme = value; }, theme);
+  for (const [theme, color] of [
+    ['dark', 'rgb(82, 139, 255)'],
+    ['light', 'rgb(82, 111, 255)'],
+  ]) {
+    await page.evaluate((value) => {
+      document.documentElement.dataset.theme = value;
+    }, theme);
     await expect(codeCaret).toHaveCSS('border-left-color', color);
   }
   await page.evaluate(() => window.trial.selectParagraph('bold'));
@@ -64,10 +77,14 @@ test('code and virtual Markdown carets follow the application theme', async ({ p
   const virtual = editor.locator('.moki-markdown-marker--with-caret i');
   await expect(virtual).toHaveCount(1);
   await expect(page.locator('.moki-writing-caret:not([hidden])')).toHaveCount(0);
-  expect(await virtual.evaluate((node) => getComputedStyle(node, '::after').borderInlineStartColor)).toBe('rgb(44, 44, 46)');
+  expect(
+    await virtual.evaluate((node) => getComputedStyle(node, '::after').borderInlineStartColor),
+  ).toBe('rgb(44, 44, 46)');
 });
 
-test('draft delimiters are muted, completed formatting is solid, and clicking its left edge reveals source markers', async ({ page }) => {
+test('draft delimiters are muted, completed formatting is solid, and clicking its left edge reveals source markers', async ({
+  page,
+}) => {
   const editor = await openEditor(page);
   await page.evaluate(async () => {
     const { default: config } = await import('/src/store/useConfigStore.js');
@@ -76,11 +93,15 @@ test('draft delimiters are muted, completed formatting is solid, and clicking it
   await editor.click();
   await page.keyboard.type('**bold');
   await expect(editor.locator('.moki-markdown-ghost')).toHaveText('**');
-  const draft = await editor.locator('.moki-markdown-ghost').evaluate((node) => getComputedStyle(node).color);
+  const draft = await editor
+    .locator('.moki-markdown-ghost')
+    .evaluate((node) => getComputedStyle(node).color);
   await page.keyboard.type('**');
   const bold = editor.locator('strong');
   await expect(bold).toHaveText('bold');
-  await expect(editor.locator('.moki-markdown-ghost, .moki-markdown-marker:visible')).toHaveCount(0);
+  await expect(editor.locator('.moki-markdown-ghost, .moki-markdown-marker:visible')).toHaveCount(
+    0,
+  );
   expect(await bold.evaluate((node) => getComputedStyle(node).color)).not.toBe(draft);
   const box = await bold.boundingBox();
   await page.mouse.click(box.x + 0.5, box.y + box.height / 2);
@@ -91,7 +112,9 @@ test('draft delimiters are muted, completed formatting is solid, and clicking it
   await expect(editor.locator('.moki-markdown-marker:visible')).toHaveCount(0);
 });
 
-test('block formula preview keeps the last good render while the source is unparseable', async ({ page }) => {
+test('block formula preview keeps the last good render while the source is unparseable', async ({
+  page,
+}) => {
   const editor = await openEditor(page);
   await editor.click();
   await page.keyboard.type('Trailing paragraph');
@@ -133,7 +156,9 @@ test('block formula preview keeps the last good render while the source is unpar
   expect(await page.evaluate(() => window.trial.markdown())).toContain('$$\n\\alpha\n$$');
 });
 
-test('inline formula shows a preview bubble only while its source is revealed', async ({ page }) => {
+test('inline formula shows a preview bubble only while its source is revealed', async ({
+  page,
+}) => {
   // 上面留一段正文：贴着编辑区上沿时气泡会翻到下方，这里要验的是默认摆法。
   const editor = await openEditor(page, '上面一行\n\n$x^2$ Tail');
   const bubble = editor.locator('.moki-math-preview--inline');
@@ -168,7 +193,9 @@ test('double-clicking a rendered formula opens its source untouched', async ({ p
   expect(await page.evaluate(() => window.trial.markdown())).toContain('$$\n\\alpha \\beta\n$$');
 });
 
-test('leaving the formula source keeps the formula on the pixels its preview showed', async ({ page }) => {
+test('leaving the formula source keeps the formula on the pixels its preview showed', async ({
+  page,
+}) => {
   const editor = await openEditor(page, '正文段落\n\n$$\n\\alpha\n$$\n');
   await editor.locator('.md-preview__math--block').dblclick();
   const previewed = await editor.locator('.moki-math-preview--block .katex').boundingBox();
@@ -176,7 +203,9 @@ test('leaving the formula source keeps the formula on the pixels its preview sho
   await expect(editor.locator('.moki-math-preview--block')).toHaveCount(0);
   const rendered = await editor.locator('.md-preview__math--block .katex').boundingBox();
   // 中心对齐才比左边距可靠：气泡有左右内边距，渲染公式却占满整行。
-  expect(Math.abs(previewed.x + previewed.width / 2 - (rendered.x + rendered.width / 2))).toBeLessThan(1);
+  expect(
+    Math.abs(previewed.x + previewed.width / 2 - (rendered.x + rendered.width / 2)),
+  ).toBeLessThan(1);
   expect(Math.abs(previewed.y - rendered.y)).toBeLessThan(1);
   expect(Math.abs(previewed.height - rendered.height)).toBeLessThan(1);
 });
@@ -193,8 +222,12 @@ test('the inline bubble is centred on the formula it previews', async ({ page })
     expect(slot.y - box.y - box.height).toBeGreaterThanOrEqual(0);
     expect(slot.y - box.y - box.height).toBeLessThan(20);
     // 尾巴由 ::after 画出，正对着下方的公式；描边走真实边框，几何不变。
-    expect(await bubble.evaluate((node) => getComputedStyle(node, '::after').content)).not.toBe('none');
-    expect(await bubble.evaluate((node) => getComputedStyle(node).borderTopColor)).toBe('rgb(229, 229, 231)');
+    expect(await bubble.evaluate((node) => getComputedStyle(node, '::after').content)).not.toBe(
+      'none',
+    );
+    expect(await bubble.evaluate((node) => getComputedStyle(node).borderTopColor)).toBe(
+      'rgb(229, 229, 231)',
+    );
   };
   // 正在输入的源码节点：先塞够长的正文让它换行，公式落在第二行行尾。
   const typing = await openEditor(page, '字'.repeat(120));
@@ -247,7 +280,11 @@ test('the inline bubble moves out of the way when it does not fit', async ({ pag
   await expect(roomBubble).toBeVisible();
   expect(await roomBubble.evaluate((node) => node.dataset.mokiMathPreviewSide ?? '')).toBe('');
   // 上下左右都放得下，就不该有任何位移。
-  expect(await roomBubble.evaluate((node) => getComputedStyle(node).getPropertyValue('--moki-preview-shift'))).toBe('0px');
+  expect(
+    await roomBubble.evaluate((node) =>
+      getComputedStyle(node).getPropertyValue('--moki-preview-shift'),
+    ),
+  ).toBe('0px');
   // 横向：气泡比正文宽很多又会探出右边界时，按差值平移刚好收回来的距离。
   // \rule 渲染出来比它那串源码宽得多，是少数能把气泡撑得比正文更宽的公式；
   // 段落右对齐让公式贴住正文右缘，等价于在窄分屏里写到行尾。
@@ -268,7 +305,12 @@ test('the inline bubble moves out of the way when it does not fit', async ({ pag
   expect(shifted.x + shifted.width).toBeLessThanOrEqual(pane.x + pane.width + 0.5);
   expect(shifted.x).toBeGreaterThan(pane.x);
   // 气泡整块挪了位，尾巴还得正对着公式：inset 从边框内侧量起，所以补 1px。
-  const tailX = await edgeBubble.evaluate((node) => node.getBoundingClientRect().x + parseFloat(getComputedStyle(node, '::after').insetInlineStart) + 1);
+  const tailX = await edgeBubble.evaluate(
+    (node) =>
+      node.getBoundingClientRect().x +
+      parseFloat(getComputedStyle(node, '::after').insetInlineStart) +
+      1,
+  );
   expect(Math.abs(tailX - (wide.x + wide.width / 2))).toBeLessThan(2);
 });
 
@@ -288,10 +330,17 @@ test('the block preview is the formula itself, with no box around it', async ({ 
       shadow: style.filter,
     };
   });
-  expect(bare).toEqual({ tail: 'none', border: '0px none', background: 'rgba(0, 0, 0, 0)', shadow: 'none' });
+  expect(bare).toEqual({
+    tail: 'none',
+    border: '0px none',
+    background: 'rgba(0, 0, 0, 0)',
+    shadow: 'none',
+  });
 });
 
-test('a backslash in formula source opens the symbol completion list and typing narrows it', async ({ page }) => {
+test('a backslash in formula source opens the symbol completion list and typing narrows it', async ({
+  page,
+}) => {
   const editor = await openEditor(page);
   const list = page.locator('.moki-math-completion');
   const rows = list.getByRole('option');
@@ -439,7 +488,10 @@ test('typing the closing $ folds the formula and hands the sentence back', async
   const editor = await openEditor(page);
   await editor.click();
   await page.keyboard.type('正文 $$ \\alpha$ 尾巴');
-  await expect(editor.locator('.md-preview__math--inline')).toHaveAttribute('data-value', '\\alpha');
+  await expect(editor.locator('.md-preview__math--inline')).toHaveAttribute(
+    'data-value',
+    '\\alpha',
+  );
   // 收尾 `$` 之后再打字写的是正文，不能被吸进公式里。紧跟行内原子的空格会被浏览器
   // 存成不换行空格，与直接在正文里写 `$x^2$` 完全一致，所以这里只按空白匹配。
   expect(await page.evaluate(() => window.trial.markdown())).toMatch(/正文 \$\\alpha\$\s尾巴/);
@@ -469,7 +521,9 @@ test('an abandoned $$ stays visible source instead of an empty formula', async (
   await expect(editor.locator('.md-preview__math--inline')).toHaveCount(0);
 });
 
-test('horizontal arrows enter each visible marker character before crossing a line boundary', async ({ page }) => {
+test('horizontal arrows enter each visible marker character before crossing a line boundary', async ({
+  page,
+}) => {
   const editor = await openEditor(page, 'Above\n\n**bold**');
   await page.evaluate(() => window.trial.selectTextblock(1));
   const position = () => page.evaluate(() => window.trial.state().selection.anchor);
@@ -497,37 +551,55 @@ for (const [content, keys] of [
   ['##### 1. LINQ 概述', ['ArrowLeft']],
   ['**注意**：查询', ['ArrowRight', 'ArrowRight', 'ArrowRight']],
 ]) {
-  test(`the blinking marker caret aligns with the adjacent text in ${content}`, async ({ page }) => {
+  test(`the blinking marker caret aligns with the adjacent text in ${content}`, async ({
+    page,
+  }) => {
     const editor = await openEditor(page, content);
     await page.evaluate(() => window.trial.selectTextblock(0));
     for (const key of keys) await page.keyboard.press(key);
-    const caret = await editor.locator('.moki-markdown-marker--with-caret i').evaluate((element) => {
-      const style = getComputedStyle(element, '::after');
-      const text = element.closest('p, h5').lastChild;
-      const range = document.createRange();
-      range.setStart(text, 0);
-      range.setEnd(text, 1);
-      const bounds = range.getBoundingClientRect();
-      const top = element.getBoundingClientRect().top + parseFloat(style.top);
-      return { top, bottom: top + parseFloat(style.height), textTop: bounds.top, textBottom: bounds.bottom, animation: style.animationName };
-    });
+    const caret = await editor
+      .locator('.moki-markdown-marker--with-caret i')
+      .evaluate((element) => {
+        const style = getComputedStyle(element, '::after');
+        const text = element.closest('p, h5').lastChild;
+        const range = document.createRange();
+        range.setStart(text, 0);
+        range.setEnd(text, 1);
+        const bounds = range.getBoundingClientRect();
+        const top = element.getBoundingClientRect().top + parseFloat(style.top);
+        return {
+          top,
+          bottom: top + parseFloat(style.height),
+          textTop: bounds.top,
+          textBottom: bounds.bottom,
+          animation: style.animationName,
+        };
+      });
     expect(Math.abs(caret.top - caret.textTop)).toBeLessThan(1);
     expect(Math.abs(caret.bottom - caret.textBottom)).toBeLessThan(1);
     expect(caret.animation).toBe('ProseMirror-cursor-blink');
   });
 }
 
-test('typing Markdown task markers converts bullet items into unchecked and checked tasks', async ({ page }) => {
+test('typing Markdown task markers converts bullet items into unchecked and checked tasks', async ({
+  page,
+}) => {
   const editor = await openEditor(page);
   await page.evaluate(() => window.trial.selectTextblock(0));
   await page.keyboard.type('- [ ] first');
-  await expect(editor.locator('li[data-item-type="task"]')).toHaveAttribute('data-checked', 'false');
+  await expect(editor.locator('li[data-item-type="task"]')).toHaveAttribute(
+    'data-checked',
+    'false',
+  );
   await page.keyboard.press('Enter');
   await page.keyboard.press('Enter');
   await page.keyboard.type('- [X]');
   await page.keyboard.press('Enter');
   await page.keyboard.type('second');
-  await expect(editor.locator('li[data-item-type="task"]').last()).toHaveAttribute('data-checked', 'true');
+  await expect(editor.locator('li[data-item-type="task"]').last()).toHaveAttribute(
+    'data-checked',
+    'true',
+  );
   const markdown = await page.evaluate(() => window.trial.markdown());
   expect(markdown).toContain('[ ] first');
   expect(markdown).toContain('[x] second');
@@ -535,26 +607,39 @@ test('typing Markdown task markers converts bullet items into unchecked and chec
   await page.keyboard.press('Enter');
   await page.keyboard.insertText('- [ ] ');
   await page.keyboard.type('third');
-  await expect(editor.locator('li[data-item-type="task"]').last()).toHaveAttribute('data-checked', 'false');
+  await expect(editor.locator('li[data-item-type="task"]').last()).toHaveAttribute(
+    'data-checked',
+    'false',
+  );
   expect(await page.evaluate(() => window.trial.markdown())).toContain('[ ] third');
 });
 
-test('moving left from prose lands after the closing code fence and inserts outside it', async ({ page }) => {
+test('moving left from prose lands after the closing code fence and inserts outside it', async ({
+  page,
+}) => {
   const editor = await openEditor(page, '`321`1');
   await page.evaluate(() => window.trial.selectTextblock(0, 'end'));
   await page.keyboard.press('ArrowLeft');
-  await expect(editor.locator('.moki-markdown-marker--with-caret')).toHaveAttribute('data-marker-before', '`');
+  await expect(editor.locator('.moki-markdown-marker--with-caret')).toHaveAttribute(
+    'data-marker-before',
+    '`',
+  );
   await page.keyboard.type('A');
   await expect(editor.locator('code')).toHaveText('321');
   expect(await page.evaluate(() => window.trial.markdown().trimEnd())).toBe('`321`A1');
   await page.evaluate(() => window.trial.selectTextblock(0));
   for (let i = 0; i < 4; i++) await page.keyboard.press('ArrowRight');
-  await expect(editor.locator('.moki-markdown-marker--with-caret')).toHaveAttribute('data-marker-before', '`');
+  await expect(editor.locator('.moki-markdown-marker--with-caret')).toHaveAttribute(
+    'data-marker-before',
+    '`',
+  );
   await page.keyboard.type('B');
   expect(await page.evaluate(() => window.trial.markdown().trimEnd())).toBe('`321`BA1');
 });
 
-test('links and formulas render immediately after typing and reveal their syntax at the leading boundary', async ({ page }) => {
+test('links and formulas render immediately after typing and reveal their syntax at the leading boundary', async ({
+  page,
+}) => {
   const editor = await openEditor(page);
   await editor.click();
   await page.keyboard.type('[site](https://example.com');
@@ -576,20 +661,34 @@ test('links and formulas render immediately after typing and reveal their syntax
   await page.keyboard.press('Enter');
   await page.keyboard.type('[***styled**](https://styled.example) plain');
   await expect(editor.locator('a[href="https://styled.example"][href]')).toHaveText('styled');
-  await expect(editor.locator('a[href="https://styled.example"] strong, strong a[href="https://styled.example"]')).toHaveCount(1);
+  await expect(
+    editor.locator(
+      'a[href="https://styled.example"] strong, strong a[href="https://styled.example"]',
+    ),
+  ).toHaveCount(1);
 });
 
-test('moving across syntax boundaries does not dirty the file and read-only preview has no editing decorations', async ({ page }) => {
+test('moving across syntax boundaries does not dirty the file and read-only preview has no editing decorations', async ({
+  page,
+}) => {
   const content = '## Title\n\n*italic* ~~removed~~ `code`\n';
   const editor = await openEditor(page, content);
   const original = await page.evaluate(() => window.trial.markdown());
   const heading = editor.locator('h2');
   const properties = ['fontFamily', 'fontSize', 'fontWeight', 'letterSpacing', 'marginInlineEnd'];
-  const rendered = await heading.evaluate((node, props) => props.map((prop) => getComputedStyle(node, '::before')[prop]), properties);
+  const rendered = await heading.evaluate(
+    (node, props) => props.map((prop) => getComputedStyle(node, '::before')[prop]),
+    properties,
+  );
   await page.evaluate(() => window.trial.selectTextblock(0));
   const source = heading.locator('.moki-markdown-heading-marker:visible');
   await expect(source).toHaveAttribute('data-moki-marker', '##');
-  expect(await source.evaluate((node, props) => props.map((prop) => getComputedStyle(node)[prop]), properties)).toEqual(rendered);
+  expect(
+    await source.evaluate(
+      (node, props) => props.map((prop) => getComputedStyle(node)[prop]),
+      properties,
+    ),
+  ).toEqual(rendered);
   await page.evaluate(() => window.trial.selectTextblock(1));
   await expect(editor.locator('p .moki-markdown-marker:visible')).toHaveCount(2);
   await page.mouse.click(1, 1);
@@ -600,7 +699,9 @@ test('moving across syntax boundaries does not dirty the file and read-only prev
   await expect(editor.locator('.moki-markdown-marker, .moki-markdown-ghost')).toHaveCount(0);
 });
 
-test('asterisk completion pairs two strokes and upgrades the third stroke to bold', async ({ page }) => {
+test('asterisk completion pairs two strokes and upgrades the third stroke to bold', async ({
+  page,
+}) => {
   const editor = await openEditor(page);
   await page.evaluate(() => window.trial.selectTextblock(0));
   const position = () => page.evaluate(() => window.trial.state().selection.anchor);
@@ -631,19 +732,28 @@ test('asterisk completion pairs two strokes and upgrades the third stroke to bol
 });
 
 for (const order of ['left first', 'right first']) {
-  test(`adding stars around existing text (${order}) renders bold immediately`, async ({ page }) => {
+  test(`adding stars around existing text (${order}) renders bold immediately`, async ({
+    page,
+  }) => {
     const editor = await openEditor(page, '前面 已有文字 后面');
-    const select = (offset) => page.evaluate((offset) => {
-      window.trial.selectTextblock(0);
-      window.trial.dispatch((state) => state.tr.setSelection(state.selection.constructor.create(state.doc, offset + 1)));
-    }, offset);
+    const select = (offset) =>
+      page.evaluate((offset) => {
+        window.trial.selectTextblock(0);
+        window.trial.dispatch((state) =>
+          state.tr.setSelection(state.selection.constructor.create(state.doc, offset + 1)),
+        );
+      }, offset);
     await select(order === 'left first' ? 3 : 7);
     await page.keyboard.type('**');
-    await expect(editor.locator('p')).toHaveText(order === 'left first' ? '前面 **已有文字 后面' : '前面 已有文字** 后面');
+    await expect(editor.locator('p')).toHaveText(
+      order === 'left first' ? '前面 **已有文字 后面' : '前面 已有文字** 后面',
+    );
     await select(order === 'left first' ? 9 : 3);
     await page.keyboard.type('**');
     await expect(editor.locator('strong')).toHaveText('已有文字');
-    expect(await page.evaluate(() => window.trial.markdown().trimEnd())).toBe('前面 **已有文字** 后面');
+    expect(await page.evaluate(() => window.trial.markdown().trimEnd())).toBe(
+      '前面 **已有文字** 后面',
+    );
   });
 }
 
@@ -653,15 +763,23 @@ for (const [source, offset, selector, expected] of [
   ['Before ~~~~ after', 9, 'del', 'Before ~~中文~~ after'],
   ['Before `` after', 8, 'code', 'Before `中文` after'],
 ]) {
-  test(`committing IME text between the markers in ${source} renders immediately`, async ({ page }) => {
+  test(`committing IME text between the markers in ${source} renders immediately`, async ({
+    page,
+  }) => {
     const editor = await openEditor(page, source);
     await page.evaluate((offset) => {
       window.trial.selectTextblock(0);
-      window.trial.dispatch((state) => state.tr.setSelection(state.selection.constructor.create(state.doc, offset + 1)));
+      window.trial.dispatch((state) =>
+        state.tr.setSelection(state.selection.constructor.create(state.doc, offset + 1)),
+      );
     }, offset);
     const cdp = await page.context().newCDPSession(page);
     try {
-      await cdp.send('Input.imeSetComposition', { text: 'zhong', selectionStart: 5, selectionEnd: 5 });
+      await cdp.send('Input.imeSetComposition', {
+        text: 'zhong',
+        selectionStart: 5,
+        selectionEnd: 5,
+      });
       await page.keyboard.insertText('中文');
       await expect(editor.locator(selector)).toHaveText('中文');
       expect(await page.evaluate(() => window.trial.markdown().trimEnd())).toBe(expected);
@@ -671,7 +789,9 @@ for (const [source, offset, selector, expected] of [
   });
 }
 
-test('undo restores the empty bold markers after committing a long-lived IME candidate', async ({ page }) => {
+test('undo restores the empty bold markers after committing a long-lived IME candidate', async ({
+  page,
+}) => {
   const editor = await openEditor(page);
   await page.evaluate(() => window.trial.selectTextblock(0));
   await page.keyboard.type('***');
@@ -692,7 +812,9 @@ test('undo restores the empty bold markers after committing a long-lived IME can
   }
 });
 
-test('paired deletion removes one emphasis layer, keeps code text and supports undo and redo', async ({ page }) => {
+test('paired deletion removes one emphasis layer, keeps code text and supports undo and redo', async ({
+  page,
+}) => {
   const editor = await openEditor(page, '**213**\n\n`Task.Run`\n\n(outer [inside])');
   await page.evaluate(() => window.trial.selectTextblock(0));
   await page.keyboard.press('Backspace');
@@ -713,8 +835,13 @@ test('paired deletion removes one emphasis layer, keeps code text and supports u
   await expect(editor.locator('p').nth(2)).toHaveText('outer [inside]');
 });
 
-for (const [markup, selector] of [['**abcdef**', 'strong'], ['`abcdef`', 'code']]) {
-  test(`clicking rendered ${selector} draws no interim caret and inserts at the clicked character boundary`, async ({ page }) => {
+for (const [markup, selector] of [
+  ['**abcdef**', 'strong'],
+  ['`abcdef`', 'code'],
+]) {
+  test(`clicking rendered ${selector} draws no interim caret and inserts at the clicked character boundary`, async ({
+    page,
+  }) => {
     const editor = await openEditor(page, `before ${markup} after`);
     const point = await editor.locator(selector).evaluate((element) => {
       const range = document.createRange();
@@ -735,23 +862,29 @@ for (const [markup, selector] of [['**abcdef**', 'strong'], ['`abcdef`', 'code']
 
 test('dragging from rendered bold text keeps the native text selection', async ({ page }) => {
   const editor = await openEditor(page, 'Before **abcdef** after');
-  const [start, end] = await editor.locator('strong').evaluate((element) => [1, 5].map((offset) => {
-    const range = document.createRange();
-    range.setStart(element.firstChild, offset);
-    range.collapse(true);
-    const { left, top, height } = range.getBoundingClientRect();
-    return { x: left, y: top + height / 2 };
-  }));
+  const [start, end] = await editor.locator('strong').evaluate((element) =>
+    [1, 5].map((offset) => {
+      const range = document.createRange();
+      range.setStart(element.firstChild, offset);
+      range.collapse(true);
+      const { left, top, height } = range.getBoundingClientRect();
+      return { x: left, y: top + height / 2 };
+    }),
+  );
   await page.mouse.move(start.x, start.y);
   await page.mouse.down();
   await page.mouse.move(end.x, end.y, { steps: 8 });
   await page.mouse.up();
   await expect.poll(() => page.evaluate(() => window.getSelection().toString())).toBe('bcde');
   await editor.locator('strong').dblclick();
-  await expect.poll(() => page.evaluate(() => window.getSelection().toString().trim())).toBe('abcdef');
+  await expect
+    .poll(() => page.evaluate(() => window.getSelection().toString().trim()))
+    .toBe('abcdef');
 });
 
-test('two backticks place the caret between them and the next text renders as inline code', async ({ page }) => {
+test('two backticks place the caret between them and the next text renders as inline code', async ({
+  page,
+}) => {
   const editor = await openEditor(page);
   await page.evaluate(() => window.trial.selectTextblock(0));
   await page.keyboard.type('``');
@@ -764,7 +897,9 @@ test('two backticks place the caret between them and the next text renders as in
   await expect(editor.locator('p')).toHaveText('Task.Run outside');
 });
 
-test('the language menu floats under the unfinished fence without shifting the next heading', async ({ page }) => {
+test('the language menu floats under the unfinished fence without shifting the next heading', async ({
+  page,
+}) => {
   const editor = await openEditor(page, `Before\n\n## Next\n\n${'After\n\n'.repeat(30)}`);
   await page.evaluate(() => window.trial.selectTextblock(0, 'end'));
   await page.keyboard.press('Enter');
@@ -777,15 +912,25 @@ test('the language menu floats under the unfinished fence without shifting the n
   await expect(fence).toHaveText('```');
   await expect(editor.locator('.cm-editor')).toHaveCount(0);
   await expect(editor).toBeFocused();
-  expect(await menu.evaluate((element) => !document.querySelector('.md-preview--milkdown').contains(element))).toBe(true);
+  expect(
+    await menu.evaluate(
+      (element) => !document.querySelector('.md-preview--milkdown').contains(element),
+    ),
+  ).toBe(true);
   const alignedWithFence = async () => {
     const marker = await fence.locator('.moki-markdown-ghost').boundingBox();
     const box = await menu.boundingBox();
-    return Math.abs(box.x - marker.x) <= 2 && box.y >= marker.y + marker.height - 2 && box.y <= marker.y + marker.height + 8;
+    return (
+      Math.abs(box.x - marker.x) <= 2 &&
+      box.y >= marker.y + marker.height - 2 &&
+      box.y <= marker.y + marker.height + 8
+    );
   };
   await expect.poll(alignedWithFence).toBe(true);
   expect((await heading.boundingBox()).y).toBe(headingBefore.y);
-  await page.locator('.md-preview--milkdown').evaluate((pane) => { pane.scrollTop = 24; });
+  await page.locator('.md-preview--milkdown').evaluate((pane) => {
+    pane.scrollTop = 24;
+  });
   await expect.poll(async () => (await heading.boundingBox()).y).toBeLessThan(headingBefore.y);
   await expect.poll(alignedWithFence).toBe(true);
   await page.keyboard.press('ArrowDown');
@@ -801,7 +946,9 @@ test('the language menu floats under the unfinished fence without shifting the n
   await expect(editor.locator('.cm-content')).toBeFocused();
 });
 
-test('Enter or a complete language confirms the fence, and a space leaves it pending', async ({ page }) => {
+test('Enter or a complete language confirms the fence, and a space leaves it pending', async ({
+  page,
+}) => {
   const editor = await openEditor(page);
   await page.evaluate(() => window.trial.selectTextblock(0));
   await page.keyboard.type('``` ');
@@ -819,7 +966,9 @@ test('Enter or a complete language confirms the fence, and a space leaves it pen
   await expect(editor.locator('.cm-content')).toBeFocused();
 });
 
-test('Enter after auto-opening a Rust fence confirms it without inserting a blank first line', async ({ page }) => {
+test('Enter after auto-opening a Rust fence confirms it without inserting a blank first line', async ({
+  page,
+}) => {
   const editor = await openEditor(page);
   await page.evaluate(() => window.trial.selectTextblock(0));
   await page.keyboard.type('```rust');
@@ -834,16 +983,21 @@ test('Enter after auto-opening a Rust fence confirms it without inserting a blan
   await expect.poll(source).toBe('```rust\nlet x = 1;\nlet y = 2;\n```');
 });
 
-test('Enter inside an existing Rust block can still insert an intentional blank line', async ({ page }) => {
+test('Enter inside an existing Rust block can still insert an intentional blank line', async ({
+  page,
+}) => {
   const editor = await openEditor(page, '```rust\nlet x = 1;\n```');
   await page.evaluate(() => window.trial.selectCode('start'));
   await expect(editor.locator('.cm-content')).toBeFocused();
   await page.keyboard.press('Enter');
-  await expect.poll(() => page.evaluate(() => window.trial.markdown().trimEnd()))
+  await expect
+    .poll(() => page.evaluate(() => window.trial.markdown().trimEnd()))
     .toBe('```rust\n\nlet x = 1;\n```');
 });
 
-test('individual pair preferences disable backticks and square brackets while leaving round brackets enabled', async ({ page }) => {
+test('individual pair preferences disable backticks and square brackets while leaving round brackets enabled', async ({
+  page,
+}) => {
   const editor = await openEditor(page);
   await page.evaluate(async () => {
     const { default: config } = await import('/src/store/useConfigStore.js');
@@ -865,13 +1019,17 @@ test('individual pair preferences disable backticks and square brackets while le
 });
 
 for (const renderer of ['preview', 'milkdown']) {
-  test(`${renderer} marks complete quote and code blocks in a document selection`, async ({ page }) => {
+  test(`${renderer} marks complete quote and code blocks in a document selection`, async ({
+    page,
+  }) => {
     const markdown = 'Before\n\n> Quote text\n\n```js\nconst answer = 42;\n```\n\nAfter';
     const query = renderer === 'milkdown' ? '&renderer=milkdown' : '';
     await page.goto(`/tests/preview-harness.html?content=${encodeURIComponent(markdown)}${query}`);
     const editor = page.locator(renderer === 'milkdown' ? '.milkdown-editor' : '.md-preview');
     const quote = editor.locator('blockquote');
-    const code = editor.locator(renderer === 'milkdown' ? '.milkdown-code-block' : '.md-runnable-code');
+    const code = editor.locator(
+      renderer === 'milkdown' ? '.milkdown-code-block' : '.md-runnable-code',
+    );
     await expect(code).toBeVisible();
     if (renderer === 'milkdown') {
       await editor.locator('p').first().click();
@@ -894,11 +1052,16 @@ for (const renderer of ['preview', 'milkdown']) {
 }
 
 for (const list of ['ul', 'ol']) {
-  test(`Enter at the start of a ${list} continuation lifts the paragraph and keeps item order`, async ({ page }) => {
+  test(`Enter at the start of a ${list} continuation lifts the paragraph and keeps item order`, async ({
+    page,
+  }) => {
     const ordered = list === 'ol';
     const marker = ordered ? ['5.', '6.', '7.'] : ['-', '-', '-'];
     const indent = ordered ? '   ' : '  ';
-    const editor = await openEditor(page, `${marker[0]} First\n${marker[1]} Second\n\n${indent}Continuation\n\n${marker[2]} After`);
+    const editor = await openEditor(
+      page,
+      `${marker[0]} First\n${marker[1]} Second\n\n${indent}Continuation\n\n${marker[2]} After`,
+    );
     await page.evaluate(() => window.trial.selectParagraph('Continuation'));
     await page.keyboard.press('Enter');
     await expect(editor.locator(`:scope > ${list}`)).toHaveCount(2);
@@ -918,9 +1081,6 @@ test('Enter at a nested list item start outdents one level', async ({ page }) =>
   await expect(editor.locator(':scope > ul > li')).toHaveText(['Parent', 'Child']);
 });
 
-
-
-
 test('four stars then content renders strong instead of plain text', async ({ page }) => {
   const editor = await openEditor(page);
   await editor.click();
@@ -930,23 +1090,22 @@ test('four stars then content renders strong instead of plain text', async ({ pa
   expect(await page.evaluate(() => window.trial.markdown().trimEnd())).toBe('**321321**');
 });
 
-
-
-
 test('pasting plain **bold** renders strong instead of text', async ({ page }) => {
   const editor = await openEditor(page);
   await editor.locator('p').first().click();
   await page.evaluate(() => {
     const root = document.querySelector('.milkdown-editor');
-    const target = root.querySelector('.ProseMirror') || root.querySelector('[contenteditable="true"]') || root;
+    const target =
+      root.querySelector('.ProseMirror') || root.querySelector('[contenteditable="true"]') || root;
     const data = new DataTransfer();
     data.setData('text/plain', '**321321**');
-    target.dispatchEvent(new ClipboardEvent('paste', { clipboardData: data, bubbles: true, cancelable: true }));
+    target.dispatchEvent(
+      new ClipboardEvent('paste', { clipboardData: data, bubbles: true, cancelable: true }),
+    );
   });
   await expect(editor.locator('strong')).toHaveText('321321');
   expect(await page.evaluate(() => window.trial.markdown().trimEnd())).toBe('**321321**');
 });
-
 
 test('pasting into an empty bold pair renders strong', async ({ page }) => {
   const editor = await openEditor(page);
@@ -954,10 +1113,13 @@ test('pasting into an empty bold pair renders strong', async ({ page }) => {
   await page.keyboard.type('****');
   await page.evaluate(() => {
     const root = document.querySelector('.milkdown-editor');
-    const target = root.querySelector('.ProseMirror') || root.querySelector('[contenteditable="true"]') || root;
+    const target =
+      root.querySelector('.ProseMirror') || root.querySelector('[contenteditable="true"]') || root;
     const data = new DataTransfer();
     data.setData('text/plain', '321321');
-    target.dispatchEvent(new ClipboardEvent('paste', { clipboardData: data, bubbles: true, cancelable: true }));
+    target.dispatchEvent(
+      new ClipboardEvent('paste', { clipboardData: data, bubbles: true, cancelable: true }),
+    );
   });
   await expect(editor.locator('strong')).toHaveText('321321');
   expect(await page.evaluate(() => window.trial.markdown().trimEnd())).toBe('**321321**');
