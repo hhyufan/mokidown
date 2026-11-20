@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Tooltip } from 'antd';
 import MarkdownComparisonEditor from './MarkdownComparisonEditor';
@@ -11,33 +11,67 @@ const comparisonSides = ['original', 'modified'];
 
 const lineCount = (row) => row.lastModified - row.firstModified + 1;
 
-function foldRows(rows, foldState) {
+function foldRows(rows, foldState, previous) {
   const visible = [];
+  const collapsedRanges = [];
   const appendRows = (start, end) => {
     for (let i = start; i < end; i++) visible.push(rows[i]);
   };
   let collapsedCount = 0;
   let expandedCount = 0;
+  const preserved =
+    previous && (previous.foldState === foldState || foldState.overrides.size)
+      ? previous.collapsedRanges
+      : null;
+  if (!preserved && !rows.some((row) => row.changed)) {
+    return { visible: rows, collapsedCount, expandedCount, collapsedRanges };
+  }
+  let rangeIndex = 0;
+  const previousRange = (row) => {
+    if (!preserved || row.firstOriginal == null) return undefined;
+    while (preserved[rangeIndex]?.[1] < row.firstOriginal) rangeIndex++;
+    const range = preserved[rangeIndex];
+    return range && row.firstOriginal >= range[0] && row.lastOriginal <= range[1]
+      ? range
+      : undefined;
+  };
   for (let start = 0; start < rows.length;) {
     if (rows[start].changed || rows[start].firstModified == null) {
       visible.push(rows[start++]);
       continue;
     }
+    const existingRange = previousRange(rows[start]);
     let end = start + 1;
-    while (end < rows.length && !rows[end].changed && rows[end].firstModified != null) end++;
+    while (
+      end < rows.length &&
+      !rows[end].changed &&
+      rows[end].firstModified != null &&
+      previousRange(rows[end]) === existingRange
+    )
+      end++;
     // Keep a line of context next to changes without cutting into a Markdown block.
-    const first = start > 0 && lineCount(rows[start]) <= HISTORY_FOLD_CONTEXT ? start + 1 : start;
+    const first =
+      rows[start - 1]?.changed && lineCount(rows[start]) <= HISTORY_FOLD_CONTEXT
+        ? start + 1
+        : start;
     const last =
-      end < rows.length && lineCount(rows[end - 1]) <= HISTORY_FOLD_CONTEXT ? end - 1 : end;
+      rows[end]?.changed && lineCount(rows[end - 1]) <= HISTORY_FOLD_CONTEXT ? end - 1 : end;
     const group = rows.slice(first, last);
     const count = group.length ? group.at(-1).lastModified - group[0].firstModified + 1 : 0;
-    if (count < MARKDOWN_FOLD_MINIMUM || !group.some(({ hasContent }) => hasContent)) {
+    const firstOriginal = group.find((row) => row.firstOriginal != null)?.firstOriginal;
+    const lastOriginal = group.findLast((row) => row.lastOriginal != null)?.lastOriginal;
+    if (
+      firstOriginal == null ||
+      count < MARKDOWN_FOLD_MINIMUM ||
+      !group.some(({ hasContent }) => hasContent)
+    ) {
       appendRows(start, end);
     } else {
       const hiddenStart = group[0].firstModified;
       const hiddenEnd = group.at(-1).lastModified;
-      const key = `fold:${hiddenStart}:${hiddenEnd}`;
-      const expanded = foldState.overrides.get(key) ?? foldState.defaultExpanded;
+      const key = `fold:${firstOriginal}:${lastOriginal}`;
+      const expanded =
+        foldState.overrides.get(key) ?? (preserved ? !existingRange : foldState.defaultExpanded);
       appendRows(start, first);
       if (expanded) {
         expandedCount++;
@@ -45,21 +79,22 @@ function foldRows(rows, foldState) {
         appendRows(first + 1, last);
       } else {
         collapsedCount++;
+        collapsedRanges.push([firstOriginal, lastOriginal]);
         visible.push({
           key,
           count,
           fold: true,
           firstModified: hiddenStart,
           lastModified: hiddenEnd,
-          firstOriginal: group.find((row) => row.firstOriginal != null)?.firstOriginal,
-          lastOriginal: group.findLast((row) => row.lastOriginal != null)?.lastOriginal,
+          firstOriginal,
+          lastOriginal,
         });
       }
       appendRows(last, end);
     }
     start = end;
   }
-  return { visible, collapsedCount, expandedCount };
+  return { visible, collapsedCount, expandedCount, collapsedRanges };
 }
 
 function comparisonLayout(rows, blocks, firstLine, lastLine) {
@@ -112,6 +147,7 @@ export default function MarkdownHistoryDiff({
 }) {
   const { t } = useTranslation();
   const scrollRef = useRef(null);
+  const previousFolds = useRef(null);
   const [currentReady, setCurrentReady] = useState(false);
   const [showOriginal, setShowOriginal] = useState(false);
   const markCurrentReady = useCallback(() => setCurrentReady(true), []);
@@ -126,12 +162,15 @@ export default function MarkdownHistoryDiff({
       if (next) cancelAnimationFrame(next);
     };
   }, [currentReady]);
-  useMarkdownComparisonAlignment(scrollRef);
   const { rows, originalBlocks, modifiedBlocks } = comparison;
-  const { visible, collapsedCount, expandedCount } = useMemo(
-    () => foldRows(rows, foldState),
+  const { visible, collapsedCount, expandedCount, collapsedRanges } = useMemo(
+    () => foldRows(rows, foldState, previousFolds.current),
     [rows, foldState],
   );
+  useLayoutEffect(() => {
+    previousFolds.current = { foldState, collapsedRanges };
+  }, [foldState, collapsedRanges]);
+  useMarkdownComparisonAlignment(scrollRef, visible);
   useEffect(() => {
     onFoldSummary({ collapsedCount, expandedCount });
   }, [collapsedCount, expandedCount, onFoldSummary]);
@@ -280,7 +319,7 @@ export default function MarkdownHistoryDiff({
         <MarkdownComparisonEditor
           tabId={tabId}
           content={draftContent}
-          layout={modifiedLayout}
+          layout={ready ? modifiedLayout : null}
           previewBoundsRef={previewBoundsRef}
           onDraftChange={onDraftChange}
           boundsRef={scrollRef}
