@@ -497,14 +497,14 @@
 @keyframes md-fold-expand { from { transform: rotate(-90deg); } to { transform: rotate(0deg); } }
 @keyframes md-fold-collapse { from { transform: rotate(0deg); } to { transform: rotate(-90deg); } }
 
-.md-preview--milkdown {
-  // 应用主题优先于系统配色：系统深色、应用浅色时，浏览器默认光标会沿用
-  // 系统配色变白；这里显式声明 color-scheme 与 caret-color 兜底。
-  &[data-editor-theme='light'] .milkdown-editor,
-  &[data-editor-theme='dark'] .milkdown-editor {
-    caret-color: var(--text, #2c2c2e);
-  }
+.md-preview.reader__document {
+  .hljs-keyword, .hljs-selector-tag, .hljs-literal { color: #bf54a0; }
+  .hljs-string, .hljs-attr { color: #548044; }
+  .hljs-number, .hljs-title { color: #bd7138; }
+  .hljs-comment { color: var(--text-sec); font-style: italic; }
+}
 
+.md-preview--milkdown {
   --md-code-text: #383a42;
   --md-code-keyword: #a626a4;
   --md-code-name: #e45649;
@@ -555,12 +555,24 @@
     cursor: default;
   }
 
+  .milkdown-editor .ProseMirror-selectednode { outline: none; }
+  .milkdown-editor li.ProseMirror-selectednode::after { content: none; }
+
   .milkdown-editor:not(.milkdown-editor--readonly) {
     // Keep a real hit area below the final block, including short documents.
     padding-bottom: 3em;
     h1::before, h2::before { pointer-events: none; }
 
-    &:not(.ProseMirror-hideselection) { caret-color: var(--text, #2c2c2e); }
+    &:not(.ProseMirror-hideselection, .moki-markdown-virtual-caret, .moki-markdown-pointer-pending, [data-drawn-caret]) {
+      caret-color: var(--text, #2c2c2e) !important;
+    }
+    &[data-drawn-caret] { caret-color: transparent !important; }
+    .cm-content { caret-color: var(--code-caret); }
+    :is(.cm-cursor, .cm-dropCursor) { border-left-color: var(--code-caret) !important; }
+    @media (forced-colors: active) {
+      --code-caret: CanvasText;
+      :is(.cm-cursor, .cm-dropCursor) { forced-color-adjust: none; }
+    }
     .moki-markdown-marker { display: none; }
 
     &.ProseMirror-focused {
@@ -578,7 +590,7 @@
         &::before { content: attr(data-moki-marker); }
       }
       &.moki-markdown-virtual-caret,
-      &.moki-markdown-pointer-pending { caret-color: transparent; }
+      &.moki-markdown-pointer-pending { caret-color: transparent !important; }
       &.moki-markdown-pointer-pending .moki-markdown-marker--with-caret > i::after { visibility: hidden; }
       .moki-markdown-marker--with-caret {
         &::before { content: attr(data-marker-before); }
@@ -1212,6 +1224,23 @@
     // 表格间距统一由 table 自身承担，相邻表格之间才有一致的上下留白。
     margin: 0;
   }
+}
+
+.moki-writing-caret {
+  position: absolute;
+  inset: 0 auto auto 0;
+  width: 2px;
+  z-index: 2;
+  background: var(--text, #2c2c2e);
+  pointer-events: none;
+  animation: moki-writing-caret-blink 1.1s step-end infinite;
+  &[hidden] { display: none; }
+  @media (prefers-reduced-motion: reduce) { animation: none; }
+  @media (forced-colors: active) { background: CanvasText; forced-color-adjust: none; }
+}
+
+@keyframes moki-writing-caret-blink {
+  55% { opacity: 0; }
 }
 
 .editor-content__editor--milkdown {

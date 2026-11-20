@@ -97,10 +97,6 @@ html.reader-transparent-host #root {
     min-width: 0;
     padding: 32px clamp(24px, 3vw, 56px);
     > * { content-visibility: auto; contain-intrinsic-size: auto 80px; }
-    .hljs-keyword, .hljs-selector-tag, .hljs-literal { color: #bf54a0; }
-    .hljs-string, .hljs-attr { color: #548044; }
-    .hljs-number, .hljs-title { color: #bd7138; }
-    .hljs-comment { color: var(--text-sec); font-style: italic; }
     input[type='checkbox'] { pointer-events: none; }
   }
   &__source-editor { position: relative; flex: 1 1 0; width: 100%; min-height: 0; min-width: 0; overflow: hidden; }

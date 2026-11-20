@@ -22,7 +22,6 @@ import { useTranslation } from 'react-i18next';
 import { TextSelection } from '@milkdown/kit/prose/state';
 import { closeHistory } from '@milkdown/kit/prose/history';
 import { loadMarkdownImageSrc } from '@utils/markdownAssets';
-import useEditorStore from '@store/useEditorStore';
 import {
   mediaAt,
   imageDescription,
@@ -33,27 +32,31 @@ import {
 import './milkdown-media.scss';
 
 const MilkdownMediaTools = forwardRef(function MilkdownMediaTools(
-  { rootRef, getView, ready, readOnly },
+  { rootRef, previewBoundsRef = rootRef, documentPath, getView, ready, readOnly },
   ref,
 ) {
   const { t } = useTranslation();
   const [surface, setSurface] = useState(null);
   const [error, setError] = useState('');
   const [preview, setPreview] = useState(null);
+  const [resolvedPreview, setResolvedPreview] = useState(null);
   const [previewEdit, setPreviewEdit] = useState(null);
   const [previewHost, setPreviewHost] = useState(null);
+  const previewSource = preview?.source;
+  const previewSrc = resolvedPreview?.source === previewSource
+    ? resolvedPreview?.src : previewSource?.rendered;
   useLayoutEffect(() => {
-    if (!previewHost || !rootRef.current) return;
-    const editor = rootRef.current;
+    const bounds = previewBoundsRef.current;
+    if (!previewHost || !bounds) return;
     const fit = () => {
-      const { left, top, width, height } = editor.getBoundingClientRect();
+      const { left, top, width, height } = bounds.getBoundingClientRect();
       Object.assign(previewHost.style, {
         left: `${left}px`, top: `${top}px`, width: `${width}px`, height: `${height}px`,
       });
     };
     fit();
     const observer = new ResizeObserver(fit);
-    observer.observe(editor);
+    observer.observe(bounds);
     window.addEventListener('resize', fit);
     document.addEventListener('scroll', fit, true);
     return () => {
@@ -61,17 +64,33 @@ const MilkdownMediaTools = forwardRef(function MilkdownMediaTools(
       window.removeEventListener('resize', fit);
       document.removeEventListener('scroll', fit, true);
     };
-  }, [previewHost, rootRef]);
+  }, [previewHost, previewBoundsRef]);
   const current = useRef(null);
   const inputRef = useRef(null);
   const pickerOpen = useRef(false);
   const applying = useRef(false);
-  useEffect(
-    () => () => {
-      if (preview?.objectUrl) URL.revokeObjectURL(preview.objectUrl);
-    },
-    [preview?.objectUrl],
-  );
+  useEffect(() => {
+    if (!previewSource || (previewSource.loaded && !previewSource.rendered.startsWith('blob:'))) return;
+    let closed = false;
+    let previewUrl;
+    // Own a separate blob URL for local previews so an editor re-render cannot revoke it.
+    loadMarkdownImageSrc(previewSource.address, documentPath)
+      .then(({ src, objectUrl }) => {
+        if (closed) {
+          if (objectUrl) URL.revokeObjectURL(objectUrl);
+          return;
+        }
+        previewUrl = objectUrl;
+        if (src && (objectUrl || !previewSource.loaded)) setResolvedPreview({ source: previewSource, src });
+      })
+      .catch(() => {
+        // Keep the browser-rendered source if a local address could not be resolved.
+      });
+    return () => {
+      closed = true;
+      if (previewUrl) URL.revokeObjectURL(previewUrl);
+    };
+  }, [documentPath, previewSource]);
   const update = useCallback((value) => {
     current.current = value;
     setSurface(value);
@@ -121,9 +140,6 @@ const MilkdownMediaTools = forwardRef(function MilkdownMediaTools(
           view.state.tr.setMeta(mediaEditorKey, {
             position: target.from,
             dom: value.dom,
-            from: target.from,
-            to: target.to,
-            kind: target.kind,
           }),
         );
         update(next);
@@ -177,9 +193,6 @@ const MilkdownMediaTools = forwardRef(function MilkdownMediaTools(
         view.state.tr.setMeta(mediaEditorKey, {
           position: value.from,
           dom,
-          from: target?.from ?? value.from,
-          to: target?.to ?? value.from,
-          kind,
         }),
       );
       update(value);
@@ -234,16 +247,20 @@ const MilkdownMediaTools = forwardRef(function MilkdownMediaTools(
       event.preventDefault();
       event.stopPropagation();
       event.stopImmediatePropagation();
-      if (!image.getAttribute('src')) {
-        return;
-      }
+      const address = image.dataset.mokiOriginalSrc || image.getAttribute('src');
+      if (!address) return;
       if (!commit()) return;
       clear();
       setPreviewEdit(null);
       setPreview({
-        src: image.currentSrc || image.src,
+        source: {
+          address,
+          rendered: image.currentSrc || image.src,
+          loaded: image.complete && image.naturalWidth > 0,
+        },
         alt: image.alt,
-        target: mediaAt(view, view.posAtDOM(image, 0), 'image'),
+        target: !readOnly && !image.closest('.md-preview__html-block')
+          ? mediaAt(view, view.posAtDOM(image, 0), 'image') : null,
         doc: view.state.doc,
         view,
       });
@@ -332,7 +349,7 @@ const MilkdownMediaTools = forwardRef(function MilkdownMediaTools(
     }
     clear(true);
   };
-  const savePreview = async (edit = previewEdit) => {
+  const savePreview = (edit = previewEdit) => {
     const value = preview;
     if (!value?.target || !edit) return;
     if (value.view.isDestroyed || !value.view.state.doc.eq(value.doc)) {
@@ -353,21 +370,14 @@ const MilkdownMediaTools = forwardRef(function MilkdownMediaTools(
     );
     value.view.dispatch(closeHistory(value.view.state.tr));
     const target = mediaAt(value.view, value.target.from, 'image');
-    const next = { ...value, target, doc: value.view.state.doc, alt: target.text };
-    setPreview(next);
+    setPreview({
+      ...value,
+      target,
+      doc: value.view.state.doc,
+      alt: target?.text ?? value.alt,
+      source: address === value.target.address ? value.source : { address },
+    });
     setPreviewEdit(null);
-    if (address !== value.target.address) {
-      const store = useEditorStore.getState();
-      const path = store.tabs.find((tab) => tab.id === store.activeTabId)?.path || '';
-      const result = await loadMarkdownImageSrc(address, path);
-      setPreview((active) => {
-        if (active?.doc !== next.doc) {
-          if (result.objectUrl) URL.revokeObjectURL(result.objectUrl);
-          return active;
-        }
-        return { ...active, src: result.src, objectUrl: result.objectUrl };
-      });
-    }
   };
   const choosePreviewFile = async () => {
     pickerOpen.current = true;
@@ -382,7 +392,7 @@ const MilkdownMediaTools = forwardRef(function MilkdownMediaTools(
           },
         ],
       });
-      if (file) await savePreview({ field: 'address', value: file });
+      if (file) savePreview({ field: 'address', value: file });
     } catch {
       setPreviewEdit((edit) => (edit ? { ...edit, error: t('media.fileError') } : edit));
     } finally {
@@ -483,7 +493,7 @@ const MilkdownMediaTools = forwardRef(function MilkdownMediaTools(
       {preview && previewHost && (
         <Image
           style={{ display: 'none' }}
-          src={preview.src}
+          src={previewSrc}
           alt={preview.alt}
           preview={{
             visible: true,

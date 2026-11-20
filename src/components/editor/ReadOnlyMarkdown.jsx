@@ -63,7 +63,7 @@ function ReaderMermaid({ code, dark, eager }) {
 }
 
 // This renderer intentionally has no editor store, execution controls or editable node views.
-const ReadOnlyMarkdown = memo(function ReadOnlyMarkdown({ content, documentPath, dark, fontSize, lineHeight, onReady }) {
+const ReadOnlyMarkdown = memo(function ReadOnlyMarkdown({ content, documentPath, dark, fontSize, lineHeight, onReady, fragmentScope }) {
   const root = useRef(null);
   useEffect(() => {
     if (!onReady) return undefined;
@@ -91,7 +91,11 @@ const ReadOnlyMarkdown = memo(function ReadOnlyMarkdown({ content, documentPath,
         event.preventDefault();
         let fragment = href.slice(1);
         try { fragment = decodeURIComponent(fragment); } catch { /* Preserve malformed fragments as literal IDs. */ }
-        root.current?.querySelector(`#${CSS.escape(fragment)}`)?.scrollIntoView({ block: 'center' });
+        const selector = `#${CSS.escape(fragment)}`;
+        const comparison = fragmentScope && root.current?.closest('.history-markdown-diff');
+        const destination = root.current?.querySelector(selector)
+          || comparison?.querySelector(`${fragmentScope} ${selector}`);
+        destination?.scrollIntoView({ block: 'center' });
       } else if (window.__TAURI_INTERNALS__) {
         event.preventDefault();
         const target = resolveMarkdownLinkPath(href, documentPath);
@@ -101,7 +105,7 @@ const ReadOnlyMarkdown = memo(function ReadOnlyMarkdown({ content, documentPath,
         void action.catch((error) => console.error('[reader] Could not open link:', error));
       }
     }} target={href?.startsWith('#') ? undefined : '_blank'} rel="noopener noreferrer">{children}</a>,
-  }), [documentPath, dark, onReady]);
+  }), [documentPath, dark, onReady, fragmentScope]);
   return <article ref={root} className="md-preview reader__document" style={{ fontSize, lineHeight: lineHeight / fontSize }}>
     <ReactMarkdown remarkPlugins={remarkPlugins} rehypePlugins={rehypePlugins} components={components}>{content}</ReactMarkdown>
   </article>;

@@ -180,8 +180,6 @@ export const milkdownMediaEditor = $prose(
             ? {
                 ...value,
                 position: tr.mapping.map(value.position),
-                from: tr.mapping.map(value.from),
-                to: tr.mapping.map(value.to),
               }
             : null;
         },
@@ -194,7 +192,7 @@ export const milkdownMediaEditor = $prose(
           let depth = $position.depth;
           while (depth > 0 && !$position.node(depth).isTextblock) depth--;
           const position = depth ? $position.start(depth) : value.position;
-          const decorations = [
+          return DecorationSet.create(state.doc, [
             Decoration.widget(position, () => value.dom, {
               key: value.key,
               side: -1,
@@ -202,15 +200,7 @@ export const milkdownMediaEditor = $prose(
               stopEvent: () => true,
               ignoreSelection: true,
             }),
-          ];
-          if (value.from < value.to) {
-            decorations.push(
-              value.kind === 'image'
-                ? Decoration.node(value.from, value.to, { class: 'moki-media-selected' })
-                : Decoration.inline(value.from, value.to, { class: 'moki-media-selected' }),
-            );
-          }
-          return DecorationSet.create(state.doc, decorations);
+          ]);
         },
       },
     }),

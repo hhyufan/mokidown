@@ -53,11 +53,12 @@ it('normalizes built-in theme aliases for the real Shiki adapter and editor crea
 it('registers complete fallback theme data before asynchronous initialization or diff editor creation', async () => {
   await import('./monacoShiki');
   expect(mock.editor.defineTheme.mock.calls).toHaveLength(2);
-  for (const [, theme] of mock.editor.defineTheme.mock.calls) {
+  for (const [name, theme] of mock.editor.defineTheme.mock.calls) {
     // Monaco's tokenTheme getter reads colors directly even with inherit enabled.
     expect(theme.colors['editor.foreground']).toBeUndefined();
     expect(theme.colors['editor.background']).toBeUndefined();
     expect(theme.colors['minimap.background']).toBe('#00000000');
+    expect(theme.colors['editorCursor.foreground']).toBe(name === 'one-light' ? '#526fff' : '#528bff');
   }
 });
 
@@ -70,6 +71,12 @@ it('keeps the minimap canvas transparent in both Shiki themes', async () => {
     }));
     const theme = mock.editor.defineTheme.mock.calls.filter(([id]) => id === name).at(-1)[1];
     expect(theme.colors['minimap.background']).toBe('#00000000');
+    const caret = name === 'one-light' ? '#526fff' : '#528bff';
+    expect(theme.colors).toMatchObject({
+      'editorCursor.foreground': caret,
+      'editorMultiCursor.primary.foreground': caret,
+      'editorMultiCursor.secondary.foreground': caret,
+    });
   }
 });
 

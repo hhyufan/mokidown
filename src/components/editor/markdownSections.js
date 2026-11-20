@@ -2,8 +2,20 @@ import { unified } from 'unified';
 import remarkParse from 'remark-parse';
 import remarkGfm from 'remark-gfm';
 import remarkMath from 'remark-math';
+import remarkMarkdownHtml from '@utils/remarkMarkdownHtml';
 
 const parser = unified().use(remarkParse).use(remarkGfm).use(remarkMath);
+const previewParser = parser().use(remarkMarkdownHtml);
+
+export function parseMarkdownBlocks(source) {
+  return previewParser.runSync(previewParser.parse(source), source).children;
+}
+
+export function markdownBlockKey(blocks) {
+  return JSON.stringify(blocks, (property, value) =>
+    property === 'position' || property === 'spread' ? undefined : value,
+  );
+}
 
 // 以同类节点的文档顺序连接 Markdown 行号和 ProseMirror 位置，不依赖标题文本唯一。
 export function markdownFoldAnchors(source) {
