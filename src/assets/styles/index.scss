@@ -57,7 +57,7 @@
 }
 
 :root {
-  color-scheme: light;
+  color-scheme: only light;
   --moki-background-base: #fff;
   --moki-background-wash: color-mix(in srgb, var(--moki-background-base) calc((1 - var(--moki-background-opacity, 0.2)) * 100%), transparent);
   --bg: #f5f5f7;
@@ -131,6 +131,7 @@ html[data-theme='dark'] {
 
 html {
   color: var(--text);
+  -webkit-tap-highlight-color: transparent;
   font-family: var(--font-app);
   font-size: 16px;
   font-weight: 400;
@@ -138,6 +139,10 @@ html {
   text-rendering: optimizeLegibility;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+}
+
+:where(:focus) {
+  outline: none;
 }
 
 // 表单元素在部分浏览器中默认不会继承字体族
