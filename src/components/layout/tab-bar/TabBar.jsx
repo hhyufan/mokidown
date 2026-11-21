@@ -417,7 +417,7 @@ function TabBar({ onRequestCloseTab, onRequestCloseTabs }) {
                   dropTarget?.id === tab.id &&
                     (dropTarget.after ? 'tabbar__tab--drop-after' : 'tabbar__tab--drop-before'),
                 )}
-                onClick={() => !isRenaming && setActiveTab(tab.id)}
+                onClick={() => !isRenaming && setActiveTab(tab.id, { animate: true })}
                 onContextMenu={(event) => {
                   if (!isRenaming) openTabMenu(event, tab);
                 }}
