@@ -100,7 +100,7 @@ export default function MarkdownMathCompletionMenu({ request, onClose }) {
   }, [active, choose, items, onClose, request, visible]);
   if (!visible) return null;
   return createPortal(
-    <div ref={anchorRef} style={{ position: 'fixed', zIndex: 1050, visibility: 'hidden' }}>
+    <div ref={anchorRef} className="moki-math-completion-anchor" style={{ position: 'fixed', zIndex: 1050, visibility: 'hidden' }}>
       <div className="moki-math-completion" role="listbox" aria-label={t('editor.mathCompletionMenu')} ref={listRef}>
         {items.map(([symbol, snippet], index) => (
           <div
