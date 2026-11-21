@@ -1,19 +1,27 @@
-
 import { useState, useEffect } from 'react';
-import { Modal, Menu, Switch, Select, Input, InputNumber, Button, Checkbox, Space, Tooltip } from 'antd';
+import { flushSync } from 'react-dom';
+import {
+  Modal,
+  Menu,
+  Switch,
+  Select,
+  Input,
+  InputNumber,
+  Button,
+  Checkbox,
+  Space,
+  Tooltip,
+} from 'antd';
 import { useResponsiveLayout } from '@hooks/useResponsiveLayout';
 import {
   SettingOutlined,
   BgColorsOutlined,
   EditOutlined,
   DownloadOutlined,
-
   PlusOutlined,
   MinusOutlined,
-
   ExportOutlined,
   ImportOutlined,
-
   InfoCircleOutlined,
   GithubOutlined,
   StarFilled,
@@ -61,11 +69,19 @@ const NAV_ICONS = {
   about: <InfoCircleOutlined />,
 };
 
-const NAV_KEYS = ['general', 'appearance', 'editor', 'renderer', 'shortcuts', 'languages',  'about'];
+const NAV_KEYS = ['general', 'appearance', 'editor', 'renderer', 'shortcuts', 'languages', 'about'];
 
 function SettingsModal({ open: openProp, onClose }) {
   const { t, i18n } = useTranslation();
   const [activeNav, setActiveNav] = useState('general');
+  const switchNav = (key) => {
+    if (!key || key === activeNav) return;
+    if (typeof document.startViewTransition !== 'function') {
+      setActiveNav(key);
+      return;
+    }
+    document.startViewTransition(() => flushSync(() => setActiveNav(key)));
+  };
   const [settingsBusy, setSettingsBusy] = useState(false);
 
   const [appVersion, setAppVersion] = useState('');
@@ -219,7 +235,7 @@ function SettingsModal({ open: openProp, onClose }) {
             className="settings-modal__tabs"
             mode="horizontal"
             selectedKeys={[activeNav]}
-            onClick={({ key }) => setActiveNav(key)}
+            onClick={({ key }) => switchNav(key)}
             items={menuItems}
             overflowedIndicator={null}
           />
@@ -231,303 +247,383 @@ function SettingsModal({ open: openProp, onClose }) {
               className="settings-modal__nav"
               mode="inline"
               selectedKeys={[activeNav]}
-              onClick={({ key }) => setActiveNav(key)}
+              onClick={({ key }) => switchNav(key)}
               items={menuItems}
               style={{ width: 180 }}
             />
           )}
 
           <div className="settings-modal__content">
-            {activeNav === 'general' && (
-              <div className="settings-section">
-                <SettingGroup label={t('settings.group.snapshot')} />
-                <SettingRow label={t('settings.snapshot.title')}>
-                  <Space>
-                    <Button icon={<ExportOutlined />} loading={settingsBusy} onClick={handleExportJson}>{t('settings.snapshot.exportJson')}</Button>
-                    <Button icon={<ImportOutlined />} disabled={settingsBusy} onClick={handleImportJson}>{t('settings.snapshot.importJson')}</Button>
-                  </Space>
-                </SettingRow>
-                <SettingGroup label={t('settings.group.workspace')} />
-                <SettingRow
-                  label={t('settings.general.language')}
-                  desc={t('settings.general.languageDesc')}
-                >
-                  <Select
-                    style={{ width: 160 }}
-                    value={config.language}
-                    onChange={(v) => handleChange('language', v)}
-                    options={[
-                      { value: 'en', label: <span>English</span> },
-                      { value: 'zh', label: <span>中文</span> },
-                    ]}
-                  />
-                </SettingRow>
-                <SettingRow
-                  label={t('settings.general.workspacePath')}
-                  desc={t('settings.general.workspacePathDesc')}
-                >
-                  <Input
-                    style={{ width: 260 }}
-                    value={config.workspacePath}
-                    onChange={(e) => handleChange('workspacePath', e.target.value)}
-                    placeholder="/path/to/workspace"
-                  />
-                </SettingRow>
-                <SettingGroup label={t('settings.group.behavior')} />
-                <SettingRow
-                  label={t('settings.general.associatedOpenMode')}
-                  desc={t('settings.general.associatedOpenModeDesc')}
-                >
-                  <Select
-                    aria-label={t('settings.general.associatedOpenMode')}
-                    style={{ width: 200 }}
-                    value={config.associatedOpenMode}
-                    onChange={(value) => handleChange('associatedOpenMode', value)}
-                    options={[
-                      { value: 'editor', label: t('settings.general.openInEditor') },
-                      { value: 'reader', label: t('settings.general.openInReader') },
-                    ]}
-                  />
-                </SettingRow>
-                {Boolean(window.__TAURI_INTERNALS__ && /Windows/i.test(navigator.userAgent)) && <SettingRow
-                  label={t('settings.general.externalFileDrag')}
-                  desc={t('settings.general.externalFileDragDesc')}
-                >
-                  <Select aria-label={t('settings.general.externalFileDrag')} style={{ width: 200 }}
-                    value={config.externalFileDrag} onChange={(value) => handleChange('externalFileDrag', value)}
-                    options={[
-                      { value: 'reader', label: t('settings.general.openDragWindow') },
-                      { value: 'explorer', label: t('settings.general.dragToExplorer') },
-                    ]} />
-                </SettingRow>}
-                <SettingRow
-                  label={t('settings.general.startup')}
-                  desc={t('settings.general.startupDesc')}
-                >
-                  <Switch
-                    checked={config.autoSave}
-                    onChange={(v) => handleChange('autoSave', v)}
-                  />
-                </SettingRow>
-              </div>
-            )}
-
-            {activeNav === 'appearance' && (
-              <div className="settings-section">
-                <MokiSettings SettingGroup={SettingGroup} SettingRow={SettingRow} />
-                <BackgroundSettings SettingGroup={SettingGroup} SettingRow={SettingRow} />
-                {/* 主题切换统一由上面的 Moki 卡片区承担；这里曾有一份 Light/Dark 单选，
-                    两处改的是同一个 store，属于重复入口，已移除。 */}
-              </div>
-            )}
-
-            {activeNav === 'editor' && (
-              <div className="settings-section">
-                <SettingGroup label={t('settings.group.font')} />
-                <SettingRow
-                  label={t('settings.editor.fontSize')}
-                  desc={t('settings.editor.fontSizeDesc')}
-                >
-                  <FontSizeControl
-                    label={t('settings.editor.fontSize')}
-                    value={config.fontSize}
-                    onChange={(v) => handleChange('fontSize', Number(v) || 14)}
-                  />
-                </SettingRow>
-                <SettingRow
-                  label={t('settings.editor.fontFamily')}
-                  desc={t('settings.editor.fontFamilyDesc')}
-                >
-                  <Select
-                    style={{ width: 200 }}
-                    value={config.fontFamily}
-                    onChange={(v) => handleChange('fontFamily', v)}
-                    options={[
-                      { value: 'JetBrains Mono', label: <span>JetBrains Mono</span> },
-                      { value: 'Fira Code', label: <span>Fira Code</span> },
-                      { value: 'Cascadia Code', label: <span>Cascadia Code</span> },
-                      { value: 'Consolas', label: <span>Consolas</span> },
-                      { value: 'monospace', label: <span>Monospace</span> },
-                    ]}
-                  />
-                </SettingRow>
-                <SettingGroup label={t('settings.group.formatting')} />
-                <SettingRow
-                  label={t('settings.editor.tabSize')}
-                  desc={t('settings.editor.tabSizeDesc')}
-                >
-                  <Select
-                    style={{ width: 100 }}
-                    value={config.tabSize}
-                    onChange={(v) => handleChange('tabSize', Number(v))}
-                    options={[
-                      { value: 2, label: <span>2</span> },
-                      { value: 4, label: <span>4</span> },
-                      { value: 8, label: <span>8</span> },
-                    ]}
-                  />
-                </SettingRow>
-                <SettingRow
-                  label={t('settings.editor.wordWrap')}
-                  desc={t('settings.editor.wordWrapDesc')}
-                >
-                  <Switch
-                    checked={config.wordWrap}
-                    onChange={(v) => handleChange('wordWrap', v)}
-                  />
-                </SettingRow>
-                <SettingGroup label={t('settings.group.display')} />
-                <SettingRow
-                  label={t('settings.editor.lineNumbers')}
-                  desc={t('settings.editor.lineNumbersDesc')}
-                >
-                  <Switch
-                    checked={config.lineNumbers}
-                    onChange={(v) => handleChange('lineNumbers', v)}
-                  />
-                </SettingRow>
-                <SettingRow
-                  label={t('settings.editor.minimap')}
-                  desc={t('settings.editor.minimapDesc')}
-                >
-                  <Switch
-                    checked={config.minimap?.enabled ?? false}
-                    onChange={(v) => handleChange('minimap', { enabled: v })}
-                  />
-                </SettingRow>
-                <SettingGroup label={t('settings.group.file')} />
-                <SettingRow
-                  label={t('settings.editor.autoSave')}
-                  desc={t('settings.editor.autoSaveDesc')}
-                >
-                  <Switch
-                    checked={config.autoSave}
-                    onChange={(v) => handleChange('autoSave', v)}
-                  />
-                </SettingRow>
-              </div>
-            )}
-
-            {activeNav === 'renderer' && (
-              <div className="settings-section">
-                <SettingGroup label={t('htmlPreview.title')} />
-                <SettingRow label={t('web.openLinksInEditor')} desc={t('web.openLinksInEditorHint')}>
-                  <Switch checked={config.openLinksInEditor === true} onChange={(value) => handleChange('openLinksInEditor', value)} />
-                </SettingRow>
-                <SettingRow label={t('htmlPreview.liveReload')} desc={t('htmlPreview.liveReloadHint')}>
-                  <Switch checked={config.htmlPreviewLiveReload ?? true} onChange={(v) => handleChange('htmlPreviewLiveReload', v)} />
-                </SettingRow>
-                <SettingRow label={t('htmlPreview.port')} desc={t('htmlPreview.portHint')}>
-                  <InputNumber aria-label={t('htmlPreview.port')} min={0} max={65535} precision={0}
-                    value={config.htmlPreviewPort ?? 0} onChange={(value) => handleChange('htmlPreviewPort', Number(value) || 0)} />
-                </SettingRow>
-                <SettingGroup label={t('settings.group.typography')} />
-                <SettingRow
-                  label={t('settings.appearance.previewZoomSync')}
-                  desc={t('settings.appearance.previewZoomSyncDesc')}
-                >
-                  <Switch
-                    checked={config.previewZoomSync ?? true}
-                    onChange={(v) => handleChange('previewZoomSync', v)}
-                  />
-                </SettingRow>
-                <SettingRow
-                  label={t('settings.appearance.previewFontSize')}
-                  desc={t('settings.appearance.previewFontSizeDesc')}
-                >
-                  <FontSizeControl
-                    label={t('settings.appearance.previewFontSize')}
-                    disabled={config.previewZoomSync ?? true}
-                    value={config.previewFontSize ?? config.fontSize ?? 14}
-                    onChange={(v) => handleChange('previewFontSize', Number(v) || config.fontSize || 14)}
-                  />
-                </SettingRow>
-                <SettingGroup label={t('settings.group.taskList')} />
-                <SettingRow
-                  label={t('settings.editor.markdownTaskCascade')}
-                  desc={t('settings.editor.markdownTaskCascadeDesc')}
-                >
-                  <Switch
-                    aria-label={t('settings.editor.markdownTaskCascade')}
-                    checked={config.markdownTaskCascade !== false}
-                    onChange={(value) => handleChange('markdownTaskCascade', value)}
-                  />
-                </SettingRow>
-                <SettingGroup label={t('settings.group.folding')} />
-                <SettingRow
-                  label={t('settings.editor.markdownFolding')}
-                  desc={t('settings.editor.markdownFoldingDesc')}
-                >
-                  <Switch
-                    aria-label={t('settings.editor.markdownFolding')}
-                    checked={config.markdownFolding !== false}
-                    onChange={(value) => handleChange('markdownFolding', value)}
-                  />
-                </SettingRow>
-                <SettingGroup label={t('settings.group.inputAssist')} />
-                <MarkdownPairSettings
-                  enabled={config.markdownSmartPairsEnabled}
-                  value={config.markdownSmartPairs}
-                  onToggle={(value) => handleChange('markdownSmartPairsEnabled', value)}
-                  onChange={(value) => handleChange('markdownSmartPairs', value)}
-                />
-              </div>
-            )}
-
-            {activeNav === 'shortcuts' && (
-              <ShortcutsSettings SettingGroup={SettingGroup} SettingRow={SettingRow} />
-            )}
-
-            {activeNav === 'languages' && <LanguageServices onOpenDocs={onClose} />}
-
-            {activeNav === 'about' && (
-              <div className="settings-section">
-                <div
-                  className={`settings-about__hero ${config.mokiDisplay === 'hidden' ? 'settings-about__hero--plain' : ''}`}
-                >
-                  {/* 两栏共用一条基线网格：左栏是人物画布（贴底 + 底部柔光），
-                      右栏是品牌、简介与一条 dl 清单，避免原先七八个元素各自对齐的杂乱。 */}
-                  {config.mokiDisplay !== 'hidden' && (
-                    <div className="settings-about__portrait">
-                      <MokiSprite art="themes" />
-                      <div className="settings-about__caption">{t('moki.caption')}</div>
-                    </div>
+            <div className="settings-modal__pane" key={activeNav}>
+              {activeNav === 'general' && (
+                <div className="settings-section">
+                  <SettingGroup label={t('settings.group.snapshot')} />
+                  <SettingRow label={t('settings.snapshot.title')}>
+                    <Space>
+                      <Button
+                        icon={<ExportOutlined />}
+                        loading={settingsBusy}
+                        onClick={handleExportJson}
+                      >
+                        {t('settings.snapshot.exportJson')}
+                      </Button>
+                      <Button
+                        icon={<ImportOutlined />}
+                        disabled={settingsBusy}
+                        onClick={handleImportJson}
+                      >
+                        {t('settings.snapshot.importJson')}
+                      </Button>
+                    </Space>
+                  </SettingRow>
+                  <SettingGroup label={t('settings.group.workspace')} />
+                  <SettingRow
+                    label={t('settings.general.language')}
+                    desc={t('settings.general.languageDesc')}
+                  >
+                    <Select
+                      style={{ width: 160 }}
+                      value={config.language}
+                      onChange={(v) => handleChange('language', v)}
+                      options={[
+                        { value: 'en', label: <span>English</span> },
+                        { value: 'zh', label: <span>中文</span> },
+                      ]}
+                    />
+                  </SettingRow>
+                  <SettingRow
+                    label={t('settings.general.workspacePath')}
+                    desc={t('settings.general.workspacePathDesc')}
+                  >
+                    <Input
+                      style={{ width: 260 }}
+                      value={config.workspacePath}
+                      onChange={(e) => handleChange('workspacePath', e.target.value)}
+                      placeholder="/path/to/workspace"
+                    />
+                  </SettingRow>
+                  <SettingGroup label={t('settings.group.behavior')} />
+                  <SettingRow
+                    label={t('settings.general.associatedOpenMode')}
+                    desc={t('settings.general.associatedOpenModeDesc')}
+                  >
+                    <Select
+                      aria-label={t('settings.general.associatedOpenMode')}
+                      style={{ width: 200 }}
+                      value={config.associatedOpenMode}
+                      onChange={(value) => handleChange('associatedOpenMode', value)}
+                      options={[
+                        { value: 'editor', label: t('settings.general.openInEditor') },
+                        { value: 'reader', label: t('settings.general.openInReader') },
+                      ]}
+                    />
+                  </SettingRow>
+                  {Boolean(window.__TAURI_INTERNALS__ && /Windows/i.test(navigator.userAgent)) && (
+                    <SettingRow
+                      label={t('settings.general.externalFileDrag')}
+                      desc={t('settings.general.externalFileDragDesc')}
+                    >
+                      <Select
+                        aria-label={t('settings.general.externalFileDrag')}
+                        style={{ width: 200 }}
+                        value={config.externalFileDrag}
+                        onChange={(value) => handleChange('externalFileDrag', value)}
+                        options={[
+                          { value: 'reader', label: t('settings.general.openDragWindow') },
+                          { value: 'explorer', label: t('settings.general.dragToExplorer') },
+                        ]}
+                      />
+                    </SettingRow>
                   )}
-                  <div className="settings-about__body">
-                    <div className="settings-about__identity">
-                      <AppMark size={46} className="settings-about__logo" />
-                      <div className="settings-about__identity-text">
-                        <div className="settings-about__name">{t('app.name')}</div>
-                        {appVersion && (
-                          <span className="settings-about__version">v{appVersion}</span>
-                        )}
+                  <SettingRow
+                    label={t('settings.general.startup')}
+                    desc={t('settings.general.startupDesc')}
+                  >
+                    <Switch
+                      checked={config.autoSave}
+                      onChange={(v) => handleChange('autoSave', v)}
+                    />
+                  </SettingRow>
+                </div>
+              )}
+
+              {activeNav === 'appearance' && (
+                <div className="settings-section">
+                  <MokiSettings SettingGroup={SettingGroup} SettingRow={SettingRow} />
+                  <BackgroundSettings SettingGroup={SettingGroup} SettingRow={SettingRow} />
+                  {/* 主题切换统一由上面的 Moki 卡片区承担；这里曾有一份 Light/Dark 单选，
+                    两处改的是同一个 store，属于重复入口，已移除。 */}
+                </div>
+              )}
+
+              {activeNav === 'editor' && (
+                <div className="settings-section">
+                  <SettingGroup label={t('settings.group.font')} />
+                  <SettingRow
+                    label={t('settings.editor.fontSize')}
+                    desc={t('settings.editor.fontSizeDesc')}
+                  >
+                    <FontSizeControl
+                      label={t('settings.editor.fontSize')}
+                      value={config.fontSize}
+                      onChange={(v) => handleChange('fontSize', Number(v) || 14)}
+                    />
+                  </SettingRow>
+                  <SettingRow
+                    label={t('settings.editor.fontFamily')}
+                    desc={t('settings.editor.fontFamilyDesc')}
+                  >
+                    <Select
+                      style={{ width: 200 }}
+                      value={config.fontFamily}
+                      onChange={(v) => handleChange('fontFamily', v)}
+                      options={[
+                        { value: 'JetBrains Mono', label: <span>JetBrains Mono</span> },
+                        { value: 'Fira Code', label: <span>Fira Code</span> },
+                        { value: 'Cascadia Code', label: <span>Cascadia Code</span> },
+                        { value: 'Consolas', label: <span>Consolas</span> },
+                        { value: 'monospace', label: <span>Monospace</span> },
+                      ]}
+                    />
+                  </SettingRow>
+                  <SettingGroup label={t('settings.group.formatting')} />
+                  <SettingRow
+                    label={t('settings.editor.tabSize')}
+                    desc={t('settings.editor.tabSizeDesc')}
+                  >
+                    <Select
+                      style={{ width: 100 }}
+                      value={config.tabSize}
+                      onChange={(v) => handleChange('tabSize', Number(v))}
+                      options={[
+                        { value: 2, label: <span>2</span> },
+                        { value: 4, label: <span>4</span> },
+                        { value: 8, label: <span>8</span> },
+                      ]}
+                    />
+                  </SettingRow>
+                  <SettingRow
+                    label={t('settings.editor.wordWrap')}
+                    desc={t('settings.editor.wordWrapDesc')}
+                  >
+                    <Switch
+                      checked={config.wordWrap}
+                      onChange={(v) => handleChange('wordWrap', v)}
+                    />
+                  </SettingRow>
+                  <SettingGroup label={t('settings.group.display')} />
+                  <SettingRow
+                    label={t('settings.editor.lineNumbers')}
+                    desc={t('settings.editor.lineNumbersDesc')}
+                  >
+                    <Switch
+                      checked={config.lineNumbers}
+                      onChange={(v) => handleChange('lineNumbers', v)}
+                    />
+                  </SettingRow>
+                  <SettingRow
+                    label={t('settings.editor.minimap')}
+                    desc={t('settings.editor.minimapDesc')}
+                  >
+                    <Switch
+                      checked={config.minimap?.enabled ?? false}
+                      onChange={(v) => handleChange('minimap', { enabled: v })}
+                    />
+                  </SettingRow>
+                  <SettingGroup label={t('settings.group.file')} />
+                  <SettingRow
+                    label={t('settings.editor.autoSave')}
+                    desc={t('settings.editor.autoSaveDesc')}
+                  >
+                    <Switch
+                      checked={config.autoSave}
+                      onChange={(v) => handleChange('autoSave', v)}
+                    />
+                  </SettingRow>
+                </div>
+              )}
+
+              {activeNav === 'renderer' && (
+                <div className="settings-section">
+                  <SettingGroup label={t('htmlPreview.title')} />
+                  <SettingRow
+                    label={t('web.openLinksInEditor')}
+                    desc={t('web.openLinksInEditorHint')}
+                  >
+                    <Switch
+                      checked={config.openLinksInEditor === true}
+                      onChange={(value) => handleChange('openLinksInEditor', value)}
+                    />
+                  </SettingRow>
+                  <SettingRow
+                    label={t('htmlPreview.liveReload')}
+                    desc={t('htmlPreview.liveReloadHint')}
+                  >
+                    <Switch
+                      checked={config.htmlPreviewLiveReload ?? true}
+                      onChange={(v) => handleChange('htmlPreviewLiveReload', v)}
+                    />
+                  </SettingRow>
+                  <SettingRow label={t('htmlPreview.port')} desc={t('htmlPreview.portHint')}>
+                    <InputNumber
+                      aria-label={t('htmlPreview.port')}
+                      min={0}
+                      max={65535}
+                      precision={0}
+                      value={config.htmlPreviewPort ?? 0}
+                      onChange={(value) => handleChange('htmlPreviewPort', Number(value) || 0)}
+                    />
+                  </SettingRow>
+                  <SettingGroup label={t('settings.group.typography')} />
+                  <SettingRow
+                    label={t('settings.appearance.previewZoomSync')}
+                    desc={t('settings.appearance.previewZoomSyncDesc')}
+                  >
+                    <Switch
+                      checked={config.previewZoomSync ?? true}
+                      onChange={(v) => handleChange('previewZoomSync', v)}
+                    />
+                  </SettingRow>
+                  <SettingRow
+                    label={t('settings.appearance.previewFontSize')}
+                    desc={t('settings.appearance.previewFontSizeDesc')}
+                  >
+                    <FontSizeControl
+                      label={t('settings.appearance.previewFontSize')}
+                      disabled={config.previewZoomSync ?? true}
+                      value={config.previewFontSize ?? config.fontSize ?? 14}
+                      onChange={(v) =>
+                        handleChange('previewFontSize', Number(v) || config.fontSize || 14)
+                      }
+                    />
+                  </SettingRow>
+                  <SettingGroup label={t('settings.group.taskList')} />
+                  <SettingRow
+                    label={t('settings.editor.markdownTaskCascade')}
+                    desc={t('settings.editor.markdownTaskCascadeDesc')}
+                  >
+                    <Switch
+                      aria-label={t('settings.editor.markdownTaskCascade')}
+                      checked={config.markdownTaskCascade !== false}
+                      onChange={(value) => handleChange('markdownTaskCascade', value)}
+                    />
+                  </SettingRow>
+                  <SettingGroup label={t('settings.group.folding')} />
+                  <SettingRow
+                    label={t('settings.editor.markdownFolding')}
+                    desc={t('settings.editor.markdownFoldingDesc')}
+                  >
+                    <Switch
+                      aria-label={t('settings.editor.markdownFolding')}
+                      checked={config.markdownFolding !== false}
+                      onChange={(value) => handleChange('markdownFolding', value)}
+                    />
+                  </SettingRow>
+                  <SettingGroup label={t('settings.group.inputAssist')} />
+                  <MarkdownPairSettings
+                    enabled={config.markdownSmartPairsEnabled}
+                    value={config.markdownSmartPairs}
+                    onToggle={(value) => handleChange('markdownSmartPairsEnabled', value)}
+                    onChange={(value) => handleChange('markdownSmartPairs', value)}
+                  />
+                </div>
+              )}
+
+              {activeNav === 'shortcuts' && (
+                <ShortcutsSettings SettingGroup={SettingGroup} SettingRow={SettingRow} />
+              )}
+
+              {activeNav === 'languages' && <LanguageServices onOpenDocs={onClose} />}
+
+              {activeNav === 'about' && (
+                <div className="settings-section">
+                  <div
+                    className={`settings-about__hero ${config.mokiDisplay === 'hidden' ? 'settings-about__hero--plain' : ''}`}
+                  >
+                    {/* 两栏共用一条基线网格：左栏是人物画布（贴底 + 底部柔光），
+                      右栏是品牌、简介与一条 dl 清单，避免原先七八个元素各自对齐的杂乱。 */}
+                    {config.mokiDisplay !== 'hidden' && (
+                      <div className="settings-about__portrait">
+                        <MokiSprite art="themes" />
+                        <div className="settings-about__caption">{t('moki.caption')}</div>
                       </div>
-                    </div>
-                    <p className="settings-about__tagline">{t('settings.about.tagline')}</p>
-                    {(canCheckUpdates() || isWebDemo()) && <div><Button icon={<DownloadOutlined />} loading={['checking', 'downloading', 'installing'].includes(updateStage)} onClick={() => useUpdateStore.getState().check()}>{t('sidebar.footer.checkUpdates')}</Button>{isWebDemo() ? (
-                      <Button type="link" href={installerUrl} target="_blank" rel="noreferrer">{t('settings.about.installer')}</Button>
-                    ) : (
-                      <Button type="link" onClick={async () => { const url = await resolveInstallerUrl(); try { await openExternal(url); } catch (err) { notify('error', t('notification.error'), err?.message || String(err)); } }}>{t('settings.about.installer')}</Button>
-                    )}</div>}
-                    <dl className="settings-about__meta">
-                      <dt>{t('settings.about.author')}</dt>
-                      <dd>{t('settings.about.authorDesc')}</dd>
-                      <dt>{t('settings.about.repository')}</dt>
-                      <dd>
-                        <button type="button" className="settings-about__link" onClick={handleOpenRepo}>
-                          <GithubOutlined />
-                          <span>{t('settings.about.repositoryDesc')}</span>
-                        </button>
-                      </dd>
-                    </dl>
-                    <div className="settings-about__footer">
-                      <StarFilled className="settings-about__star-icon" />
-                      <span>{t('settings.about.starHint')}</span>
+                    )}
+                    <div className="settings-about__body">
+                      <div className="settings-about__identity">
+                        <AppMark size={46} className="settings-about__logo" />
+                        <div className="settings-about__identity-text">
+                          <div className="settings-about__name">{t('app.name')}</div>
+                          {appVersion && (
+                            <span className="settings-about__version">v{appVersion}</span>
+                          )}
+                        </div>
+                      </div>
+                      <p className="settings-about__tagline">{t('settings.about.tagline')}</p>
+                      {(canCheckUpdates() || isWebDemo()) && (
+                        <div>
+                          <Button
+                            icon={<DownloadOutlined />}
+                            loading={['checking', 'downloading', 'installing'].includes(
+                              updateStage,
+                            )}
+                            onClick={() => useUpdateStore.getState().check()}
+                          >
+                            {t('sidebar.footer.checkUpdates')}
+                          </Button>
+                          {isWebDemo() ? (
+                            <Button
+                              type="link"
+                              href={installerUrl}
+                              target="_blank"
+                              rel="noreferrer"
+                            >
+                              {t('settings.about.installer')}
+                            </Button>
+                          ) : (
+                            <Button
+                              type="link"
+                              onClick={async () => {
+                                const url = await resolveInstallerUrl();
+                                try {
+                                  await openExternal(url);
+                                } catch (err) {
+                                  notify(
+                                    'error',
+                                    t('notification.error'),
+                                    err?.message || String(err),
+                                  );
+                                }
+                              }}
+                            >
+                              {t('settings.about.installer')}
+                            </Button>
+                          )}
+                        </div>
+                      )}
+                      <dl className="settings-about__meta">
+                        <dt>{t('settings.about.author')}</dt>
+                        <dd>{t('settings.about.authorDesc')}</dd>
+                        <dt>{t('settings.about.repository')}</dt>
+                        <dd>
+                          <button
+                            type="button"
+                            className="settings-about__link"
+                            onClick={handleOpenRepo}
+                          >
+                            <GithubOutlined />
+                            <span>{t('settings.about.repositoryDesc')}</span>
+                          </button>
+                        </dd>
+                      </dl>
+                      <div className="settings-about__footer">
+                        <StarFilled className="settings-about__star-icon" />
+                        <span>{t('settings.about.starHint')}</span>
+                      </div>
                     </div>
                   </div>
                 </div>
-              </div>
-            )}
+              )}
+            </div>
           </div>
         </div>
       </div>
@@ -543,18 +639,35 @@ function SettingsModal({ open: openProp, onClose }) {
  */
 function FontSizeControl({ label, value, onChange, disabled = false }) {
   const { t } = useTranslation();
-  return <Space.Compact className="setting-font-size">
-    <Tooltip title={t('settings.fontSize.decrease', { label })}>
-    <Button disabled={disabled} aria-label={t('settings.fontSize.decrease', { label })} icon={<MinusOutlined />}
-      onClick={() => onChange(Math.max(10, (value || 14) - 1))} />
-    </Tooltip>
-    <InputNumber aria-label={label} min={10} max={24} step={1} disabled={disabled}
-      value={value} onChange={onChange} />
-    <Tooltip title={t('settings.fontSize.increase', { label })}>
-    <Button disabled={disabled} aria-label={t('settings.fontSize.increase', { label })} icon={<PlusOutlined />}
-      onClick={() => onChange(Math.min(24, (value || 14) + 1))} />
-    </Tooltip>
-  </Space.Compact>;
+  return (
+    <Space.Compact className="setting-font-size">
+      <Tooltip title={t('settings.fontSize.decrease', { label })}>
+        <Button
+          disabled={disabled}
+          aria-label={t('settings.fontSize.decrease', { label })}
+          icon={<MinusOutlined />}
+          onClick={() => onChange(Math.max(10, (value || 14) - 1))}
+        />
+      </Tooltip>
+      <InputNumber
+        aria-label={label}
+        min={10}
+        max={24}
+        step={1}
+        disabled={disabled}
+        value={value}
+        onChange={onChange}
+      />
+      <Tooltip title={t('settings.fontSize.increase', { label })}>
+        <Button
+          disabled={disabled}
+          aria-label={t('settings.fontSize.increase', { label })}
+          icon={<PlusOutlined />}
+          onClick={() => onChange(Math.min(24, (value || 14) + 1))}
+        />
+      </Tooltip>
+    </Space.Compact>
+  );
 }
 
 /** 设置分组标题。 */
@@ -586,10 +699,21 @@ function MarkdownPairSettings({ enabled, value, onToggle, onChange }) {
                 aria-describedby={description}
                 checked={selected.includes(symbol)}
                 disabled={!enabled}
-                onChange={({ target }) => onChange(target.checked ? [...selected, symbol] : selected.filter((item) => item !== symbol))}
+                onChange={({ target }) =>
+                  onChange(
+                    target.checked
+                      ? [...selected, symbol]
+                      : selected.filter((item) => item !== symbol),
+                  )
+                }
               >
-                <span className="settings-pair-list__title">{title}<code aria-hidden="true">{characters}</code></span>
-                <span className="setting-row__desc" id={description}>{t(`settings.editor.pair.${name}Desc`)}</span>
+                <span className="settings-pair-list__title">
+                  {title}
+                  <code aria-hidden="true">{characters}</code>
+                </span>
+                <span className="setting-row__desc" id={description}>
+                  {t(`settings.editor.pair.${name}Desc`)}
+                </span>
               </Checkbox>
             </li>
           );
