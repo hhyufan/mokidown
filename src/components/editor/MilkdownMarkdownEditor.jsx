@@ -1579,11 +1579,12 @@ function MilkdownInner(
     fontSize,
     lineHeight,
     onAutoSave,
+    active,
     readOnly,
     onDraftChange,
     comparisonLayout,
     comparisonSource,
-    onComparisonReady,
+    onReady,
     previewBoundsRef,
   },
   ref,
@@ -1635,6 +1636,12 @@ function MilkdownInner(
   }, []);
   const [renderTick, setRenderTick] = useState(0);
   const { menu, openMenu, closeMenu } = useEditorContextMenu(`${activeTabId}:${renderTick}`);
+  useEffect(() => {
+    if (active) return;
+    closeMenu();
+    closeCodeLanguageMenu();
+    closeMathCompletion();
+  }, [active, closeCodeLanguageMenu, closeMathCompletion, closeMenu]);
   const handleContextMenu = (event) => {
     const editor = editorRef.current;
     if (!editor || readOnly || event.target.closest('input, textarea, button, select')) return;
@@ -1684,7 +1691,7 @@ function MilkdownInner(
       if (!charTimerRef.current) {
         charTimerRef.current = setTimeout(() => {
           charTimerRef.current = null;
-          setCharacterCount(markdown.length);
+          if (useEditorStore.getState().activeTabId === tabId) setCharacterCount(markdown.length);
         }, 250);
       }
 
@@ -1890,9 +1897,9 @@ function MilkdownInner(
     [activeTabId, content, isComparison, readOnly, publishEditorContent],
   );
 
-  useEffect(() => {
-    if (!editorInfo.loading) onComparisonReady?.();
-  }, [editorInfo.loading, onComparisonReady]);
+  useLayoutEffect(() => {
+    if (!editorInfo.loading) onReady?.();
+  }, [editorInfo.loading, onReady]);
 
   useLayoutEffect(() => {
     if (!isComparison || editorInfo.loading || syncedComparisonRef.current === comparisonSource)
@@ -1948,7 +1955,7 @@ function MilkdownInner(
   const jumpToCode = useCodeBlockNavigation(
     activeTabId,
     resolveCodeTarget,
-    !isComparison && !editorInfo.loading,
+    active && !isComparison && !editorInfo.loading,
   );
 
   useEffect(() => {
@@ -1994,10 +2001,14 @@ function MilkdownInner(
         },
       );
     });
-    document.addEventListener('selectionchange', requestDocumentViewStateSave);
+    const saveSelection = () => {
+      if (wrapperRef.current?.contains(document.getSelection()?.anchorNode))
+        requestDocumentViewStateSave();
+    };
+    document.addEventListener('selectionchange', saveSelection);
     return () => {
       stopView?.();
-      document.removeEventListener('selectionchange', requestDocumentViewStateSave);
+      document.removeEventListener('selectionchange', saveSelection);
     };
   }, [activeTabId, editorInfo.loading, isComparison, readOnly]);
 
@@ -2256,7 +2267,7 @@ function MilkdownInner(
   }, [documentPath, openFileFromPath]);
 
   useEffect(() => {
-    if (isComparison) return undefined;
+    if (isComparison || !active) return undefined;
     const handler = (e) => {
       const wrapper = wrapperRef.current;
       const detail = e.detail ?? {};
@@ -2290,7 +2301,7 @@ function MilkdownInner(
 
     window.addEventListener('outline:jump', handler);
     return () => window.removeEventListener('outline:jump', handler);
-  }, [isComparison]);
+  }, [active, isComparison]);
 
   useEffect(() => {
     if (readOnly || editorInfo.loading) return undefined;
@@ -2425,12 +2436,18 @@ function MilkdownInner(
         previewBoundsRef={previewBoundsRef}
         documentPath={documentPath}
         getView={getMediaView}
-        ready={!editorInfo.loading}
+        ready={active && !editorInfo.loading}
         readOnly={readOnly}
       />
-      <EditorContextMenu menu={menu} onClose={closeMenu} />
-      <MarkdownCodeLanguageMenu request={codeLanguageMenu} onClose={closeCodeLanguageMenu} />
-      <MarkdownMathCompletionMenu request={mathCompletion} onClose={closeMathCompletion} />
+      <EditorContextMenu menu={active ? menu : null} onClose={closeMenu} />
+      <MarkdownCodeLanguageMenu
+        request={active ? codeLanguageMenu : null}
+        onClose={closeCodeLanguageMenu}
+      />
+      <MarkdownMathCompletionMenu
+        request={active ? mathCompletion : null}
+        onClose={closeMathCompletion}
+      />
     </div>
   );
 }
@@ -2466,7 +2483,7 @@ class MilkdownErrorBoundary extends Component {
    */
   componentDidCatch(error, info) {
     reportReactError(error, info);
-    this.props.onComparisonReady?.();
+    this.props.onReady?.();
   }
 
   /**
@@ -2497,14 +2514,14 @@ class MilkdownErrorBoundary extends Component {
  * 并用 ErrorBoundary 包住第三方编辑器初始化过程。
  */
 const MilkdownMarkdownEditor = forwardRef(function MilkdownMarkdownEditor(
-  { className, onAutoSave, readOnly = false, comparison },
+  { className, onAutoSave, readOnly = false, comparison, tabId, active = true, onReady },
   ref,
 ) {
   const documentVersion = useEditorStore(
-    useShallow((s) => ({
-      id: s.activeTabId,
-      revision: s.tabs.find((tab) => tab.id === s.activeTabId)?.contentRevision ?? 0,
-    })),
+    useShallow((s) => {
+      const id = tabId ?? s.activeTabId;
+      return { id, revision: s.tabs.find((tab) => tab.id === id)?.contentRevision ?? 0 };
+    }),
   );
   const activeTabId = comparison?.tabId ?? documentVersion.id;
   const contentRevision = comparison ? 0 : documentVersion.revision;
@@ -2526,12 +2543,17 @@ const MilkdownMarkdownEditor = forwardRef(function MilkdownMarkdownEditor(
   const content = comparison ? comparison.initialContent : readOnly ? bufferedContent : fallback;
   const fontSize = previewZoomSync ? editorFontSize : previewFontSize || editorFontSize;
   const lineHeight = previewZoomSync ? editorLineHeight : previewLineHeight || editorLineHeight;
+  const comparisonReady = comparison?.onReady;
+  const notifyReady = useCallback(() => {
+    comparisonReady?.();
+    onReady?.(activeTabId);
+  }, [activeTabId, comparisonReady, onReady]);
 
   return (
     <MilkdownErrorBoundary
       key={`${activeTabId}:${contentRevision}`}
       className={className}
-      onComparisonReady={comparison?.onReady}
+      onReady={notifyReady}
     >
       <MilkdownProvider>
         <ForwardedMilkdownInner
@@ -2544,10 +2566,11 @@ const MilkdownMarkdownEditor = forwardRef(function MilkdownMarkdownEditor(
           fontSize={fontSize}
           lineHeight={lineHeight}
           onAutoSave={onAutoSave}
+          active={active}
           onDraftChange={comparison?.onChange}
           comparisonLayout={comparison?.layout}
           comparisonSource={comparison?.content}
-          onComparisonReady={comparison?.onReady}
+          onReady={notifyReady}
           previewBoundsRef={comparison?.previewBoundsRef}
           readOnly={readOnly}
         />

@@ -6,7 +6,13 @@
  */
 
 .sidebar {
-  --sidebar-actual-width: max(var(--sidebar-min-width, 220px), min(var(--sidebar-drag-width, var(--sidebar-width, 280px)), max(var(--sidebar-min-width, 220px), calc(100vw - 360px))));
+  --sidebar-actual-width: max(
+    var(--sidebar-min-width, 220px),
+    min(
+      var(--sidebar-drag-width, var(--sidebar-width, 280px)),
+      max(var(--sidebar-min-width, 220px), calc(100vw - 360px))
+    )
+  );
   position: relative;
   width: var(--sidebar-actual-width);
   min-width: var(--sidebar-actual-width);
@@ -17,7 +23,9 @@
   padding-right: resize-handle.$track-size;
   display: flex;
   flex-direction: column;
-  transition: margin-left 0.25s ease, opacity 0.25s ease;
+  transition:
+    margin-left 0.25s ease,
+    opacity 0.25s ease;
   z-index: 10;
 
   &--hidden {
@@ -35,7 +43,11 @@
   bottom: 0;
   width: resize-handle.$track-size;
 }
-@media (max-width: 768px) { .sidebar__resizer { display: none; } }
+@media (max-width: 768px) {
+  .sidebar__resizer {
+    display: none;
+  }
+}
 
 // 品牌区：应用图标 + 产品字标。
 .sidebar__header {
@@ -87,8 +99,12 @@
   display: grid;
   width: max-content;
 
-  .sidebar__tab-measure-button { width: auto; }
-  [data-measure-label]::after { content: attr(data-measure-label); }
+  .sidebar__tab-measure-button {
+    width: auto;
+  }
+  [data-measure-label]::after {
+    content: attr(data-measure-label);
+  }
 }
 
 .sidebar__tab,
@@ -147,7 +163,9 @@
 .sidebar__tab-slot {
   flex: 1 1 0;
   min-width: max-content;
-  &--hidden { display: none; }
+  &--hidden {
+    display: none;
+  }
 }
 
 // Keep the mgtree glyph, but follow the same idle/hover/active colors as the
@@ -159,8 +177,12 @@
   height: 14px;
   flex-shrink: 0;
   fill: currentColor;
-  :is(path, rect, circle, ellipse, polygon, polyline, text, use):not([fill='none']) { fill: currentColor !important; }
-  [stroke]:not([stroke='none']) { stroke: currentColor !important; }
+  :is(path, rect, circle, ellipse, polygon, polyline, text, use):not([fill='none']) {
+    fill: currentColor !important;
+  }
+  [stroke]:not([stroke='none']) {
+    stroke: currentColor !important;
+  }
 }
 
 .sidebar__tab-slider {
@@ -186,10 +208,21 @@
   overflow: hidden;
 }
 
-.sidebar__content--enter { animation: sidebar-content-enter 180ms ease-out both; }
-@keyframes sidebar-content-enter { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: translateY(0); } }
+.sidebar__content--enter {
+  animation: sidebar-content-enter 180ms ease-out both;
+}
+@keyframes sidebar-content-enter {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
 @media (prefers-reduced-motion: reduce) {
-  .sidebar__content--enter { animation: none; }
+  .sidebar__content--enter {
+    animation: none;
+  }
 }
 
 .sidebar__view {
@@ -200,13 +233,32 @@
 }
 
 .explorer-mode {
-  display: flex; flex-direction: column; flex: 1; min-height: 0;
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
   animation: explorer-mode-enter 180ms ease-out both;
-  transition: opacity 100ms ease, transform 100ms ease;
-  &--leaving { animation: none; opacity: 0; transform: translateX(-6px); pointer-events: none; }
+  transition: opacity 100ms ease;
+  &--leaving {
+    animation: none;
+    opacity: 0;
+    pointer-events: none;
+  }
 }
-@keyframes explorer-mode-enter { from { opacity: 0; transform: translateX(8px); } to { opacity: 1; transform: translateX(0); } }
-@media (prefers-reduced-motion: reduce) { .explorer-mode { animation: none; transition: none; } }
+@keyframes explorer-mode-enter {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .explorer-mode {
+    animation: none;
+    transition: none;
+  }
+}
 
 .sidebar__toolbar {
   display: flex;
@@ -246,8 +298,13 @@
   color: var(--text);
   background: transparent;
   cursor: pointer;
-  &:hover { color: var(--accent); background: var(--hover); }
-  &:focus-visible { outline: 1px solid var(--accent); }
+  &:hover {
+    color: var(--accent);
+    background: var(--hover);
+  }
+  &:focus-visible {
+    outline: 1px solid var(--accent);
+  }
 }
 
 .stb {
@@ -378,8 +435,6 @@
     height: 16px;
   }
 }
-
-
 
 .sidebar__recent-name {
   font-size: 13px;
@@ -524,7 +579,9 @@
     z-index: 40;
     box-shadow: 18px 0 48px rgba(0, 0, 0, 0.26);
     transform: translateX(0);
-    transition: transform 0.22s ease, opacity 0.22s ease;
+    transition:
+      transform 0.22s ease,
+      opacity 0.22s ease;
     padding-top: env(safe-area-inset-top);
     padding-right: 0;
     border-right: 1px solid var(--border);
@@ -623,13 +680,7 @@
 
 /* Keep the plugin panel header on one line (12px chevron, ellipsized title). */
 
-
-
 /* Plugin panel reuses the timeline classes; only the chevron is scoped. */
-
-
-
-
 
 /* Generic sidebar panel fed by plugins (self-contained layout). */
 .plugin-panel {

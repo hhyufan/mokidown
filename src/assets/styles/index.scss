@@ -128,9 +128,56 @@ html[data-theme='dark'] {
   padding: 0;
 }
 
-::view-transition-old(root),
-::view-transition-new(root) {
+html::view-transition-old(root),
+html::view-transition-new(root) {
   animation: none;
+}
+
+.content-transition {
+  &::view-transition-group(root) {
+    animation-duration: 240ms;
+  }
+
+  &::view-transition-old(root) {
+    animation: content-transition-out 240ms linear both;
+    mix-blend-mode: normal;
+  }
+
+  &::view-transition-new(root) {
+    animation: content-transition-in 240ms linear both;
+    mix-blend-mode: normal;
+  }
+}
+
+/* 旧内容先退到 0.1（约 140ms），新内容从 0.1 接上（约 112ms 起），
+   交叠区旧画面已经很淡，不出现两份文字同时清晰。 */
+@keyframes content-transition-out {
+  0% {
+    opacity: 1;
+  }
+  35% {
+    opacity: 0.42;
+  }
+  50%,
+  100% {
+    opacity: 0.1;
+  }
+}
+
+@keyframes content-transition-in {
+  0%,
+  33% {
+    opacity: 0.1;
+  }
+  48% {
+    opacity: 0.3;
+  }
+  68% {
+    opacity: 0.74;
+  }
+  100% {
+    opacity: 1;
+  }
 }
 
 html {
@@ -297,13 +344,13 @@ html[data-theme='dark'] {
    Both icons live in the button. The active one sits still; the other waits
    below-right, tilted and scaled down. Switching lets the old icon tilt away
    while the new one rises into place. */
-::view-transition-old(root),
-::view-transition-new(root) {
+html::view-transition-old(root),
+html::view-transition-new(root) {
   animation-duration: 0.45s;
   animation-timing-function: ease-in-out;
 }
 
-::view-transition-old(root) {
+html::view-transition-old(root) {
   animation: none;
   z-index: 1;
 }

@@ -85,21 +85,31 @@
     color: var(--text);
   }
 
+  &::after {
+    content: '';
+    position: absolute;
+    bottom: -1px;
+    left: 0;
+    right: 0;
+    height: 1px;
+    background: var(--surface);
+    opacity: 0;
+    transition: opacity 0.15s;
+    pointer-events: none;
+  }
+
   &--active {
     background: var(--surface);
     color: var(--text);
     border-color: var(--border);
 
-    &::after {
-      content: '';
-      position: absolute;
-      bottom: -1px;
-      left: 0;
-      right: 0;
-      height: 1px;
-      background: var(--surface);
-    }
+    &::after { opacity: 1; }
   }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .tabbar__tab,
+  .tabbar__tab::after { transition: none; }
 }
 
 .tabbar__tab.tabbar__tab-exit {
