@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { useTranslation } from 'react-i18next';
-import { mathSymbolSnippets } from './milkdownMathCompletion';
+import { mathSymbolSnippets } from './milkdownMathSymbols';
 
 // 列表最多占这么高，超出视口下沿再往里收，剩下的靠自身滚动。
 const MAX_HEIGHT = 240;
@@ -19,15 +19,19 @@ export default function MarkdownMathCompletionMenu({ request, onClose }) {
   const listRef = useRef(null);
   const [active, setActive] = useState(-1);
   const query = request?.query.toLowerCase() || '';
-  const items = useMemo(() => mathSymbolSnippets
-    .filter(([, snippet]) => snippet.toLowerCase().startsWith(query)), [query]);
+  // 前缀命中好几行时，按「还差几个字符」排：打到 `\in` 想的多半是 `\infty`，而表里
+  // `\int_{}` 恰好排在它前面，别让第一行成为手滑点错的那个。没编码时保持整张表的策展顺序。
+  const items = useMemo(() => {
+    const hits = mathSymbolSnippets.filter(([, snippet]) => snippet.toLowerCase().startsWith(query));
+    return query ? hits.sort((a, b) => a[1].length - b[1].length) : hits;
+  }, [query]);
   const visible = Boolean(request) && items.length > 0;
   // 焦点全程留在编辑器里，所以插入只能靠 request，不能让列表抢焦点。
   const choose = useCallback((index) => {
     const item = items[index];
     if (item) request.select(item[1]);
   }, [items, request]);
-  // 过滤条件一变就回到「没有选中项」：Enter 该继续是编辑器自己的 Enter。
+  // 过滤条件一变就回到「没有选中项」，别把上一串的选中行带过来。
   useEffect(() => setActive(-1), [query]);
   useLayoutEffect(() => {
     if (!visible) return undefined;
@@ -68,11 +72,14 @@ export default function MarkdownMathCompletionMenu({ request, onClose }) {
       }
       const step = event.key === 'ArrowDown' ? 1 : event.key === 'ArrowUp' ? -1 : 0;
       if (!step) {
-        // 没有选中项时不拦 Enter / Tab：正在敲完整编码的人不该被列表改掉按键。
-        if ((event.key !== 'Enter' && event.key !== 'Tab') || active < 0) return;
+        // 只剩唯一候选时不用先按方向键：这时候不存在抢按键的问题，
+        // 打到 `\sqr` 的人再按一次方向键只是多一步。候选不止一个时仍然不拦 Enter / Tab，
+        // 正在敲完整编码的人不该被列表改掉这两个键的含义。
+        const picked = active >= 0 ? active : items.length === 1 ? 0 : -1;
+        if (picked < 0 || (event.key !== 'Enter' && event.key !== 'Tab')) return;
         event.preventDefault();
         event.stopPropagation();
-        choose(active);
+        choose(picked);
         return;
       }
       event.preventDefault();
@@ -93,7 +100,7 @@ export default function MarkdownMathCompletionMenu({ request, onClose }) {
   }, [active, choose, items, onClose, request, visible]);
   if (!visible) return null;
   return createPortal(
-    <div ref={anchorRef} style={{ position: 'fixed', zIndex: 1050, visibility: 'hidden' }}>
+    <div ref={anchorRef} className="moki-math-completion-anchor" style={{ position: 'fixed', zIndex: 1050, visibility: 'hidden' }}>
       <div className="moki-math-completion" role="listbox" aria-label={t('editor.mathCompletionMenu')} ref={listRef}>
         {items.map(([symbol, snippet], index) => (
           <div

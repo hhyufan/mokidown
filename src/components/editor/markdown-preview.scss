@@ -794,16 +794,6 @@
       .moki-markdown-heading-source::before {
         content: none;
       }
-      .moki-markdown-math-source {
-        > * {
-          display: none;
-        }
-        &::before {
-          content: attr(data-moki-math-source);
-          font-family: var(--font-editor);
-          color: var(--text-sec);
-        }
-      }
     }
   }
 
@@ -1027,7 +1017,6 @@
     border-radius: 4px;
   }
 
-  .md-preview__math-source--inline,
   .md-preview__raw-source--inline {
     padding: 2px 6px;
   }
@@ -1066,7 +1055,7 @@
     min-height: 1.5em;
   }
 
-  // ── 公式源码态的实时预览气泡 ──────────────────────────────────────────
+  // ── 公式的实时预览：源码态上方的气泡，与渲染态压在正文上的覆盖层 ────────
   .moki-math-preview {
     font-family: var(--font-editor);
     color: var(--text);
@@ -1080,18 +1069,59 @@
     }
   }
 
-  // 行内气泡的定位参照：零尺寸的行内锚点站在公式自己的槽位上。
-  // 它是空的内联元素，既不占宽度也不产生断行机会，行高与折行都不受影响。
-  .moki-math-preview-anchor {
+  // 行内公式是一段挂了 math mark 的正文。它是覆盖层与气泡唯一的定位参照，
+  // 所以必须自己站住一个 position:relative 的盒子；两种状态共用同一份字号，
+  // 翻态时只有颜色变，宽度不跳。
+  // 着色留给下面两条 decoration 类：PM 把装饰 span 放在 mark span 里面，与正文同级，
+  // 这里写 color 会和它们抢同一段文字。
+  [data-moki-math-mark] {
+    position: relative;
+    font-family: var(--font-editor);
+  }
+
+  // 编辑态：正文露出来，配色沿用其它格式的源码态。等宽字体也钉在这里，
+  // 初次编辑的草稿正文还没挂上 math mark，靠这条跟上编辑态的同款字形。
+  .moki-math-source {
+    color: var(--accent);
+    background: var(--hover);
+    border-radius: 4px;
+    font-family: var(--font-editor);
+  }
+
+  // 渲染态：正文还在（删掉它就没有可编辑的载体，光标也落不回来），只是染透明，
+  // 由覆盖层把 KaTeX 排上去。
+  .moki-math-rendered {
+    color: transparent;
+  }
+
+  // 草稿：成对手势刚打出的那对 `$` 中间，正文还是一段普通文字。气泡要在这里找定位参照，
+  // 除此之外什么都不改。
+  .moki-math-draft {
     position: relative;
   }
 
-  // 中线对齐的两个锚点：正在输入的源码节点，和光标贴住时改显源码的渲染节点。
-  .md-preview__math-source--inline {
-    anchor-name: --moki-math-source;
+  // 草稿的两枚 `$` 是成对手势替用户补的，但摆法和编辑态那对虚拟定界符一致：同样的淡色、
+  // 同样的等宽正体。定界符是记号不是正文，所以不跟着相邻文字加粗倾斜。
+  // 只染色不删字符，光标才照常落得进去，折成公式时文档里少的也正是这两格。
+  .moki-math-draft-marker {
+    color: color-mix(in srgb, var(--text) 56%, transparent);
+    font-family: var(--font-editor);
+    font-weight: 400;
+    font-style: normal;
   }
-  .moki-markdown-math-source {
-    anchor-name: --moki-math-revealed;
+
+  // 覆盖层压在正文槽位上：宽度取满 mark span，居中，垂直对齐正文中线。
+  // color 是防身的：KaTeX 大量依赖 currentColor，一旦哪天装饰 span 反过来套在
+  // mark 外面，继承来的透明会让整条公式隐形——那是最难发现的一种坏法。
+  .moki-math-preview--cover {
+    position: absolute;
+    inset-inline-start: 0;
+    inset-block-start: 50%;
+    width: 100%;
+    transform: translateY(-50%);
+    text-align: center;
+    white-space: nowrap;
+    color: var(--text);
   }
 
   // 块级公式独占一行、居中显示，预览不做成对话框：边框、底色和投影在收尾那一刻
@@ -1122,43 +1152,32 @@
     filter: drop-shadow(var(--shadow));
 
     position: absolute;
-    // 兜底：不支持锚点定位的内核退回贴在公式起点，跟改动前一样。
-    inset-inline-start: 0;
+    // 包含块就是 math mark 自己那个 span（见 [data-moki-math-mark]）。左边落到
+    // 正文盒子的中点再左移自身一半宽度，气泡中线便跟着正文中线；垂直贴在正文上沿。
+    inset-inline-start: 50%;
     bottom: 100%;
     z-index: 3;
     margin-bottom: 6px;
     // 正文两侧留白比旧版宽一倍，字不再贴着气泡边。
     padding: 4px 16px;
-    // 包含块是零尺寸的锚点，可用宽度算出来是 0：不写 max-content 的话长公式会被
-    // 挤成竖排，KaTeX 只能换行。上限留一点余量，免得贴着窗口右缘出界。
     width: max-content;
     max-width: min(320px, calc(100vw - 16px));
-    // 横向收回的位移量由 milkdownMathPreview 量出来后写成行内样式；
-    // 没探出边界时那条声明给的就是 0px。
-    transform: translateX(var(--moki-preview-shift, 0px));
+    // 横向收回的位移量、以及放不下时要不要翻到下方，都由 milkdownMathPreview 按
+    // 编辑区可视范围量出来后写成行内样式/属性。不能交给 position-try：它只按
+    // 「包含块」判断放得下放不下，而气泡的包含块是正文那段源码的宽度，量不到
+    // 编辑区边界，滚动起来更是对不上。
+    transform: translate(calc(-50% + var(--moki-preview-shift, 0px)));
 
-    // 气泡中线跟着正文中线走：左边落在正文盒子的中点，再左移自身一半宽度。
-    // 写在 @supports 里，兜底那条路径不会带上 translateX 而偏到公式左边去。
-    @supports (anchor-name: --moki) {
-      inset-inline-start: anchor(center);
-      bottom: anchor(top);
-      transform: translateX(calc(-50% + var(--moki-preview-shift, 0px)));
-
-      // 下面这个属性由 milkdownMathPreview 按编辑区可视范围量出来后写上。
-      // 不能交给 position-try：它只按「包含块」判断放得下放不下，而气泡的包含块
-      // 是那个零宽锚点，量不到编辑区边界，滚动起来更是对不上。
-
-      // 第一行写公式：上方放不下，翻到正文下方，尾巴跟着翻到气泡上沿。
-      &[data-moki-math-preview-side='below'] {
-        inset-block-start: anchor(bottom);
-        inset-block-end: auto;
-        margin-block-start: 6px;
-        margin-block-end: 0;
-        --moki-tail-top: -6px;
-        --moki-tail-bottom: auto;
-        --moki-tail-up: 1px;
-        --moki-tail-down: 0px;
-      }
+    // 第一行写公式：上方放不下，翻到正文下方，尾巴跟着翻到气泡上沿。
+    &[data-moki-math-preview-side='below'] {
+      inset-block-start: 100%;
+      inset-block-end: auto;
+      margin-block-start: 6px;
+      margin-block-end: 0;
+      --moki-tail-top: -6px;
+      --moki-tail-bottom: auto;
+      --moki-tail-up: 1px;
+      --moki-tail-down: 0px;
     }
 
     &::after {

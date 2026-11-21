@@ -89,7 +89,7 @@ test('plain Markdown paste renders blocks and supports undo', async ({ page }) =
   await page.evaluate(() => window.trial.paste('# 粘贴标题\n\n**加粗**与 $x^2$\n\n| A | B |\n| --- | --- |\n| one | two |\n\n```js\nconst a = 1;\n```'));
   await expect(page.locator('.milkdown-editor h1')).toHaveText('粘贴标题');
   await expect(page.locator('.milkdown-editor strong')).toHaveText('加粗');
-  await expect(page.locator('.md-preview__math--inline .katex')).toBeVisible();
+  await expect(page.locator('[data-moki-math-mark] .katex')).toBeVisible();
   await expect(page.locator('.milkdown-editor table')).toBeVisible();
   await expect(page.locator('.cm-content')).toContainText('const a = 1;');
   await page.keyboard.press('Control+z');
