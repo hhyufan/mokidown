@@ -226,7 +226,9 @@
     margin-inline-start: 0;
     padding: 7px 0;
 
-    &:not(.ant-checkbox-wrapper-disabled) { color: var(--text); }
+    &:not(.ant-checkbox-wrapper-disabled) {
+      color: var(--text);
+    }
   }
 
   &__title {
@@ -247,7 +249,9 @@
 .setting-row__control {
   flex-shrink: 0;
 
-  select, input[type="text"], input[type="number"] {
+  select,
+  input[type='text'],
+  input[type='number'] {
     padding: 6px 10px;
     border-radius: var(--radius-sm);
     border: 1px solid var(--border);
@@ -264,7 +268,7 @@
     }
   }
 
-  input[type="number"] {
+  input[type='number'] {
     width: 80px;
     min-width: auto;
   }
@@ -294,8 +298,16 @@
   align-items: center;
   gap: 8px;
   width: 180px;
-  .ant-slider { flex: 1; min-width: 0; }
-  > span { min-width: 36px; text-align: right; color: var(--text-sec); font-size: 12px; }
+  .ant-slider {
+    flex: 1;
+    min-width: 0;
+  }
+  > span {
+    min-width: 36px;
+    text-align: right;
+    color: var(--text-sec);
+    font-size: 12px;
+  }
 }
 .setting-background__preview {
   position: relative;
@@ -307,11 +319,26 @@
   background: #fff;
   display: grid;
   place-items: center;
-  img { position: absolute; width: 100%; height: 100%; object-fit: cover; }
-  > span { position: relative; color: var(--text); font-size: 12px; }
-  &--dark { background: #181818; }
+  img {
+    position: absolute;
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+  }
+  > span {
+    position: relative;
+    color: var(--text);
+    font-size: 12px;
+  }
+  &--dark {
+    background: #181818;
+  }
 }
-.setting-background__error { padding: 8px 0; color: var(--error); font-size: 12px; }
+.setting-background__error {
+  padding: 8px 0;
+  color: var(--error);
+  font-size: 12px;
+}
 
 .setting-row__action-btn {
   padding: 6px 12px;
@@ -744,7 +771,7 @@ html[data-theme='dark'] .settings-about__portrait > .moki-sprite {
   border-radius: var(--radius-sm);
   overflow: hidden;
 
-  input[type="number"] {
+  input[type='number'] {
     width: 52px;
     min-width: auto;
     text-align: center;
@@ -842,5 +869,33 @@ html[data-theme='dark'] .settings-about__portrait > .moki-sprite {
         min-width: 0;
       }
     }
+  }
+}
+
+/* 设置分页：用 View Transition 做旧内容淡出 + 新内容淡入。 */
+/* 命在滚动容器上，快照才会被 overflow 裁剪；命在内容上会溢出到弹窗外。 */
+.settings-modal__content {
+  view-transition-name: settings-pane;
+}
+::view-transition-old(settings-pane) {
+  animation: settings-pane-out 200ms ease-out both;
+}
+::view-transition-new(settings-pane) {
+  animation: settings-pane-in 240ms ease-out both;
+}
+@keyframes settings-pane-out {
+  to {
+    opacity: 0;
+  }
+}
+@keyframes settings-pane-in {
+  from {
+    opacity: 0;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  ::view-transition-old(settings-pane),
+  ::view-transition-new(settings-pane) {
+    animation: none;
   }
 }
