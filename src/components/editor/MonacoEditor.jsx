@@ -95,7 +95,7 @@ function horizontalScrollbarOptions(wrapped) {
  * 负责初始化编辑器实例、同步标签缓冲区、接入右键菜单与移动端选区能力，
  * 并对主题、字号、语言与自动保存等外部配置变化做增量响应。
  */
-const MonacoEditorComponent = forwardRef(function MonacoEditorComponent({ className, onAutoSave, appHotkeyHandlers = {}, onEditorReady }, ref) {
+const MonacoEditorComponent = forwardRef(function MonacoEditorComponent({ className, onAutoSave, appHotkeyHandlers = {}, onEditorReady, tabId }, ref) {
   const containerRef = useRef(null);
   const editorRef = useRef(null);
   // 快捷键回调通过 ref 传递：它们来自上层工作区，身份每次渲染都可能变化，
@@ -103,14 +103,14 @@ const MonacoEditorComponent = forwardRef(function MonacoEditorComponent({ classN
   const hotkeyHandlersRef = useRef(appHotkeyHandlers);
   hotkeyHandlersRef.current = appHotkeyHandlers;
   const modelsRef = useRef(new Map());
-  const currentTabIdRef = useRef(null);
   const suppressModelChangeRef = useRef(false);
   const replayingHistoryRef = useRef(false);
   const pendingJump = useProblemsStore((state) => state.pendingJump);
 
   // 编辑器只关心当前激活的是哪个标签页，不直接订阅正文内容，因此输入过程
   // 不会反向触发本组件或其他内容感知组件的 React 重渲染。
-  const activeTabId = useEditorStore((s) => s.activeTabId);
+  const activeTabId = useEditorStore((s) => tabId === undefined ? s.activeTabId : tabId);
+  const currentTabIdRef = useRef(activeTabId);
   const tabsRevision = useEditorStore((s) => s.tabsRevision);
   const languageRevision = useLspStore((s) => s.revision);
   const markTabDirty = useEditorStore((s) => s.markTabDirty);
@@ -226,7 +226,7 @@ const MonacoEditorComponent = forwardRef(function MonacoEditorComponent({ classN
 
     const isDark = document.documentElement.dataset.theme === 'dark';
     const initialTheme = getMonacoThemeName(isDark);
-    const tab = useEditorStore.getState().getActiveTab();
+    const tab = useEditorStore.getState().tabs.find((item) => item.id === currentTabIdRef.current);
     const initial = tab ? documentModelInfo(tab) : null;
     const initialModel = initial ? monaco.editor.createModel(initial.value, initial.language, initial.uri) : null;
     const initialView = tab ? getDocumentViewState(tab.id, 'monaco') : null;
@@ -520,7 +520,7 @@ const MonacoEditorComponent = forwardRef(function MonacoEditorComponent({ classN
      */
     const handleOutlineJump = (e) => {
       const { line } = e.detail ?? {};
-      if (!line) return;
+      if (!line || !currentTabIdRef.current) return;
       editor.revealLineInCenter(line);
       editor.setPosition({ lineNumber: line, column: 1 });
       editor.focus();
@@ -536,7 +536,7 @@ const MonacoEditorComponent = forwardRef(function MonacoEditorComponent({ classN
      */
     const handleSearchJump = (e) => {
       const { line } = e.detail ?? {};
-      if (!line) return;
+      if (!line || !currentTabIdRef.current) return;
 
       editor.revealLineInCenter(line);
       editor.setPosition({ lineNumber: line, column: 1 });
@@ -645,6 +645,12 @@ const MonacoEditorComponent = forwardRef(function MonacoEditorComponent({ classN
       suppressModelChangeRef.current = true;
       editor.setModel(null);
       suppressModelChangeRef.current = false;
+      if (previous && !useEditorStore.getState().tabs.some((item) => item.id === previousId)) {
+        disposeDocumentModel(previous.model);
+        modelsRef.current.delete(previousId);
+      }
+      setContextMenu((menu) => menu.visible ? { ...menu, visible: false } : menu);
+      closeCodeLanguageMenu();
       return;
     }
 
@@ -698,10 +704,14 @@ const MonacoEditorComponent = forwardRef(function MonacoEditorComponent({ classN
         model.updateOptions({ tabSize: desiredTabSize, insertSpaces: true });
       }
     }
-    if (switchedModel) restoreMonacoViewState(editor, entry.viewState);
+    if (switchedModel) {
+      restoreMonacoViewState(editor, entry.viewState);
+      // Paint the restored viewport before the workspace takes its new snapshot.
+      editor.render(true);
+    }
 
     setCharacterCount(newValue.length);
-  }, [activeTabId, tabsRevision, languageRevision, setCharacterCount, tabSize]);
+  }, [activeTabId, closeCodeLanguageMenu, tabsRevision, languageRevision, setCharacterCount, tabSize]);
 
   useEffect(() => {
     if (!editorInstance || !pendingJump || pendingJump.tabId !== activeTabId) return;
@@ -725,7 +735,7 @@ const MonacoEditorComponent = forwardRef(function MonacoEditorComponent({ classN
     let binding;
     const bind = () => {
       binding?.dispose();
-      const tab = useEditorStore.getState().getActiveTab();
+      const tab = useEditorStore.getState().tabs.find((item) => item.id === currentTabIdRef.current);
       const model = editorInstance.getModel();
       editorInstance.trigger('language-services', 'hideSuggestWidget', null);
       editorInstance.trigger('language-services', 'closeParameterHints', null);
@@ -741,7 +751,7 @@ const MonacoEditorComponent = forwardRef(function MonacoEditorComponent({ classN
       bind();
     });
     const saved = useEditorStore.subscribe((state, previous) => {
-      const tab = state.tabs.find((tab) => tab.id === state.activeTabId);
+      const tab = state.tabs.find((tab) => tab.id === currentTabIdRef.current);
       const before = previous.tabs.find((candidate) => candidate.id === tab?.id);
       if (tab && before?.modified && !tab.modified) binding?.save?.();
     });
@@ -846,7 +856,7 @@ const MonacoEditorComponent = forwardRef(function MonacoEditorComponent({ classN
           event.stopPropagation();
         }}
       />
-      {!useSelectionBar && (
+      {activeTabId != null && !useSelectionBar && (
         <MonacoContextMenu
           visible={contextMenu.visible}
           x={contextMenu.x}
@@ -856,9 +866,9 @@ const MonacoEditorComponent = forwardRef(function MonacoEditorComponent({ classN
           replayHistory={replayHistory}
         />
       )}
-      <MobileSelectionBar editor={editorInstance} enabled={useSelectionBar} containerRef={containerRef} />
-      <MonacoSelectionHandles editor={editorInstance} enabled={useSelectionBar} />
-      <MarkdownCodeLanguageMenu request={codeLanguageMenu} onClose={closeCodeLanguageMenu} />
+      <MobileSelectionBar editor={editorInstance} enabled={activeTabId != null && useSelectionBar} containerRef={containerRef} />
+      <MonacoSelectionHandles editor={editorInstance} enabled={activeTabId != null && useSelectionBar} />
+      <MarkdownCodeLanguageMenu request={activeTabId == null ? null : codeLanguageMenu} onClose={closeCodeLanguageMenu} />
     </>
   );
 });
