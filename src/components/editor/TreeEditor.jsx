@@ -27,9 +27,9 @@ function readExpanded(storageKey) {
   } catch { return []; }
 }
 
-export default function TreeEditor({ className = '', onAutoSave, onSourceChange }) {
+export default function TreeEditor({ className = '', onAutoSave, onSourceChange, tabId: documentId }) {
   const { t } = useTranslation();
-  const tabId = useEditorStore((s) => s.activeTabId);
+  const tabId = useEditorStore((s) => documentId ?? s.activeTabId);
   const tab = useEditorStore((s) => s.tabs.find((item) => item.id === tabId));
   const fontSize = useConfigStore((s) => s.previewFontSize || s.fontSize || 14);
   const source = useEditorBufferContent(tabId, tab?.content || '', 100);
