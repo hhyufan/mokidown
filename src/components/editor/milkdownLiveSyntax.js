@@ -8,22 +8,10 @@ import { EditorView as CodeMirrorView } from '@codemirror/view';
 import { $inputRule, $nodeSchema, $prose } from '@milkdown/kit/utils';
 import { isImeComposing } from '@utils/keyboard';
 import useConfigStore from '@store/useConfigStore';
-import {
-  activeMarkdownPairs,
-  emptyAsteriskPair,
-  emptyMarkdownMarkPair,
-  markdownAsteriskEdit,
-  markdownBacktickEdit,
-  markdownBrackets,
-  markdownPairDeletion,
-  markdownPairEnabled,
-  matchingMarkdownBracket,
-} from '@utils/markdownPairs';
-import {
-  CODE_FENCE_LANGUAGE_EVENT,
-  completedFenceLanguage,
-  readMarkdownFence,
-} from '@utils/markdownCodeFence';
+import { activeMarkdownPairs, emptyAsteriskPair, emptyMarkdownMarkPair, markdownAsteriskEdit, markdownBacktickEdit, markdownBrackets, markdownPairDeletion, markdownPairEnabled, matchingMarkdownBracket } from '@utils/markdownPairs';
+import { CODE_FENCE_LANGUAGE_EVENT, completedFenceLanguage, readMarkdownFence } from '@utils/markdownCodeFence';
+import { mathDraftAt, mathDraftRange, mathMarkName } from './milkdownMathMark';
+import { characterEscapeMarkName, syntaxScanText } from './milkdownRawText';
 import { attachWritingCaret } from './milkdownWritingCaret';
 
 const sourceTypeName = 'moki_inline_syntax_source';
@@ -88,12 +76,12 @@ export const milkdownInlineSyntaxSource = $nodeSchema(sourceTypeName, () => ({
 function markDelimiters(mark, text) {
   const marker = mark.attrs.marker === '_' ? '_' : '*';
   switch (mark.type.name) {
-    case 'emphasis':
-      return [marker, marker];
-    case 'strong':
-      return [marker.repeat(2), marker.repeat(2)];
-    case 'strike_through':
-      return ['~~', '~~'];
+    case 'emphasis': return [marker, marker];
+    case 'strong': return [marker.repeat(2), marker.repeat(2)];
+    case 'strike_through': return ['~~', '~~'];
+    // 行内公式的定界符不进文档：正文只存 LaTeX，两个 `$` 由这里画出来。
+    // 于是序列化交回 remark 的永远是「mark + 正文」，结构上就写不出双层 `$`。
+    case 'math': return ['$', '$'];
     case 'inlineCode': {
       let length = 1;
       for (const match of text.matchAll(/`+/g)) length = Math.max(length, match[0].length + 1);
@@ -253,9 +241,12 @@ function deleteDelimiter(ctx, view, event) {
       ? activeMarkRanges($from, -1).filter((range) => range.to === $from.pos)
       : [];
   const atStart = opening.length > 0;
-  const range = (atStart ? opening : closing).sort(
-    (a, b) => a.to - a.from - (b.to - b.from) || a.delimiters[0].length - b.delimiters[0].length,
-  )[0];
+  const range = (atStart ? opening : closing).sort((a, b) => (a.to - a.from) - (b.to - b.from)
+    || a.delimiters[0].length - b.delimiters[0].length)[0];
+  // 行内公式的两个 `$` 不在文档里，是画出来的：把它当一对标记拆掉，交回 remark 的是裸
+  // LaTeX，屏幕上反而多出两个 `$`。贴在公式边上那一下归公式预览插件——它把源码掀开、
+  // 光标送进正文，删不删字符由下一按键决定。
+  if (range?.mark.type.name === mathMarkName) return false;
   const preference = activeMarkdownPairs(useConfigStore.getState());
   if (!range) {
     let text = '';
@@ -372,7 +363,8 @@ function trackInlineClick(view, event) {
   )
     return;
   const marker = event.target.closest?.('.moki-markdown-marker');
-  const inline = event.target.closest?.('strong, b, em, i, del, s, code');
+  // 行内公式的正文也走这条路：点进公式时两个 `$` 要跟着浮出来，不然只看得到源码文字。
+  const inline = event.target.closest?.('strong, b, em, i, del, s, code, [data-moki-math-mark]');
   if (!marker && !inline) return;
 
   // Resolve the click before revealing or hiding delimiters, which reflows
@@ -495,6 +487,10 @@ function pendingMarkers($caret) {
   const ghost = (from, to) =>
     Decoration.inline(start + from, start + to, { class: 'moki-markdown-ghost' });
   const after = $caret.nodeAfter;
+  // 成对草稿的那两枚 `$` 由预览插件负责染透明，这里再抹一层灰就是两个插件抢同一段字。
+  const draft = mathDraftAt($caret);
+  const isDraftMarker = (from, to) =>
+    !!draft && to - from === 1 && (from === draft.anchor || from === draft.close);
   if (after?.isText && !after.marks.length) {
     const width = emptyAsteriskPair(text + after.text.slice(0, 3), text.length);
     if (width) return [ghost(text.length - width, text.length + width)];
@@ -508,6 +504,7 @@ function pendingMarkers($caret) {
     const token = match[0];
     const from = match.index;
     const to = from + token.length;
+    if (isDraftMarker(start + from, start + to)) continue;
     if (from && /[\w:/\\]/.test(text[from - 1])) continue;
     const rest = text.slice(to);
     if (/^\s/.test(rest) || (token === '$' && /^\d/.test(rest))) continue;
@@ -691,6 +688,109 @@ function typeAsterisk(view, $pos, value, text) {
   return false;
 }
 
+// 打 `\$` 想要的是普通文字里的 `$`：把前面那个反斜杠吃掉，换成和文件里 `\$` 读进来
+// 一样的形状（挂转义 mark 的 `$`），扫描据此不再把它当定界符，见 syntaxScanText。
+// 公式正文与代码里不适用：`$` 在正文里是收界符，remark-math 也写不出转义的 `$`；
+// 还没闭合的 `$$` 草稿里则照旧留给草稿判定，别把用户正在写的 LaTeX 搅了。
+function typeEscapeDollar(view, $pos, value, text) {
+  const { state } = view;
+  if (text !== '$') return false;
+  const type = state.schema.marks[characterEscapeMarkName];
+  if (!type) return false;
+  const marks = state.storedMarks ?? $pos.marks();
+  if (marks.some((mark) => mark.type.spec.code)) return false;
+  let back = 0;
+  while (value[$pos.parentOffset - back - 1] === '\\') back++;
+  if (!(back % 2) || mathDraftRange(value, $pos.parentOffset)) return false;
+  const tr = state.tr.replaceWith($pos.pos - 1, $pos.pos,
+    state.schema.text('$', [...$pos.nodeBefore.marks, type.create()]));
+  view.dispatch(tr.setSelection(TextSelection.create(tr.doc, $pos.pos)).scrollIntoView());
+  return true;
+}
+
+// 打字判定只看向刚敲下的这个字符：`$` 要么收尾已有公式，要么把之前打下的字面 `$`
+// 连同中间的正文一起折成 math mark，两个定界符都不留在文档里；成对手势打出的那对 `$`
+// 先以字面文本摊着（见 mathDraftRange），光标离开这一段才折。
+// 判据照抄 pendingMarkers 对 `$` 的保护（数字开头是价格、转义的是正文），
+// 让打字看到的样子和折叠的结果一致。
+function typeDollar(view, $pos, value, text) {
+  if (text !== '$') return false;
+  const { state } = view;
+  const type = state.schema.marks.math;
+  if (!type) return false;
+  const marks = state.storedMarks ?? $pos.marks();
+  // 光标在公式正文里：把 mark 收到 caret 为止，后面的正文退回普通文字。
+  // 直接留个字面 $ 在正文里不行——remark-math 里 $ 没法转义，写回去会变成两段公式。
+  if (type.isInSet(marks)) {
+    const range = activeMarkRanges($pos).find((item) => item.mark.type === type);
+    if (!range) return false;
+    const tr = closeHistory(state.tr);
+    if (range.to > $pos.pos) tr.removeMark($pos.pos, range.to, type);
+    view.dispatch(tr.setStoredMarks(type.removeFromSet(marks)));
+    return true;
+  }
+  // inclusive:false 让公式右边界的 marks() 早就摘掉了 math，只能看文档两侧。
+  const left = $pos.nodeBefore?.marks || [];
+  const right = $pos.nodeAfter?.marks || [];
+  if (!$pos.textOffset && type.isInSet(left) && !type.isInSet(right)) {
+    view.dispatch(state.tr.setStoredMarks(type.removeFromSet(marks)));
+    return true;
+  }
+  if (marks.some((mark) => mark.type.spec.code) || right.some((mark) => mark.type.spec.code)) return false;
+  const offset = $pos.parentOffset;
+  // 贴在草稿的收尾 `$` 前面再打 `$`，是老手感里「$$x$$ 写完了」的那一下：这一笔不吃正文
+  // 也不另开一对，只把光标递到定界符外面。光标已经离开那一段，预览插件紧接着折成公式。
+  const draft = mathDraftRange(value, offset);
+  const atClose =
+    value[offset] === '$' &&
+    (draft?.close === offset ||
+      (value[offset - 1] === '$' &&
+        value[offset - 2] !== '$' &&
+        !(offset > 1 && /[\w:/\\]/.test(value[offset - 2]))));
+  if (atClose) {
+    view.dispatch(
+      closeHistory(state.tr).setSelection(TextSelection.create(state.doc, $pos.pos + 1)),
+    );
+    return true;
+  }
+  // 成对手势的第二下：`$` 紧跟在另一枚 `$` 后面时补出右半截，光标留在两枚中间，
+  // 与 `**` 同一套手感——紧接着打的字才算公式正文，那两枚定界符由预览插件染透明、
+  // 光标一走就折掉。连写的第三枚、贴着字母数字的那一枚都不算开界，与 mathDraftRange 同源。
+  if (
+    value[offset - 1] === '$' &&
+    value[offset - 2] !== '$' &&
+    !/[^\s]/.test(value[offset] || '') &&
+    !(offset > 1 && /[\w:/\\]/.test(value[offset - 2]))
+  ) {
+    const tr = closeHistory(state.tr).insertText('$', $pos.pos);
+    view.dispatch(
+      tr.setSelection(TextSelection.create(tr.doc, $pos.pos)).scrollIntoView(),
+    );
+    return true;
+  }
+  for (let index = offset - 1; index >= 0; index--) {
+    if (value[index] !== '$') continue;
+    // 连写的 `$` 归草稿判定管，不能拿半截去折一个单 `$` 公式。
+    if (value[index - 1] === '$') return false;
+    let escaped = 0;
+    for (let back = index - 1; back >= 0 && value[back] === '\\'; back--) escaped++;
+    if (escaped % 2) continue;
+    const body = value.slice(index + 1, offset);
+    // 正文跨了 inline 子节点或占位符就交给默认插入，折叠只负责单个文本节点里的 LaTeX。
+    if (!body || /^[\s\r\n]|\s$|[\n\ufffc]/.test(body) || /^\d/.test(body)) return false;
+    if (index > 0 && /[\w:/\\]/.test(value[index - 1])) return false;
+    const from = $pos.pos - body.length - 1;
+    const tr = closeHistory(state.tr);
+    tr.delete(from, from + 1);
+    tr.addMark(from, $pos.pos - 1, type.create());
+    tr.setSelection(TextSelection.create(tr.doc, $pos.pos - 1));
+    tr.setStoredMarks(type.removeFromSet(tr.selection.$from.marks()));
+    view.dispatch(tr.scrollIntoView());
+    return true;
+  }
+  return false;
+}
+
 function completeInlinePair(view, $pos, value, text, composition, paste = false) {
   const { state } = view;
   const offset = $pos.parentOffset;
@@ -753,7 +853,7 @@ function handleSmartTextInput(view, from, to, text) {
   const { state } = view;
   const $pos = state.doc.resolve(from);
   if (!$pos.parent.isTextblock || $pos.parent.type.spec.code) return false;
-  const value = $pos.parent.textBetween(0, $pos.parent.content.size, '\n', '\ufffc');
+  const value = syntaxScanText($pos.parent);
   const preference = activeMarkdownPairs(useConfigStore.getState());
   if (markdownPairEnabled(preference, '`')) {
     if (text === '`') return typeBacktick(view, $pos, value);
@@ -778,6 +878,8 @@ function handleSmartTextInput(view, from, to, text) {
   )
     return true;
   if (markdownPairEnabled(preference, '*') && typeAsterisk(view, $pos, value, text)) return true;
+  if (typeEscapeDollar(view, $pos, value, text)) return true;
+  if (typeDollar(view, $pos, value, text)) return true;
   if (completeInlinePair(view, $pos, value, text)) return true;
   // Explicitly exiting an inline mark takes precedence over DOM mark inheritance.
   if (
@@ -810,281 +912,193 @@ function handleSmartTextInput(view, from, to, text) {
   return true;
 }
 
-export const milkdownLiveSyntax = $prose(
-  (ctx) =>
-    new Plugin({
-      key: liveSyntaxKey,
-      state: {
-        init: () => ({ closing: false, caret: null, composition: null, pointer: null }),
-        apply(tr, previous) {
-          const update = tr.getMeta(liveSyntaxKey);
-          if (!update && !tr.docChanged && !tr.selectionSet && !tr.storedMarksSet) return previous;
-          return {
-            closing: update?.closing || false,
-            caret: update?.caret || null,
-            composition: tr.getMeta('composition') ?? previous.composition,
-            pointer:
-              update && 'pointer' in update
-                ? update.pointer
-                : tr.docChanged
-                  ? null
-                  : previous.pointer,
-          };
-        },
-      },
-      view(editorView) {
-        let previous = '';
-        const writingCaret = attachWritingCaret(editorView);
-        const resize =
-          typeof ResizeObserver === 'function'
-            ? new ResizeObserver(() => {
-                alignVirtualCaret(editorView);
-                writingCaret?.schedule();
-              })
-            : null;
-        resize?.observe(editorView.dom);
-        return {
-          update(view) {
-            alignVirtualCaret(view);
+export const milkdownLiveSyntax = $prose((ctx) => new Plugin({
+  key: liveSyntaxKey,
+  state: {
+    init: () => ({ closing: false, caret: null, composition: null, pointer: null }),
+    apply(tr, previous) {
+      const update = tr.getMeta(liveSyntaxKey);
+      if (!update && !tr.docChanged && !tr.selectionSet && !tr.storedMarksSet) return previous;
+      return { closing: update?.closing || false, caret: update?.caret || null,
+        composition: tr.getMeta('composition') ?? previous.composition,
+        pointer: update && 'pointer' in update ? update.pointer : tr.docChanged ? null : previous.pointer };
+    },
+  },
+  view(editorView) {
+    let previous = '';
+    const writingCaret = attachWritingCaret(editorView);
+    const resize =
+      typeof ResizeObserver === 'function'
+        ? new ResizeObserver(() => {
+            alignVirtualCaret(editorView);
             writingCaret?.schedule();
-            const pending = pendingCodeFence(view);
-            const key = pending && `${pending.$from.pos}:${pending.$from.parent.textContent}`;
-            if (key === previous) return;
-            previous = key;
-            let detail = null;
-            if (pending && view.hasFocus()) {
-              const { doc } = view.state;
-              const current = () =>
-                !view.isDestroyed &&
-                view.state.doc === doc &&
-                pendingCodeFence(view)?.$from.pos === pending.$from.pos;
-              detail = {
-                query: pending.language,
-                containsTarget: (target) => view.dom.contains(target),
-                getAnchor: () => {
-                  if (!current()) return null;
-                  const { left } = view.coordsAtPos(pending.$from.start(), 1);
-                  const { top, bottom } = view.coordsAtPos(pending.$from.pos);
-                  const pane = view.dom.closest('.md-preview--milkdown')?.getBoundingClientRect();
-                  return pane && (bottom <= pane.top || top >= pane.bottom)
-                    ? null
-                    : { x: left, y: bottom };
-                },
-                select: (language) => {
-                  if (current()) openCodeFence(view, view.state.selection.$from, language);
-                },
-                undo: () => {
-                  if (current()) undo(view.state, view.dispatch);
-                },
-                focus: () => {
-                  if (!view.isDestroyed) view.focus();
-                },
-              };
-            }
-            view.dom.dispatchEvent(
-              new CustomEvent(CODE_FENCE_LANGUAGE_EVENT, { bubbles: true, detail }),
-            );
-          },
-          destroy() {
-            resize?.disconnect();
-            writingCaret?.destroy();
-            inlinePointerCleanup.get(editorView)?.();
-          },
-        };
+          })
+        : null;
+    resize?.observe(editorView.dom);
+    return {
+      update(view) {
+        alignVirtualCaret(view);
+        writingCaret?.schedule();
+        const pending = pendingCodeFence(view);
+        const key = pending && `${pending.$from.pos}:${pending.$from.parent.textContent}`;
+        if (key === previous) return;
+        previous = key;
+        let detail = null;
+        if (pending && view.hasFocus()) {
+          const { doc } = view.state;
+          const current = () => !view.isDestroyed && view.state.doc === doc && pendingCodeFence(view)?.$from.pos === pending.$from.pos;
+          detail = {
+            query: pending.language,
+            containsTarget: (target) => view.dom.contains(target),
+            getAnchor: () => {
+              if (!current()) return null;
+              const { left } = view.coordsAtPos(pending.$from.start(), 1);
+              const { top, bottom } = view.coordsAtPos(pending.$from.pos);
+              const pane = view.dom.closest('.md-preview--milkdown')?.getBoundingClientRect();
+              return pane && (bottom <= pane.top || top >= pane.bottom) ? null : { x: left, y: bottom };
+            },
+            select: (language) => { if (current()) openCodeFence(view, view.state.selection.$from, language); },
+            undo: () => { if (current()) undo(view.state, view.dispatch); },
+            focus: () => { if (!view.isDestroyed) view.focus(); },
+          };
+        }
+        view.dom.dispatchEvent(new CustomEvent(CODE_FENCE_LANGUAGE_EVENT, { bubbles: true, detail }));
       },
-      appendTransaction(transactions, _oldState, state) {
-        if (!transactions.some((tr) => tr.docChanged)) return null;
-        const { $from } = state.selection;
-        const source = $from.parent;
-        if (source.type.name !== sourceTypeName) return null;
-        const parsed = ctx.get(parserCtx)(source.textContent);
-        const paragraph = parsed.firstChild;
-        if (
-          parsed.childCount !== 1 ||
-          paragraph?.type.name !== 'paragraph' ||
-          serializeInline(ctx.get(serializerCtx), state.schema, paragraph.content) !==
-            source.textContent
-        )
-          return null;
-        const nodes = [];
-        paragraph.forEach(
-          (child) =>
-            child.isInline &&
-            nodes.push(
-              child.mark(source.marks.reduce((marks, mark) => mark.addToSet(marks), child.marks)),
-            ),
-        );
-        const replacement = Fragment.fromArray(nodes);
-        const prefix =
-          paragraph.firstChild?.marks
-            .map((mark) => markDelimiters(mark, paragraph.textContent)?.[0].length || 0)
-            .reduce((total, length) => total + length, 0) || 0;
-        const from = $from.before();
-        const tr = state.tr.replaceWith(from, $from.after(), replacement);
-        const offset = Math.max(0, Math.min(replacement.size, $from.parentOffset - prefix));
-        return tr.setSelection(TextSelection.create(tr.doc, from + offset));
+      destroy() {
+        resize?.disconnect();
+        writingCaret?.destroy();
+        inlinePointerCleanup.get(editorView)?.();
       },
-      props: {
-        attributes(state) {
-          const { caret, pointer } = liveSyntaxKey.getState(state);
-          if (pointer) return { class: 'moki-markdown-pointer-pending' };
-          return caret ? { class: 'moki-markdown-virtual-caret' } : {};
-        },
-        handleTextInput: handleSmartTextInput,
-        handleDOMEvents: {
-          compositionstart(view) {
-            inlineCompositions.delete(view);
-            const { empty, $from } = view.state.selection;
-            if (!empty || !$from.parent.isTextblock || $from.parent.type.spec.code) return false;
-            const value = $from.parent.textBetween(0, $from.parent.content.size, '\n', '\ufffc');
-            if (emptyMarkdownMarkPair(value, $from.parentOffset)) {
-              inlineCompositions.set(view, {
-                $from,
-                value,
-                previousId: liveSyntaxKey.getState(view.state).composition,
-              });
-            }
-            return false;
-          },
-          compositionend(view) {
-            const pending = inlineCompositions.get(view);
-            inlineCompositions.delete(view);
-            if (!pending) return false;
-            // Let ProseMirror commit the browser's composition before changing marks.
-            setTimeout(() => {
-              if (view.isDestroyed || view.composing || !view.editable) return;
-              const { $from: before, value, previousId } = pending;
-              const { doc, selection } = view.state;
-              if (!selection.empty || before.pos > doc.content.size) return;
-              const $pos = doc.resolve(before.pos);
-              const offset = before.parentOffset;
-              const length = $pos.parent.content.size - before.parent.content.size;
-              if (
-                length <= 0 ||
-                selection.from !== before.pos + length ||
-                $pos.parent.type !== before.parent.type ||
-                $pos.parentOffset !== offset ||
-                !$pos.parent.content.cut(0, offset).eq(before.parent.content.cut(0, offset)) ||
-                !$pos.parent.content.cut(offset + length).eq(before.parent.content.cut(offset))
-              )
-                return;
-              const text = $pos.parent.textBetween(offset, offset + length);
-              const id = liveSyntaxKey.getState(view.state).composition;
-              // Keep the conversion in the same undo group even if the IME
-              // candidate was visible for longer than the normal history delay.
-              if (text.length === length)
-                completeInlinePair(view, $pos, value, text, {
-                  length,
-                  id: id !== previousId ? id : null,
-                });
-            }, 0);
-            return false;
-          },
-          keydown(view, event) {
-            if (
-              view.editable &&
-              !view.composing &&
-              !isImeComposing(event) &&
-              !event.ctrlKey &&
-              !event.metaKey &&
-              !event.altKey &&
-              !event.target.closest?.('.cm-editor, input, textarea, button') &&
-              view.state.selection.empty
-            ) {
-              const { from, to } = view.state.selection;
-              if (
-                !event.shiftKey &&
-                (event.key === 'ArrowLeft' || event.key === 'ArrowRight') &&
-                moveAcrossDelimiters(view, event.key === 'ArrowLeft' ? -1 : 1)
-              ) {
-                event.preventDefault();
-                return true;
-              }
-              const enter = event.key === 'Enter' && !event.shiftKey;
-              const pending = (enter || event.key === ' ') && pendingCodeFence(view);
-              const pairedKey =
-                event.key === '`' ||
-                event.key === '*' ||
-                bracketKeys.has(event.key) ||
-                (event.key === ' ' && pending);
-              if (
-                (enter && pending && openCodeFence(view, pending.$from, pending.language)) ||
-                (pairedKey && handleSmartTextInput(view, from, to, event.key))
-              ) {
-                event.preventDefault();
-                return true;
-              }
-            }
-            return deleteDelimiter(ctx, view, event);
-          },
-          mousedown(view, event) {
-            if (event.button === 0) trackInlineClick(view, event);
-            if (event.button !== 2 || !event.target.closest?.('a[href]')) return false;
-            // Focusing here would insert markers and move the link before the
-            // media context menu receives the browser's contextmenu event.
+    };
+  },
+  appendTransaction(transactions, _oldState, state) {
+    if (!transactions.some((tr) => tr.docChanged)) return null;
+    const { $from } = state.selection;
+    const source = $from.parent;
+    if (source.type.name !== sourceTypeName) return null;
+    const parsed = ctx.get(parserCtx)(source.textContent);
+    const paragraph = parsed.firstChild;
+    if (parsed.childCount !== 1 || paragraph?.type.name !== 'paragraph'
+      || serializeInline(ctx.get(serializerCtx), state.schema, paragraph.content) !== source.textContent) return null;
+    const nodes = [];
+    paragraph.forEach((child) => child.isInline && nodes.push(child.mark(
+      source.marks.reduce((marks, mark) => mark.addToSet(marks), child.marks),
+    )));
+    const replacement = Fragment.fromArray(nodes);
+    const prefix = paragraph.firstChild?.marks.map((mark) => markDelimiters(mark, paragraph.textContent)?.[0].length || 0)
+      .reduce((total, length) => total + length, 0) || 0;
+    const from = $from.before();
+    const tr = state.tr.replaceWith(from, $from.after(), replacement);
+    const offset = Math.max(0, Math.min(replacement.size, $from.parentOffset - prefix));
+    return tr.setSelection(TextSelection.create(tr.doc, from + offset));
+  },
+  props: {
+    attributes(state) {
+      const { caret, pointer } = liveSyntaxKey.getState(state);
+      if (pointer) return { class: 'moki-markdown-pointer-pending' };
+      return caret ? { class: 'moki-markdown-virtual-caret' } : {};
+    },
+    handleTextInput: handleSmartTextInput,
+    handleDOMEvents: {
+      compositionstart(view) {
+        inlineCompositions.delete(view);
+        const { empty, $from } = view.state.selection;
+        if (!empty || !$from.parent.isTextblock || $from.parent.type.spec.code) return false;
+        const value = $from.parent.textBetween(0, $from.parent.content.size, '\n', '\ufffc');
+        if (emptyMarkdownMarkPair(value, $from.parentOffset)) {
+          inlineCompositions.set(view, { $from, value, previousId: liveSyntaxKey.getState(view.state).composition });
+        }
+        return false;
+      },
+      compositionend(view) {
+        const pending = inlineCompositions.get(view);
+        inlineCompositions.delete(view);
+        if (!pending) return false;
+        // Let ProseMirror commit the browser's composition before changing marks.
+        setTimeout(() => {
+          if (view.isDestroyed || view.composing || !view.editable) return;
+          const { $from: before, value, previousId } = pending;
+          const { doc, selection } = view.state;
+          if (!selection.empty || before.pos > doc.content.size) return;
+          const $pos = doc.resolve(before.pos);
+          const offset = before.parentOffset;
+          const length = $pos.parent.content.size - before.parent.content.size;
+          if (length <= 0 || selection.from !== before.pos + length
+            || $pos.parent.type !== before.parent.type || $pos.parentOffset !== offset
+            || !$pos.parent.content.cut(0, offset).eq(before.parent.content.cut(0, offset))
+            || !$pos.parent.content.cut(offset + length).eq(before.parent.content.cut(offset))) return;
+          const text = $pos.parent.textBetween(offset, offset + length);
+          const id = liveSyntaxKey.getState(view.state).composition;
+          // Keep the conversion in the same undo group even if the IME
+          // candidate was visible for longer than the normal history delay.
+          if (text.length === length) completeInlinePair(view, $pos, value, text, { length, id: id !== previousId ? id : null });
+        }, 0);
+        return false;
+      },
+      keydown(view, event) {
+        if (view.editable && !view.composing && !isImeComposing(event)
+          && !event.ctrlKey && !event.metaKey && !event.altKey && !event.target.closest?.('.cm-editor, input, textarea, button')
+          && view.state.selection.empty) {
+          const { from, to } = view.state.selection;
+          if (!event.shiftKey && (event.key === 'ArrowLeft' || event.key === 'ArrowRight')
+            && moveAcrossDelimiters(view, event.key === 'ArrowLeft' ? -1 : 1)) {
             event.preventDefault();
             return true;
-          },
-        },
-        decorations(state) {
-          const { doc } = state;
-          const { caret, pointer } = liveSyntaxKey.getState(state);
-          if (pointer && !pointer.focused) return null;
-          const selection = pointer?.selection || state.selection;
-          const { $from } = selection;
-          if (!$from.parent.isTextblock || $from.parent.type.spec.code) return null;
-          const next = selection.empty ? $from.nodeAfter : selection.node;
-          const formula =
-            next?.type.name === 'math_inline' &&
-            Decoration.node($from.pos, $from.pos + next.nodeSize, {
-              class: 'moki-markdown-math-source',
-              'data-moki-math-source': `$${next.attrs.value}$`,
-            });
-          if (!selection.empty) return formula ? DecorationSet.create(doc, [formula]) : null;
-          const virtualCaret = pointer ? pointer.caret : caret;
-          const decorations = pendingMarkers($from);
-          const opening = new Map(),
-            closing = new Map();
-          const ranges = activeMarkRanges($from);
-          if (virtualCaret)
-            ranges.push(...activeMarkRanges($from, -1).filter((range) => range.to === $from.pos));
-          ranges.sort((a, b) => a.from - b.from || b.to - a.to || a.order - b.order);
-          for (const {
-            from,
-            to,
-            delimiters: [open, close],
-          } of ranges) {
-            opening.set(from, (opening.get(from) || '') + open);
-            closing.set(to, close + (closing.get(to) || ''));
           }
-          if ($from.parent.type.name === 'heading' && $from.parentOffset === 0) {
-            if (!virtualCaret)
-              decorations.push(
-                markerWidget($from.pos, '#'.repeat($from.parent.attrs.level), -2, true),
-              );
-            decorations.push(
-              Decoration.node($from.before(), $from.after(), {
-                class: 'moki-markdown-heading-source',
-              }),
-            );
+          const enter = event.key === 'Enter' && !event.shiftKey;
+          const pending = (enter || event.key === ' ') && pendingCodeFence(view);
+          const pairedKey = event.key === '`' || event.key === '*' || bracketKeys.has(event.key) || (event.key === ' ' && pending);
+          if ((enter && pending && openCodeFence(view, pending.$from, pending.language))
+            || (pairedKey && handleSmartTextInput(view, from, to, event.key))) {
+            event.preventDefault();
+            return true;
           }
-          if (formula) decorations.push(formula);
-          if (virtualCaret) {
-            const boundary = delimiterBoundary($from);
-            opening.delete($from.pos);
-            closing.delete($from.pos);
-            if (boundary)
-              decorations.push(
-                markerWidget($from.pos, boundary.text, -1, boundary.heading, virtualCaret.offset),
-              );
-          }
-          for (const [pos, text] of opening) decorations.push(markerWidget(pos, text, -1));
-          for (const [pos, text] of closing) decorations.push(markerWidget(pos, text, 1));
-          return decorations.length ? DecorationSet.create(doc, decorations) : null;
-        },
+        }
+        return deleteDelimiter(ctx, view, event);
       },
-    }),
-);
+      mousedown(view, event) {
+        if (event.button === 0) trackInlineClick(view, event);
+        if (event.button !== 2 || !event.target.closest?.('a[href]')) return false;
+        // Focusing here would insert markers and move the link before the
+        // media context menu receives the browser's contextmenu event.
+        event.preventDefault();
+        return true;
+      },
+    },
+    decorations(state) {
+      const { doc } = state;
+      const { caret, pointer } = liveSyntaxKey.getState(state);
+      if (pointer && !pointer.focused) return null;
+      const selection = pointer?.selection || state.selection;
+      const { $from } = selection;
+      if (!$from.parent.isTextblock || $from.parent.type.spec.code) return null;
+      if (!selection.empty) return null;
+      const virtualCaret = pointer ? pointer.caret : caret;
+      const decorations = pendingMarkers($from);
+      const opening = new Map(), closing = new Map();
+      const ranges = activeMarkRanges($from);
+      if (virtualCaret) ranges.push(...activeMarkRanges($from, -1).filter((range) => range.to === $from.pos));
+      ranges.sort((a, b) => a.from - b.from || b.to - a.to || a.order - b.order);
+      for (const { from, to, delimiters: [open, close] } of ranges) {
+        opening.set(from, (opening.get(from) || '') + open);
+        closing.set(to, close + (closing.get(to) || ''));
+      }
+      if ($from.parent.type.name === 'heading' && $from.parentOffset === 0) {
+        if (!virtualCaret) decorations.push(markerWidget($from.pos, '#'.repeat($from.parent.attrs.level), -2, true));
+        decorations.push(Decoration.node($from.before(), $from.after(), { class: 'moki-markdown-heading-source' }));
+      }
+      if (virtualCaret) {
+        const boundary = delimiterBoundary($from);
+        opening.delete($from.pos);
+        closing.delete($from.pos);
+        if (boundary) decorations.push(markerWidget($from.pos, boundary.text, -1, boundary.heading, virtualCaret.offset));
+      }
+      for (const [pos, text] of opening) decorations.push(markerWidget(pos, text, -1));
+      for (const [pos, text] of closing) decorations.push(markerWidget(pos, text, 1));
+      return decorations.length ? DecorationSet.create(doc, decorations) : null;
+    },
+  },
+}));
 
 export const milkdownBlockSelection = $prose(
   () =>
