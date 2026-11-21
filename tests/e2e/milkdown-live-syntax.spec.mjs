@@ -471,10 +471,10 @@ test('a fresh $$ pair opens the whole symbol table before any control sequence',
   expect(await rows.count()).toBeGreaterThan(10);
   // 空对也给一只空预览框：摆在那儿就说清「这里即将排出一条公式」。
   await expect(editor.locator('.moki-math-preview--inline')).toHaveCount(1);
-  // 那两枚 `$` 是手势替用户补的，屏幕上不再摆出来。
+  // 那两枚 `$` 由手势替用户补上，摆法与双击进入编辑态的那对定界符一致（淡色可见）。
   const markers = editor.locator('.moki-math-draft-marker');
   await expect(markers).toHaveCount(2);
-  await expect(markers.first()).toHaveCSS('color', 'rgba(0, 0, 0, 0)');
+  await expect(markers.first()).not.toHaveCSS('color', 'rgba(0, 0, 0, 0)');
   const box = await list.boundingBox();
   const opening = await markers.first().boundingBox();
   const bottom = await editor.locator('p').first().evaluate((node) => {
@@ -497,6 +497,32 @@ test('a fresh $$ pair opens the whole symbol table before any control sequence',
   await page.keyboard.type('$$');
   await expect(editor.locator('[data-moki-math-mark]')).toHaveCount(1);
   expect(await page.evaluate(() => window.trial.markdown())).toMatch(/正文 \$\\alpha\$/);
+});
+
+// 初次编辑与双击进入编辑态得看着是同一件事：定界符的淡色、正文的源码配色与等宽字形，
+// 两边逐项对上。折成 mark 的那一下只少掉两枚 `$`，字色字体一跳不停。
+function mathLook(page, selector) {
+  return page.locator(selector).first().evaluate((node) => {
+    const { color, backgroundColor, fontFamily, fontStyle, fontWeight } = getComputedStyle(node);
+    return { color, background: backgroundColor, font: `${fontFamily} ${fontStyle} ${fontWeight}` };
+  });
+}
+
+test('the first draft is drawn exactly like the double-click edit state', async ({ page }) => {
+  const edit = await openEditor(page, '正文 $x^2$ 结尾');
+  await editFormula(page, edit);
+  const [editMarker, editBody] = [
+    await mathLook(edit, '.moki-markdown-marker'),
+    await mathLook(edit, '.moki-math-source'),
+  ];
+  expect(editBody.color).not.toBe(editMarker.color);
+
+  const typing = await openEditor(page);
+  await typing.click();
+  await page.keyboard.type('正文 $$\\alpha');
+  await expect(typing.locator('.moki-math-draft-marker')).toHaveCount(2);
+  expect(await mathLook(typing, '.moki-math-draft-marker')).toEqual(editMarker);
+  expect(await mathLook(typing, '.moki-math-source')).toEqual(editBody);
 });
 
 test('a pair with nothing typed inside stays two plain dollar signs', async ({ page }) => {
