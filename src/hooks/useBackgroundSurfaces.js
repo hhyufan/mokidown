@@ -25,9 +25,9 @@ export const MONACO_POPUPS = [
   '.quick-input-widget',
 ].join(', ');
 const MONACO_SURFACES = `${MONACO_POPUPS}, .monaco-editor .diff-hidden-lines > .center`;
-const POPUPS = `.knowledge-tree__header, .footer__dropdown, .sort-dropdown, .search-dropdown__panel, .search-dropdown__scope-menu, .titlebar__search .ant-select-dropdown, .moki-tree-jump-popup .ant-popover-inner, .ant-select-dropdown, .ant-dropdown-menu, .ant-picker-panel-container, .ft, .ft__heading-panel, .ft__table-panel, .ant-modal-content, .editor-content__run, .monaco-context-menu, .moki-tree__chevron, .task-panel, .milkdown-media-tools, .milkdown-media-preview-editor, .notif, .ant-tooltip-inner, .md-preview__task-checkbox, .preview-wallpaper, ${MONACO_SURFACES}`;
+const POPUPS = `.knowledge-tree__header, .footer__dropdown, .sort-dropdown, .search-dropdown__panel, .search-dropdown__scope-menu, .titlebar__search .ant-select-dropdown, .moki-tree-jump-popup .ant-popover-inner, .ant-select-dropdown, .ant-dropdown-menu, .ant-picker-panel-container, .ft, .ft__heading-panel, .ft__table-panel, .ant-modal-content, .editor-content__run, .monaco-context-menu, .moki-tree__chevron, .task-panel, .milkdown-media-tools, .milkdown-media-preview-editor, .notif, .ant-tooltip-inner, .md-preview__task-checkbox, .preview-wallpaper, .moki-math-completion, .moki-math-preview--inline, .language-picker .list-wrapper, ${MONACO_SURFACES}`;
 const POSITIONERS =
-  '.ant-dropdown, .ant-picker-dropdown, .moki-tree-jump-popup, .ant-tooltip, .diff-hidden-lines-widget';
+  '.ant-dropdown, .ant-picker-dropdown, .moki-tree-jump-popup, .ant-tooltip, .diff-hidden-lines-widget, .moki-math-completion-anchor, .language-picker';
 
 // Portal popups need the same image, cover dimensions and viewport coordinates
 // as the workspace. Explicit coordinates also work inside transformed antd
