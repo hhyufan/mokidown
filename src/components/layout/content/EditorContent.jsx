@@ -14,6 +14,7 @@ import {
   useRef,
   useState,
 } from 'react';
+import { flushSync } from 'react-dom';
 import { useTranslation } from 'react-i18next';
 import { Tooltip } from 'antd';
 import useEditorStore from '@store/useEditorStore';
@@ -27,7 +28,9 @@ import FloatingRunButton from '@components/editor/FloatingRunButton';
 import { useFileManager } from '@hooks/useFileManager';
 import { useResponsiveLayout } from '@hooks/useResponsiveLayout';
 import usePreviewFrame from '@hooks/usePreviewFrame';
+import { startContentTransition } from '@hooks/useContentTransition';
 import { lazyWithRetry } from '@utils/lazyWithRetry';
+import { registerEditorPaneTransition } from '@utils/editorPaneTransition';
 import { externalLink, openEditorLink } from '@utils/editorLinks';
 import { createAppHotkeyHandlers } from '@utils/hotkeyCommands';
 import { reportReactError } from '@/services/runtimeLogs';
@@ -74,6 +77,13 @@ function PluginDocsPage({ title }) {
  * @returns {JSX.Element} 占据预览区尺寸的空白占位元素。
  */
 const PreviewFallback = () => <div style={{ flex: 1, minHeight: 0 }} />;
+
+function RendererReady({ tabId, onReady }) {
+  useLayoutEffect(() => {
+    onReady(tabId);
+  }, [onReady, tabId]);
+  return null;
+}
 
 /**
  * 将渲染器加载或初始化错误限制在编辑区内部，避免错误继续冒泡到应用根节点。
@@ -280,6 +290,9 @@ function EditorContent() {
   );
   const historyDiff = useHistoryStore((s) => s.diff);
   const monacoRef = useRef(null);
+  const milkdownRef = useRef(null);
+  const surfaceRef = useRef(null);
+  const workspaceTransition = useRef(null);
   const containerRef = useRef(null);
   const stopSplitDrag = useRef(null);
   const [splitRatio, setSplitRatio] = useState(() => useEditorStore.getState().splitRatio);
@@ -313,7 +326,11 @@ function EditorContent() {
   const splitRequested = viewMode === 'split' && hasPreview;
   const [splitPreviewMounted, setSplitPreviewMounted] = useState(false);
   const [htmlPreviewMounted, setHtmlPreviewMounted] = useState(false);
+  const [htmlPreviewTab, setHtmlPreviewTab] = useState(null);
   const [markdownPreviewReady, setMarkdownPreviewReady] = useState(false);
+  const [markdownPreviewTab, setMarkdownPreviewTab] = useState(null);
+  const [readyEditors, setReadyEditors] = useState(() => new Set());
+  const visitedEditors = useRef(new Set());
   const lastSingleMode = useRef('edit');
   // 网页分屏：右侧直接展示链接，不依赖 Markdown 预览的就绪状态。
   const webSplitUrl = useEditorStore((state) => state.webSplitUrl);
@@ -324,7 +341,14 @@ function EditorContent() {
     isMarkdown &&
     (viewMode === 'preview' ||
       (splitRequested && !isSplit && lastSingleMode.current === 'preview'));
-  const markMarkdownPreviewReady = useCallback(() => setMarkdownPreviewReady(true), []);
+  const markMarkdownPreviewReady = useCallback(() => {
+    setMarkdownPreviewReady(true);
+    setMarkdownPreviewTab(activeTabId);
+  }, [activeTabId]);
+  const markHtmlPreviewReady = useCallback(() => setHtmlPreviewTab(activeTabId), [activeTabId]);
+  const markEditorReady = useCallback((id) => {
+    setReadyEditors((previous) => (previous.has(id) ? previous : new Set(previous).add(id)));
+  }, []);
   const attachPreview = useCallback((handle) => {
     setPreviewSyncHandle(handle);
     if (!handle) setMarkdownPreviewReady(false);
@@ -356,9 +380,12 @@ function EditorContent() {
    *
    * @param {object} action 工具栏发出的插入或包裹动作描述。
    */
-  const handleToolbarInsert = useCallback((action) => {
-    applyMarkdownToolbarAction(monacoRef.current, action);
-  }, []);
+  const handleToolbarInsert = useCallback(
+    (action) => {
+      applyMarkdownToolbarAction(showMilkdown ? milkdownRef.current : monacoRef.current, action);
+    },
+    [showMilkdown],
+  );
 
   // 分栏分隔条统一使用 Pointer Events，让桌面鼠标拖拽与移动端触摸拖拽
   // 共用同一套实现。`setPointerCapture` 对触摸场景尤其关键，否则手指离开
@@ -583,12 +610,136 @@ function EditorContent() {
   }, [activeTabId, isMarkdown, isSplit, previewSyncHandle, splitEditor]);
   const showHistoryDiff = Boolean(historyDiff && historyDiff.tabId === activeTabId);
   const showWorkspace = !showHistoryDiff && (isWebSplit || (activeTabMeta && !isPluginDocs));
+  const showMonaco = Boolean(
+    showWorkspace &&
+    activeTabMeta &&
+    !isWebPage &&
+    !isPluginDocs &&
+    !showMilkdown &&
+    (viewMode !== 'preview' || !hasPreview),
+  );
+  const showEditablePreview = Boolean(
+    showWorkspace && (showMilkdown || (viewMode === 'preview' && isTree)),
+  );
+  const showHtmlPreview = Boolean(
+    showWorkspace && isHtml && viewMode !== 'edit' && !(isWebSplit && viewMode === 'split'),
+  );
+  const showSplitTree = Boolean(showWorkspace && splitRequested && isTree && !isWebSplit);
+  const [monacoMounted, setMonacoMounted] = useState(false);
+  useLayoutEffect(() => {
+    if (showMonaco) setMonacoMounted(true);
+  }, [showMonaco]);
+
+  // Keep the Monaco widget and its document models alive across other renderers.
+  // Milkdown has per-document ProseMirror state, so retain each visited instance.
+  const editableTabs = useMemo(() => {
+    const mountedEditors = new Set(viewMode === 'preview' ? visitedEditors.current : []);
+    if (showEditablePreview) mountedEditors.add(activeTabId);
+    return tabs.filter((tab) => mountedEditors.has(tab.id));
+  }, [activeTabId, showEditablePreview, tabs, viewMode]);
+  useLayoutEffect(() => {
+    const retained = new Set(editableTabs.map(({ id }) => id));
+    const dropped = [...visitedEditors.current].filter(
+      (id) => !retained.has(id) && (!showSplitTree || id !== activeTabId),
+    );
+    visitedEditors.current = retained;
+    if (dropped.length) {
+      setReadyEditors((previous) => {
+        const next = new Set(previous);
+        for (const id of dropped) next.delete(id);
+        return next;
+      });
+    }
+  }, [activeTabId, editableTabs, showSplitTree]);
+
+  const stopWorkspaceTransition = useCallback(() => {
+    const pending = workspaceTransition.current;
+    workspaceTransition.current = null;
+    pending?.resolve?.();
+    pending?.transition?.skipTransition();
+  }, []);
+  useLayoutEffect(() => stopWorkspaceTransition, [stopWorkspaceTransition]);
+
+  const transitionWorkspace = useCallback(
+    (update) => {
+      stopWorkspaceTransition();
+      const pending = {};
+      workspaceTransition.current = pending;
+      pending.transition = startContentTransition(surfaceRef.current, (animated) => {
+        if (workspaceTransition.current !== pending) return;
+        if (!animated) {
+          workspaceTransition.current = null;
+          update();
+          return;
+        }
+        return new Promise((resolve) => {
+          pending.resolve = resolve;
+          const previousTab = useEditorStore.getState().activeTabId;
+          flushSync(() => {
+            if (!update()) {
+              pending.resolve = null;
+              pending.transition?.skipTransition();
+              resolve();
+              return;
+            }
+            const { activeTabId: id, viewMode: mode } = useEditorStore.getState();
+            Object.assign(pending, { id, mode });
+            if (id !== previousTab) setHtmlPreviewTab(null);
+          });
+        });
+      });
+      void pending.transition?.finished
+        .finally(() => {
+          if (workspaceTransition.current === pending) workspaceTransition.current = null;
+        })
+        .catch(() => {});
+    },
+    [stopWorkspaceTransition],
+  );
+  useLayoutEffect(() => registerEditorPaneTransition(transitionWorkspace), [transitionWorkspace]);
+
+  useLayoutEffect(() => {
+    const pending = workspaceTransition.current;
+    if (!pending?.resolve) return;
+    const ready =
+      (!showMonaco || splitEditor) &&
+      (!(showEditablePreview || showSplitTree) || readyEditors.has(activeTabId)) &&
+      (!showHtmlPreview || htmlPreviewTab === activeTabId) &&
+      (!showWorkspace ||
+        !splitRequested ||
+        !isMarkdown ||
+        isWebSplit ||
+        markdownPreviewTab === activeTabId);
+    if (activeTabId !== pending.id || viewMode !== pending.mode || ready) {
+      pending.resolve();
+      pending.resolve = null;
+    }
+  }, [
+    activeTabId,
+    viewMode,
+    htmlPreviewTab,
+    isMarkdown,
+    isWebSplit,
+    markdownPreviewTab,
+    readyEditors,
+    showEditablePreview,
+    showHtmlPreview,
+    showMonaco,
+    showSplitTree,
+    showWorkspace,
+    splitEditor,
+    splitRequested,
+  ]);
+
   // Keep mounted iframes in the same DOM order when the tab strip is reordered.
   const mountedWebTabs = new Set(visitedWebTabs.current);
   if (isWebPage) mountedWebTabs.add(activeTabId);
 
   return (
-    <main className={`editor-content ${isMobileLayout ? 'editor-content--mobile' : ''}`}>
+    <main
+      ref={surfaceRef}
+      className={`editor-content content-transition ${isMobileLayout ? 'editor-content--mobile' : ''}`}
+    >
       {showHistoryDiff && (
         <Suspense fallback={null}>
           <HistoryDiffView />
@@ -626,6 +777,59 @@ function EditorContent() {
               onPage={(url, icons) => useEditorStore.getState().setWebTabPage(tab.id, url, icons)}
             />
           ))}
+        {(showMonaco || monacoMounted) && (
+          <div
+            className="editor-content__monaco-surface editor-content__primary-surface"
+            hidden={!showMonaco}
+          >
+            <MonacoEditor
+              tabId={showMonaco ? activeTabId : null}
+              ref={monacoRef}
+              className={`editor-content__editor${isSplit ? ' editor-content__editor--half' : ''}`}
+              onEditorReady={setSplitEditor}
+              onAutoSave={triggerAutoSave}
+              appHotkeyHandlers={appHotkeyHandlers}
+            />
+          </div>
+        )}
+        {editableTabs.map((tab) => {
+          const active = showEditablePreview && tab.id === activeTabId;
+          const tree = tab.ext?.toLowerCase() === 'mgtree';
+          return (
+            <div
+              key={tab.id}
+              className="editor-content__editable-preview editor-content__primary-surface"
+              data-inactive={!active || undefined}
+              inert={!active ? '' : undefined}
+            >
+              <RendererErrorBoundary
+                fallback={<RendererLoadError onReady={() => markEditorReady(tab.id)} />}
+              >
+                <Suspense fallback={<PreviewFallback />}>
+                  {tree ? (
+                    <>
+                      <TreeEditor
+                        tabId={tab.id}
+                        className="editor-content__preview"
+                        onAutoSave={triggerAutoSave}
+                      />
+                      <RendererReady tabId={tab.id} onReady={markEditorReady} />
+                    </>
+                  ) : (
+                    <MilkdownMarkdownEditor
+                      ref={active ? milkdownRef : null}
+                      tabId={tab.id}
+                      active={active}
+                      className="editor-content__preview editor-content__editor--milkdown"
+                      onAutoSave={triggerAutoSave}
+                      onReady={markEditorReady}
+                    />
+                  )}
+                </Suspense>
+              </RendererErrorBoundary>
+            </div>
+          );
+        })}
         {showWorkspace && (
           <>
             {!activeTabMeta && (
@@ -634,50 +838,17 @@ function EditorContent() {
               </div>
             )}
             {isPluginDocs && <PluginDocsPage title={activeTabMeta.name} />}
-            {activeTabMeta &&
-              !isWebPage &&
-              !isPluginDocs &&
-              !showMilkdown &&
-              (viewMode !== 'preview' || !hasPreview) && (
-                <MonacoEditor
-                  ref={monacoRef}
-                  className={`editor-content__editor${isSplit ? ' editor-content__editor--half' : ''}`}
-                  onEditorReady={setSplitEditor}
-                  onAutoSave={triggerAutoSave}
-                  appHotkeyHandlers={appHotkeyHandlers}
-                />
-              )}
-            {showMilkdown && (
-              <RendererErrorBoundary fallback={<RendererLoadError />}>
-                <Suspense fallback={<PreviewFallback />}>
-                  <MilkdownMarkdownEditor
-                    key={activeTabId}
-                    ref={monacoRef}
-                    className="editor-content__preview editor-content__editor--milkdown"
-                    onAutoSave={triggerAutoSave}
-                  />
-                </Suspense>
-              </RendererErrorBoundary>
-            )}
-            {viewMode === 'preview' && isTree && (
-              <RendererErrorBoundary fallback={<RendererLoadError />}>
-                <Suspense fallback={<PreviewFallback />}>
-                  <TreeEditor
-                    key={activeTabId}
-                    className="editor-content__preview"
-                    onAutoSave={triggerAutoSave}
-                  />
-                </Suspense>
-              </RendererErrorBoundary>
-            )}
             {isHtml && (viewMode !== 'edit' || htmlPreviewMounted) && (
               <div
                 className={`editor-content__html-surface${isSplit && !isWebSplit ? ' editor-content__html-surface--half' : ''}`}
                 hidden={viewMode === 'edit' || (isWebSplit && viewMode === 'split')}
               >
-                <RendererErrorBoundary fallback={<RendererLoadError />}>
+                <RendererErrorBoundary
+                  key={activeTabId}
+                  fallback={<RendererLoadError onReady={markHtmlPreviewReady} />}
+                >
                   <Suspense fallback={<PreviewFallback />}>
-                    <HtmlFilePreview key={activeTabId} />
+                    <HtmlFilePreview onReady={markHtmlPreviewReady} />
                   </Suspense>
                 </RendererErrorBoundary>
               </div>
@@ -719,18 +890,27 @@ function EditorContent() {
                 <RendererErrorBoundary
                   fallback={
                     <RendererLoadError
-                      onReady={isMarkdown ? markMarkdownPreviewReady : undefined}
+                      onReady={
+                        isMarkdown
+                          ? markMarkdownPreviewReady
+                          : isTree
+                            ? () => markEditorReady(activeTabId)
+                            : undefined
+                      }
                     />
                   }
                 >
                   <Suspense fallback={<PreviewFallback />}>
                     {isHtml ? null : isTree ? (
-                      <TreeEditor
-                        key={activeTabId}
-                        className="editor-content__preview editor-content__preview--half"
-                        onAutoSave={triggerAutoSave}
-                        onSourceChange={handleTreeSourceChange}
-                      />
+                      <>
+                        <TreeEditor
+                          key={activeTabId}
+                          className="editor-content__preview editor-content__preview--half"
+                          onAutoSave={triggerAutoSave}
+                          onSourceChange={handleTreeSourceChange}
+                        />
+                        <RendererReady tabId={activeTabId} onReady={markEditorReady} />
+                      </>
                     ) : (
                       <MarkdownPreview
                         ref={attachPreview}

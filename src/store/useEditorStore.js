@@ -16,6 +16,7 @@ import {
 import { clearMarkdownUndo, renameMarkdownUndo } from '@utils/markdownUndo';
 import { historyCapture } from '@utils/tauriApi';
 import { captureDocumentViewState, renameDocumentViewState } from '@utils/documentViewState';
+import { transitionEditorPane } from '@utils/editorPaneTransition';
 import { untitledFileName } from '@utils/untitledFileName';
 import { parsePreviewAddress, samePreview } from '@utils/previewAddress';
 import useHistoryStore, { isMarkdownComparison } from './useHistoryStore';
@@ -82,11 +83,21 @@ const useEditorStore = create(
           };
         }),
       knowledgeJump: null,
-      requestKnowledgeJump: (language, index) =>
-        set((s) => ({
-          knowledgeJump: { tabId: s.activeTabId, language, index, nonce: Date.now() },
-          viewMode: s.viewMode === 'edit' ? 'split' : s.viewMode,
-        })),
+      requestKnowledgeJump: (language, index) => {
+        const { activeTabId, viewMode } = get();
+        const jump = () => {
+          const state = get();
+          if (state.activeTabId !== activeTabId) return false;
+          const split = state.viewMode === 'edit';
+          set({
+            knowledgeJump: { tabId: activeTabId, language, index, nonce: Date.now() },
+            viewMode: split ? 'split' : state.viewMode,
+          });
+          return split;
+        };
+        if (viewMode === 'edit') transitionEditorPane(jump);
+        else jump();
+      },
       viewMode: 'edit',
       toolbarVisible: false,
       splitRatio: 0.5,
@@ -483,11 +494,19 @@ const useEditorStore = create(
       },
 
       /** ??????????? */
-      setActiveTab: (tabId) => {
-        const { activeTabId } = get();
-        if (tabId === activeTabId) return;
-        flushEditorBuffer(activeTabId);
-        set({ activeTabId: tabId });
+      setActiveTab: (tabId, { animate = false } = {}) => {
+        const from = get().activeTabId;
+        const activate = () => {
+          const { activeTabId, tabRenderList } = get();
+          if (tabId === activeTabId) return false;
+          if (animate && (activeTabId !== from || !tabRenderList.some((tab) => tab.id === tabId)))
+            return false;
+          flushEditorBuffer(activeTabId);
+          set({ activeTabId: tabId });
+          return true;
+        };
+        if (animate) transitionEditorPane(activate);
+        else activate();
       },
 
       /**
@@ -625,13 +644,20 @@ const useEditorStore = create(
 
       /** ?????????? */
       setViewMode: (mode, meta = {}) => {
-        const { activeTabId, viewMode } = get();
-        if (viewMode !== mode) {
-          flushEditorBuffer(activeTabId);
-          // 在替换源码编辑器前抓取实时折叠状态，供 Milkdown 挂载时恢复。
-          captureDocumentViewState(activeTabId, 'monaco');
-        }
-        set({ viewMode: mode, uiStateUpdatedAt: meta.updatedAt ?? Date.now() });
+        const from = get().activeTabId;
+        const apply = () => {
+          const { activeTabId, viewMode } = get();
+          if (meta.animate && activeTabId !== from) return false;
+          if (viewMode !== mode) {
+            flushEditorBuffer(activeTabId);
+            // Capture folding before switching away from the source pane.
+            captureDocumentViewState(activeTabId, 'monaco');
+          }
+          set({ viewMode: mode, uiStateUpdatedAt: meta.updatedAt ?? Date.now() });
+          return viewMode !== mode;
+        };
+        if (meta.animate) transitionEditorPane(apply);
+        else apply();
       },
       toggleEditPreview: () => {
         const { activeTabId, tabRenderList, viewMode, setViewMode } = get();
@@ -644,12 +670,14 @@ const useEditorStore = create(
             )
           )
             comparison.toggleViewMode();
-        } else if (viewMode !== 'split') setViewMode(viewMode === 'edit' ? 'preview' : 'edit');
+        } else if (viewMode !== 'split') {
+          setViewMode(viewMode === 'edit' ? 'preview' : 'edit', { animate: true });
+        }
       },
       /** ????????????????? */
       toggleSplit: () => {
         const { viewMode, setViewMode } = get();
-        setViewMode(viewMode === 'split' ? 'edit' : 'split');
+        setViewMode(viewMode === 'split' ? 'edit' : 'split', { animate: true });
       },
 
       toggleToolbar: () =>
