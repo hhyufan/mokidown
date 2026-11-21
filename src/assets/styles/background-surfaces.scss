@@ -282,8 +282,17 @@ body.moki-has-background {
   .md-preview--milkdown .milkdown-media-tools,
   .milkdown-media-preview-editor,
   .ant-dropdown .ant-dropdown-menu,
-  .ant-picker-dropdown .ant-picker-panel-container {
+  .ant-picker-dropdown .ant-picker-panel-container,
+  .moki-math-completion.moki-math-completion,
+  .moki-math-preview--inline.moki-math-preview--inline,
+  .language-picker .list-wrapper.list-wrapper {
     @include background-popup.image-surface;
+  }
+
+  // 公式补全与代码块语言菜单的选中行沿用玻璃令牌，不破坏"选中"语义。
+  .moki-math-completion,
+  .language-picker .list-wrapper {
+    --hover: var(--moki-glass-hover);
   }
 
   .moki-monaco-surface.moki-monaco-surface {
@@ -396,6 +405,10 @@ html body.moki-has-background {
   // 箭头上重绘壁纸不现实（它是个 8px 的三角），取底色近似。
   .ant-tooltip .ant-tooltip-arrow::before,
   .ant-tooltip .ant-tooltip-arrow::after {
+    background: var(--moki-background-base) !important;
+  }
+  // 行内公式气泡的尾巴同理：10px 的旋转方块，重绘壁纸坐标算不过来，取底色近似。
+  .moki-math-preview--inline::after {
     background: var(--moki-background-base) !important;
   }
 }
