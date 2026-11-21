@@ -12,7 +12,14 @@ import { htmlPreviewSizingScript } from './htmlPreviewSizing';
 import PreviewAddressButton from './PreviewAddressButton';
 import './html-preview.scss';
 
-export default function HtmlPreview({ source, filePath, title, compact = false, className = '' }) {
+export default function HtmlPreview({
+  source,
+  filePath,
+  title,
+  compact = false,
+  className = '',
+  onReady,
+}) {
   const { t } = useTranslation();
   const requestedPort = useConfigStore((state) => state.htmlPreviewPort ?? 0);
   const globalLiveReload = useConfigStore((state) => state.htmlPreviewLiveReload ?? true);
@@ -33,6 +40,9 @@ export default function HtmlPreview({ source, filePath, title, compact = false, 
   const [address, setAddress] = useState('about:srcdoc');
   const [navigationUrl, setNavigationUrl] = useState(null);
   const [refresh, setRefresh] = useState(0);
+  useEffect(() => {
+    if (error) onReady?.();
+  }, [error, onReady]);
   const sessionRef = useRef(null);
   const viewportRef = useRef(null);
   const iframeRef = useRef(null);
@@ -277,6 +287,7 @@ export default function HtmlPreview({ source, filePath, title, compact = false, 
               setContentWidth(1280);
               syncFrameTheme();
               injectSizing(iframeRef.current);
+              onReady?.();
             }}
             style={{
               width: Math.max(1, width),
