@@ -411,10 +411,16 @@ export const milkdownMathPreview = $prose(() => {
         // 定位参照由 widget 自带的零宽锚点提供。锚点摆在正文正中，气泡就正好压在正文上方。
         const draft = math ? mathDraft(state, ranges) : null;
         if (draft) {
-          // 那两枚 `$` 是成对手势替用户补出来的，屏幕上不再摆出来：预览框与补全列表已经说清
-          // 「这里在写公式」。染透明而不是删字符，光标才照常落得进去，折成公式时宽度也不跳。
+          // 初次编辑按双击进入的编辑态那一套摆：两枚 `$` 用与虚拟定界符同样的淡色露出来，
+          // 中间那段正文挂上源码配色。折成 mark 的那一下少的只是定界符，字色字体都不跳。
           for (const pos of [draft.anchor, draft.close]) {
             decorations.push(Decoration.inline(pos, pos + 1, { class: 'moki-math-draft-marker' }));
+          }
+          // 源码配色铺满两枚 `$` 之间那一整截，连 `from`/`to` 裁掉的首尾空白也算进去：装饰边界
+          // 要是压在草稿正文和收尾那枚 `$` 之间，`$$` 收尾那一下就认不到定界符，实测变成再开一对
+          // 空草稿——既不跳过定界符，也不折。
+          if (draft.anchor + 1 < draft.close) {
+            decorations.push(Decoration.inline(draft.anchor + 1, draft.close, { class: 'moki-math-source' }));
           }
           addBubble(`draft:${draft.anchor}`, draft.from + ((draft.to - draft.from) >> 1),
             doc.textBetween(draft.from, draft.to), draftSpec, 1, draft.from === draft.to);

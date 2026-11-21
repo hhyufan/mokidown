@@ -1079,11 +1079,13 @@
     font-family: var(--font-editor);
   }
 
-  // 编辑态：正文露出来，配色沿用其它格式的源码态。
+  // 编辑态：正文露出来，配色沿用其它格式的源码态。等宽字体也钉在这里，
+  // 初次编辑的草稿正文还没挂上 math mark，靠这条跟上编辑态的同款字形。
   .moki-math-source {
     color: var(--accent);
     background: var(--hover);
     border-radius: 4px;
+    font-family: var(--font-editor);
   }
 
   // 渲染态：正文还在（删掉它就没有可编辑的载体，光标也落不回来），只是染透明，
@@ -1098,10 +1100,14 @@
     position: relative;
   }
 
-  // 草稿的两枚 `$` 由手势替用户补上，屏幕上不再摆出来。染透明而不是删字符，光标才照常
-  // 落得进去；折成公式时文档里少的也是这两格，宽度不会跟着跳。
+  // 草稿的两枚 `$` 是成对手势替用户补的，但摆法和编辑态那对虚拟定界符一致：同样的淡色、
+  // 同样的等宽正体。定界符是记号不是正文，所以不跟着相邻文字加粗倾斜。
+  // 只染色不删字符，光标才照常落得进去，折成公式时文档里少的也正是这两格。
   .moki-math-draft-marker {
-    color: transparent;
+    color: color-mix(in srgb, var(--text) 56%, transparent);
+    font-family: var(--font-editor);
+    font-weight: 400;
+    font-style: normal;
   }
 
   // 覆盖层压在正文槽位上：宽度取满 mark span，居中，垂直对齐正文中线。
