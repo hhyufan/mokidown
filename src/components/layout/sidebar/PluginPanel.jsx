@@ -72,7 +72,7 @@ export default function PluginPanel() {
                   sendToPlugin(source.pluginId, {
                     type: 'event',
                     name: 'versionSelected',
-                    payload: { id: item.id, rev: item.rev },
+                    payload: { id: item.id, rev: item.rev, timestamp: item.timestamp },
                   })
                 }
               >
