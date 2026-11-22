@@ -7,6 +7,7 @@ export function useMarkdownHistoryComparison(original, modified, enabled, includ
   useEffect(() => {
     if (!enabled) return undefined;
     let worker;
+    let watchdog = 0;
     let inlineCompare = null;
     let active = null;
     let requested = null;
@@ -23,20 +24,32 @@ export function useMarkdownHistoryComparison(original, modified, enabled, includ
         error: String(error?.message || error),
       }));
     };
+    const openInline = () => {
+      import('./markdownHistoryComparison')
+        .then(({ createMarkdownHistoryComparison }) => {
+          inlineCompare = createMarkdownHistoryComparison(original);
+          run();
+        })
+        .catch(fail);
+    };
     const open = () => {
-      if (typeof Worker === 'undefined') {
-        import('./markdownHistoryComparison')
-          .then(({ createMarkdownHistoryComparison }) => {
-            inlineCompare = createMarkdownHistoryComparison(original);
-            run();
-          })
-          .catch(fail);
+      if (import.meta.env.DEV || typeof Worker === 'undefined') {
+        openInline();
         return;
       }
       worker = new Worker(new URL('../../workers/markdownHistory.worker.js', import.meta.url), {
         type: 'module',
       });
+      // Worker 在个别环境里会静默不返回（模块加载失败但无 error 事件），
+      // 超时后切到同线程计算，避免对比界面一直停在加载态。
+      watchdog = setTimeout(() => {
+        if (hasResult) return;
+        worker?.terminate();
+        worker = null;
+        openInline();
+      }, 1500);
       worker.onmessage = ({ data }) => {
+        clearTimeout(watchdog);
         if (active && requested === active) {
           hasResult = true;
           const modified = active.modified;
