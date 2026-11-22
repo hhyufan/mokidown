@@ -210,7 +210,7 @@
   "settings.editor.pair.backtick": "Inline code and code blocks",
   "settings.editor.pair.backtickDesc": "Put the caret between two backticks. After three at the start of a line, press Enter or confirm a language to create a code block.",
   "settings.editor.pair.math": "Formula",
-  "settings.editor.pair.mathDesc": "Delete the dollar signs around a formula and keep its LaTeX body. Covers inline math and its block counterpart.",
+  "settings.editor.pair.mathDesc": "Put the caret between two dollar signs, or type a third at the start of a line to create a block formula. Delete the dollar signs around a formula and keep its LaTeX body.",
   "editor.codeLanguageMenu": "Choose code language",
   "editor.codeLanguagePlainText": "Plain text",
   "settings.editor.lineNumbers": "Line Numbers",
