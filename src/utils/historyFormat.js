@@ -5,7 +5,10 @@
  * 大小：B / KB / MB，保留一位小数。
  */
 export function formatHistoryTime(timestamp) {
-  const date = new Date(timestamp);
+  // Plugins may hand over epoch milliseconds as a number or a numeric string.
+  const value =
+    typeof timestamp === 'string' && /^\d+$/.test(timestamp) ? Number(timestamp) : timestamp;
+  const date = new Date(value);
   if (Number.isNaN(date.getTime())) return '';
   const now = new Date();
   const sameDay = date.toDateString() === now.toDateString();
