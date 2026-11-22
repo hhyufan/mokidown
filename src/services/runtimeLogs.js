@@ -197,7 +197,9 @@ export function installRuntimeLogging() {
       // tooling artifact, not an app error. Vue flags are injected at build time.
       if (
         /Couldn't find callback id/.test(message) ||
-        /__VUE_(?:OPTIONS_API|PROD_DEVTOOLS|PROD_HYDRATION_MISMATCH_DETAILS)__/.test(message)
+        /__VUE_(?:OPTIONS_API|PROD_DEVTOOLS|PROD_HYDRATION_MISMATCH_DETAILS)__/.test(message) ||
+        // Chromium 在 ResizeObserver 回调改布局时给出的良性循环警告，不是应用错误。
+        /ResizeObserver loop/.test(message)
       )
         return;
       // React 可能在渲染期间调用 console；延后发布，避免同步更新任务面板。
