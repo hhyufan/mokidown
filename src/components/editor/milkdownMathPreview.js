@@ -8,20 +8,30 @@
  * 末尾那个宏还没打完时也不喂 KaTeX：`\in`、`\inf` 恰好是它认得的前缀，
  * 真会排出「属于」和 `inf`，看着就像补全挑错了符号。
  *
- * 行内公式分「查看」和「编辑」两档：单击只把源码翻出来看，预览框和补全列表都不出现；
- * 只有双击（光标落进正文）或在公式边上按一下退格/删除，才算真的在改它，那时候预览与补全才跟上。
- * 查看档里挪光标、接着打字都还当查看——手滑碰一下方向键不该就把整篇的公式点亮。
+ * 行内公式只要展开源码就预览：单击、双击与贴边退格揭开的都是同一种状态，气泡跟着源码走。
+ * 什么时候算「在编辑这条公式」由 milkdownMathMark 的 isMathEditing 一处说了算——严格在内、
+ * 被鼠标点开过、或正踩在画出来的那枚 `$` 上。贴着边界路过不算，实时语法读的是同一个条件，
+ * 两边一起翻态才不会出现「正文还压在覆盖层底下、两头却摆着 `$`」。
+ * 光标落在公式边界上时，inclusive:false 本来会把下一笔字送到正文外面，编辑档把 mark 按住，
+ * 这一笔才落进式子里。
  *
  * 从零写一条公式走的是草稿：连打两个 `$` 由实时语法补成一对，光标停在中间，那两枚定界符
  * 在这里被染透明（本插件的活儿），光标一走就把定界符删掉、正文挂上 mark 折成公式。
  */
 import { Decoration, DecorationSet } from '@milkdown/kit/prose/view';
-import { Plugin, PluginKey, TextSelection } from '@milkdown/kit/prose/state';
+import { Plugin, TextSelection } from '@milkdown/kit/prose/state';
 import { closeHistory } from '@milkdown/kit/prose/history';
 import { $prose } from '@milkdown/kit/utils';
 import { isImeComposing } from '@utils/keyboard';
 import katex from 'katex';
-import { mathDraftAt, mathMarkName } from './milkdownMathMark';
+import {
+  isClicked,
+  isMathEditing,
+  mathDraftAt,
+  mathMarkName,
+  previewKey,
+} from './milkdownMathMark';
+import { delimiterCaret, unfoldMathPair } from './milkdownLiveSyntax';
 import { endsWithPartialMacro } from './milkdownMathSymbols';
 
 // 块级源码态的节点名与文档协议绑定，改动会让已存文档的公式失效。
@@ -31,7 +41,6 @@ const bubbleSpec = { displayMode: false, variant: 'inline' };
 const draftSpec = { displayMode: false, variant: 'inline', draft: true };
 const coverSpec = { displayMode: false, variant: 'cover', cover: true };
 
-const previewKey = new PluginKey('moki-math-preview');
 const MAX_CACHE = 200;
 // 只缓存渲染结果字符串；widget 的 toDOM 每次必须返回新节点，
 // 复用同一 DOM 实例会让内容相同的两个公式互相"搬走"对方的节点。
@@ -72,7 +81,7 @@ function renderPreview(value, spec) {
   // 预览不许光标进去：浏览器光标一走进非文档内容，PM 就读不回文档位置。
   bubble.setAttribute('contenteditable', 'false');
   bubble.setAttribute('aria-hidden', 'true');
-  // 刚打开的空对没有正文可排，`previewHtml` 会给出 error：那正是要的一个空框。
+  // 正文为空时不摆东西：气泡只在有正文时才挂上来（见 addBubble）。
   bubble.innerHTML = (spec.cover ? coverHtml(value) : previewHtml(value, spec.displayMode)).html || '';
   if (!spec.draft) return bubble;
   // 草稿正文没挂 mark，PM 又会在 widget 两侧断开装饰 span，气泡在正文里找不到
@@ -97,36 +106,14 @@ function mathRanges(doc, type) {
   return ranges;
 }
 
-// 展开源码的条件是光标整个落在公式里。按「与选区相交就展开」写的话，Ctrl+A 会把
-// 全文公式一起掀开，整篇重排。空光标还要更严一档，必须严格在内：mark 是
-// inclusive:false，贴在公式左右边界打字落在正文外面，那时候掀开源码反而对不上手。
-// 非空选区允许正好框住整段——双击选词拿到的就是这个形状。
-function isRevealed({ from, to }, range) {
-  if (from === to) return from > range.from && to < range.to;
-  return from >= range.from && to <= range.to;
-}
+// 「什么时候算在编辑这条公式」由 milkdownMathMark 的 isMathEditing 统一判定，实时语法画 `$`
+// 用的是同一个条件；这里再判一次就会出现两个插件各说各话的状态。
 
-// 点在公式正文上（含首尾那个字的两半边）时，浏览器给的光标正好压在边界上，
-// 上面那条严格在内的判定不放行，看起来就是「单击没反应」；正文只有一个字符时
-// 根本没有向内的光标位，永远掀不开。鼠标这一下点的是这段正文，所以额外记住
-// 「刚被点开的公式」，让源码翻出来。光标挪走或文档一改就忘。
-function isClicked(clicked, range) {
-  return !!clicked && clicked.from === range.from && clicked.to === range.to;
-}
-
-// 记住的那一下还分档：`inspect` 为真表示只是点开来看源码，预览浮层先不摆。
-function isInspecting(clicked) {
-  return !!clicked?.inspect;
-}
-
-// 补全列表是另一个插件，读的是同一份单击记忆：查看档里它不该冒头。
-export const isMathInspecting = (state) => isInspecting(previewKey.getState(state));
-
-// 单击落在公式上先只算「我要看它的源码」：点的位置离首尾那个字近一半，浏览器就把光标
+// 单击为什么要自己记一笔，而不等光标落点说了算：点的位置离首尾那个字近一半，浏览器就把光标
 // 放在边界上，inclusive:false 让那个位置读起来是「在旁边打字」，掀开判定不放行。
 // 位置要用 PM 的坐标换算而不是量 DOM 盒子：mousedown 已经把定界符画出来，
 // 正文在指针底下挪了位，mouseup 再按盒子判就已经偏了。
-// `event.detail` 是这一连串点击的第几下：一下算查看，两下才算编辑。
+// `event.detail` 分出这两下：一下把源码掀开，两下再把压在边界上的光标收进正文（见 editPos）。
 // 第二下要在 `dblclick` 里收而不是 mouseup——mouseup 时浏览器还没开始选词；可它当场也还没
 // 选完，落光标得再等一拍，详见下面那段。
 function revealClickedMath(view, event) {
@@ -144,7 +131,7 @@ function revealClickedMath(view, event) {
   const range = ranges.find(({ from, to }) => at >= from && at <= to)
     ?? (double ? ranges.find(({ from, to }) => end > from && start < to) : null);
   if (!double) {
-    if (range) view.dispatch(state.tr.setMeta(previewKey, { ...range, inspect: true }));
+    if (range) view.dispatch(state.tr.setMeta(previewKey, { from: range.from, to: range.to }));
     return;
   }
   // 双击第二下交回来的是浏览器的原生选词，可公式刚被第一下重新排过，Chromium 找不回
@@ -160,11 +147,6 @@ function revealClickedMath(view, event) {
       view.dispatch(editInside(view.state, math, range, pos));
     }, 0);
   }
-  // 两下之间隔着别的事务的话，单击记忆可能已经被那个非空选区冲掉了；记忆还在就照常
-  // 从查看档切到编辑档。
-  else if (isInspecting(previewKey.getState(state))) {
-    view.dispatch(state.tr.setMeta(previewKey, { ...previewKey.getState(state), inspect: false }));
-  }
 }
 
 // 指针贴着公式左右边界时，inclusive:false 会把打字送到正文外面，所以往内收一格。
@@ -176,34 +158,25 @@ function editPos({ from, to }, caret) {
 function editInside(state, math, { from, to }, pos) {
   const tr = state.tr
     .setSelection(TextSelection.create(state.doc, pos))
-    .setMeta(previewKey, { from, to, inspect: false });
+    .setMeta(previewKey, { from, to });
   // 单字符正文的光标只能压在边界上，而边界上打字会被当成公式外面的普通文字，整个公式
   // 当场散掉。把 mark 记成待插入的 marks，下一笔字才落进正文里。
   if (to - from < 2) tr.setStoredMarks(state.doc.resolve(from).nodeAfter?.marks ?? [math.create()]);
   return tr;
 }
 
-// 查看档里只有 Backspace 才算「我要改它」：方向键、Home/End 挪一下光标、接着打字都还当查看，
-// 气泡与补全列表照旧不出现。键盘一动就作废的老规矩太宽——手滑碰一下方向键就把公式点亮了。
-function releaseInspect(view, event) {
-  if (event.key !== 'Backspace') return;
-  const clicked = previewKey.getState(view.state);
-  if (clicked?.inspect) view.dispatch(view.state.tr.setMeta(previewKey, { ...clicked, inspect: false }));
-}
-
 // 光标贴在渲染态公式的边上按退格/删除：原本吃掉的是正文最后一个字符，或者整对 `$`
 // （`$` 不在文档里，拆掉 mark 反而凭空多出两个 `$`）。这一下改成「我要改这个公式」——
-// 源码翻出来、光标落在指针这一侧、一个字符都不删。已经在编辑档了就不插手，
-// 第二下退格照常删字，正文删空整段公式自然消失。
+// 源码翻出来、光标落在指针这一侧、一个字符都不删。已经点开就不插手：光标要是还切在画出来的
+// 那枚 `$` 上，接着由 unfoldMathPair 把定界符摊成草稿；挪在正文那一格就照常删字，正文删空整段公式自然消失。
 function edgeToEdit(state, math, forward) {
   const { selection } = state;
   if (!selection.empty) return null;
   const pos = forward ? selection.from : selection.to;
   const clicked = previewKey.getState(state);
-  const editing = (range) => isClicked(clicked, range) && !isInspecting(clicked);
   return mathRanges(state.doc, math).find((range) => (forward
     ? range.from === pos
-    : range.to === pos) && !editing(range)) ?? null;
+    : range.to === pos) && !isClicked(clicked, range)) ?? null;
 }
 
 function enterAtEdge(view, math, range, forward) {
@@ -214,7 +187,7 @@ function enterAtEdge(view, math, range, forward) {
   view.dispatch(state.tr
     .setSelection(TextSelection.create(state.doc, forward ? range.from : range.to))
     .setStoredMarks(marks)
-    .setMeta(previewKey, { ...range, inspect: false })
+    .setMeta(previewKey, { from: range.from, to: range.to })
     .scrollIntoView());
 }
 
@@ -308,32 +281,47 @@ export const milkdownMathPreview = $prose(() => {
         return from === to && from >= memory.from && to <= memory.to ? memory : null;
       },
     },
-    // 编辑档里光标压在公式尾巴上时，PM 每敲一个字就把 storedMarks 清空，下一个字顺着
-    // `inclusive:false` 就跑到正文外面去了（`$x^2$` 末尾连打两个字会变成 `$x^2A$B`）。
-    // 只要还认这条公式在编辑，就把 mark 重新按上：光标停在尾巴上也还是在正文里打字。
+    // 贴在公式边界打字算改这条公式：mark 是 inclusive:false，本来这一笔会被送到正文外面
+    // （`$x^2$` 尾巴上打字变成 `$x^2$A`）。光标一走到边界就把正文那串 marks 记成待插入的
+    // marks，这一笔才落进式子的头上或尾巴——进编辑态不必先用退格把源码掀开。
+    // 已经摊开的公式里，PM 每敲一个字就把 storedMarks 清空，同一个事务再把 mark 按回去，
+    // 光标停在尾巴上也还是在正文里打字。
     appendTransaction(transactions, oldState, state) {
       const math = state.schema.marks[mathMarkName];
       const folded = math && foldDraft(transactions, oldState, state, math);
       if (folded) return folded;
       if (!transactions.some(({ docChanged, selectionSet }) => docChanged || selectionSet)) return null;
-      const clicked = previewKey.getState(state);
-      if (!clicked || isInspecting(clicked)) return null;
       const { selection } = state;
-      if (!selection.empty || selection.to !== clicked.to) return null;
-      const marks = selection.$from.nodeBefore?.marks;
-      if (!marks?.some((mark) => mark.type.name === mathMarkName)) return null;
+      if (!selection.empty) return null;
+      const { $from } = selection;
       const current = state.storedMarks;
+      // 待插入 marks 里已经没有 math：这是实时语法把光标送进画出来的那枚 `$`
+      // （selectDelimiterPosition 按格子算出的 marks），意思是「下一笔落在公式外面」。
+      // 这里再按回去不但抹掉这层意思，还会连带把插件记着的那一格清掉——光标就再也走不出尾巴。
+      if (current && !current.some((mark) => mark.type.name === mathMarkName)) return null;
+      // 左右邻居都没挂 math 就不贴在公式边上，用不着把整篇扫一遍找区间。
+      const beside = (node) => node?.marks.some((mark) => mark.type.name === mathMarkName);
+      if (!beside($from.nodeBefore) && !beside($from.nodeAfter)) return null;
+      const range = mathRanges(state.doc, math).find(
+        ({ from: start, to }) => start === $from.pos || to === $from.pos,
+      );
+      if (!range) return null;
+      const marks = ($from.pos === range.to ? $from.nodeBefore : $from.nodeAfter).marks;
       const same = current?.length === marks.length && current?.every((mark, i) => mark.eq(marks[i]));
-      return same ? null : state.tr.setStoredMarks(marks);
+      if (same) return null;
+      // 只有真的落了一笔字才顺手把这条公式记成「已点开」。光标走到边界本身不算在编辑，
+      // 那时候源码还该压着（见 isMathEditing）；字进了正文，才摊开给人接着改。
+      const tr = state.tr.setStoredMarks(marks);
+      return transactions.some(({ docChanged }) => docChanged)
+        ? tr.setMeta(previewKey, { from: range.from, to: range.to })
+        : tr;
     },
     view(editorView) {
       const refit = () => fitBubbles(editorView);
       const onClick = (event) => revealClickedMath(editorView, event);
-      const onKeydown = (event) => releaseInspect(editorView, event);
       window.addEventListener('resize', refit);
       editorView.dom.addEventListener('mouseup', onClick);
       editorView.dom.addEventListener('dblclick', onClick);
-      editorView.dom.addEventListener('keydown', onKeydown);
       return {
         // 插件视图在文档同步之后才跑，这时气泡已经在 DOM 里，量到的是最终位置。
         update() {
@@ -347,7 +335,6 @@ export const milkdownMathPreview = $prose(() => {
           window.removeEventListener('resize', refit);
           editorView.dom.removeEventListener('mouseup', onClick);
           editorView.dom.removeEventListener('dblclick', onClick);
-          editorView.dom.removeEventListener('keydown', onKeydown);
           scroller?.removeEventListener('scroll', refit);
           scroller = null;
         },
@@ -361,9 +348,15 @@ export const milkdownMathPreview = $prose(() => {
           || event.ctrlKey || event.metaKey || event.altKey || event.shiftKey) return false;
         const math = view.state.schema.marks[mathMarkName];
         const range = math && edgeToEdit(view.state, math, forward);
-        if (!range) return false;
+        if (range) {
+          event.preventDefault();
+          enterAtEdge(view, math, range, forward);
+          return true;
+        }
+        // 源码已经摊开了，光标还切在画出来的那枚 `$` 上：这一下把两枚定界符落回文档，
+        // 摊成初次打 `$` 那种草稿，同一键再走一下才真删掉它们。
+        if (!unfoldMathPair(view, forward)) return false;
         event.preventDefault();
-        enterAtEdge(view, math, range, forward);
         return true;
       },
       decorations(state) {
@@ -378,13 +371,15 @@ export const milkdownMathPreview = $prose(() => {
           { key, side, stopEvent: () => true, ignoreSelection: true }));
 
         // 正文不成立时沿用上一次成功的样子；还没成功渲染过就没有可沿用的预览，
-        // 等用户写出可解析的东西再出现气泡。空对（`placeholder`）是唯一的例外。
-        const addBubble = (identity, pos, value, spec, side, placeholder = false) => {
+        // 等用户写出可解析的东西再出现气泡。
+        // `$$` 中间没排出任何东西就不预览：空框只会让人以为式子已经成立。正文被清空时
+        // 记住的那一份也一并忘掉——清空就是「这条公式还没有内容」，不该继续挂着旧样子。
+        const addBubble = (identity, pos, value, spec, side) => {
           active.add(identity);
-          if (isPreviewable(value, spec.displayMode)) lastGood.set(identity, value);
+          if (!value.trim()) lastGood.delete(identity);
+          else if (isPreviewable(value, spec.displayMode)) lastGood.set(identity, value);
           const shown = lastGood.get(identity);
           if (shown) attach(pos, shown, spec, side, `${spec.variant}:${pos}:${shown}`);
-          else if (placeholder) attach(pos, '', spec, side, `${spec.variant}:${pos}:pending`);
         };
 
         // 块级气泡排在源码块前头：挂在它后面会让预览和源码块上下颠倒。
@@ -394,17 +389,17 @@ export const milkdownMathPreview = $prose(() => {
 
         const math = state.schema.marks[mathMarkName];
         const ranges = math ? mathRanges(doc, math) : [];
-        const clicked = math ? previewKey.getState(state) : null;
+        // 踩在画出来的那枚 `$` 上也算在编辑：格子是实时语法落的，源码这时候必须还摊着。
+        const caret = math ? delimiterCaret(state) : null;
         for (const range of ranges) {
           const value = doc.textBetween(range.from, range.to);
-          if (!isRevealed(selection, range) && !isClicked(clicked, range)) {
+          if (!isMathEditing(state, selection, caret, range)) {
             decorations.push(Decoration.inline(range.from, range.to, { class: 'moki-math-rendered' }));
             attach(range.from, value, coverSpec, 1, `cover:${range.from}:${value}`);
             continue;
           }
           decorations.push(Decoration.inline(range.from, range.to, { class: 'moki-math-source' }));
-          // 查看档只翻源码，预览框等编辑档再出现。
-          if (!isInspecting(clicked)) addBubble(`math:${range.from}`, range.from, value, bubbleSpec, 1);
+          addBubble(`math:${range.from}`, range.from, value, bubbleSpec, 1);
         }
 
         // 草稿的 `$` 和正文都还是普通文字，气泡没有 mark span 可以挂靠，
@@ -423,7 +418,7 @@ export const milkdownMathPreview = $prose(() => {
             decorations.push(Decoration.inline(draft.anchor + 1, draft.close, { class: 'moki-math-source' }));
           }
           addBubble(`draft:${draft.anchor}`, draft.from + ((draft.to - draft.from) >> 1),
-            doc.textBetween(draft.from, draft.to), draftSpec, 1, draft.from === draft.to);
+            doc.textBetween(draft.from, draft.to), draftSpec, 1);
         }
 
         for (const identity of lastGood.keys()) if (!active.has(identity)) lastGood.delete(identity);

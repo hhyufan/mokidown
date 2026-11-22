@@ -469,8 +469,8 @@ test('a fresh $$ pair opens the whole symbol table before any control sequence',
   // 开界符刚落下就把整张表摊开：不认得 LaTeX 编码的人这时候最需要它。
   await expect(list).toBeVisible();
   expect(await rows.count()).toBeGreaterThan(10);
-  // 空对也给一只空预览框：摆在那儿就说清「这里即将排出一条公式」。
-  await expect(editor.locator('.moki-math-preview--inline')).toHaveCount(1);
+  // `$$` 中间还空着不预览：一只空框只会让人以为式子已经排出来了。
+  await expect(editor.locator('.moki-math-preview--inline')).toHaveCount(0);
   // 那两枚 `$` 由手势替用户补上，摆法与双击进入编辑态的那对定界符一致（淡色可见）。
   const markers = editor.locator('.moki-math-draft-marker');
   await expect(markers).toHaveCount(2);
@@ -706,26 +706,25 @@ test('delete at the other side opens the same formula instead of taking its deli
   expect(await page.evaluate(() => window.trial.markdown())).toBe('上面一行\n\n正文 $\\alpha x^2$ 结尾\n');
 });
 
-test('a formula clicked open stays quiet until backspace, arrows and typing included', async ({ page }) => {
+test('a formula clicked open shows its source with the bubble, and keeps editing inside', async ({ page }) => {
   const editor = await openEditor(page, '上面一行\n\n正文 $x^2$ 结尾');
   const bubbles = editor.locator('.moki-math-preview--inline');
   const box = await editor.locator('[data-moki-math-mark]').boundingBox();
   await page.mouse.click(box.x + box.width / 2, box.y + box.height / 2);
   await expect.poll(() => visibleMarkers(editor)).toEqual(['$', '$']);
-  // 单击只把源码翻出来看：预览浮层与补全列表都不出现，这一档不算进编辑态。
-  await expect(bubbles).toHaveCount(0);
-  // 点正文正中落成的光标在 `x` 之后（11），方向键只在源码里挪位，不该把气泡带出来。
+  // 气泡跟着源码走：点开那一下就摆着，方向键在源码里挪位也甩不掉。
+  await expect(bubbles).toHaveCount(1);
+  // 点正文正中落成的光标在 `x` 之后（11），方向键只在源码里挪位。
   await pressTo(page, 'ArrowLeft', 10);
-  await expect(bubbles).toHaveCount(0);
+  await expect(bubbles).toHaveCount(1);
   await pressTo(page, 'ArrowRight', 11);
-  await expect(bubbles).toHaveCount(0);
-  // 手滑碰一下方向键不该点亮整篇的公式；接着打字也只改这一段的源码。
+  await expect(bubbles).toHaveCount(1);
+  // 接着打字只改这一段的源码：贴在边界那一笔照样落进正文里。
   await page.keyboard.type('Q');
   expect(await page.evaluate(() => window.trial.markdown())).toContain('正文 $xQ^2$ 结尾');
-  await expect(bubbles).toHaveCount(0);
-  // 键盘上只有退格这一句「我要改它」：这一下气泡才跟上，删掉的还是刚打进去的那个字符。
-  await page.keyboard.press('Backspace');
   await expect(bubbles).toHaveCount(1);
+  // 退格删掉的还是刚打进去的那个字符，公式本身不动。
+  await page.keyboard.press('Backspace');
   expect(await page.evaluate(() => window.trial.markdown())).toBe('上面一行\n\n正文 $x^2$ 结尾\n');
 });
 
