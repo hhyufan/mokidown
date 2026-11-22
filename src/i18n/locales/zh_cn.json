@@ -210,7 +210,7 @@
   "settings.editor.pair.backtick": "行内代码与代码块",
   "settings.editor.pair.backtickDesc": "输入两个反引号后把光标放到中间。行首三个反引号后按 Enter 或确认语言，即可创建代码块。",
   "settings.editor.pair.math": "公式",
-  "settings.editor.pair.mathDesc": "成对移除公式两边的美元符号定界符，保留中间的 LaTeX 正文。行内的一枚与块级的两枚都归这一项。",
+  "settings.editor.pair.mathDesc": "输入两个美元符号后把光标放到中间，行首连打第三个即创建块级公式。成对移除公式两边的定界符，保留中间的 LaTeX 正文。",
   "editor.codeLanguageMenu": "选择代码语言",
   "editor.codeLanguagePlainText": "纯文本",
   "settings.editor.lineNumbers": "行号",
