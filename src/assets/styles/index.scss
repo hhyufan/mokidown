@@ -439,9 +439,33 @@ html[data-theme='dark'] .theme-switch-icons .theme-icon--moon {
   background: var(--hover);
 }
 
-.version-list__meta {
-  color: var(--text-sec);
+.version-list__label {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
   font-size: 12px;
+  text-align: left;
+}
+
+.version-list__rollback {
+  display: grid;
+  place-items: center;
+  flex-shrink: 0;
+  width: 14px;
+  height: 14px;
+  color: var(--accent);
+
+  .anticon {
+    font-size: 14px;
+  }
+}
+
+.version-list__meta {
+  flex-shrink: 0;
+  color: var(--text-sec);
+  font-size: 11px;
 }
 
 .version-list__empty {
