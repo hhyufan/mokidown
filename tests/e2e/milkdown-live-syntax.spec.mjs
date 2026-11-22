@@ -892,6 +892,36 @@ test('an abandoned $$ stays visible source instead of an empty formula', async (
   expect(await page.evaluate(() => window.trial.markdown())).toContain('z $$ $tail');
 });
 
+test('an abandoned block formula stays source instead of an empty render', async ({ page }) => {
+  const editor = await openEditor(page, '上面一行');
+  await editor.locator('p').first().click();
+  await page.keyboard.press('Control+End');
+  await page.keyboard.press('Enter');
+  await page.keyboard.type('$$ ');
+  // 源码块空着走开，折过去只剩一只空框，写回文件还平白留下 `$$\n\n$$` 这段没写完的语法。
+  // 与上面那条行内空对同一条规矩：没什么可折的就摊着，等用户回来接着写。
+  await page.evaluate(() => window.trial.selectTextblock(0));
+  const source = editor.locator('.md-preview__math-source--block');
+  await expect(source).toBeVisible();
+  await expect(editor.locator('.md-preview__math--block')).toHaveCount(0);
+  expect(await page.evaluate(() => window.trial.markdown())).toBe('上面一行\n\n$$\n$$\n');
+  // 只摊着一串空白的也不算写完。
+  await page.evaluate(() => window.trial.selectTextblock(1));
+  await page.keyboard.type('   ');
+  await page.evaluate(() => window.trial.selectTextblock(0));
+  await expect(source).toBeVisible();
+  await expect(editor.locator('.md-preview__math--block')).toHaveCount(0);
+  // 写上正文再走开，才轮到折成渲染态。
+  await page.evaluate(() => window.trial.selectTextblock(1));
+  await page.keyboard.press('Delete');
+  await page.keyboard.press('Delete');
+  await page.keyboard.press('Delete');
+  await page.keyboard.type('x^2');
+  await page.evaluate(() => window.trial.selectTextblock(0));
+  await expect(editor.locator('.md-preview__math--block')).toBeVisible();
+  expect(await page.evaluate(() => window.trial.markdown())).toBe('上面一行\n\n$$\nx^2\n$$\n');
+});
+
 test('horizontal arrows enter each visible marker character before crossing a line boundary', async ({
   page,
 }) => {
