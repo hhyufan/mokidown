@@ -15,7 +15,10 @@ const DEVICE_LOCAL_CONFIG_KEYS = new Set([
   'htmlPreviewPort',
   'htmlPreviewLiveReload',
   'associatedOpenMode',
-  'backgroundImage', 'backgroundImageName', 'backgroundEnabled', 'backgroundTransparency',
+  'backgroundImage',
+  'backgroundImageName',
+  'backgroundEnabled',
+  'backgroundTransparency',
   // 键位取决于本机键盘布局与外接键盘，跨设备同步会把别人机器上的手感带过来。
   'hotkeys',
   // 品牌标识属于本机外观偏好，不必跟着账号同步到其它设备。
@@ -53,6 +56,10 @@ const useConfigStore = create(
       markdownTaskCascade: true,
       markdownFolding: true,
       ...normalizeMarkdownPairSettings(),
+      indentRainbowEnabled: true,
+      renderWhitespaceEnabled: true,
+      insertSpaces: true,
+      indentRainbowStyle: 'surface',
       tabSize: 2,
       wordWrap: true,
       lineNumbers: true,
@@ -75,14 +82,15 @@ const useConfigStore = create(
       /**
        * 按单个键更新配置，并同步刷新配置时间戳。
        */
-      setConfig: (key, value, meta = {}) => set((state) => ({
-        ...state,
-        [key]: value,
-        configUpdatedAt: meta.updatedAt ?? Date.now(),
-        settingsUpdatedAt: DEVICE_LOCAL_CONFIG_KEYS.has(key)
-          ? state.settingsUpdatedAt
-          : meta.updatedAt ?? Date.now(),
-      })),
+      setConfig: (key, value, meta = {}) =>
+        set((state) => ({
+          ...state,
+          [key]: value,
+          configUpdatedAt: meta.updatedAt ?? Date.now(),
+          settingsUpdatedAt: DEVICE_LOCAL_CONFIG_KEYS.has(key)
+            ? state.settingsUpdatedAt
+            : (meta.updatedAt ?? Date.now()),
+        })),
       /**
        * 修改单个快捷键。
        *
@@ -140,7 +148,7 @@ const useConfigStore = create(
           settingsUpdatedAt: state.settingsUpdatedAt,
         }));
       },
-      
+
       loadConfig: (config, meta = {}) => {
         // 导入/回放的键位必须归一化：快照可能来自旧版本（含已下线的动作 id）
         // 或被手工改过，直接铺开会让非法组合进入键位表。同时作废探测缓存——
@@ -153,9 +161,9 @@ const useConfigStore = create(
           ...(hasHotkeys ? { hotkeys: resolveHotkeys(config.hotkeys) } : {}),
           configUpdatedAt: meta.updatedAt ?? state.configUpdatedAt ?? Date.now(),
           settingsUpdatedAt: Object.keys(config || {}).some(
-            (key) => !DEVICE_LOCAL_CONFIG_KEYS.has(key)
+            (key) => !DEVICE_LOCAL_CONFIG_KEYS.has(key),
           )
-            ? meta.updatedAt ?? Date.now()
+            ? (meta.updatedAt ?? Date.now())
             : state.settingsUpdatedAt,
         }));
       },
@@ -164,7 +172,10 @@ const useConfigStore = create(
       name: 'mokidown-config',
       // Retire the editor companion without restoring it from older local preferences.
       merge: (persisted, current) => {
-        const merged = { ...current, ...Object.fromEntries(Object.entries(persisted || {}).filter(([key]) => key in current)) };
+        const merged = {
+          ...current,
+          ...Object.fromEntries(Object.entries(persisted || {}).filter(([key]) => key in current)),
+        };
 
         if (merged.mokiDisplay === 'companion') merged.mokiDisplay = 'welcome';
         delete merged.mokiSize;
@@ -178,8 +189,8 @@ const useConfigStore = create(
         Object.assign(merged, normalizeMarkdownPairSettings(persisted || {}, current));
         return merged;
       },
-    }
-  )
+    },
+  ),
 );
 
 export default useConfigStore;

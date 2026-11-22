@@ -3,10 +3,18 @@ import * as monaco from 'monaco-editor';
 import '@/monaco-worker';
 import { getFileLanguage } from '@utils/fileLanguage';
 import { initMonacoShiki, getMonacoThemeName } from '@utils/monacoShiki';
+import { installIndentRainbow } from '@utils/monacoIndentRainbow';
 import './monaco-editor.scss';
 
 /** One read-only model per reader, independent of tabs, plugins and editor buffers. */
-export default function ReaderSourceEditor({ document: info, content, dark, config, onReady, onPositionChange }) {
+export default function ReaderSourceEditor({
+  document: info,
+  content,
+  dark,
+  config,
+  onReady,
+  onPositionChange,
+}) {
   const container = useRef(null);
   const instance = useRef(null);
   const latest = useRef(null);
@@ -18,6 +26,7 @@ export default function ReaderSourceEditor({ document: info, content, dark, conf
     fontSize: value.config.fontSize || 14,
     lineHeight: value.config.lineHeight || 24,
     fontFamily: `'${value.config.fontFamily || 'JetBrains Mono'}', Consolas, monospace`,
+    renderWhitespace: 'boundary',
     tabSize: value.config.tabSize || 2,
     wordWrap: value.config.wordWrap ? 'on' : 'off',
     lineNumbers: value.config.lineNumbers === false ? 'off' : 'on',
@@ -47,12 +56,18 @@ export default function ReaderSourceEditor({ document: info, content, dark, conf
         }
         model = monaco.editor.createModel(value.content, language);
         editor = monaco.editor.create(container.current, {
-          ...optionBuilder.current(value), model, automaticLayout: true,
-          readOnly: true, domReadOnly: true, scrollBeyondLastLine: false,
-          padding: { top: 12, bottom: 12 }, accessibilitySupport: 'auto',
+          ...optionBuilder.current(value),
+          model,
+          automaticLayout: true,
+          readOnly: true,
+          domReadOnly: true,
+          scrollBeyondLastLine: false,
+          padding: { top: 12, bottom: 12 },
+          accessibilitySupport: 'auto',
           ariaLabel: value.info.name,
         });
         instance.current = editor;
+        const stopIndentRainbow = installIndentRainbow(editor, monaco);
         cursor = editor.onDidChangeCursorPosition(({ position }) => {
           latest.current.onPositionChange(position);
         });
@@ -60,7 +75,10 @@ export default function ReaderSourceEditor({ document: info, content, dark, conf
         editor.render(true);
         latest.current.onReady();
       } catch (failure) {
-        if (!cancelled) { setError(failure.message || String(failure)); latest.current.onReady(); }
+        if (!cancelled) {
+          setError(failure.message || String(failure));
+          latest.current.onReady();
+        }
       }
     };
     void mount();
@@ -68,6 +86,7 @@ export default function ReaderSourceEditor({ document: info, content, dark, conf
       cancelled = true;
       instance.current = null;
       cursor?.dispose();
+      stopIndentRainbow?.();
       editor?.dispose();
       model?.dispose();
     };
@@ -82,8 +101,14 @@ export default function ReaderSourceEditor({ document: info, content, dark, conf
     monaco.editor.setTheme(getMonacoThemeName(dark));
   }, [content, dark, config]);
 
-  return <div className="reader__source-editor">
-    {error && <div className="reader__message" role="alert">{error}</div>}
-    <div ref={container} className="monaco-editor-container" />
-  </div>;
+  return (
+    <div className="reader__source-editor">
+      {error && (
+        <div className="reader__message" role="alert">
+          {error}
+        </div>
+      )}
+      <div ref={container} className="monaco-editor-container" />
+    </div>
+  );
 }

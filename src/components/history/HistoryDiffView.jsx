@@ -5,6 +5,7 @@ import { CheckOutlined, CloseOutlined, HistoryOutlined } from '@ant-design/icons
 import useHistoryStore, { isMarkdownComparison } from '@store/useHistoryStore';
 import useEditorStore from '@store/useEditorStore';
 import useThemeStore from '@store/useThemeStore';
+import { installIndentRainbow } from '@utils/monacoIndentRainbow';
 import useConfigStore from '@store/useConfigStore';
 import useNotificationStore from '@store/useNotificationStore';
 import { useFileManager } from '@hooks/useFileManager';
@@ -150,6 +151,8 @@ function MonacoHistoryDiff({
           lineNumbers: 'on',
           wordWrap: 'on',
           diffWordWrap: 'on',
+          renderWhitespace: 'boundary',
+          renderWhitespace: 'boundary',
           tabSize: props.tabSize,
           fontSize: props.fontSize,
           fontFamily: props.mono,
@@ -176,6 +179,12 @@ function MonacoHistoryDiff({
         modifiedModelRef.current = modifiedModel;
         const originalEditor = diff.getOriginalEditor(),
           modifiedEditor = diff.getModifiedEditor();
+        listeners.push({
+          dispose: installIndentRainbow(originalEditor, monaco),
+        });
+        listeners.push({
+          dispose: installIndentRainbow(modifiedEditor, monaco),
+        });
         const arrows = modifiedEditor.onDidScrollChange
           ? mountHistorySourceArrows(containerRef.current, modifiedEditor)
           : null;
