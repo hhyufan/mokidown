@@ -1139,6 +1139,49 @@ test('paired deletion removes one emphasis layer, keeps code text and supports u
   await expect(editor.locator('p').nth(2)).toHaveText('outer [inside]');
 });
 
+// 草稿的两枚 `$` 是真字符（折叠之前摊在文档里的那对），所以它与星号那类标记同一条规矩：
+// 删掉一枚，另一枚跟着一起走，中间的 LaTeX 正文留在句子里。两边都算，与光标从哪边贴上
+// 去无关。「公式」这一项关掉之后退回一枚一枚删。
+test('deleting one dollar sign of a formula draft takes the pair and keeps the body', async ({
+  page,
+}) => {
+  const draft = async () => {
+    const editor = await openEditor(page);
+    await editor.click();
+    await page.keyboard.type('正文 $$x^2');
+    // 手势补出的收尾那枚此刻还贴在光标右边：整对 `$` 摊在文档里，等着删。
+    expect(await page.evaluate(() => window.trial.markdown())).toBe('正文 $x^2$\n');
+    return editor;
+  };
+  const caret = (offset) =>
+    page.evaluate((position) => {
+      window.trial.dispatch((state) =>
+        state.tr.setSelection(state.selection.constructor.create(state.doc, position)),
+      );
+    }, offset);
+
+  await draft();
+  await page.keyboard.press('Delete');
+  expect(await page.evaluate(() => window.trial.markdown())).toBe('正文 x^2\n');
+
+  await draft();
+  await caret(5);
+  await page.keyboard.press('Backspace');
+  expect(await page.evaluate(() => window.trial.markdown())).toBe('正文 x^2\n');
+
+  await page.evaluate(async () => {
+    const { default: config } = await import('/src/store/useConfigStore.js');
+    const { normalizeMarkdownPairs } = await import('/src/utils/markdownPairs.js');
+    config.getState().setConfig(
+      'markdownSmartPairs',
+      normalizeMarkdownPairs().filter((symbol) => symbol !== '$'),
+    );
+  });
+  await draft();
+  await page.keyboard.press('Delete');
+  expect(await page.evaluate(() => window.trial.markdown())).toBe('正文 $x^2\n');
+});
+
 for (const [markup, selector] of [
   ['**abcdef**', 'strong'],
   ['`abcdef`', 'code'],

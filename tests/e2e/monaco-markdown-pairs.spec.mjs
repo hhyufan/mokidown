@@ -53,8 +53,19 @@ test('Monaco Markdown shares paired deletion, the code fence shortcut and the op
   await page.keyboard.type('*');
   await expect.poll(value).toBe('****');
   expect(await page.evaluate(() => window.markdownPairsTrial.editor().getPosition())).toMatchObject({ lineNumber: 1, column: 3 });
-  await page.keyboard.type('dasdas** plain');
-  await expect.poll(value).toBe('**dasdas** plain');
+  await page.keyboard.type('dasdas');
+  await expect.poll(value).toBe('**dasdas**');
+  // 公式那一对 `$` 走同一条规矩：删掉一枚，另一枚跟着走，中间的 LaTeX 正文留下。
+  await page.evaluate(() => {
+    const editor = window.markdownPairsTrial.editor();
+    editor.setValue('$\\alpha$'); editor.setPosition({ lineNumber: 1, column: 9 }); editor.focus();
+  });
+  await page.keyboard.press('Backspace');
+  await expect.poll(value).toBe('\\alpha');
+  await page.evaluate(() => {
+    const editor = window.markdownPairsTrial.editor();
+    editor.setValue(''); editor.setPosition({ lineNumber: 1, column: 1 });
+  });
   await page.evaluate(() => {
     window.markdownPairsTrial.config.getState().setConfig('markdownSmartPairs', ['(']);
     const editor = window.markdownPairsTrial.editor();
