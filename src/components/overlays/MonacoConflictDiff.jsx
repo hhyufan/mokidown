@@ -3,6 +3,7 @@ import * as monaco from 'monaco-editor';
 import '@/monaco-worker';
 import { getFileLanguage } from '@utils/fileLanguage';
 import { initMonacoShiki, isMonacoShikiReady, getMonacoThemeName } from '@utils/monacoShiki';
+import { installIndentRainbow } from '@utils/monacoIndentRainbow';
 
 function countLines(content = '') {
   if (!content) return 1;
@@ -25,7 +26,8 @@ function countLines(content = '') {
  * @param {number} props.fontSize 编辑器字体大小。
  * @param {string} props.fontFamily 编辑器字体族。
  * @param {number} props.lineHeight 编辑器行高。
- * @param {number} props.tabSize 制表符宽度。
+ * @param {number} props.renderWhitespace: 'boundary',
+        tabSize 制表符宽度。
  */
 export default function MonacoConflictDiff({
   original,
@@ -42,6 +44,7 @@ export default function MonacoConflictDiff({
   const wrapperRef = useRef(null);
   const containerRef = useRef(null);
   const diffEditorRef = useRef(null);
+  const rainbowDisposersRef = useRef([]);
   const originalModelRef = useRef(null);
   const modifiedModelRef = useRef(null);
   const [highlighterReady, setHighlighterReady] = useState(isMonacoShikiReady());
@@ -58,7 +61,17 @@ export default function MonacoConflictDiff({
     [fontFamily],
   );
   const latestRef = useRef(null);
-  latestRef.current = { original, modified, language, theme, lineNumbersMinChars, tabSize, fontSize, monacoFontFamily, lineHeight };
+  latestRef.current = {
+    original,
+    modified,
+    language,
+    theme,
+    lineNumbersMinChars,
+    tabSize,
+    fontSize,
+    monacoFontFamily,
+    lineHeight,
+  };
 
   useEffect(() => {
     if (!containerRef.current) return undefined;
@@ -66,7 +79,17 @@ export default function MonacoConflictDiff({
     // StrictMode replays mount effects. Do not start worker diffs for that
     // immediately disposed instance, whose models would vanish mid-request.
     const frame = requestAnimationFrame(() => {
-      const { original, modified, language, theme, lineNumbersMinChars, tabSize, fontSize, monacoFontFamily, lineHeight } = latestRef.current;
+      const {
+        original,
+        modified,
+        language,
+        theme,
+        lineNumbersMinChars,
+        tabSize,
+        fontSize,
+        monacoFontFamily,
+        lineHeight,
+      } = latestRef.current;
       const diffEditor = monaco.editor.createDiffEditor(containerRef.current, {
         theme: getMonacoThemeName(theme === 'dark'),
         automaticLayout: true,
@@ -90,6 +113,7 @@ export default function MonacoConflictDiff({
         wordWrap: 'on',
         diffWordWrap: 'on',
         wrappingIndent: 'same',
+        renderWhitespace: 'boundary',
         tabSize,
         fontSize,
         fontFamily: monacoFontFamily,
@@ -118,6 +142,10 @@ export default function MonacoConflictDiff({
       });
 
       diffEditorRef.current = diffEditor;
+      rainbowDisposersRef.current = [
+        installIndentRainbow(diffEditor.getOriginalEditor(), monaco),
+        installIndentRainbow(diffEditor.getModifiedEditor(), monaco),
+      ];
       originalModelRef.current = originalModel;
       modifiedModelRef.current = modifiedModel;
       setEditorReady(true);
@@ -132,6 +160,8 @@ export default function MonacoConflictDiff({
     return () => {
       disposed = true;
       cancelAnimationFrame(frame);
+      for (const dispose of rainbowDisposersRef.current) dispose();
+      rainbowDisposersRef.current = [];
       diffEditorRef.current?.dispose();
       originalModelRef.current?.dispose();
       modifiedModelRef.current?.dispose();
@@ -166,7 +196,9 @@ export default function MonacoConflictDiff({
       );
     };
 
-    const schedule = () => { if (frameId == null) frameId = requestAnimationFrame(syncPaneWidths); };
+    const schedule = () => {
+      if (frameId == null) frameId = requestAnimationFrame(syncPaneWidths);
+    };
     schedule();
     const observer = new ResizeObserver(schedule);
     observer.observe(wrapperRef.current);
@@ -239,4 +271,3 @@ export default function MonacoConflictDiff({
     </div>
   );
 }
-

@@ -17,6 +17,7 @@ jobs:
       - run: npm ci --legacy-peer-deps
       - run: npm run test
       - run: npm run lint
+      - run: npm run check:chinese
       - run: npm run format:check
       - run: npm run version:sync
       - run: git diff --exit-code -- package.json package-lock.json src-tauri/Cargo.toml

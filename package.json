@@ -54,7 +54,8 @@
     "android:build": "node scripts/android.mjs",
     "android:build:release": "node scripts/android.mjs --release",
     "ci": "npm run test && npm run lint && npm run format:check && npm run version:sync && npm run build && npm run check:bundle",
-    "ci:full": "npm run ci && npm run installer:build && npm run check:installer-bundle"
+    "ci:full": "npm run ci && npm run installer:build && npm run check:installer-bundle",
+    "check:chinese": "node scripts/check-hardcoded-chinese.mjs"
   },
   "dependencies": {
     "@ant-design/icons": "^5.2.6",
