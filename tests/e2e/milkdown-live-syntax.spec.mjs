@@ -460,6 +460,77 @@ test('$$ away from the line start stays an inline draft, not a block', async ({ 
   expect(await page.evaluate(() => window.trial.state().parent)).toBe('math_source_block');
 });
 
+test('three dollars at the line start open the block formula', async ({ page }) => {
+  const editor = await openEditor(page);
+  await editor.click();
+  await page.keyboard.type('$$');
+  // 第三下不走「把光标递到定界符外面」那条路：行首一个独占整段的空对说的是「这条公式要摆在
+  // 正文之外」，与 `$$ ` 那一下同一个去处——空的源码块，光标落在里面接着写。
+  await page.keyboard.type('$');
+  expect(await page.evaluate(() => window.trial.state().parent)).toBe('math_source_block');
+  expect(await page.evaluate(() => window.trial.markdown())).toBe('$$\n$$\n');
+  await expect(editor.locator('.moki-math-completion')).toHaveCount(0);
+  await page.keyboard.type('x^2');
+  expect(await page.evaluate(() => window.trial.markdown())).toBe('$$\nx^2\n$$\n');
+  // 行中还挂着别的字就不算块级入口：第三下仍是「这条行内公式写完了」，光标挪到定界符外面，
+  // 那两枚照旧摊着等用户接着写。
+  const mid = await openEditor(page);
+  await mid.click();
+  await page.keyboard.type('正文 $$$');
+  expect(await page.evaluate(() => window.trial.state().parent)).toBe('paragraph');
+  expect(await page.evaluate(() => window.trial.markdown())).toBe('正文 $$\n');
+  // 贴着数字的 `$` 是价钱符号，连写几枚都不开公式。
+  const price = await openEditor(page);
+  await price.click();
+  await page.keyboard.type('100$$$');
+  expect(await page.evaluate(() => window.trial.markdown())).toBe('100$$$\n');
+});
+
+test('the formula row gates the dollar pair gesture along with its deletion', async ({ page }) => {
+  const setFormula = (enabled) =>
+    page.evaluate(async (enabled) => {
+      const { default: config } = await import('/src/store/useConfigStore.js');
+      const { normalizeMarkdownPairs } = await import('/src/utils/markdownPairs.js');
+      const pairs = normalizeMarkdownPairs();
+      config.getState().setConfig(
+        'markdownSmartPairs',
+        enabled ? pairs : pairs.filter((symbol) => symbol !== '$'),
+      );
+    }, enabled);
+  const caret = () => page.evaluate(() => window.trial.state().selection.anchor);
+
+  // 开着才有成对手势：两下 `$` 把光标放进中间（那一格是段落里第 2 个位置），第三下升成块级。
+  const on = await openEditor(page);
+  await setFormula(true);
+  await on.click();
+  await page.keyboard.type('$$');
+  expect(await caret()).toBe(2);
+  await expect(on.locator('.moki-math-draft-marker')).toHaveCount(2);
+  await page.keyboard.type('$');
+  expect(await page.evaluate(() => window.trial.state().parent)).toBe('math_source_block');
+
+  // 关掉之后 `$` 只是普通字符：光标不跳、第三下不开块级，空格也凑不出空对，`$$ ` 那条
+  // 输入规则要的「收尾那枚在光标右边」就不成立了。
+  const off = await openEditor(page);
+  await setFormula(false);
+  await off.click();
+  await page.keyboard.type('$$');
+  expect(await caret()).toBe(3);
+  await expect(off.locator('.moki-math-draft-marker')).toHaveCount(0);
+  await page.keyboard.type('$');
+  expect(await page.evaluate(() => window.trial.state().parent)).toBe('paragraph');
+  expect(await page.evaluate(() => window.trial.markdown())).toBe('$$$\n');
+  await page.keyboard.press('Space');
+  expect(await page.evaluate(() => window.trial.state().parent)).toBe('paragraph');
+  // 收尾即折不归这项管：`$x^2$` 敲完照样是公式，那是预览判定，不是配对补全。
+  const typed = await openEditor(page);
+  await setFormula(false);
+  await typed.click();
+  await page.keyboard.type('$x^2$');
+  expect(await page.evaluate(() => window.trial.markdown())).toBe('$x^2$\n');
+  await expect(typed.locator('[data-moki-math-mark]')).toHaveCount(1);
+});
+
 test('a fresh $$ pair opens the whole symbol table before any control sequence', async ({ page }) => {
   const editor = await openEditor(page);
   const list = page.locator('.moki-math-completion');
@@ -1169,6 +1240,9 @@ test('deleting one dollar sign of a formula draft takes the pair and keeps the b
   await page.keyboard.press('Backspace');
   expect(await page.evaluate(() => window.trial.markdown())).toBe('正文 x^2\n');
 
+  // 这一项关掉之后成对删除没了。草稿还是趁开着的时候用手势摊出来，紧接着才关掉这一项：
+  // 光标没挪，那对字面 `$` 就还摊在句子里，等这一下删除。
+  await draft();
   await page.evaluate(async () => {
     const { default: config } = await import('/src/store/useConfigStore.js');
     const { normalizeMarkdownPairs } = await import('/src/utils/markdownPairs.js');
@@ -1177,7 +1251,6 @@ test('deleting one dollar sign of a formula draft takes the pair and keeps the b
       normalizeMarkdownPairs().filter((symbol) => symbol !== '$'),
     );
   });
-  await draft();
   await page.keyboard.press('Delete');
   expect(await page.evaluate(() => window.trial.markdown())).toBe('正文 $x^2\n');
 });

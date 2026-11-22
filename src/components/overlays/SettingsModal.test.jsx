@@ -119,9 +119,10 @@ it('shows named Markdown syntax options and changes each smart pair independentl
     const math = screen.getByRole('checkbox', { name: '公式' });
     const master = screen.getByRole('switch', { name: 'Markdown 智能配对' });
     expect(backtick).toBeChecked();
-    // 公式那一对 `$` 与星号同一条规矩：删一枚带走另一枚，LaTeX 正文留下。
+    // 「公式」这一项管三件事：两下把光标放进中间、行首第三下开块级、删一枚带走另一枚。
     expect(math).toBeChecked();
-    expect(math).toHaveAccessibleDescription(/成对移除公式两边的美元符号定界符/);
+    expect(math).toHaveAccessibleDescription(/行首连打第三个即创建块级公式/);
+    expect(math).toHaveAccessibleDescription(/成对移除公式两边的定界符/);
     expect(backtick).toHaveAccessibleDescription(/按 Enter 或确认语言/);
     fireEvent.click(backtick);
     expect(backtick).not.toBeChecked();

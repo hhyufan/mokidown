@@ -781,12 +781,35 @@ function typeEscapeDollar(view, $pos, value, text) {
   return true;
 }
 
+// 行首连打三下 `$` 是块级公式的成对手势，与 `*` 两下成斜体、第三下升成粗体同一条路子。
+// 判据与 `$$ ` 那条输入规则对齐：空对独占整段、光标正踩在收尾那枚上，才把整段换成可编辑
+// 的公式源码块。行中还挂着别的字（`正文 $|$`）时，第三下说的仍是「这条行内公式写完了」，
+// 照旧只把光标递到定界符外面。
+function openMathBlockPair(view, $pos, value, draft) {
+  if (
+    !draft ||
+    draft.anchor ||
+    draft.from !== draft.to ||
+    draft.close !== $pos.parentOffset ||
+    draft.close !== value.length - 1
+  )
+    return false;
+  const { state } = view;
+  const type = state.schema.nodes.math_source_block;
+  if (!type || !$pos.node(-1).canReplaceWith($pos.index(-1), $pos.indexAfter(-1), type))
+    return false;
+  const from = $pos.before();
+  const tr = closeHistory(state.tr).replaceWith(from, $pos.after(), type.create());
+  view.dispatch(tr.setSelection(TextSelection.create(tr.doc, from + 1)).scrollIntoView());
+  return true;
+}
+
 // 打字判定只看向刚敲下的这个字符：`$` 要么收尾已有公式，要么把之前打下的字面 `$`
 // 连同中间的正文一起折成 math mark，两个定界符都不留在文档里；成对手势打出的那对 `$`
 // 先以字面文本摊着（见 mathDraftRange），光标离开这一段才折。
 // 判据照抄 pendingMarkers 对 `$` 的保护（数字开头是价格、转义的是正文），
 // 让打字看到的样子和折叠的结果一致。
-function typeDollar(view, $pos, value, text) {
+function typeDollar(view, $pos, value, text, preference) {
   if (text !== '$') return false;
   const { state } = view;
   const type = state.schema.marks.math;
@@ -811,9 +834,14 @@ function typeDollar(view, $pos, value, text) {
   }
   if (marks.some((mark) => mark.type.spec.code) || right.some((mark) => mark.type.spec.code)) return false;
   const offset = $pos.parentOffset;
+  // 「公式」这一项管成对手势那两下：补出右半截把光标放进中间，以及行首第三下升级成块级
+  // 公式。关掉之后 `$` 就是一枚普通字符，`$$ ` 也凑不出空对，块级入口自然跟着关。
+  // 已经写好的 `$x^2$` 收尾即折不归这项——那是公式预览的活，不是配对补全。
+  const paired = markdownPairEnabled(preference, '$');
   // 贴在草稿的收尾 `$` 前面再打 `$`，是老手感里「$$x$$ 写完了」的那一下：这一笔不吃正文
   // 也不另开一对，只把光标递到定界符外面。光标已经离开那一段，预览插件紧接着折成公式。
   const draft = mathDraftRange(value, offset);
+  if (paired && openMathBlockPair(view, $pos, value, draft)) return true;
   const atClose =
     value[offset] === '$' &&
     (draft?.close === offset ||
@@ -830,6 +858,7 @@ function typeDollar(view, $pos, value, text) {
   // 与 `**` 同一套手感——紧接着打的字才算公式正文，那两枚定界符由预览插件染透明、
   // 光标一走就折掉。连写的第三枚、贴着字母数字的那一枚都不算开界，与 mathDraftRange 同源。
   if (
+    paired &&
     value[offset - 1] === '$' &&
     value[offset - 2] !== '$' &&
     !/[^\s]/.test(value[offset] || '') &&
@@ -952,7 +981,7 @@ function handleSmartTextInput(view, from, to, text) {
     return true;
   if (markdownPairEnabled(preference, '*') && typeAsterisk(view, $pos, value, text)) return true;
   if (typeEscapeDollar(view, $pos, value, text)) return true;
-  if (typeDollar(view, $pos, value, text)) return true;
+  if (typeDollar(view, $pos, value, text, preference)) return true;
   if (completeInlinePair(view, $pos, value, text)) return true;
   // Explicitly exiting an inline mark takes precedence over DOM mark inheritance.
   if (
