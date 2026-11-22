@@ -7,14 +7,27 @@
 import { lazy, Suspense, useEffect, useState, useCallback, useMemo, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
 import { listen } from '@tauri-apps/api/event';
-import { appWindow, getCliArgs, onFileChanged, onOpenPaths, historyCapture, isSafUri, isWebPath, startFileWatching } from '@utils/tauriApi';
+import {
+  appWindow,
+  getCliArgs,
+  onFileChanged,
+  onOpenPaths,
+  historyCapture,
+  isSafUri,
+  isWebPath,
+  startFileWatching,
+} from '@utils/tauriApi';
 import { isImeComposing } from '@utils/keyboard';
 import { beginWindowDrag, isWindowDragExcluded } from '@utils/windowDrag';
 import { rememberDiskBaseline } from '@/services/localFileGuard';
 import { prepareReaderDragPreview, receiveReaderDocument } from '@/services/readerWindows';
 import { installReaderFileDrag } from '@/services/readerFileDrag';
 import { invoke } from '@utils/tauriInvoke';
-import { createFileChangeObserver, restoreExternalDisk, setLocalFileComposing } from '@/services/localFileOperations';
+import {
+  createFileChangeObserver,
+  restoreExternalDisk,
+  setLocalFileComposing,
+} from '@/services/localFileOperations';
 import useThemeStore from '@store/useThemeStore';
 import useEditorStore from '@store/useEditorStore';
 import { flushEditorBuffer, getBuffer } from '@utils/editorBuffer';
@@ -34,7 +47,11 @@ import { getBackgroundTransparency } from '@utils/backgroundImage';
 import { disableNativeContextMenu } from '@utils/nativeContextMenu';
 import { createFullscreenController } from '@utils/windowFullscreen';
 
-import { restoreEditorSession, startEditorSessionTracking, flushEditorSession } from '@/services/editorSession';
+import {
+  restoreEditorSession,
+  startEditorSessionTracking,
+  flushEditorSession,
+} from '@/services/editorSession';
 import {
   discardRecoverySnapshot,
   finishRecoveryReview,
@@ -89,7 +106,12 @@ const fullscreenController = createFullscreenController(appWindow);
  * @returns {boolean} 是否属于支持的 Markdown 关联文件。
  */
 function isAssociatedMarkdownPath(path) {
-  const ext = String(path || '').split(/[\\/]/).pop()?.split('.').pop()?.toLowerCase();
+  const ext = String(path || '')
+    .split(/[\\/]/)
+    .pop()
+    ?.split('.')
+    .pop()
+    ?.toLowerCase();
   return ASSOCIATED_MARKDOWN_EXTENSIONS.has(ext);
 }
 
@@ -101,9 +123,13 @@ function isAssociatedMarkdownPath(path) {
  */
 function App({ skipCliArgs = false }) {
   useEffect(() => {
-    void prepareReaderDragPreview().catch((error) => console.error('[reader] Could not prepare drag preview:', error));
+    void prepareReaderDragPreview().catch((error) =>
+      console.error('[reader] Could not prepare drag preview:', error),
+    );
   }, []);
-  useEffect(() => { window.__mokiRuntimeLogs?.ready(); }, []);
+  useEffect(() => {
+    window.__mokiRuntimeLogs?.ready();
+  }, []);
   useEffect(() => disableNativeContextMenu(), []);
   const { t } = useTranslation();
   const initTheme = useThemeStore((s) => s.initTheme);
@@ -116,14 +142,24 @@ function App({ skipCliArgs = false }) {
   const activeTabId = useEditorStore((s) => s.activeTabId);
 
   const autoSave = useConfigStore((s) => s.autoSave);
-  
+
   const backgroundEnabled = useConfigStore((s) => s.backgroundEnabled);
   const backgroundTransparency = useConfigStore((s) => s.backgroundTransparency);
   const theme = useThemeStore((s) => s.theme);
+  const indentRainbowEnabled = useConfigStore((s) => s.indentRainbowEnabled);
+  const indentRainbowStyle = useConfigStore((s) => s.indentRainbowStyle);
+  useEffect(() => {
+    document.documentElement.dataset.indentRainbow = indentRainbowEnabled
+      ? indentRainbowStyle || 'surface'
+      : 'off';
+  }, [indentRainbowEnabled, indentRainbowStyle]);
   const { url: backgroundUrl } = useBackgroundImage();
   const hasBackground = backgroundEnabled && Boolean(backgroundUrl);
-  useBackgroundSurfaces({ enabled: hasBackground, imageUrl: backgroundUrl,
-    opacity: (100 - getBackgroundTransparency(backgroundTransparency, theme)) / 100 });
+  useBackgroundSurfaces({
+    enabled: hasBackground,
+    imageUrl: backgroundUrl,
+    opacity: (100 - getBackgroundTransparency(backgroundTransparency, theme)) / 100,
+  });
 
   const [searchOpen, setSearchOpen] = useState(false);
   const openSearch = useCallback(() => setSearchOpen(true), []);
@@ -152,7 +188,10 @@ function App({ skipCliArgs = false }) {
     const subscription = listen('moki:workspace-enter', () => {
       if (!disposed) setCrtBoot(true);
     });
-    return () => { disposed = true; subscription.then((unlisten) => unlisten()).catch(() => {}); };
+    return () => {
+      disposed = true;
+      subscription.then((unlisten) => unlisten()).catch(() => {});
+    };
   }, []);
   const lastDragPositionRef = useRef(null);
   const allowWindowCloseRef = useRef(false);
@@ -179,9 +218,13 @@ function App({ skipCliArgs = false }) {
     [autoSave, tabs],
   );
   const promptedUnsavedTabs = useMemo(
-    () => pendingCloseTabIds
-      ? tabs.filter((tab) => pendingCloseTabIds.includes(tab.id) && tab.modified && (!autoSave || !tab.path))
-      : unsavedTabs,
+    () =>
+      pendingCloseTabIds
+        ? tabs.filter(
+            (tab) =>
+              pendingCloseTabIds.includes(tab.id) && tab.modified && (!autoSave || !tab.path),
+          )
+        : unsavedTabs,
     [autoSave, pendingCloseTabIds, tabs, unsavedTabs],
   );
 
@@ -191,30 +234,41 @@ function App({ skipCliArgs = false }) {
    * @param {Array<object>} [pendingTabs=unsavedTabs] 需要参与关闭确认的未保存标签集合。
    * @param {string[]|null} [tabIds=null] 待关闭标签；null 表示关闭窗口。
    */
-  const openUnsavedClosePrompt = useCallback((pendingTabs = unsavedTabs, tabIds = null) => {
-    savedCloseTabIds.current.clear();
-    setSelectedUnsavedTabIds(pendingTabs.map((tab) => tab.id));
-    setPendingCloseTabIds(tabIds);
-    setUnsavedPromptOpen(true);
-  }, [unsavedTabs]);
+  const openUnsavedClosePrompt = useCallback(
+    (pendingTabs = unsavedTabs, tabIds = null) => {
+      savedCloseTabIds.current.clear();
+      setSelectedUnsavedTabIds(pendingTabs.map((tab) => tab.id));
+      setPendingCloseTabIds(tabIds);
+      setUnsavedPromptOpen(true);
+    },
+    [unsavedTabs],
+  );
 
   /**
    * 请求关闭标签；关闭自动保存时，脏标签必须先由用户确认。
    *
    * @param {string[]} tabIds 目标标签 id。
    */
-  const requestTabsClose = useCallback((tabIds) => {
-    const editor = useEditorStore.getState();
-    if (tabIds.includes(editor.activeTabId)) flushEditorBuffer(editor.activeTabId);
-    const targets = useEditorStore.getState().tabRenderList.filter((item) => tabIds.includes(item.id));
-    if (!targets.length) return;
-    const dirty = targets.filter((tab) => tab.modified && (!autoSave || !tab.path));
-    if (dirty.length) {
-      openUnsavedClosePrompt(dirty, targets.map(({ id }) => id));
-      return;
-    }
-    closeTabs(targets.map(({ id }) => id));
-  }, [autoSave, closeTabs, openUnsavedClosePrompt]);
+  const requestTabsClose = useCallback(
+    (tabIds) => {
+      const editor = useEditorStore.getState();
+      if (tabIds.includes(editor.activeTabId)) flushEditorBuffer(editor.activeTabId);
+      const targets = useEditorStore
+        .getState()
+        .tabRenderList.filter((item) => tabIds.includes(item.id));
+      if (!targets.length) return;
+      const dirty = targets.filter((tab) => tab.modified && (!autoSave || !tab.path));
+      if (dirty.length) {
+        openUnsavedClosePrompt(
+          dirty,
+          targets.map(({ id }) => id),
+        );
+        return;
+      }
+      closeTabs(targets.map(({ id }) => id));
+    },
+    [autoSave, closeTabs, openUnsavedClosePrompt],
+  );
   const requestTabClose = useCallback((tabId) => requestTabsClose([tabId]), [requestTabsClose]);
 
   useEffect(() => {
@@ -231,7 +285,10 @@ function App({ skipCliArgs = false }) {
   useEffect(() => {
     if (isAndroid) return undefined;
     let composing = null;
-    const compositionStart = (event) => { composing = event.target; setLocalFileComposing(composing); };
+    const compositionStart = (event) => {
+      composing = event.target;
+      setLocalFileComposing(composing);
+    };
     const compositionEnd = (event) => {
       if (event.target !== composing) return;
       composing = null;
@@ -240,7 +297,9 @@ function App({ skipCliArgs = false }) {
     document.addEventListener('compositionstart', compositionStart, true);
     document.addEventListener('compositionend', compositionEnd, true);
     document.addEventListener('focusout', compositionEnd, true);
-    const observer = createFileChangeObserver({ isComposing: () => Boolean(composing?.isConnected) });
+    const observer = createFileChangeObserver({
+      isComposing: () => Boolean(composing?.isConnected),
+    });
     const checkActiveFile = () => {
       if (!window.__TAURI_INTERNALS__) return;
       const path = useEditorStore.getState().getActiveTab()?.path;
@@ -273,7 +332,13 @@ function App({ skipCliArgs = false }) {
     const timer = setInterval(() => {
       const { activeTabId, tabs } = useEditorStore.getState();
       const tab = tabs.find((item) => item.id === activeTabId);
-      if (!tab || !tab.path || /^[a-z][a-z\d+.-]*:\/\//i.test(tab.path) || tab.path.startsWith('content://')) return;
+      if (
+        !tab ||
+        !tab.path ||
+        /^[a-z][a-z\d+.-]*:\/\//i.test(tab.path) ||
+        tab.path.startsWith('content://')
+      )
+        return;
       historyCapture(tab.path, getBuffer(tab.id, tab.content || '')).catch(() => {});
     }, 60_000);
     return () => clearInterval(timer);
@@ -286,7 +351,13 @@ function App({ skipCliArgs = false }) {
     prevActiveIdRef.current = activeTabId;
     if (!prevId || prevId === activeTabId) return;
     const tab = useEditorStore.getState().tabs.find((item) => item.id === prevId);
-    if (!tab || !tab.path || /^[a-z][a-z\d+.-]*:\/\//i.test(tab.path) || tab.path.startsWith('content://')) return;
+    if (
+      !tab ||
+      !tab.path ||
+      /^[a-z][a-z\d+.-]*:\/\//i.test(tab.path) ||
+      tab.path.startsWith('content://')
+    )
+      return;
     historyCapture(tab.path, getBuffer(prevId, tab.content || '')).catch(() => {});
   }, [activeTabId]);
 
@@ -360,22 +431,33 @@ function App({ skipCliArgs = false }) {
     let disposed = false;
     let queue = Promise.resolve();
     const drain = () => {
-      queue = queue.then(async () => {
-        if (disposed) return;
-        const documents = await invoke('reader_editor_handover');
-        for (const document of documents || []) await receiveReaderDocument(document, openFileFromPath);
-      }).catch((error) => console.error('[reader] Could not return document to editor:', error));
+      queue = queue
+        .then(async () => {
+          if (disposed) return;
+          const documents = await invoke('reader_editor_handover');
+          for (const document of documents || [])
+            await receiveReaderDocument(document, openFileFromPath);
+        })
+        .catch((error) => console.error('[reader] Could not return document to editor:', error));
     };
     const subscription = listen('reader:open-in-editor', drain);
     // Register before draining: native queues requests while the editor imports or restores its session.
-    void subscription.then(drain).catch((error) => console.error('[reader] Could not register handover:', error));
-    return () => { disposed = true; void subscription.then((stop) => stop()).catch(() => {}); };
+    void subscription
+      .then(drain)
+      .catch((error) => console.error('[reader] Could not register handover:', error));
+    return () => {
+      disposed = true;
+      void subscription.then((stop) => stop()).catch(() => {});
+    };
   }, [isAndroid, openFileFromPath]);
 
   useEffect(() => {
     if (!window.__TAURI_INTERNALS__ || isAndroid) return undefined;
     const previews = ['reader:native-drag-end', 'reader:native-preview-failed'].map((name) =>
-      listen(name, (event) => window.dispatchEvent(new CustomEvent(name, { detail: event.payload }))));
+      listen(name, (event) =>
+        window.dispatchEvent(new CustomEvent(name, { detail: event.payload })),
+      ),
+    );
     const shellDrop = listen('reader:shell-file-drag-result', ({ payload }) => {
       if (payload.error) {
         useNotificationStore.getState().notify('error', t('drag.failed'), payload.error);
@@ -392,19 +474,25 @@ function App({ skipCliArgs = false }) {
         await invoke('open_reader_window', { document, x, y });
         if (document.keepSource || document.modified || !document.path) return;
         const store = useEditorStore.getState();
-        const source = store.tabs.find((tab) => tab.id === document.id || tab.path === document.path);
+        const source = store.tabs.find(
+          (tab) => tab.id === document.id || tab.path === document.path,
+        );
         if (source && !source.modified && store.getTabContent(source.id) === document.content) {
           store.closeTab(source.id);
         }
       } catch (error) {
         console.error('[reader] Could not open detached tab:', error);
         if (document.opening?.preview.token) {
-          void invoke('close_drag_preview', { token: document.opening.preview.token }).catch(() => {});
+          void invoke('close_drag_preview', { token: document.opening.preview.token }).catch(
+            () => {},
+          );
         }
       }
     });
     return () => {
-      [subscription, shellDrop, ...previews].forEach((subscription) => { void subscription.then((stop) => stop()).catch(() => {}); });
+      [subscription, shellDrop, ...previews].forEach((subscription) => {
+        void subscription.then((stop) => stop()).catch(() => {});
+      });
     };
   }, [isAndroid, loadFilesOnly, t]);
 
@@ -443,27 +531,40 @@ function App({ skipCliArgs = false }) {
    * @param {string} actionId 动作标识。
    * @returns {boolean} 是否已处理。
    */
-  const runHotkeyAction = useCallback((actionId) => {
-    const handlers = {
-      save: saveCurrentFile,
-      openFile: openFileDialog,
-      search: () => setSearchOpen(true),
-      openSettings: () => setSettingsOpen((v) => !v),
+  const runHotkeyAction = useCallback(
+    (actionId) => {
+      const handlers = {
+        save: saveCurrentFile,
+        openFile: openFileDialog,
+        search: () => setSearchOpen(true),
+        openSettings: () => setSettingsOpen((v) => !v),
+        toggleSidebar,
+        togglePreview: toggleEditPreview,
+        toggleFullscreen: () => {
+          if (!isDesktopWindow) return;
+          fullscreenController.toggle().catch(console.error);
+        },
+        closeTab: () => requestTabsClose([activeTabId]),
+        closeOtherTabs: () =>
+          requestTabsClose(tabs.filter(({ id }) => id !== activeTabId).map(({ id }) => id)),
+        closeAllTabs: () => requestTabsClose(tabs.map(({ id }) => id)),
+      };
+      const handler = handlers[actionId];
+      if (!handler) return false;
+      handler();
+      return true;
+    },
+    [
+      isDesktopWindow,
+      saveCurrentFile,
+      openFileDialog,
       toggleSidebar,
-      togglePreview: toggleEditPreview,
-      toggleFullscreen: () => {
-        if (!isDesktopWindow) return;
-        fullscreenController.toggle().catch(console.error);
-      },
-      closeTab: () => requestTabsClose([activeTabId]),
-      closeOtherTabs: () => requestTabsClose(tabs.filter(({ id }) => id !== activeTabId).map(({ id }) => id)),
-      closeAllTabs: () => requestTabsClose(tabs.map(({ id }) => id)),
-    };
-    const handler = handlers[actionId];
-    if (!handler) return false;
-    handler();
-    return true;
-  }, [isDesktopWindow, saveCurrentFile, openFileDialog, toggleSidebar, toggleEditPreview, requestTabsClose, activeTabId, tabs]);
+      toggleEditPreview,
+      requestTabsClose,
+      activeTabId,
+      tabs,
+    ],
+  );
 
   /**
    * 处理应用级快捷键。
@@ -474,32 +575,35 @@ function App({ skipCliArgs = false }) {
    *
    * @param {KeyboardEvent} e 键盘事件对象。
    */
-  const handleKeyDown = useCallback((e) => {
-    if (document.querySelector('.editor-context-menu')) return;
-    // 输入法组合期间不处理任何应用级快捷键：这一阶段 keyCode 会是 229，
-    // 并且回车、方向键都属于输入法自身，抢过来会导致中文输入彻底失效。
-    if (isImeComposing(e)) return;
+  const handleKeyDown = useCallback(
+    (e) => {
+      if (document.querySelector('.editor-context-menu')) return;
+      // 输入法组合期间不处理任何应用级快捷键：这一阶段 keyCode 会是 229，
+      // 并且回车、方向键都属于输入法自身，抢过来会导致中文输入彻底失效。
+      if (isImeComposing(e)) return;
 
-    // 「设置 → 快捷键」正在录入键位时挂起全局快捷键，避免改绑 Ctrl+S 时真的保存。
-    if (isCapturingShortcut()) return;
+      // 「设置 → 快捷键」正在录入键位时挂起全局快捷键，避免改绑 Ctrl+S 时真的保存。
+      if (isCapturingShortcut()) return;
 
-    if (e.target?.closest?.('.integrated-terminal .xterm')) return;
-    if (handleScriptShortcut(e)) return;
+      if (e.target?.closest?.('.integrated-terminal .xterm')) return;
+      if (handleScriptShortcut(e)) return;
 
-    const action = matchHotkey(e, 'app');
-    if (!action) return;
-    // F11 长按会连续触发，全屏切换只响应第一次。
-    if (action.id === 'toggleFullscreen' && e.repeat) {
-      e.preventDefault();
-      return;
-    }
-    if (runHotkeyAction(action.id)) {
-      e.preventDefault();
-      // This capture listener already handled the action. Do not deliver the
-      // same keydown to Monaco's command binding and save a second time.
-      e.stopPropagation();
-    }
-  }, [matchHotkey, runHotkeyAction]);
+      const action = matchHotkey(e, 'app');
+      if (!action) return;
+      // F11 长按会连续触发，全屏切换只响应第一次。
+      if (action.id === 'toggleFullscreen' && e.repeat) {
+        e.preventDefault();
+        return;
+      }
+      if (runHotkeyAction(action.id)) {
+        e.preventDefault();
+        // This capture listener already handled the action. Do not deliver the
+        // same keydown to Monaco's command binding and save a second time.
+        e.stopPropagation();
+      }
+    },
+    [matchHotkey, runHotkeyAction],
+  );
 
   useEffect(() => {
     const onKeyDown = (event) => {
@@ -553,17 +657,27 @@ function App({ skipCliArgs = false }) {
       await flushRecoverySnapshot().catch((error) => {
         console.warn('[App] Failed to flush recovery snapshot before close:', error);
       });
-      const shouldPrompt = !useConfigStore.getState().autoSave
-        && useEditorStore.getState().tabRenderList.some((tab) => tab.modified);
+      const shouldPrompt =
+        !useConfigStore.getState().autoSave &&
+        useEditorStore.getState().tabRenderList.some((tab) => tab.modified);
       if (shouldPrompt) {
-        openUnsavedClosePrompt(useEditorStore.getState().tabRenderList.filter((tab) => tab.modified));
+        openUnsavedClosePrompt(
+          useEditorStore.getState().tabRenderList.filter((tab) => tab.modified),
+        );
         return;
       }
       // 应用正常退出时，为当前活动文档捕获终态（等价于一次“退出编辑”）。
       const { activeTabId, tabs } = useEditorStore.getState();
       const activeTab = tabs.find((item) => item.id === activeTabId);
-      if (activeTab && activeTab.path && !/^[a-z][a-z\d+.-]*:\/\//i.test(activeTab.path) && !activeTab.path.startsWith('content://')) {
-        historyCapture(activeTab.path, getBuffer(activeTab.id, activeTab.content || '')).catch(() => {});
+      if (
+        activeTab &&
+        activeTab.path &&
+        !/^[a-z][a-z\d+.-]*:\/\//i.test(activeTab.path) &&
+        !activeTab.path.startsWith('content://')
+      ) {
+        historyCapture(activeTab.path, getBuffer(activeTab.id, activeTab.content || '')).catch(
+          () => {},
+        );
       }
       allowWindowCloseRef.current = true;
       appWindow.close();
@@ -574,19 +688,24 @@ function App({ skipCliArgs = false }) {
     };
   }, [isDesktopWindow, openUnsavedClosePrompt]);
 
-  const handleRestoreRecovery = useCallback(async (drafts) => {
-    for (const draft of drafts) {
-      const id = useEditorStore.getState().restoreRecoveredTab(draft);
-      const tab = useEditorStore.getState().tabs.find((item) => item.id === id);
-      if (!tab?.path) continue;
-      if (typeof draft.diskContent === 'string') rememberDiskBaseline(tab.path, draft.diskContent);
-      if (!isAndroid && !isSafUri(tab.path)) void startFileWatching(tab.path).catch(console.error);
-    }
-    setRecoveryDrafts([]);
-    await finishRecoveryReview().catch((error) => {
-      useNotificationStore.getState().notify('error', t('notification.error'), String(error));
-    });
-  }, [isAndroid, t]);
+  const handleRestoreRecovery = useCallback(
+    async (drafts) => {
+      for (const draft of drafts) {
+        const id = useEditorStore.getState().restoreRecoveredTab(draft);
+        const tab = useEditorStore.getState().tabs.find((item) => item.id === id);
+        if (!tab?.path) continue;
+        if (typeof draft.diskContent === 'string')
+          rememberDiskBaseline(tab.path, draft.diskContent);
+        if (!isAndroid && !isSafUri(tab.path))
+          void startFileWatching(tab.path).catch(console.error);
+      }
+      setRecoveryDrafts([]);
+      await finishRecoveryReview().catch((error) => {
+        useNotificationStore.getState().notify('error', t('notification.error'), String(error));
+      });
+    },
+    [isAndroid, t],
+  );
 
   const handleDiscardRecovery = useCallback(async () => {
     setRecoveryDrafts([]);
@@ -597,15 +716,15 @@ function App({ skipCliArgs = false }) {
 
   const handleKeepExternalEdit = useCallback(() => {
     const store = useEditorStore.getState();
-    if (!externalConflict || store.externalFileConflicts.get(externalConflict.path) !== externalConflict) return;
+    if (
+      !externalConflict ||
+      store.externalFileConflicts.get(externalConflict.path) !== externalConflict
+    )
+      return;
     if (typeof externalConflict.diskContent === 'string') {
       // Acknowledge the observed disk side. The next explicit save may replace
       // it without reopening the same conflict for duplicate watcher events.
-      rememberDiskBaseline(
-        externalConflict.path,
-        externalConflict.diskContent,
-        externalConflict,
-      );
+      rememberDiskBaseline(externalConflict.path, externalConflict.diskContent, externalConflict);
     }
     store.clearExternalFileConflict(externalConflict.path, externalConflict);
   }, [externalConflict]);
@@ -662,7 +781,14 @@ function App({ skipCliArgs = false }) {
     }
     allowWindowCloseRef.current = true;
     appWindow.close();
-  }, [closeTabs, isDesktopWindow, pendingCloseTabIds, promptedUnsavedTabs, saveTab, selectedUnsavedTabIds]);
+  }, [
+    closeTabs,
+    isDesktopWindow,
+    pendingCloseTabIds,
+    promptedUnsavedTabs,
+    saveTab,
+    selectedUnsavedTabIds,
+  ]);
 
   /**
    * 放弃未保存修改并关闭目标标签或窗口。
@@ -724,51 +850,78 @@ function App({ skipCliArgs = false }) {
   }, []);
 
   const showDropRegion = useCallback((region) => {
-    setFileDrop((previous) => previous?.kind === region?.kind && previous?.directory === region?.directory
-      && ['x', 'y', 'width', 'height'].every((key) => previous?.rect[key] === region?.rect[key]) ? previous : region);
+    setFileDrop((previous) =>
+      previous?.kind === region?.kind &&
+      previous?.directory === region?.directory &&
+      ['x', 'y', 'width', 'height'].every((key) => previous?.rect[key] === region?.rect[key])
+        ? previous
+        : region,
+    );
   }, []);
-  const resolveDropConflict = useCallback((source, path) => new Promise((resolve) => {
-    setDropConflict({ source, path, resolve });
-  }), []);
+  const resolveDropConflict = useCallback(
+    (source, path) =>
+      new Promise((resolve) => {
+        setDropConflict({ source, path, resolve });
+      }),
+    [],
+  );
   const finishDropConflict = (name) => {
     dropConflict?.resolve(name);
     setDropConflict(null);
   };
-  const handleFileDrop = useCallback((paths, region, effect) => {
-    showDropRegion(null);
-    if (!paths.length || !region) return;
-    if (region.kind === 'editor') {
-      void openDroppedPathsInEditor(paths);
-    } else {
-      transferQueue.current = transferQueue.current.catch(console.error).then(() => moveDroppedPathsToExplorer(paths, {
-        directory: region.directory, effect, resolveConflict: resolveDropConflict,
-      }));
-    }
-  }, [moveDroppedPathsToExplorer, openDroppedPathsInEditor, resolveDropConflict, showDropRegion]);
+  const handleFileDrop = useCallback(
+    (paths, region, effect) => {
+      showDropRegion(null);
+      if (!paths.length || !region) return;
+      if (region.kind === 'editor') {
+        void openDroppedPathsInEditor(paths);
+      } else {
+        transferQueue.current = transferQueue.current.catch(console.error).then(() =>
+          moveDroppedPathsToExplorer(paths, {
+            directory: region.directory,
+            effect,
+            resolveConflict: resolveDropConflict,
+          }),
+        );
+      }
+    },
+    [moveDroppedPathsToExplorer, openDroppedPathsInEditor, resolveDropConflict, showDropRegion],
+  );
 
   useEffect(() => {
     if (isAndroid) return;
     const stopInternal = installReaderFileDrag(document.body, {
       onMove: (gesture) => showDropRegion(getDropRegion(gesture)),
-      onRelease: (gesture) => handleFileDrop([gesture.id], getDropRegion(gesture), gesture.ctrlKey ? 'copy' : null),
+      onRelease: (gesture) =>
+        handleFileDrop([gesture.id], getDropRegion(gesture), gesture.ctrlKey ? 'copy' : null),
       onEnd: () => showDropRegion(null),
-      onError: (error) => useNotificationStore.getState().notify('error', t('drag.failed'), String(error)),
+      onError: (error) =>
+        useNotificationStore.getState().notify('error', t('drag.failed'), String(error)),
     });
-    const clear = () => { lastDragPositionRef.current = null; showDropRegion(null); };
+    const clear = () => {
+      lastDragPositionRef.current = null;
+      showDropRegion(null);
+    };
     if (window.__TAURI_INTERNALS__) {
       const update = ({ payload }) => {
         lastDragPositionRef.current = payload.position;
         showDropRegion(getDropRegion(payload.position, true));
       };
-      const listeners = [listen('tauri://drag-enter', update), listen('tauri://drag-over', update),
-        listen('tauri://drag-leave', clear), listen('tauri://drag-drop', ({ payload }) => {
+      const listeners = [
+        listen('tauri://drag-enter', update),
+        listen('tauri://drag-over', update),
+        listen('tauri://drag-leave', clear),
+        listen('tauri://drag-drop', ({ payload }) => {
           const region = getDropRegion(payload.position || lastDragPositionRef.current, true);
           clear();
           handleFileDrop(payload.paths || [], region);
-        })];
+        }),
+      ];
       return () => {
         stopInternal?.();
-        listeners.forEach((subscription) => void subscription.then((unlisten) => unlisten()).catch(console.error));
+        listeners.forEach(
+          (subscription) => void subscription.then((unlisten) => unlisten()).catch(console.error),
+        );
       };
     }
     const over = (event) => {
@@ -787,7 +940,13 @@ function App({ skipCliArgs = false }) {
       void openDroppedBrowserFiles(files);
     };
     const leave = (event) => {
-      if (event.clientX <= 0 || event.clientY <= 0 || event.clientX >= innerWidth || event.clientY >= innerHeight) clear();
+      if (
+        event.clientX <= 0 ||
+        event.clientY <= 0 ||
+        event.clientX >= innerWidth ||
+        event.clientY >= innerHeight
+      )
+        clear();
     };
     window.addEventListener('dragover', over);
     window.addEventListener('drop', drop);
@@ -816,9 +975,7 @@ function App({ skipCliArgs = false }) {
           isPortrait && 'app--portrait',
         )}
       >
-        <Sidebar
-          onOpenSettings={() => setSettingsOpen(true)}
-        />
+        <Sidebar onOpenSettings={() => setSettingsOpen(true)} />
         {isMobileLayout && sidebarVisible && (
           <button
             className="app__sidebar-backdrop"
@@ -835,7 +992,7 @@ function App({ skipCliArgs = false }) {
             onRequestClose={requestWindowClose}
           />
           <TabBar onRequestCloseTab={requestTabClose} onRequestCloseTabs={requestTabsClose} />
-          
+
           {externalConflict && (
             <ExternalFileConflictNotice
               key={externalConflict.path}
@@ -845,18 +1002,38 @@ function App({ skipCliArgs = false }) {
               onSaveAs={handleSaveExternalAs}
             />
           )}
-          <RuntimeErrorBoundary><EditorContent /></RuntimeErrorBoundary>
+          <RuntimeErrorBoundary>
+            <EditorContent />
+          </RuntimeErrorBoundary>
           <OutputConsole />
           <Footer />
         </div>
-        {fileDrop && <div className={`drag-overlay drag-overlay--${fileDrop.kind}`} aria-hidden="true"
-          style={{ left: fileDrop.rect.left, top: fileDrop.rect.top, width: fileDrop.rect.width, height: fileDrop.rect.height }} />}
+        {fileDrop && (
+          <div
+            className={`drag-overlay drag-overlay--${fileDrop.kind}`}
+            aria-hidden="true"
+            style={{
+              left: fileDrop.rect.left,
+              top: fileDrop.rect.top,
+              width: fileDrop.rect.width,
+              height: fileDrop.rect.height,
+            }}
+          />
+        )}
       </div>
       <Suspense fallback={null}>
-        {dropConflict && <FileDropConflict key={dropConflict.path} {...dropConflict} resolve={finishDropConflict} />}
+        {dropConflict && (
+          <FileDropConflict
+            key={dropConflict.path}
+            {...dropConflict}
+            resolve={finishDropConflict}
+          />
+        )}
         <ExtensionHost />
-        {settingsOpen && <SettingsModal open={settingsOpen} onClose={() => setSettingsOpen(false)} />}
-        
+        {settingsOpen && (
+          <SettingsModal open={settingsOpen} onClose={() => setSettingsOpen(false)} />
+        )}
+
         {unsavedPromptOpen && (
           <UnsavedChangesModal
             open={unsavedPromptOpen}
@@ -877,7 +1054,6 @@ function App({ skipCliArgs = false }) {
             onDiscard={handleDiscardRecovery}
           />
         )}
-
       </Suspense>
       <TaskList />
       <VersionList />

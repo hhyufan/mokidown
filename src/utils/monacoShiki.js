@@ -80,14 +80,57 @@ const fallbackSetTheme = (name) => runtime.setTheme(normalizeThemeName(name));
 const fallbackCreate = (element, options, overrides) =>
   runtime.create(element, { ...options, theme: normalizeThemeName(options?.theme) }, overrides);
 
+// 缩进参考线的六色循环：Monaco 的 IndentGuidesOverlay 会按层级给
+// .core-guide-indent 挂 lvl-N，取的就是主题里的 editorIndentGuideN；主题定义
+// 这六组颜色后，所有 Monaco 实例（主编辑器、冲突/历史 diff）都会自动生效。
+const LIGHT_INDENT_GUIDES = [
+  '#e06c7580',
+  '#e5a04c80',
+  '#d8c04a80',
+  '#6bbf7b80',
+  '#5aa7d880',
+  '#a97bd680',
+];
+const DARK_INDENT_GUIDES = [
+  '#ff7b7280',
+  '#ffb86c80',
+  '#f1fa8c80',
+  '#50fa7b80',
+  '#8be9fd80',
+  '#bd93f980',
+];
+const LIGHT_ACTIVE_INDENT_GUIDES = [
+  '#e06c75cc',
+  '#e5a04ccc',
+  '#d8c04acc',
+  '#6bbf7bcc',
+  '#5aa7d8cc',
+  '#a97bd6cc',
+];
+const DARK_ACTIVE_INDENT_GUIDES = [
+  '#ff7b72cc',
+  '#ffb86ccc',
+  '#f1fa8ccc',
+  '#50fa7bcc',
+  '#8be9fdcc',
+  '#bd93f9cc',
+];
+
 function themeOverrides(dark) {
   const caret = dark ? '#528bff' : '#526fff';
-  return {
+  const guides = dark ? DARK_INDENT_GUIDES : LIGHT_INDENT_GUIDES;
+  const activeGuides = dark ? DARK_ACTIVE_INDENT_GUIDES : LIGHT_ACTIVE_INDENT_GUIDES;
+  const colors = {
     'minimap.background': '#00000000',
     'editorCursor.foreground': caret,
     'editorMultiCursor.primary.foreground': caret,
     'editorMultiCursor.secondary.foreground': caret,
   };
+  for (let level = 0; level < 6; level++) {
+    colors[`editorIndentGuide.background${level + 1}`] = '#00000000';
+    colors[`editorIndentGuide.activeBackground${level + 1}`] = '#00000000';
+  }
+  return colors;
 }
 
 if (!runtime.ready) {
