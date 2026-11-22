@@ -19,7 +19,7 @@ export default function VersionList() {
     sendToPlugin(state.pluginId, {
       type: 'event',
       name: 'versionSelected',
-      payload: { id: item.id, rev: item.rev },
+      payload: { id: item.id, rev: item.rev, timestamp: item.timestamp },
     });
     if (item.content != null && state.tabId) {
       useHistoryStore.getState().setDiff({
