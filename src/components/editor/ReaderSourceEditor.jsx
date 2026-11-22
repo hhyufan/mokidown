@@ -42,6 +42,7 @@ export default function ReaderSourceEditor({
 
   useEffect(() => {
     let cancelled = false;
+    let stopIndentRainbow = null;
     let editor;
     let model;
     let cursor;
@@ -67,7 +68,7 @@ export default function ReaderSourceEditor({
           ariaLabel: value.info.name,
         });
         instance.current = editor;
-        const stopIndentRainbow = installIndentRainbow(editor, monaco);
+        stopIndentRainbow = installIndentRainbow(editor, monaco);
         cursor = editor.onDidChangeCursorPosition(({ position }) => {
           latest.current.onPositionChange(position);
         });
