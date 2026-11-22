@@ -58,7 +58,7 @@
   "sidebar.explorer.refresh": "刷新",
   "editor.menu.path": "路径操作",
   "editor.menu.copyPath": "复制路径",
-  "sidebar.explorer.openInExplorer": "在资源管理器中打开",
+  "sidebar.explorer.openInExplorer": "在文件管理器中打开",
   "sidebar.explorer.openFolder": "打开文件夹",
   "sidebar.explorer.closeFolder": "关闭文件夹",
   "sidebar.explorer.newFilePlaceholder": "文件名",
@@ -290,7 +290,7 @@
   "settings.general.externalFileDrag": "拖出文件时",
   "settings.general.externalFileDragDesc": "设置从 MokiDown 拖出文件后的默认行为。文件夹使用 Windows 拖放。",
   "settings.general.openDragWindow": "在新窗口打开",
-  "settings.general.dragToExplorer": "交给 Windows 资源管理器",
+  "settings.general.dragToExplorer": "交给文件管理器",
   "toolbar.drag": "拖动工具栏",
   "sidebar.tabs": "侧边栏标签",
   "notification.info": "提示",
@@ -1012,5 +1012,8 @@
   "history.hiddenLines_one": "已隐藏 {{count}} 行",
   "history.hiddenLines_other": "已隐藏 {{count}} 行",
   "history.expandHiddenLines_one": "展开 {{count}} 行未更改内容",
-  "history.expandHiddenLines_other": "展开 {{count}} 行未更改内容"
+  "history.expandHiddenLines_other": "展开 {{count}} 行未更改内容",
+  "htmlPreview.localPreview": "本地预览",
+  "htmlPreview.hotReload": "热更新",
+  "settings.general.languageZh": "中文"
 }
