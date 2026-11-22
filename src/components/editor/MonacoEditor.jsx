@@ -5,7 +5,15 @@ import i18n from '@/i18n';
  * 该文件负责创建 Monaco 实例、桥接缓冲区与全局状态、同步主题与语言配置，
  * 并统一接入桌面端右键菜单和移动端选区增强交互。
  */
-import { useEffect, useLayoutEffect, useRef, useImperativeHandle, forwardRef, useState, useCallback } from 'react';
+import {
+  useEffect,
+  useLayoutEffect,
+  useRef,
+  useImperativeHandle,
+  forwardRef,
+  useState,
+  useCallback,
+} from 'react';
 import * as monaco from 'monaco-editor';
 import { StandaloneServices } from 'monaco-editor/esm/vs/editor/standalone/browser/standaloneServices.js';
 import { IUndoRedoService } from 'monaco-editor/esm/vs/platform/undoRedo/common/undoRedo.js';
@@ -21,10 +29,21 @@ import { readFileContent } from '@utils/tauriApi';
 import { externalLink, openEditorLink } from '@utils/editorLinks';
 import { getFileLanguage } from '@utils/fileLanguage';
 import { initMonacoShiki, isMonacoShikiReady, getMonacoThemeName } from '@utils/monacoShiki';
+import { installIndentRainbow } from '@utils/monacoIndentRainbow';
 import { setBuffer, getBuffer, registerEditorBufferFlusher } from '@utils/editorBuffer';
-import { markdownUndoDirection, markdownUndoStep, noteNativeMarkdownUndo, recordMarkdownEdit } from '@utils/markdownUndo';
+import {
+  markdownUndoDirection,
+  markdownUndoStep,
+  noteNativeMarkdownUndo,
+  recordMarkdownEdit,
+} from '@utils/markdownUndo';
 import { registerPluginEditor } from '@/services/pluginEditor';
-import { getDocumentViewState, setDocumentViewState, registerDocumentViewState, requestDocumentViewStateSave } from '@utils/documentViewState';
+import {
+  getDocumentViewState,
+  setDocumentViewState,
+  registerDocumentViewState,
+  requestDocumentViewStateSave,
+} from '@utils/documentViewState';
 import MonacoContextMenu from './MonacoContextMenu';
 import MobileSelectionBar from './MobileSelectionBar';
 import MonacoSelectionHandles from './MonacoSelectionHandles';
@@ -45,7 +64,10 @@ const markdownFoldingProvider = monaco.languages.registerFoldingRangeProvider('m
     const ranges = markdownFoldingRanges(model.getValue());
     const existing = computeRanges(model, false, markdownLanguage.folding.markers);
     for (let index = 0; index < existing.length; index++) {
-      ranges.push({ start: existing.getStartLineNumber(index), end: existing.getEndLineNumber(index) });
+      ranges.push({
+        start: existing.getStartLineNumber(index),
+        end: existing.getEndLineNumber(index),
+      });
     }
     return ranges;
   },
@@ -54,13 +76,17 @@ if (import.meta.hot) import.meta.hot.dispose(() => markdownFoldingProvider.dispo
 
 function documentModelInfo(tab) {
   const language = getFileLanguage(tab.name);
-  if (!monaco.languages.getLanguages().some((item) => item.id === language)) monaco.languages.register({ id: language });
+  if (!monaco.languages.getLanguages().some((item) => item.id === language))
+    monaco.languages.register({ id: language });
   return {
     value: getBuffer(tab.id, tab.content || ''),
     language,
-    uri: tab.path && /^(?:[a-z]:[\\/]|\/)/i.test(tab.path)
-      ? monaco.Uri.file(tab.path)
-      : monaco.Uri.parse(`inmemory://mokidown/${encodeURIComponent(tab.id)}/${encodeURIComponent(tab.name)}`),
+    uri:
+      tab.path && /^(?:[a-z]:[\\/]|\/)/i.test(tab.path)
+        ? monaco.Uri.file(tab.path)
+        : monaco.Uri.parse(
+            `inmemory://mokidown/${encodeURIComponent(tab.id)}/${encodeURIComponent(tab.name)}`,
+          ),
   };
 }
 
@@ -95,7 +121,10 @@ function horizontalScrollbarOptions(wrapped) {
  * 负责初始化编辑器实例、同步标签缓冲区、接入右键菜单与移动端选区能力，
  * 并对主题、字号、语言与自动保存等外部配置变化做增量响应。
  */
-const MonacoEditorComponent = forwardRef(function MonacoEditorComponent({ className, onAutoSave, appHotkeyHandlers = {}, onEditorReady, tabId }, ref) {
+const MonacoEditorComponent = forwardRef(function MonacoEditorComponent(
+  { className, onAutoSave, appHotkeyHandlers = {}, onEditorReady, tabId },
+  ref,
+) {
   const containerRef = useRef(null);
   const editorRef = useRef(null);
   // 快捷键回调通过 ref 传递：它们来自上层工作区，身份每次渲染都可能变化，
@@ -109,7 +138,7 @@ const MonacoEditorComponent = forwardRef(function MonacoEditorComponent({ classN
 
   // 编辑器只关心当前激活的是哪个标签页，不直接订阅正文内容，因此输入过程
   // 不会反向触发本组件或其他内容感知组件的 React 重渲染。
-  const activeTabId = useEditorStore((s) => tabId === undefined ? s.activeTabId : tabId);
+  const activeTabId = useEditorStore((s) => (tabId === undefined ? s.activeTabId : tabId));
   const currentTabIdRef = useRef(activeTabId);
   const tabsRevision = useEditorStore((s) => s.tabsRevision);
   const languageRevision = useLspStore((s) => s.revision);
@@ -124,6 +153,8 @@ const MonacoEditorComponent = forwardRef(function MonacoEditorComponent({ classN
   const wordWrap = useConfigStore((s) => s.wordWrap);
   const lineNumbers = useConfigStore((s) => s.lineNumbers);
   const minimap = useConfigStore((s) => s.minimap);
+  const renderWhitespaceEnabled = useConfigStore((s) => s.renderWhitespaceEnabled);
+  const insertSpaces = useConfigStore((s) => s.insertSpaces);
 
   const fontFamily = `'${fontFamilyBase}', 'Fira Code', Consolas, monospace`;
 
@@ -158,42 +189,52 @@ const MonacoEditorComponent = forwardRef(function MonacoEditorComponent({ classN
   // 这是有意为之的过渡状态——之前通过 `monaco-editor-nls-adapter` 在构建期重写
   // Monaco 源码实现的本地化已经整体下线，相关依赖与启动顺序约束一并移除。
 
-  useImperativeHandle(ref, () => ({
-    getEditor: () => editorRef.current,
-    getCurrentValue: () => editorRef.current?.getValue() ?? '',
-    insertText(text) {
-      const editor = editorRef.current;
-      if (!editor) return;
-      const selection = editor.getSelection();
-      editor.executeEdits('toolbar', [{
-        range: selection,
-        text,
-        forceMoveMarkers: true,
-      }]);
-      editor.focus();
-    },
-    wrapSelection(before, after) {
-      const editor = editorRef.current;
-      if (!editor) return;
-      const selection = editor.getSelection();
-      const selectedText = editor.getModel().getValueInRange(selection);
-      editor.executeEdits('toolbar', [{
-        range: selection,
-        text: before + selectedText + after,
-        forceMoveMarkers: true,
-      }]);
-      if (selectedText) {
-        const newStart = selection.getStartPosition();
-        editor.setSelection(new monaco.Selection(
-          newStart.lineNumber,
-          newStart.column + before.length,
-          newStart.lineNumber,
-          newStart.column + before.length + selectedText.length,
-        ));
-      }
-      editor.focus();
-    },
-  }), []);
+  useImperativeHandle(
+    ref,
+    () => ({
+      getEditor: () => editorRef.current,
+      getCurrentValue: () => editorRef.current?.getValue() ?? '',
+      insertText(text) {
+        const editor = editorRef.current;
+        if (!editor) return;
+        const selection = editor.getSelection();
+        editor.executeEdits('toolbar', [
+          {
+            range: selection,
+            text,
+            forceMoveMarkers: true,
+          },
+        ]);
+        editor.focus();
+      },
+      wrapSelection(before, after) {
+        const editor = editorRef.current;
+        if (!editor) return;
+        const selection = editor.getSelection();
+        const selectedText = editor.getModel().getValueInRange(selection);
+        editor.executeEdits('toolbar', [
+          {
+            range: selection,
+            text: before + selectedText + after,
+            forceMoveMarkers: true,
+          },
+        ]);
+        if (selectedText) {
+          const newStart = selection.getStartPosition();
+          editor.setSelection(
+            new monaco.Selection(
+              newStart.lineNumber,
+              newStart.column + before.length,
+              newStart.lineNumber,
+              newStart.column + before.length + selectedText.length,
+            ),
+          );
+        }
+        editor.focus();
+      },
+    }),
+    [],
+  );
 
   const replayHistory = useCallback((direction) => {
     const editor = editorRef.current;
@@ -228,9 +269,16 @@ const MonacoEditorComponent = forwardRef(function MonacoEditorComponent({ classN
     const initialTheme = getMonacoThemeName(isDark);
     const tab = useEditorStore.getState().tabs.find((item) => item.id === currentTabIdRef.current);
     const initial = tab ? documentModelInfo(tab) : null;
-    const initialModel = initial ? monaco.editor.createModel(initial.value, initial.language, initial.uri) : null;
+    const initialModel = initial
+      ? monaco.editor.createModel(initial.value, initial.language, initial.uri)
+      : null;
     const initialView = tab ? getDocumentViewState(tab.id, 'monaco') : null;
-    if (tab) modelsRef.current.set(tab.id, { model: initialModel, viewState: initialView, contentRevision: tab.contentRevision ?? 0 });
+    if (tab)
+      modelsRef.current.set(tab.id, {
+        model: initialModel,
+        viewState: initialView,
+        contentRevision: tab.contentRevision ?? 0,
+      });
     currentTabIdRef.current = tab?.id || null;
 
     const editor = monaco.editor.create(container, {
@@ -246,7 +294,8 @@ const MonacoEditorComponent = forwardRef(function MonacoEditorComponent({ classN
       wordWrap: wordWrap ? 'on' : 'off',
       wrappingIndent: 'same',
       scrollBeyondLastLine: false,
-      renderWhitespace: 'selection',
+      renderWhitespace: renderWhitespaceEnabled ? 'boundary' : 'selection',
+      detectIndentation: false,
       tabSize,
       smoothScrolling: true,
       cursorBlinking: 'smooth',
@@ -267,6 +316,7 @@ const MonacoEditorComponent = forwardRef(function MonacoEditorComponent({ classN
     });
 
     editorRef.current = editor;
+    const stopIndentRainbow = installIndentRainbow(editor, monaco);
     const stopFoldControls = bindMonacoFoldControls(editor, () => currentTabIdRef.current);
     // Follow effective wrapping, including temporary runtime overrides, so an
     // unwrapped line never becomes inaccessible behind a hidden scrollbar.
@@ -279,12 +329,19 @@ const MonacoEditorComponent = forwardRef(function MonacoEditorComponent({ classN
       }
     };
     editor.onDidChangeConfiguration((event) => {
-      if (event.hasChanged(monaco.editor.EditorOption.wrappingInfo)
-        || event.hasChanged(monaco.editor.EditorOption.scrollbar)) syncHorizontalScrollbar();
+      if (
+        event.hasChanged(monaco.editor.EditorOption.wrappingInfo) ||
+        event.hasChanged(monaco.editor.EditorOption.scrollbar)
+      )
+        syncHorizontalScrollbar();
     });
     syncHorizontalScrollbar();
     restoreMonacoViewState(editor, initialView);
-    const stopSessionView = registerDocumentViewState('monaco', () => currentTabIdRef.current, () => editor.saveViewState());
+    const stopSessionView = registerDocumentViewState(
+      'monaco',
+      () => currentTabIdRef.current,
+      () => editor.saveViewState(),
+    );
     editor.onDidChangeCursorSelection(requestDocumentViewStateSave);
     editor.onDidScrollChange(requestDocumentViewStateSave);
     setEditorInstance(editor);
@@ -295,14 +352,24 @@ const MonacoEditorComponent = forwardRef(function MonacoEditorComponent({ classN
           try {
             const result = await readFileContent(resource.fsPath);
             if (!result.success) return false;
-            useEditorStore.getState().openFile({ path: resource.fsPath,
-              name: resource.path.split('/').pop(), content: result.content, encoding: result.encoding });
+            useEditorStore.getState().openFile({
+              path: resource.fsPath,
+              name: resource.path.split('/').pop(),
+              content: result.content,
+              encoding: result.encoding,
+            });
             return true;
-          } catch (_) { return false; }
+          } catch (_) {
+            return false;
+          }
         }
         const url = externalLink(resource.toString());
         if (!url) return false;
-        try { await openEditorLink(url); } catch (error) { console.error('Unable to open link:', error); }
+        try {
+          await openEditorLink(url);
+        } catch (error) {
+          console.error('Unable to open link:', error);
+        }
         return true;
       },
     });
@@ -382,7 +449,12 @@ const MonacoEditorComponent = forwardRef(function MonacoEditorComponent({ classN
           if (before !== value) {
             const element = StandaloneServices.get(IUndoRedoService).getLastElement(model.uri);
             if (element && !nativeUndoGroups.has(element)) nativeUndoGroups.set(element, Symbol());
-            recordMarkdownEdit(tabId, element ? nativeUndoGroups.get(element) : undefined, before, value);
+            recordMarkdownEdit(
+              tabId,
+              element ? nativeUndoGroups.get(element) : undefined,
+              before,
+              value,
+            );
           }
         }
       }
@@ -397,41 +469,73 @@ const MonacoEditorComponent = forwardRef(function MonacoEditorComponent({ classN
       scheduleAutoSave();
     });
 
-    const stopBufferFlusher = registerEditorBufferFlusher(() => currentTabIdRef.current, () => {
-      if (isComposing) return;
-      const tabId = currentTabIdRef.current;
-      const tab = useEditorStore.getState().tabs.find((item) => item.id === tabId);
-      if (!tab || modelsRef.current.get(tabId)?.contentRevision !== (tab.contentRevision ?? 0)) return;
-      const value = editor.getValue();
-      if (tabId && value !== getBuffer(tabId)) {
-        setBuffer(tabId, value);
-        markTabDirty(tabId, true);
-      }
-    });
-    const stopPluginEditor = registerPluginEditor(() => currentTabIdRef.current, (edits) => {
-      if (isComposing) throw new Error(i18n.t('pluginErrors.composing'));
-      const model = editor.getModel();
-      if (!model) throw new Error('Editor model unavailable');
-      editor.pushUndoStop();
-      editor.executeEdits('mokidown.plugin', edits.map((edit) => {
-        const start = model.getPositionAt(edit.from), end = model.getPositionAt(edit.to);
-        return { range: { startLineNumber: start.lineNumber, startColumn: start.column, endLineNumber: end.lineNumber, endColumn: end.column }, text: edit.text, forceMoveMarkers: true };
-      }));
-      editor.pushUndoStop();
-    }, {
-      getSelection: () => {
-        const model = editor.getModel(), range = editor.getSelection();
-        if (!model || !range) throw new Error('Editor selection unavailable');
-        return { from: model.getOffsetAt(range.getStartPosition()), to: model.getOffsetAt(range.getEndPosition()) };
+    const stopBufferFlusher = registerEditorBufferFlusher(
+      () => currentTabIdRef.current,
+      () => {
+        if (isComposing) return;
+        const tabId = currentTabIdRef.current;
+        const tab = useEditorStore.getState().tabs.find((item) => item.id === tabId);
+        if (!tab || modelsRef.current.get(tabId)?.contentRevision !== (tab.contentRevision ?? 0))
+          return;
+        const value = editor.getValue();
+        if (tabId && value !== getBuffer(tabId)) {
+          setBuffer(tabId, value);
+          markTabDirty(tabId, true);
+        }
       },
-      setSelection: ({ from, to }) => {
+    );
+    const stopPluginEditor = registerPluginEditor(
+      () => currentTabIdRef.current,
+      (edits) => {
+        if (isComposing) throw new Error(i18n.t('pluginErrors.composing'));
         const model = editor.getModel();
         if (!model) throw new Error('Editor model unavailable');
-        const start = model.getPositionAt(from), end = model.getPositionAt(to);
-        editor.setSelection({ startLineNumber: start.lineNumber, startColumn: start.column, endLineNumber: end.lineNumber, endColumn: end.column });
-        editor.revealPositionInCenter(start); editor.focus();
+        editor.pushUndoStop();
+        editor.executeEdits(
+          'mokidown.plugin',
+          edits.map((edit) => {
+            const start = model.getPositionAt(edit.from),
+              end = model.getPositionAt(edit.to);
+            return {
+              range: {
+                startLineNumber: start.lineNumber,
+                startColumn: start.column,
+                endLineNumber: end.lineNumber,
+                endColumn: end.column,
+              },
+              text: edit.text,
+              forceMoveMarkers: true,
+            };
+          }),
+        );
+        editor.pushUndoStop();
       },
-    });
+      {
+        getSelection: () => {
+          const model = editor.getModel(),
+            range = editor.getSelection();
+          if (!model || !range) throw new Error('Editor selection unavailable');
+          return {
+            from: model.getOffsetAt(range.getStartPosition()),
+            to: model.getOffsetAt(range.getEndPosition()),
+          };
+        },
+        setSelection: ({ from, to }) => {
+          const model = editor.getModel();
+          if (!model) throw new Error('Editor model unavailable');
+          const start = model.getPositionAt(from),
+            end = model.getPositionAt(to);
+          editor.setSelection({
+            startLineNumber: start.lineNumber,
+            startColumn: start.column,
+            endLineNumber: end.lineNumber,
+            endColumn: end.column,
+          });
+          editor.revealPositionInCenter(start);
+          editor.focus();
+        },
+      },
+    );
 
     editor.onDidChangeCursorPosition((e) => {
       setCursorPosition({
@@ -545,16 +649,24 @@ const MonacoEditorComponent = forwardRef(function MonacoEditorComponent({ classN
       if (jumpDecorTimer) clearTimeout(jumpDecorTimer);
       // 这里刻意不释放组合事件监听：一旦释放，局部的 `isComposing` 就会永远停留在
       // 释放瞬间的值，此后自动保存要么彻底不再触发，要么在输入法组合中途触发。
-      if (autoSaveTimer !== null) { clearTimeout(autoSaveTimer); autoSaveTimer = null; }
-      if (jumpDecoration) { jumpDecoration.clear(); jumpDecoration = null; }
+      if (autoSaveTimer !== null) {
+        clearTimeout(autoSaveTimer);
+        autoSaveTimer = null;
+      }
+      if (jumpDecoration) {
+        jumpDecoration.clear();
+        jumpDecoration = null;
+      }
 
-      jumpDecoration = editor.createDecorationsCollection([{
-        range: new monaco.Range(line, 1, line, 1),
-        options: {
-          isWholeLine: true,
-          className: 'search-jump-highlight',
+      jumpDecoration = editor.createDecorationsCollection([
+        {
+          range: new monaco.Range(line, 1, line, 1),
+          options: {
+            isWholeLine: true,
+            className: 'search-jump-highlight',
+          },
         },
-      }]);
+      ]);
 
       jumpDecorTimer = setTimeout(() => {
         jumpDecoration?.clear();
@@ -578,7 +690,8 @@ const MonacoEditorComponent = forwardRef(function MonacoEditorComponent({ classN
       const openIds = new Set(state.tabs.map((item) => item.id));
       for (const [id, entry] of modelsRef.current) {
         if (!openIds.has(id) && entry.model !== editor.getModel()) {
-          disposeDocumentModel(entry.model); modelsRef.current.delete(id);
+          disposeDocumentModel(entry.model);
+          modelsRef.current.delete(id);
         }
       }
     });
@@ -612,6 +725,7 @@ const MonacoEditorComponent = forwardRef(function MonacoEditorComponent({ classN
       stopSessionView();
       stopFoldControls();
       linkOpener.dispose();
+      stopIndentRainbow();
       editor.dispose();
       for (const entry of models.values()) disposeDocumentModel(entry.model);
       models.clear();
@@ -649,7 +763,7 @@ const MonacoEditorComponent = forwardRef(function MonacoEditorComponent({ classN
         disposeDocumentModel(previous.model);
         modelsRef.current.delete(previousId);
       }
-      setContextMenu((menu) => menu.visible ? { ...menu, visible: false } : menu);
+      setContextMenu((menu) => (menu.visible ? { ...menu, visible: false } : menu));
       closeCodeLanguageMenu();
       return;
     }
@@ -660,7 +774,10 @@ const MonacoEditorComponent = forwardRef(function MonacoEditorComponent({ classN
     let replacedModel = null;
     if (!entry || entry.model.uri.toString() !== uri.toString()) {
       const replaced = entry;
-      entry = { model: monaco.editor.createModel(newValue, lang, uri), viewState: getDocumentViewState(activeTabId, 'monaco') };
+      entry = {
+        model: monaco.editor.createModel(newValue, lang, uri),
+        viewState: getDocumentViewState(activeTabId, 'monaco'),
+      };
       modelsRef.current.set(activeTabId, entry);
       replacedModel = replaced?.model;
     }
@@ -669,16 +786,21 @@ const MonacoEditorComponent = forwardRef(function MonacoEditorComponent({ classN
       suppressModelChangeRef.current = true;
       editor.setModel(entry.model);
       suppressModelChangeRef.current = false;
-      setContextMenu((menu) => menu.visible ? { ...menu, visible: false } : menu);
+      setContextMenu((menu) => (menu.visible ? { ...menu, visible: false } : menu));
     }
     if (replacedModel) disposeDocumentModel(replacedModel);
     const openIds = new Set(useEditorStore.getState().tabs.map((item) => item.id));
     for (const [id, cached] of modelsRef.current) {
-      if (!openIds.has(id)) { disposeDocumentModel(cached.model); modelsRef.current.delete(id); }
+      if (!openIds.has(id)) {
+        disposeDocumentModel(cached.model);
+        modelsRef.current.delete(id);
+      }
     }
 
-    if (editor.getValue() !== newValue ||
-        (entry.contentRevision !== undefined && entry.contentRevision !== (tab.contentRevision ?? 0))) {
+    if (
+      editor.getValue() !== newValue ||
+      (entry.contentRevision !== undefined && entry.contentRevision !== (tab.contentRevision ?? 0))
+    ) {
       const pos = editor.getPosition();
       suppressModelChangeRef.current = true;
       editor.setValue(newValue);
@@ -689,8 +811,13 @@ const MonacoEditorComponent = forwardRef(function MonacoEditorComponent({ classN
 
     const model = editor.getModel();
     if (model) {
-      useProblemsStore.getState().registerDocument({ tabId: tab.id, fileName: tab.name, filePath: tab.path || '',
-        uri: model.uri.toString(), modelUri: model.uri.toString() });
+      useProblemsStore.getState().registerDocument({
+        tabId: tab.id,
+        fileName: tab.name,
+        filePath: tab.path || '',
+        uri: model.uri.toString(),
+        modelUri: model.uri.toString(),
+      });
       // 只在语言真的变化时才切换。`setModelLanguage` 会销毁并重建该 model 的
       // 分词状态；对 Monaco 按需加载的语言，还会重新走一遍异步 tokenizer loader。
       // 在外部改动、同步回写等场景下反复调用，会让可见行短暂失去 token，
@@ -699,9 +826,13 @@ const MonacoEditorComponent = forwardRef(function MonacoEditorComponent({ classN
         monaco.editor.setModelLanguage(model, lang);
       }
       const desiredTabSize = lang === 'mgtree' ? 2 : tabSize;
+      const desiredInsertSpaces = lang === 'mgtree' ? true : insertSpaces;
       const modelOptions = model.getOptions();
-      if (modelOptions.tabSize !== desiredTabSize || !modelOptions.insertSpaces) {
-        model.updateOptions({ tabSize: desiredTabSize, insertSpaces: true });
+      if (
+        modelOptions.tabSize !== desiredTabSize ||
+        modelOptions.insertSpaces !== desiredInsertSpaces
+      ) {
+        model.updateOptions({ tabSize: desiredTabSize, insertSpaces: desiredInsertSpaces });
       }
     }
     if (switchedModel) {
@@ -711,14 +842,34 @@ const MonacoEditorComponent = forwardRef(function MonacoEditorComponent({ classN
     }
 
     setCharacterCount(newValue.length);
-  }, [activeTabId, closeCodeLanguageMenu, tabsRevision, languageRevision, setCharacterCount, tabSize]);
+  }, [
+    activeTabId,
+    closeCodeLanguageMenu,
+    tabsRevision,
+    languageRevision,
+    setCharacterCount,
+    tabSize,
+  ]);
+
+  useEffect(() => {
+    editorRef.current?.updateOptions({
+      renderWhitespace: renderWhitespaceEnabled ? 'boundary' : 'selection',
+    });
+  }, [renderWhitespaceEnabled]);
+
+  useEffect(() => {
+    const model = editorRef.current?.getModel();
+    if (model && model.getLanguageId() !== 'mgtree') model.updateOptions({ insertSpaces });
+  }, [insertSpaces]);
 
   useEffect(() => {
     if (!editorInstance || !pendingJump || pendingJump.tabId !== activeTabId) return;
     const model = editorInstance.getModel();
     if (!model) return;
     const { start, end } = pendingJump.range;
-    const range = model.validateRange(new monaco.Range(start.line + 1, start.character + 1, end.line + 1, end.character + 1));
+    const range = model.validateRange(
+      new monaco.Range(start.line + 1, start.character + 1, end.line + 1, end.character + 1),
+    );
     editorInstance.setSelection(range);
     editorInstance.revealRangeInCenter(range);
     editorInstance.focus();
@@ -735,7 +886,9 @@ const MonacoEditorComponent = forwardRef(function MonacoEditorComponent({ classN
     let binding;
     const bind = () => {
       binding?.dispose();
-      const tab = useEditorStore.getState().tabs.find((item) => item.id === currentTabIdRef.current);
+      const tab = useEditorStore
+        .getState()
+        .tabs.find((item) => item.id === currentTabIdRef.current);
       const model = editorInstance.getModel();
       editorInstance.trigger('language-services', 'hideSuggestWidget', null);
       editorInstance.trigger('language-services', 'closeParameterHints', null);
@@ -762,21 +915,36 @@ const MonacoEditorComponent = forwardRef(function MonacoEditorComponent({ classN
         try {
           const result = await readFileContent(resource.fsPath);
           if (!result.success) return false;
-          useEditorStore.getState().openFile({ path: resource.fsPath,
-            name: resource.path.split('/').pop(), content: result.content, encoding: result.encoding });
+          useEditorStore.getState().openFile({
+            path: resource.fsPath,
+            name: resource.path.split('/').pop(),
+            content: result.content,
+            encoding: result.encoding,
+          });
           setTimeout(() => {
             const position = selection?.startLineNumber
-              ? { lineNumber: selection.startLineNumber, column: selection.startColumn } : selection;
-            if (position) { editorInstance.setPosition(position); editorInstance.revealPositionInCenter(position); }
+              ? { lineNumber: selection.startLineNumber, column: selection.startColumn }
+              : selection;
+            if (position) {
+              editorInstance.setPosition(position);
+              editorInstance.revealPositionInCenter(position);
+            }
             editorInstance.focus();
           }, 0);
           return true;
-        } catch (_) { return false; }
+        } catch (_) {
+          return false;
+        }
       },
     });
     return () => {
       binding?.dispose();
-      modelChanged.dispose(); languageChanged.dispose(); configChanged(); saved(); opener.dispose(); problemWatcher.dispose();
+      modelChanged.dispose();
+      languageChanged.dispose();
+      configChanged();
+      saved();
+      opener.dispose();
+      problemWatcher.dispose();
     };
   }, [editorInstance]);
 
@@ -784,9 +952,10 @@ const MonacoEditorComponent = forwardRef(function MonacoEditorComponent({ classN
   // 应用级快捷键必须在这里再注册一次；同时把用户改过的编辑器键位写进 Monaco。
   useEffect(() => {
     if (!editorInstance) return undefined;
-    const apply = () => configureMonacoHotkeys(monaco, getResolvedHotkeys(), {
-      appHandlers: hotkeyHandlersRef.current,
-    });
+    const apply = () =>
+      configureMonacoHotkeys(monaco, getResolvedHotkeys(), {
+        appHandlers: hotkeyHandlersRef.current,
+      });
     apply();
     // 键位变化时重配：先释放旧规则，避免旧键位残留。
     const unsubscribe = useConfigStore.subscribe((state, previous) => {
@@ -866,9 +1035,19 @@ const MonacoEditorComponent = forwardRef(function MonacoEditorComponent({ classN
           replayHistory={replayHistory}
         />
       )}
-      <MobileSelectionBar editor={editorInstance} enabled={activeTabId != null && useSelectionBar} containerRef={containerRef} />
-      <MonacoSelectionHandles editor={editorInstance} enabled={activeTabId != null && useSelectionBar} />
-      <MarkdownCodeLanguageMenu request={activeTabId == null ? null : codeLanguageMenu} onClose={closeCodeLanguageMenu} />
+      <MobileSelectionBar
+        editor={editorInstance}
+        enabled={activeTabId != null && useSelectionBar}
+        containerRef={containerRef}
+      />
+      <MonacoSelectionHandles
+        editor={editorInstance}
+        enabled={activeTabId != null && useSelectionBar}
+      />
+      <MarkdownCodeLanguageMenu
+        request={activeTabId == null ? null : codeLanguageMenu}
+        onClose={closeCodeLanguageMenu}
+      />
     </>
   );
 });

@@ -1,9 +1,26 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
+    <script>
+      // Chromium 在 ResizeObserver 回调里改布局时会把良性循环警告当 error 事件抛出；
+      // 在最早的脚本里拦下，避免它进入 console 和运行日志。
+      window.addEventListener(
+        'error',
+        (event) => {
+          if (String(event.message || '').includes('ResizeObserver loop')) {
+            event.preventDefault();
+            event.stopImmediatePropagation();
+          }
+        },
+        true,
+      );
+    </script>
     <link rel="icon" type="image/svg+xml" href="/vite.svg" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, maximum-scale=1, user-scalable=no" />
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1.0, viewport-fit=cover, maximum-scale=1, user-scalable=no"
+    />
     <title>MokiDown</title>
 
     <!--
@@ -13,10 +30,22 @@
       our app's CSS bundle is parsed.
     -->
     <style>
-      html, body { margin: 0; padding: 0; height: 100%; overflow: hidden; }
-      html { background: #f5f5f7; }
-      html[data-theme='dark'] { background: #121212; }
-      #root { height: 100%; }
+      html,
+      body {
+        margin: 0;
+        padding: 0;
+        height: 100%;
+        overflow: hidden;
+      }
+      html {
+        background: #f5f5f7;
+      }
+      html[data-theme='dark'] {
+        background: #121212;
+      }
+      #root {
+        height: 100%;
+      }
 
       #moki-startup-recovery {
         position: fixed;
@@ -31,19 +60,41 @@
         background: #fff;
         color: #26272a;
         box-shadow: 0 4px 20px #0002;
-        font: 14px/1.5 system-ui, sans-serif;
+        font:
+          14px/1.5 system-ui,
+          sans-serif;
       }
-      html[data-theme='dark'] #moki-startup-recovery { background: #242426; color: #f5f5f7; border-color: #555; }
-      #moki-startup-recovery h2 { margin: 0; font-size: 16px; }
-      #moki-startup-recovery p { margin: 8px 0 12px; font-size: 13px; }
+      html[data-theme='dark'] #moki-startup-recovery {
+        background: #242426;
+        color: #f5f5f7;
+        border-color: #555;
+      }
+      #moki-startup-recovery h2 {
+        margin: 0;
+        font-size: 16px;
+      }
+      #moki-startup-recovery p {
+        margin: 8px 0 12px;
+        font-size: 13px;
+      }
       #moki-startup-recovery button {
-        margin-right: 8px; padding: 6px 12px; cursor: pointer;
-        font: inherit; font-size: 12px; color: inherit;
-        border: 1px solid #b8bac1; border-radius: 6px; background: transparent;
+        margin-right: 8px;
+        padding: 6px 12px;
+        cursor: pointer;
+        font: inherit;
+        font-size: 12px;
+        color: inherit;
+        border: 1px solid #b8bac1;
+        border-radius: 6px;
+        background: transparent;
       }
-      #moki-startup-recovery button:hover { background: #80808018; }
-      #moki-startup-recovery button:focus-visible { outline: 2px solid #4091ff; outline-offset: 2px; }
-
+      #moki-startup-recovery button:hover {
+        background: #80808018;
+      }
+      #moki-startup-recovery button:focus-visible {
+        outline: 2px solid #4091ff;
+        outline-offset: 2px;
+      }
     </style>
 
     <!-- The native window is visible from creation, so startup errors are visible too. -->
@@ -53,7 +104,7 @@
         var ready = false;
         var timer;
         var card;
-        var bootstrap = window.__mokiRuntimeLogs = {
+        var bootstrap = (window.__mokiRuntimeLogs = {
           pending: pending,
           accept: null,
           ready: function () {
@@ -61,36 +112,44 @@
             clearTimeout(timer);
             if (card) card.remove();
             pending.length = 0;
-          }
-        };
+          },
+        });
 
         async function exportStartupLogs() {
           try {
-            if (bootstrap.export) { await bootstrap.export(); return; }
+            if (bootstrap.export) {
+              await bootstrap.export();
+              return;
+            }
             var data = JSON.stringify({ schemaVersion: 1, entries: pending }, null, 2);
             var bridge = window.__TAURI_INTERNALS__;
             if (bridge && bridge.invoke) {
               var path = await bridge.invoke('plugin:dialog|save', {
-                options: { defaultPath: 'mokidown-startup-errors.json', filters: [{ name: 'JSON', extensions: ['json'] }] }
+                options: {
+                  defaultPath: 'mokidown-startup-errors.json',
+                  filters: [{ name: 'JSON', extensions: ['json'] }],
+                },
               });
               if (!path) return;
               await bridge.invoke('plugin:fs|write_text_file', new TextEncoder().encode(data), {
-                headers: { path: encodeURIComponent(path), options: '{}' }
+                headers: { path: encodeURIComponent(path), options: '{}' },
               });
               return;
             }
-          var blob = new Blob([data], { type: 'application/json' });
-          var url = URL.createObjectURL(blob);
-          var link = document.createElement('a');
-          link.href = url;
-          link.download = 'mokidown-startup-errors.json';
-          document.body.appendChild(link);
-          link.click();
-          link.remove();
-          setTimeout(function () { URL.revokeObjectURL(url); }, 1000);
+            var blob = new Blob([data], { type: 'application/json' });
+            var url = URL.createObjectURL(blob);
+            var link = document.createElement('a');
+            link.href = url;
+            link.download = 'mokidown-startup-errors.json';
+            document.body.appendChild(link);
+            link.click();
+            link.remove();
+            setTimeout(function () {
+              URL.revokeObjectURL(url);
+            }, 1000);
           } catch (error) {
             if (card) {
-              card.querySelector('p').textContent = String(error && error.message || error);
+              card.querySelector('p').textContent = String((error && error.message) || error);
               card.querySelector('p').setAttribute('role', 'alert');
             }
           }
@@ -103,12 +162,18 @@
           card.id = 'moki-startup-recovery';
           card.setAttribute('role', 'status');
           var heading = document.createElement('h2');
-          heading.textContent = chinese ? 'MokiDown 启动遇到问题' : 'MokiDown had a startup problem';
+          heading.textContent = chinese
+            ? 'MokiDown 启动遇到问题'
+            : 'MokiDown had a startup problem';
           var message = document.createElement('p');
-          message.textContent = chinese ? '可以重试，或导出本次启动日志。' : 'Retry or export the startup log.';
+          message.textContent = chinese
+            ? '可以重试，或导出本次启动日志。'
+            : 'Retry or export the startup log.';
           var reload = document.createElement('button');
           reload.textContent = chinese ? '重新加载' : 'Reload';
-          reload.addEventListener('click', function () { location.reload(); });
+          reload.addEventListener('click', function () {
+            location.reload();
+          });
           var download = document.createElement('button');
           download.textContent = chinese ? '导出错误日志' : 'Export error log';
           download.addEventListener('click', exportStartupLogs);
@@ -119,11 +184,19 @@
         function capture(message, error) {
           var name = error && error.name;
           var text = String(message || 'Unknown error');
-          if (name === 'Canceled' || name === 'CancellationError' || name === 'AbortError' ||
-              /^(canceled|cancelled|aborted)$/i.test(text)) return;
+          if (
+            name === 'Canceled' ||
+            name === 'CancellationError' ||
+            name === 'AbortError' ||
+            /^(canceled|cancelled|aborted)$/i.test(text)
+          )
+            return;
           var entry = {
-            timestamp: Date.now(), level: 'error', source: ready ? 'WebView' : 'Startup',
-            message: redact(text, 4096), stack: redact(error && error.stack, 10000)
+            timestamp: Date.now(),
+            level: 'error',
+            source: ready ? 'WebView' : 'Startup',
+            message: redact(text, 4096),
+            stack: redact(error && error.stack, 10000),
           };
           if (!ready || !bootstrap.accept) {
             pending.push(entry);
@@ -137,23 +210,32 @@
         }
 
         function redact(value, limit) {
-          return String(value || '').slice(0, limit)
+          return String(value || '')
+            .slice(0, limit)
             .replace(/\b(Bearer\s+)[^\s,;"']+/gi, '$1[redacted]')
-            .replace(/([?&](?:access_token|refresh_token|token|api[_-]?key|password)=)[^&#\s]+/gi, '$1[redacted]');
+            .replace(
+              /([?&](?:access_token|refresh_token|token|api[_-]?key|password)=)[^&#\s]+/gi,
+              '$1[redacted]',
+            );
         }
 
-        window.addEventListener('error', function (event) {
-          if (event.message || event.error) capture(event.error?.message || event.message, event.error);
-          else if (event.target && event.target.tagName === 'SCRIPT') capture('Could not load application script.');
-        }, true);
+        window.addEventListener(
+          'error',
+          function (event) {
+            if (event.message || event.error)
+              capture(event.error?.message || event.message, event.error);
+            else if (event.target && event.target.tagName === 'SCRIPT')
+              capture('Could not load application script.');
+          },
+          true,
+        );
         window.addEventListener('unhandledrejection', function (event) {
           var reason = event.reason;
-          capture(reason && reason.message || reason, reason);
+          capture((reason && reason.message) || reason, reason);
         });
         timer = setTimeout(function () {
           if (!ready) capture('Application did not finish starting within 30 seconds.');
         }, 30000);
-
 
         // 1. Apply persisted theme to <html> so the inline CSS picks it up.
         try {
@@ -167,8 +249,9 @@
             theme = window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
           }
           document.documentElement.dataset.theme = theme;
-        } catch (_) { /* noop — fall back to light */ }
-
+        } catch (_) {
+          /* noop — fall back to light */
+        }
       })();
     </script>
   </head>
