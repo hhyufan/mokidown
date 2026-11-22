@@ -1,11 +1,12 @@
 import { useTranslation } from 'react-i18next';
 import { Tooltip } from 'antd';
 import { useState } from 'react';
-import { ReloadOutlined } from '@ant-design/icons';
+import { HistoryOutlined, ReloadOutlined } from '@ant-design/icons';
 import ChevronIcon from '@components/ui/ChevronIcon';
 import useEditorStore from '@store/useEditorStore';
 import usePluginContributions from '@store/usePluginContributions';
 import { sendToPlugin } from '@utils/pluginBus';
+import { formatHistoryTime, formatHistoryBytes } from '@utils/historyFormat';
 import '@components/history/history.scss';
 
 const normalize = (value) => String(value || '').replace(/\\/g, '/');
@@ -23,52 +24,73 @@ export default function PluginPanel() {
   const activeTabId = useEditorStore((s) => s.activeTabId);
   const sources = usePluginContributions((s) => s.versionSources);
   const tab = tabs.find((item) => item.id === activeTabId) || null;
-  const source = sources.find((entry) => tab?.path
-    && (normalize(tab.path) === normalize(entry.path) || normalize(tab.path).endsWith('/' + normalize(entry.path))));
+  const source = sources.find(
+    (entry) =>
+      tab?.path &&
+      (normalize(tab.path) === normalize(entry.path) ||
+        normalize(tab.path).endsWith('/' + normalize(entry.path))),
+  );
   if (!source) return null;
   return (
     <section className={`timeline${expanded ? ' timeline--open' : ''}`} aria-label={source.title}>
       <header className="timeline__header">
         <Tooltip title={t(expanded ? 'tree.collapseAll' : 'tree.expandAll')}>
-        <button
-          type="button"
-          className="timeline__toggle"
-          aria-expanded={expanded}
-          aria-label={source.title}
-          onClick={() => setExpanded(!expanded)}
-        >
-          <ChevronIcon className="timeline__chevron" />
-        </button>
+          <button
+            type="button"
+            className="timeline__toggle"
+            aria-expanded={expanded}
+            aria-label={source.title}
+            onClick={() => setExpanded(!expanded)}
+          >
+            <ChevronIcon className="timeline__chevron" />
+          </button>
         </Tooltip>
         <span className="timeline__label">{source.title}</span>
         <span className="timeline__count">{source.items.length}</span>
         <Tooltip title={t('history.refresh')}>
-        <button
-          type="button"
-          className="timeline__refresh"
-          aria-label={t('history.refresh')}
-          onClick={() => sendToPlugin(source.pluginId, { type: 'event', name: 'versionRefresh' })}
-        >
-          <ReloadOutlined />
-        </button>
+          <button
+            type="button"
+            className="timeline__refresh"
+            aria-label={t('history.refresh')}
+            onClick={() => sendToPlugin(source.pluginId, { type: 'event', name: 'versionRefresh' })}
+          >
+            <ReloadOutlined />
+          </button>
         </Tooltip>
       </header>
       <div className="timeline__body" aria-hidden={!expanded}>
         <ul className="timeline__list">
-          {source.items.length === 0 && <li className="timeline__placeholder">{source.emptyText || t('history.empty')}</li>}
+          {source.items.length === 0 && (
+            <li className="timeline__placeholder">{source.emptyText || t('history.empty')}</li>
+          )}
           {source.items.map((item) => (
             <li key={item.id}>
               <button
                 type="button"
                 className="timeline__item"
-                onClick={() => sendToPlugin(source.pluginId, {
-                  type: 'event',
-                  name: 'versionSelected',
-                  payload: { id: item.id, rev: item.rev },
-                })}
+                onClick={() =>
+                  sendToPlugin(source.pluginId, {
+                    type: 'event',
+                    name: 'versionSelected',
+                    payload: { id: item.id, rev: item.rev, timestamp: item.timestamp },
+                  })
+                }
               >
-                <span className="timeline__time">{item.label}</span>
-                <span className="timeline__size">{item.meta}</span>
+                {item.restored && (
+                  <span
+                    className="timeline__rollback"
+                    role="img"
+                    aria-label={t('history.rollback')}
+                  >
+                    <HistoryOutlined aria-hidden="true" />
+                  </span>
+                )}
+                <span className="timeline__time">
+                  {Number.isFinite(item.timestamp) ? formatHistoryTime(item.timestamp) : item.label}
+                </span>
+                <span className="timeline__size">
+                  {item.bytes != null ? formatHistoryBytes(item.bytes) : item.meta}
+                </span>
               </button>
             </li>
           ))}

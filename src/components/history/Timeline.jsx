@@ -6,24 +6,10 @@ import ChevronIcon from '@components/ui/ChevronIcon';
 import MokiStatusEmpty from '@components/moki/MokiStatusEmpty';
 import useEditorStore from '@store/useEditorStore';
 import useHistoryStore from '@store/useHistoryStore';
+import { reportRuntimeLog } from '@/services/runtimeLogs';
 import { historyList, historyRead, onHistoryChanged } from '@utils/tauriApi';
+import { formatHistoryTime, formatHistoryBytes } from '@utils/historyFormat';
 import './history.scss';
-
-function formatTime(timestamp) {
-  const date = new Date(timestamp);
-  const today = new Date();
-  const sameDay = date.toDateString() === today.toDateString();
-  const time = date.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' });
-  if (sameDay) return time;
-  const day = date.toLocaleDateString(undefined, { month: '2-digit', day: '2-digit' });
-  return `${day} ${time}`;
-}
-
-function formatBytes(bytes) {
-  if (bytes < 1024) return `${bytes} B`;
-  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
-  return `${(bytes / 1024 / 1024).toFixed(1)} MB`;
-}
 
 /**
  * 左侧资源管理器底部的本地历史时间线（VS Code Timeline 同款位置）。
@@ -64,8 +50,14 @@ export default function Timeline() {
     try {
       const next = (await historyList(tab.path)) || [];
       if (request === requestRef.current) setEntries(next);
-    } catch {
-      // A failed refresh should leave the last successful list available.
+    } catch (error) {
+      // A failed refresh should leave the last successful list available, but
+      // surface the reason in the runtime log so a broken invoke is diagnosable.
+      reportRuntimeLog({
+        source: 'WebView',
+        level: 'warning',
+        message: `history_list failed: ${error?.message || error}`,
+      });
     } finally {
       if (request === requestRef.current) {
         setLoading(false);
@@ -203,8 +195,8 @@ export default function Timeline() {
                       </span>
                     </Tooltip>
                   )}
-                  <span className="timeline__time">{formatTime(entry.timestamp)}</span>
-                  <span className="timeline__size">{formatBytes(entry.bytes)}</span>
+                  <span className="timeline__time">{formatHistoryTime(entry.timestamp)}</span>
+                  <span className="timeline__size">{formatHistoryBytes(entry.bytes)}</span>
                 </button>
               </li>
             ))}

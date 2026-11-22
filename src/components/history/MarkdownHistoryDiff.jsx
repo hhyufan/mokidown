@@ -150,12 +150,16 @@ export default function MarkdownHistoryDiff({
   const previousFolds = useRef(null);
   const [currentReady, setCurrentReady] = useState(false);
   const [showOriginal, setShowOriginal] = useState(false);
-  const markCurrentReady = useCallback(() => setCurrentReady(true), []);
+  const markCurrentReady = useCallback(() => {
+    setCurrentReady(true);
+  }, []);
   useEffect(() => {
     if (!currentReady) return undefined;
     let next;
     const first = requestAnimationFrame(() => {
-      next = requestAnimationFrame(() => setShowOriginal(true));
+      next = requestAnimationFrame(() => {
+        setShowOriginal(true);
+      });
     });
     return () => {
       cancelAnimationFrame(first);
@@ -189,6 +193,7 @@ export default function MarkdownHistoryDiff({
       className="history-markdown-diff history-markdown-draft"
       aria-busy={!ready}
       hidden={hidden}
+      style={{ visibility: showOriginal ? 'visible' : 'hidden' }}
     >
       <div className="history-markdown-draft__layout">
         {visible.map((row) => {

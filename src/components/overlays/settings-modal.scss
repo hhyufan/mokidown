@@ -899,3 +899,28 @@ html[data-theme='dark'] .settings-about__portrait > .moki-sprite {
     animation: none;
   }
 }
+
+/* 只给容器加底色，滑块和动画仍然走 antd 默认实现。 */
+/* 与侧栏导航的分段控件保持一致：hover 底、surface 滑块、6px 圆角。 */
+.settings-indent-segmented.ant-segmented {
+  padding: 5px;
+  border-radius: 8px;
+  background: var(--hover);
+
+  .ant-segmented-thumb,
+  .ant-segmented-item-selected {
+    background: var(--surface);
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.08);
+    border-radius: 6px;
+  }
+
+  .ant-segmented-item {
+    color: var(--text-sec);
+    font-size: 12px;
+    font-weight: 500;
+  }
+
+  .ant-segmented-item-selected {
+    color: var(--text);
+  }
+}
