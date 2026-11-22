@@ -72,3 +72,25 @@ test('code language controls and custom math rendering expose tooltips without c
   await expect(page.getByRole('tooltip')).toContainText('Backspace');
   expect(await page.evaluate(() => window.trial.markdown())).toContain('$x+y$');
 });
+
+test('clicking a block formula rings it with the shared accent colour', async ({ page }) => {
+  await open(page, '正文在上\n\n$$\na+b\n$$\n\n正文在下\n');
+  const math = page.locator('[data-type="math_block"]');
+  // 单击块级公式落下的是整块 NodeSelection，屏幕上没有别的提示，这一圈蓝框就是「选中了它」本身。
+  await math.click();
+  await expect(math).toHaveClass(/ProseMirror-selectednode/);
+  await expect(math).toHaveCSS('outline-style', 'solid');
+  await expect(math).toHaveCSS('outline-width', '2px');
+  const accent = await page.evaluate(() => {
+    const probe = document.createElement('span');
+    probe.style.color = 'var(--accent)';
+    document.body.append(probe);
+    const { color } = getComputedStyle(probe);
+    probe.remove();
+    return color;
+  });
+  await expect(math).toHaveCSS('outline-color', accent);
+  // 光标一走开选区就散了：蓝框得跟着没，不然屏幕上留着两个「选中」。
+  await page.locator('.milkdown-editor p').last().click();
+  await expect(math).toHaveCSS('outline-style', 'none');
+});
