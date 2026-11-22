@@ -152,7 +152,6 @@ function MonacoHistoryDiff({
           wordWrap: 'on',
           diffWordWrap: 'on',
           renderWhitespace: 'boundary',
-          renderWhitespace: 'boundary',
           tabSize: props.tabSize,
           fontSize: props.fontSize,
           fontFamily: props.mono,
