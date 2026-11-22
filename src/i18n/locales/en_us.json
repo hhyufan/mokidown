@@ -209,6 +209,8 @@
   "settings.editor.pair.tildeDesc": "Delete the matching tildes around struck-through text and keep the text.",
   "settings.editor.pair.backtick": "Inline code and code blocks",
   "settings.editor.pair.backtickDesc": "Put the caret between two backticks. After three at the start of a line, press Enter or confirm a language to create a code block.",
+  "settings.editor.pair.math": "Formula",
+  "settings.editor.pair.mathDesc": "Delete the dollar signs around a formula and keep its LaTeX body. Covers inline math and its block counterpart.",
   "editor.codeLanguageMenu": "Choose code language",
   "editor.codeLanguagePlainText": "Plain text",
   "settings.editor.lineNumbers": "Line Numbers",

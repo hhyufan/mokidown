@@ -116,8 +116,12 @@ it('shows named Markdown syntax options and changes each smart pair independentl
     expect(screen.getByRole('list', { name: 'Markdown 智能配对' })).toBeInTheDocument();
     const backtick = screen.getByRole('checkbox', { name: '行内代码与代码块' });
     const parentheses = screen.getByRole('checkbox', { name: '圆括号' });
+    const math = screen.getByRole('checkbox', { name: '公式' });
     const master = screen.getByRole('switch', { name: 'Markdown 智能配对' });
     expect(backtick).toBeChecked();
+    // 公式那一对 `$` 与星号同一条规矩：删一枚带走另一枚，LaTeX 正文留下。
+    expect(math).toBeChecked();
+    expect(math).toHaveAccessibleDescription(/成对移除公式两边的美元符号定界符/);
     expect(backtick).toHaveAccessibleDescription(/按 Enter 或确认语言/);
     fireEvent.click(backtick);
     expect(backtick).not.toBeChecked();
