@@ -1008,5 +1008,9 @@
   "settings.editor.tabBehavior": "Tab 行为",
   "settings.editor.tabBehaviorDesc": "按 Tab 时插入空格或制表符，并选择缩进宽度。",
   "settings.editor.indentUseSpaces": "空格",
-  "settings.editor.indentUseTabs": "制表符"
+  "settings.editor.indentUseTabs": "制表符",
+  "history.hiddenLines_one": "已隐藏 {{count}} 行",
+  "history.hiddenLines_other": "已隐藏 {{count}} 行",
+  "history.expandHiddenLines_one": "展开 {{count}} 行未更改内容",
+  "history.expandHiddenLines_other": "展开 {{count}} 行未更改内容"
 }
