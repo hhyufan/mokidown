@@ -10,7 +10,7 @@ import { isImeComposing } from '@utils/keyboard';
 import useConfigStore from '@store/useConfigStore';
 import { activeMarkdownPairs, emptyAsteriskPair, emptyMarkdownMarkPair, markdownAsteriskEdit, markdownBacktickEdit, markdownBrackets, markdownPairDeletion, markdownPairEnabled, matchingMarkdownBracket } from '@utils/markdownPairs';
 import { CODE_FENCE_LANGUAGE_EVENT, completedFenceLanguage, readMarkdownFence } from '@utils/markdownCodeFence';
-import { mathDraftAt, mathDraftRange, mathMarkName } from './milkdownMathMark';
+import { isMathEditing, mathDraftAt, mathDraftRange, mathMarkName } from './milkdownMathMark';
 import { characterEscapeMarkName, syntaxScanText } from './milkdownRawText';
 import { attachWritingCaret } from './milkdownWritingCaret';
 
@@ -125,24 +125,56 @@ function activeMarkRanges($caret, side = 1) {
   });
 }
 
-function delimiterBoundary($pos) {
+// 公式的定界符只在「这条公式正在编辑」时才摆出来（判定见 isMathEditing）：光标贴着边界路过
+// 既不落格子也不画 `$`，正文保持渲染态。斜体那类标记照旧贴边就摊开——它们的源码就是渲染
+// 结果，摊开不改变任何东西。
+function editableRanges(state, selection, caret, ranges) {
+  return ranges.filter(
+    ({ mark, from, to }) =>
+      mark.type.name !== mathMarkName || isMathEditing(state, selection, caret, { from, to }),
+  );
+}
+
+// 光标正踩在第几格定界符上，只有实时语法自己知道。公式预览读这一格，才能和这里画出的 `$`
+// 用同一个「在编辑」判定——两边各判各的，就会出现正文压在覆盖层底下、两边却摆着 `$` 的矛盾态。
+// 只读预览不挂实时语法，压根没有格子可问。
+export function delimiterCaret(state) {
+  const syntax = liveSyntaxKey.getState(state);
+  if (!syntax) return null;
+  return syntax.pointer ? syntax.pointer.caret : syntax.caret;
+}
+
+function delimiterBoundary(
+  state,
+  $pos,
+  selection = state.selection,
+  caret = liveSyntaxKey.getState(state).caret,
+) {
   if (!$pos.parent.isTextblock || $pos.parent.type.spec.code || $pos.textOffset) return null;
-  const closing = activeMarkRanges($pos, -1)
+  const closing = editableRanges(state, selection, caret, activeMarkRanges($pos, -1))
     .filter(({ to }) => to === $pos.pos)
     .sort((a, b) => b.from - a.from || b.order - a.order);
-  const opening = activeMarkRanges($pos)
+  const opening = editableRanges(state, selection, caret, activeMarkRanges($pos))
     .filter(({ from }) => from === $pos.pos)
     .sort((a, b) => b.to - a.to || a.order - b.order);
   const heading = $pos.parent.type.name === 'heading' && $pos.parentOffset === 0;
-  const parts = closing.map(({ mark, delimiters }) => ({
+  const parts = closing.map(({ mark, delimiters, from, to }) => ({
     mark,
     text: delimiters[1],
     opens: false,
+    from,
+    to,
   }));
   const closingLength = parts.reduce((length, { text }) => length + text.length, 0);
   if (heading) parts.push({ text: '#'.repeat($pos.parent.attrs.level) });
   parts.push(
-    ...opening.map(({ mark, delimiters }) => ({ mark, text: delimiters[0], opens: true })),
+    ...opening.map(({ mark, delimiters, from, to }) => ({
+      mark,
+      text: delimiters[0],
+      opens: true,
+      from,
+      to,
+    })),
   );
   if (!parts.length) return null;
   const text = parts.map((part) => part.text).join('');
@@ -180,7 +212,7 @@ function moveAcrossDelimiters(view, direction) {
   const { $from } = state.selection;
   if (!$from.parent.isTextblock || $from.parent.type.spec.code) return false;
   const caret = liveSyntaxKey.getState(state).caret;
-  const boundary = delimiterBoundary($from);
+  const boundary = delimiterBoundary(state, $from);
   const moveTo = ($pos, next, offset) => selectDelimiterPosition(view, $pos, next, offset);
   if (boundary) {
     const offset = (caret?.offset ?? boundary.defaultOffset) + direction;
@@ -195,14 +227,14 @@ function moveAcrossDelimiters(view, direction) {
       Array.from(text).at(direction < 0 ? -1 : 0);
     const size = character.length;
     const $next = state.doc.resolve($from.pos + direction * size);
-    const next = delimiterBoundary($next);
+    const next = delimiterBoundary(state, $next);
     if (next || boundary || adjacent.marks.length)
       return moveTo($next, next, direction < 0 ? next?.text.length : 0);
   } else if (!adjacent) {
     const edge = direction < 0 ? $from.before() : $from.after();
     const selection = TextSelection.findFrom(state.doc.resolve(edge), direction);
     if (selection instanceof TextSelection) {
-      const next = delimiterBoundary(selection.$from);
+      const next = delimiterBoundary(state, selection.$from);
       if (next || caret)
         return moveTo(selection.$from, next, direction < 0 ? next?.text.length : 0);
     }
@@ -215,6 +247,47 @@ const serializeInline = (serialize, schema, content) =>
     /\r?\n$/,
     '',
   );
+
+// 行内公式的两个 `$` 不在文档里，是画出来的：光标切在它们中间那一格时，退格/删除吃掉的是
+// 正文最后一个字或者公式外面的字，那两枚定界符怎么都删不掉——初次打出来的那对能删，正因为
+// 它还摊在文档里（见 mathDraftRange）。所以这一键不删字符，先把整条公式落成字面文本，摊成
+// 和成对手势一样的草稿：草稿的 `$` 是真字符，同样的按键再走一下就正常删掉，光标一走开又折回
+// 公式。不照粗体那样直接拆 mark：交回 remark 的是裸 LaTeX，写回文件少两个 `$`。
+// 由公式预览插件排在「贴在边上那一下先掀源码」之后调用：源码还没露出来就谈不上删定界符。
+export function unfoldMathPair(view, forward) {
+  const { state } = view;
+  const { empty, $from } = state.selection;
+  if (!empty || !$from.parent.isTextblock || $from.parent.type.spec.code) return false;
+  const boundary = delimiterBoundary(state, $from);
+  if (!boundary) return false;
+  // 文档位置只有一个，光标切在第几格由插件状态记着；没走过定界符就按默认那一格算。
+  const offset = liveSyntaxKey.getState(state).caret?.offset ?? boundary.defaultOffset;
+  const index = forward ? offset : offset - 1;
+  if (index < 0 || index >= boundary.text.length) return false;
+  let start = 0;
+  for (const part of boundary.parts) {
+    const end = start + part.text.length;
+    if (index < end) {
+      if (part.mark?.type.name !== mathMarkName) return false;
+      const [prefix, suffix] = markDelimiters(part.mark, state.doc.textBetween(part.from, part.to));
+      // 公式还挂在粗体这类标记里时，定界符跟着正文一起留下那几层，摊开再折回去才不会丢样式。
+      const shared = (state.doc.resolve(part.from).nodeAfter?.marks || []).filter(
+        (mark) => !mark.eq(part.mark),
+      );
+      const tr = closeHistory(state.tr)
+        .removeMark(part.from, part.to, part.mark)
+        .insertText(suffix, part.to, part.to, shared)
+        .insertText(prefix, part.from, part.from, shared);
+      // 定界符落在文档里原来那一格，光标原地不动，下一键删的就是它。左半边那枚先插进去，
+      // 右半边的坐标要跟着挪一位。
+      const caret = (part.opens ? part.from : part.to + prefix.length) + offset - start;
+      view.dispatch(tr.setSelection(TextSelection.create(tr.doc, caret)).scrollIntoView());
+      return true;
+    }
+    start = end;
+  }
+  return false;
+}
 
 function deleteDelimiter(ctx, view, event) {
   if (event.key !== 'Backspace' && event.key !== 'Delete') return false;
@@ -243,9 +316,9 @@ function deleteDelimiter(ctx, view, event) {
   const atStart = opening.length > 0;
   const range = (atStart ? opening : closing).sort((a, b) => (a.to - a.from) - (b.to - b.from)
     || a.delimiters[0].length - b.delimiters[0].length)[0];
-  // 行内公式的两个 `$` 不在文档里，是画出来的：把它当一对标记拆掉，交回 remark 的是裸
-  // LaTeX，屏幕上反而多出两个 `$`。贴在公式边上那一下归公式预览插件——它把源码掀开、
-  // 光标送进正文，删不删字符由下一按键决定。
+  // 走到这里说明这一键吃的是真字符（正文里的字，或者公式外面那一个）：公式不能照粗体那样
+  // 当一对标记拆掉，交回 remark 的是裸 LaTeX，写回文件凭空少两个 `$`。画出来的那两枚由
+  // unfoldMathPair 摊成草稿管，贴在折叠公式外侧那一下归公式预览插件——它把源码掀开、光标送进正文。
   if (range?.mark.type.name === mathMarkName) return false;
   const preference = activeMarkdownPairs(useConfigStore.getState());
   if (!range) {
@@ -387,7 +460,7 @@ function trackInlineClick(view, event) {
   if (pos == null) return;
   const $pos = view.state.doc.resolve(pos);
   if (!$pos.parent.isTextblock || $pos.parent.type.spec.code) return;
-  const boundary = delimiterBoundary($pos);
+  const boundary = delimiterBoundary(view.state, $pos);
   let offset = boundary?.defaultOffset;
   if (marker && boundary) {
     offset = markerOffset;
@@ -1076,8 +1149,12 @@ export const milkdownLiveSyntax = $prose((ctx) => new Plugin({
       const virtualCaret = pointer ? pointer.caret : caret;
       const decorations = pendingMarkers($from);
       const opening = new Map(), closing = new Map();
-      const ranges = activeMarkRanges($from);
-      if (virtualCaret) ranges.push(...activeMarkRanges($from, -1).filter((range) => range.to === $from.pos));
+      const ranges = editableRanges(state, selection, virtualCaret, activeMarkRanges($from));
+      // 收尾那一侧的标记只在光标真的踩在格子上时才画：贴着边界路过不算在改它。
+      // 公式再放宽一档——源码既然摊开了就得把 `$` 补齐，编辑态看到的才是完整的 `$x$`。
+      const behind = editableRanges(state, selection, virtualCaret, activeMarkRanges($from, -1))
+        .filter(({ to, mark }) => to === $from.pos && (virtualCaret || mark.type.name === mathMarkName));
+      ranges.push(...behind);
       ranges.sort((a, b) => a.from - b.from || b.to - a.to || a.order - b.order);
       for (const { from, to, delimiters: [open, close] } of ranges) {
         opening.set(from, (opening.get(from) || '') + open);
@@ -1088,7 +1165,7 @@ export const milkdownLiveSyntax = $prose((ctx) => new Plugin({
         decorations.push(Decoration.node($from.before(), $from.after(), { class: 'moki-markdown-heading-source' }));
       }
       if (virtualCaret) {
-        const boundary = delimiterBoundary($from);
+        const boundary = delimiterBoundary(state, $from, selection, virtualCaret);
         opening.delete($from.pos);
         closing.delete($from.pos);
         if (boundary) decorations.push(markerWidget($from.pos, boundary.text, -1, boundary.heading, virtualCaret.offset));
