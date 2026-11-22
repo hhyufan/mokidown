@@ -4,15 +4,14 @@
  * 光标落在一个还没写完的控制序列（`\` 加若干字母）里才出现，像编辑器的代码补全：
  * 会写编码的人边打边过滤，不会写的人打个 `\` 就能从列表里挑。
  * 刚打开的空对（`$|$`，正文还没写）也算数，列表当场摊开，不等人想起来打反斜杠。
- * 块级公式源码态、行内公式的 mark 正文、还没折成公式的成对草稿共用同一张符号表，
- * 但行内公式得先双击或用键盘进过编辑态——单击只是看源码，不打扰。
+ * 块级公式源码态、行内公式的 mark 正文、还没折成公式的成对草稿共用同一张符号表：
+ * 公式只要展开着，光标底下是半个没写完的控制序列就摊开列表。
  * 浮层与代码块语言菜单同一套机制，渲染在 body 上、正文里不留节点，所以输入
  * 与光标行为完全不受影响。
  */
 import { Plugin, PluginKey, TextSelection } from '@milkdown/kit/prose/state';
 import { $prose } from '@milkdown/kit/utils';
 import { mathDraftAt, mathMarkName } from './milkdownMathMark';
-import { isMathInspecting } from './milkdownMathPreview';
 import { completeMacros, hasCandidate, needsSeparator } from './milkdownMathSymbols';
 
 export const MATH_COMPLETION_EVENT = 'moki:math-completion';
@@ -101,9 +100,9 @@ export const milkdownMathCompletion = $prose(() => new Plugin({
     let dismissed = null;
     return {
       update(view) {
-        // 行内公式被单击「只看源码」时不弹列表：那一档还没进编辑态，弹出来等于替用户
-        // 决定了他要补全什么。判定和预览浮层共用预览插件记下的那一份记忆。
-        const token = view.hasFocus() && !isMathInspecting(view.state) ? completionAt(view) : null;
+        // 列表只认光标底下有没有半个控制序列，不看公式是怎么展开的：点开、双击、贴边退格
+        // 哪一种都算在写这条式子。
+        const token = view.hasFocus() ? completionAt(view) : null;
         const hit = token && !completeMacros.has(token.query) ? token : null;
         const key = hit && `${hit.from}:${hit.query}`;
         if (key === previous) return;
