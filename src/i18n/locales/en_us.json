@@ -58,7 +58,7 @@
   "sidebar.explorer.refresh": "Refresh",
   "editor.menu.path": "Path actions",
   "editor.menu.copyPath": "Copy Path",
-  "sidebar.explorer.openInExplorer": "Open in Explorer",
+  "sidebar.explorer.openInExplorer": "Open in File Manager",
   "sidebar.explorer.openFolder": "Open Folder",
   "sidebar.explorer.closeFolder": "Close folder",
   "sidebar.explorer.newFilePlaceholder": "File name",
@@ -290,7 +290,7 @@
   "settings.general.externalFileDrag": "Drag Files Out",
   "settings.general.externalFileDragDesc": "Choose what happens when a file is dragged out of MokiDown. Folders use Windows drag and drop.",
   "settings.general.openDragWindow": "Open in New Window",
-  "settings.general.dragToExplorer": "Hand Off to Windows Explorer",
+  "settings.general.dragToExplorer": "Hand Off to File Manager",
   "toolbar.drag": "Drag toolbar",
   "sidebar.tabs": "Sidebar tabs",
   "notification.info": "Info",
@@ -1012,5 +1012,8 @@
   "settings.editor.tabBehavior": "Tab behavior",
   "settings.editor.tabBehaviorDesc": "Insert spaces or tabs on Tab, and choose the indent width.",
   "settings.editor.indentUseSpaces": "Spaces",
-  "settings.editor.indentUseTabs": "Tabs"
+  "settings.editor.indentUseTabs": "Tabs",
+  "htmlPreview.localPreview": "Local preview",
+  "htmlPreview.hotReload": "Live reload",
+  "settings.general.languageZh": "Chinese"
 }

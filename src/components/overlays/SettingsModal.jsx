@@ -288,7 +288,7 @@ function SettingsModal({ open: openProp, onClose }) {
                       onChange={(v) => handleChange('language', v)}
                       options={[
                         { value: 'en', label: <span>English</span> },
-                        { value: 'zh', label: <span>中文</span> },
+                        { value: 'zh', label: <span>{t('settings.general.languageZh')}</span> },
                       ]}
                     />
                   </SettingRow>
