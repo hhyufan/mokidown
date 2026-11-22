@@ -448,3 +448,50 @@ html[data-theme='dark'] .theme-switch-icons .theme-icon--moon {
   color: var(--text-sec);
   font-size: 13px;
 }
+
+/* Monaco 彩虹缩进：颜色取 indent-rainbow 默认色相，线/面由设置切换。 */
+.monaco-editor {
+  --moki-rainbow-0: rgba(255, 255, 64, 0.1);
+  --moki-rainbow-1: rgba(127, 255, 127, 0.1);
+  --moki-rainbow-2: rgba(255, 127, 255, 0.1);
+  --moki-rainbow-3: rgba(79, 236, 236, 0.1);
+}
+
+html[data-theme='dark'] .monaco-editor {
+  --moki-rainbow-0: rgba(255, 255, 64, 0.12);
+  --moki-rainbow-1: rgba(127, 255, 127, 0.12);
+  --moki-rainbow-2: rgba(255, 127, 255, 0.12);
+  --moki-rainbow-3: rgba(79, 236, 236, 0.12);
+}
+
+@mixin moki-rainbow-stripes {
+  background-image: repeating-linear-gradient(
+    90deg,
+    var(--moki-rainbow-0) 0 var(--moki-indent-width),
+    var(--moki-rainbow-1) var(--moki-indent-width) calc(var(--moki-indent-width) * 2),
+    var(--moki-rainbow-2) calc(var(--moki-indent-width) * 2) calc(var(--moki-indent-width) * 3),
+    var(--moki-rainbow-3) calc(var(--moki-indent-width) * 3) calc(var(--moki-indent-width) * 4)
+  );
+  background-repeat: no-repeat;
+}
+
+html[data-indent-rainbow='surface'] {
+  @for $chars from 1 through 1024 {
+    .monaco-editor .moki-indent-rainbow-line-#{$chars} {
+      @include moki-rainbow-stripes;
+      background-size: calc(#{$chars} * 1ch) 100%;
+    }
+  }
+}
+
+/* 线模式：按层级给 .core-guide-indent 上色，Monaco 的 lvl-N 每 30 层循环。 */
+html[data-indent-rainbow='line'] {
+  @for $level from 0 through 29 {
+    .monaco-editor .lines-content .core-guide-indent.lvl-#{$level} {
+      box-shadow: 1px 0 0 0 var(--moki-rainbow-#{$level % 4}) inset;
+    }
+  }
+  .monaco-editor .lines-content .core-guide-indent.indent-active {
+    box-shadow: 1px 0 0 0 var(--moki-rainbow-0) inset;
+  }
+}
