@@ -896,6 +896,9 @@ const mathValueEditPlugin = $prose((ctx) => {
         if (node.type === blockSourceType) {
           const { from, to } = newState.selection;
           if (from > pos && to < pos + node.nodeSize) return false;
+          // 空的源码块折出去只剩一只空框，写回文件还平白留下 `$$\n\n$$` 这段没写完的语法。
+          // 与行内空对同一条规矩（见 foldDraft）：没什么可折的就摊着，等用户回来接着写。
+          if (!source.trim()) return false;
           replaceSource(pos, node, blockType.create({ value: source }));
           return;
         }
