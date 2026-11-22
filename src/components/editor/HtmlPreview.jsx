@@ -46,11 +46,13 @@ export default function HtmlPreview({
   const sessionRef = useRef(null);
   const viewportRef = useRef(null);
   const iframeRef = useRef(null);
-  const { syncFrameTheme, wallpaperProps } = usePreviewFrame(iframeRef, { onNavigate: (url) => {
-    setNavigationUrl(url);
-    setAddress(url);
-    setError('');
-  } });
+  const { syncFrameTheme, wallpaperProps } = usePreviewFrame(iframeRef, {
+    onNavigate: (url) => {
+      setNavigationUrl(url);
+      setAddress(url);
+      setError('');
+    },
+  });
   const injectSizing = (frame) => {
     try {
       const doc = frame?.contentDocument;
@@ -262,10 +264,18 @@ export default function HtmlPreview({
                 }
               }}
             />
-            <PreviewAddressButton icon="refresh" label={t('htmlPreview.refresh')} onClick={refreshPreview} />
+            <PreviewAddressButton
+              icon="refresh"
+              label={t('htmlPreview.refresh')}
+              onClick={refreshPreview}
+            />
           </form>
           {native && (
-            <PreviewAddressButton icon="close" label={t('htmlPreview.disableLiveReload')} onClick={() => setLiveOverride(false)} />
+            <PreviewAddressButton
+              icon="close"
+              label={t('htmlPreview.disableLiveReload')}
+              onClick={() => setLiveOverride(false)}
+            />
           )}
         </header>
       )}
@@ -274,7 +284,11 @@ export default function HtmlPreview({
           {error}
         </div>
       )}
-      <div className="html-preview__viewport preview-wallpaper" ref={viewportRef} {...wallpaperProps}>
+      <div
+        className="html-preview__viewport preview-wallpaper"
+        ref={viewportRef}
+        {...wallpaperProps}
+      >
         {frame && (
           <iframe
             ref={iframeRef}
@@ -323,7 +337,7 @@ export default function HtmlPreview({
               {t(liveReload ? 'htmlPreview.disableLiveReload' : 'htmlPreview.enableLiveReload')}
             </span>
             <span className="monaco-context-menu__shortcut">
-              {liveReload ? '本地预览' : '热更新'}
+              {t(liveReload ? 'htmlPreview.localPreview' : 'htmlPreview.hotReload')}
             </span>
           </button>
           <button
