@@ -1,5 +1,7 @@
 import { useTranslation } from 'react-i18next';
 import { Modal } from 'antd';
+import { HistoryOutlined } from '@ant-design/icons';
+import { formatHistoryTime, formatHistoryBytes } from '@utils/historyFormat';
 import useVersionListStore from '@store/useVersionListStore';
 import useHistoryStore from '@store/useHistoryStore';
 import { sendToPlugin } from '@utils/pluginBus';
@@ -34,11 +36,35 @@ export default function VersionList() {
   return (
     <Modal open title={state.title} footer={null} onCancel={state.close} width={520}>
       <div className="version-list">
-        {state.items.length === 0 && <p className="version-list__empty">{t('extensions.noVersions')}</p>}
+        {state.items.length === 0 && (
+          <p className="version-list__empty">{t('extensions.noVersions')}</p>
+        )}
         {state.items.map((item) => (
-          <button key={item.id} type="button" className="version-list__item" onClick={() => pick(item)}>
-            <span className="version-list__label">{item.label || item.id}</span>
-            {item.meta && <span className="version-list__meta">{item.meta}</span>}
+          <button
+            key={item.id}
+            type="button"
+            className="version-list__item"
+            onClick={() => pick(item)}
+          >
+            {item.restored && (
+              <span
+                className="version-list__rollback"
+                role="img"
+                aria-label={t('history.rollback')}
+              >
+                <HistoryOutlined aria-hidden="true" />
+              </span>
+            )}
+            <span className="version-list__label">
+              {Number.isFinite(item.timestamp)
+                ? formatHistoryTime(item.timestamp)
+                : item.label || item.id}
+            </span>
+            {(item.bytes != null || item.meta) && (
+              <span className="version-list__meta">
+                {item.bytes != null ? formatHistoryBytes(item.bytes) : item.meta}
+              </span>
+            )}
           </button>
         ))}
       </div>
