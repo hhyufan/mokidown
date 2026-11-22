@@ -4,6 +4,7 @@ import {
   Modal,
   Menu,
   Switch,
+  Segmented,
   Select,
   Input,
   InputNumber,
@@ -388,27 +389,75 @@ function SettingsModal({ open: openProp, onClose }) {
                   </SettingRow>
                   <SettingGroup label={t('settings.group.formatting')} />
                   <SettingRow
-                    label={t('settings.editor.tabSize')}
-                    desc={t('settings.editor.tabSizeDesc')}
-                  >
-                    <Select
-                      style={{ width: 100 }}
-                      value={config.tabSize}
-                      onChange={(v) => handleChange('tabSize', Number(v))}
-                      options={[
-                        { value: 2, label: <span>2</span> },
-                        { value: 4, label: <span>4</span> },
-                        { value: 8, label: <span>8</span> },
-                      ]}
-                    />
-                  </SettingRow>
-                  <SettingRow
                     label={t('settings.editor.wordWrap')}
                     desc={t('settings.editor.wordWrapDesc')}
                   >
                     <Switch
                       checked={config.wordWrap}
                       onChange={(v) => handleChange('wordWrap', v)}
+                    />
+                  </SettingRow>
+                  <SettingRow
+                    label={t('settings.editor.tabBehavior')}
+                    desc={t('settings.editor.tabBehaviorDesc')}
+                  >
+                    <Space size={8}>
+                      <Segmented
+                        className="settings-indent-segmented"
+                        value={config.insertSpaces === false ? 'tab' : 'spaces'}
+                        onChange={(v) => handleChange('insertSpaces', v === 'spaces')}
+                        options={[
+                          { value: 'spaces', label: t('settings.editor.indentUseSpaces') },
+                          { value: 'tab', label: t('settings.editor.indentUseTabs') },
+                        ]}
+                      />
+                      <Select
+                        style={{ width: 90 }}
+                        value={config.tabSize}
+                        onChange={(v) => handleChange('tabSize', Number(v))}
+                        options={[
+                          { value: 2, label: '2' },
+                          { value: 4, label: '4' },
+                          { value: 8, label: '8' },
+                        ]}
+                      />
+                    </Space>
+                  </SettingRow>
+                  <SettingGroup label={t('settings.group.indent')} />
+                  <SettingRow
+                    label={t('settings.editor.showWhitespace')}
+                    desc={t('settings.editor.showWhitespaceDesc')}
+                  >
+                    <Switch
+                      checked={config.renderWhitespaceEnabled !== false}
+                      onChange={(v) => handleChange('renderWhitespaceEnabled', v)}
+                    />
+                  </SettingRow>
+                  <SettingRow
+                    label={t('settings.editor.indentRainbowEnabled')}
+                    desc={t('settings.editor.indentRainbowEnabledDesc')}
+                  >
+                    <Switch
+                      checked={config.indentRainbowEnabled !== false}
+                      onChange={(v) => handleChange('indentRainbowEnabled', v)}
+                    />
+                  </SettingRow>
+                  <SettingRow
+                    label={t('settings.editor.indentRainbowStyle')}
+                    desc={t('settings.editor.indentRainbowStyleDesc')}
+                  >
+                    <Select
+                      style={{ width: 140 }}
+                      value={config.indentRainbowStyle || 'surface'}
+                      onChange={(v) => handleChange('indentRainbowStyle', v)}
+                      disabled={config.indentRainbowEnabled === false}
+                      options={[
+                        {
+                          value: 'surface',
+                          label: t('settings.editor.indentRainbowSurface'),
+                        },
+                        { value: 'line', label: t('settings.editor.indentRainbowLine') },
+                      ]}
                     />
                   </SettingRow>
                   <SettingGroup label={t('settings.group.display')} />
