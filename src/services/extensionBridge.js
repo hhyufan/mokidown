@@ -303,7 +303,7 @@ export function createExtensionBridge(entry, port) {
       if (!tab) throw new Error('Open the document before comparing');
       useHistoryStore.getState().setDiff({
         tabId: tab.id,
-        timestamp: Date.now(),
+        timestamp: Number.isFinite(args.timestamp) ? args.timestamp : Date.now(),
         content: String(args.content),
         label: String(args.label || ''),
         actionLabel: args.actionLabel ? String(args.actionLabel).slice(0, 80) : '',
