@@ -38,11 +38,11 @@ fn disable_browser_ui(controller: ICoreWebView2Controller) -> Result<()> {
         let settings = controller.CoreWebView2()?.Settings()?;
         settings.SetAreDefaultContextMenusEnabled(false)?;
         settings.SetAreDefaultScriptDialogsEnabled(false)?;
-        settings.SetAreDevToolsEnabled(false)?;
+        settings.SetAreDevToolsEnabled(cfg!(debug_assertions))?;
         settings.SetIsStatusBarEnabled(false)?;
         settings.SetIsZoomControlEnabled(false)?;
         if let Ok(shortcuts) = settings.cast::<ICoreWebView2Settings3>() {
-            shortcuts.SetAreBrowserAcceleratorKeysEnabled(false)?;
+            shortcuts.SetAreBrowserAcceleratorKeysEnabled(cfg!(debug_assertions))?;
         }
         if let Ok(autofill) = settings.cast::<ICoreWebView2Settings4>() {
             autofill.SetIsGeneralAutofillEnabled(false)?;

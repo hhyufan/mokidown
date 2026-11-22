@@ -6,6 +6,7 @@ import ChevronIcon from '@components/ui/ChevronIcon';
 import MokiStatusEmpty from '@components/moki/MokiStatusEmpty';
 import useEditorStore from '@store/useEditorStore';
 import useHistoryStore from '@store/useHistoryStore';
+import { reportRuntimeLog } from '@/services/runtimeLogs';
 import { historyList, historyRead, onHistoryChanged } from '@utils/tauriApi';
 import './history.scss';
 
@@ -64,8 +65,14 @@ export default function Timeline() {
     try {
       const next = (await historyList(tab.path)) || [];
       if (request === requestRef.current) setEntries(next);
-    } catch {
-      // A failed refresh should leave the last successful list available.
+    } catch (error) {
+      // A failed refresh should leave the last successful list available, but
+      // surface the reason in the runtime log so a broken invoke is diagnosable.
+      reportRuntimeLog({
+        source: 'WebView',
+        level: 'warning',
+        message: `history_list failed: ${error?.message || error}`,
+      });
     } finally {
       if (request === requestRef.current) {
         setLoading(false);

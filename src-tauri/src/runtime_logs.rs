@@ -143,6 +143,10 @@ impl log::Log for RuntimeLogger {
             return;
         }
         let message: String = record.args().to_string().chars().take(4096).collect();
+        // Chromium 在 ResizeObserver 回调改布局时给出的良性循环警告，不是应用错误。
+        if message.contains("ResizeObserver loop") {
+            return;
+        }
         let target = record.target();
         #[cfg(not(test))]
         let _ = writeln!(std::io::stderr().lock(), "[{target}] {message}");
