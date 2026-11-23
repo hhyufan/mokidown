@@ -693,6 +693,9 @@
   .milkdown-editor .ProseMirror-selectednode {
     outline: none;
   }
+  .milkdown-editor hr.ProseMirror-selectednode {
+    background-color: var(--accent);
+  }
   .milkdown-editor li.ProseMirror-selectednode::after {
     content: none;
   }
