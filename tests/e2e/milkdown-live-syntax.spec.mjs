@@ -1187,6 +1187,35 @@ test('dragging from rendered bold text keeps the native text selection', async (
     .toBe('abcdef');
 });
 
+test('clicking the closing backtick or following prose keeps the intended insertion point', async ({
+  page,
+}) => {
+  const editor = await openEditor(page, '`321321`3333');
+  await editor.locator('code').click();
+  const lastMarker = editor.locator('.moki-markdown-marker:visible').last();
+  const tick = await lastMarker.boundingBox();
+  await page.mouse.click(tick.x + tick.width * 0.8, tick.y + tick.height / 2);
+  await expect(editor.locator('.moki-markdown-marker--with-caret')).toHaveAttribute(
+    'data-marker-before',
+    '`',
+  );
+  await page.keyboard.insertText('A');
+  expect(await page.evaluate(() => window.trial.markdown().trimEnd())).toBe('`321321`A3333');
+
+  await editor.locator('code').click();
+  const point = await editor.locator('p').evaluate((paragraph) => {
+    const text = paragraph.lastChild;
+    const range = document.createRange();
+    range.setStart(text, 3);
+    range.collapse(true);
+    const { left, top, height } = range.getBoundingClientRect();
+    return { x: left, y: top + height / 2 };
+  });
+  await page.mouse.click(point.x, point.y);
+  await page.keyboard.insertText('B');
+  expect(await page.evaluate(() => window.trial.markdown().trimEnd())).toBe('`321321`A33B33');
+});
+
 test('two backticks place the caret between them and the next text renders as inline code', async ({
   page,
 }) => {
