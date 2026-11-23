@@ -676,8 +676,10 @@ test('Enter with several candidates left stays the editor’s own', async ({ pag
   await page.keyboard.press('Enter');
   // 还没写完的编码该由接着打字的人自己决定，列表不许抢走 Enter。
   expect((await page.evaluate(() => window.trial.state())).doc.content).toHaveLength(2);
-  // 断行把成对的那两枚 `$` 拆到两段里，草稿当场散掉：收尾那枚留在第二段，还是普通文字。
-  expect(await page.evaluate(() => window.trial.markdown())).toMatch(/^正文 \$\\in\n\n\$\n/);
+  // 列表没接走这一下，也没有替用户挑 `\infty`；Enter 交给编辑器，按行内公式的规矩抬成块级。
+  expect(await page.evaluate(() => window.trial.markdown())).toBe('正文 \n\n$$\n\\in\n\n$$\n');
+  expect(await page.evaluate(() => window.trial.state().doc.content[1].content[0].text)).toBe('\\in\n');
+  await expect(list).toHaveCount(0);
 });
 
 test('a macro still being typed is not handed to KaTeX', async ({ page }) => {
@@ -777,6 +779,71 @@ test('delete at the other side opens the same formula instead of taking its deli
   expect(await page.evaluate(() => window.trial.markdown())).toBe('上面一行\n\n正文 $\\alpha x^2$ 结尾\n');
 });
 
+// `$` 左边那一格是白话文字的地盘：在这儿打字，每一笔都该留在公式外面。
+// 从前这里只有第一笔守规矩——落完之后光标正好停在新排出来的左边界，插件把 mark 按回去，
+// 第二笔起全灌进正文头上（`正文 AB$x^2$` 变成 `正文 A$ABx^2$` 那种）。
+test('typing at the left edge keeps every stroke in the prose', async ({ page }) => {
+  const editor = await openEditor(page, '上面一行\n\n正文 $x^2$ 结尾');
+  await walkToMathEdge(page, editor, 'left');
+  await page.keyboard.type('A');
+  expect(await page.evaluate(() => window.trial.markdown())).toBe('上面一行\n\n正文 A$x^2$ 结尾\n');
+  await page.keyboard.type('B');
+  expect(await page.evaluate(() => window.trial.markdown())).toBe('上面一行\n\n正文 AB$x^2$ 结尾\n');
+  // 正文里连着打字，不该被公式吃掉一笔。
+  await page.keyboard.type('CD');
+  expect(await page.evaluate(() => window.trial.markdown())).toBe('上面一行\n\n正文 ABCD$x^2$ 结尾\n');
+  // 在正文这侧打字不该顺手把公式摊开：两枚定界符都还没画出来。
+  await expect.poll(() => visibleMarkers(editor)).toEqual([]);
+});
+
+// 反过来，贴着尾巴打字还是「这条式子要续写」——左边界改规矩不该把这一头也带跑。
+test('typing at the right edge still continues the formula', async ({ page }) => {
+  const editor = await openEditor(page, '上面一行\n\n正文 $x^2$ 结尾');
+  await walkToMathEdge(page, editor, 'right');
+  await page.keyboard.type('\\alpha');
+  expect(await page.evaluate(() => window.trial.markdown())).toBe(
+    '上面一行\n\n正文 $x^2\\alpha$ 结尾\n',
+  );
+});
+
+// 点在画出来的左 `$` 上，光标该停在源码这一行。气泡就挂在公式开头同一个位置，
+// 兜底量坐标时按「位置之后」读 DOM，读到的其实是气泡的盒子，光标于是跳到气泡那一行：
+// 第一行的公式气泡朝下（看着像跑到下一行），第二行的气泡朝上（看着像跑到上一行）。
+const clickLeftDelimiter = async (page, content) => {
+  const editor = await openEditor(page, content);
+  const box = await editor.locator('[data-moki-math-mark]').boundingBox();
+  await page.mouse.click(box.x + box.width / 2, box.y + box.height / 2);
+  await expect.poll(() => visibleMarkers(editor)).toEqual(['$', '$']);
+  const dollar = await editor.locator('.moki-markdown-marker').first().boundingBox();
+  const caret = page.locator('.moki-writing-caret');
+  // 画光标排在 requestAnimationFrame 上：先等它从「点正文那一下」的位置挪开再量，不然量到旧位置。
+  const before = await caret.evaluate((element) => element.style.transform);
+  await page.mouse.click(dollar.x + dollar.width / 2, dollar.y + dollar.height / 2);
+  await expect.poll(() => caret.evaluate((element) => element.style.transform)).not.toBe(before);
+  const drawn = page.locator('.moki-writing-caret:not([hidden])');
+  await expect(drawn).toBeVisible();
+  return {
+    head: await page.evaluate(() => window.trial.state().selection.head),
+    caret: await drawn.boundingBox(),
+    source: await editor.locator('[data-moki-math-mark]').boundingBox(),
+    bubble: await editor.locator('.moki-math-preview--inline').boundingBox(),
+  };
+};
+
+test('clicking the left delimiter draws the caret on the source line, not on the bubble', async ({
+  page,
+}) => {
+  for (const content of ['正文 $\\alpha^2$ 结尾', '上面一行\n\n正文 $\\alpha^2$ 结尾']) {
+    const { caret, source, bubble, head } = await clickLeftDelimiter(page, content);
+    const measured = JSON.stringify({ head, caret, source, bubble });
+    // 这一行摆得下就朝上、摆不下就朝下：两种翻法都得让光标留在源码那一行。
+    expect(bubble.y > source.y, measured).toBe(content.startsWith('正文'));
+    expect(Math.abs(caret.x - source.x), measured).toBeLessThanOrEqual(2);
+    expect(caret.y, measured).toBeGreaterThanOrEqual(source.y - 2);
+    expect(caret.y + caret.height, measured).toBeLessThanOrEqual(source.y + source.height + 2);
+  }
+});
+
 test('a formula clicked open shows its source with the bubble, and keeps editing inside', async ({ page }) => {
   const editor = await openEditor(page, '上面一行\n\n正文 $x^2$ 结尾');
   const bubbles = editor.locator('.moki-math-preview--inline');
@@ -797,6 +864,138 @@ test('a formula clicked open shows its source with the bubble, and keeps editing
   // 退格删掉的还是刚打进去的那个字符，公式本身不动。
   await page.keyboard.press('Backspace');
   expect(await page.evaluate(() => window.trial.markdown())).toBe('上面一行\n\n正文 $x^2$ 结尾\n');
+});
+
+// 单击那一下不该有中间态。从前按下还没抬起的那一段里，预览插件按实时选区把源码摊开，
+// 实时语法却把定界符冻在点击前的选区上（原生选词与拖动选中期间不许正文在指针底下重排），
+// 于是按住的一拍屏幕上只有 `\alpha^2`、两头缺 `$`，抬起才补齐。逐帧钉住：源码一摊开，两枚就得同时在。
+const watchFlipFrames = (page) =>
+  page.evaluate(() => {
+    window.__frames = [];
+    const sample = () => [
+      document.querySelector('.moki-math-source') ? 1 : 0,
+      [...document.querySelectorAll('.moki-markdown-marker[data-moki-marker="$"]')].filter(
+        (node) => node.getBoundingClientRect().width > 0,
+      ).length,
+    ];
+    let frames = 0;
+    const loop = () => {
+      window.__frames.push(sample());
+      if (++frames < 200) requestAnimationFrame(loop);
+    };
+    requestAnimationFrame(loop);
+  });
+
+test('a held single click never paints the source without its delimiters', async ({ page }) => {
+  const editor = await openEditor(page, '正文 $\\alpha^2$ 结尾');
+  const box = await editor.locator('[data-moki-math-mark]').boundingBox();
+  await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
+  await watchFlipFrames(page);
+  await page.mouse.down();
+  await page.waitForTimeout(120);
+  await page.mouse.up();
+  await expect.poll(() => visibleMarkers(editor)).toEqual(['$', '$']);
+  const frames = await page.evaluate(() => window.__frames);
+  const revealed = frames.findIndex(([source]) => source);
+  expect(revealed).toBeGreaterThan(-1);
+  expect(frames.slice(revealed).every(([, markers]) => markers === 2)).toBe(true);
+});
+
+// 行内公式的正文是一个 mark 区间，mark 跨不了段落：默认的 Enter 会把 `$a + b$` 从中间
+// 劈成 `$a$` 与 `$ + b$` 两条公式，写回文件就是一段坏语法（实测过）。所以这一下改成
+// 「这条式子要写成多行」：整条抬到新的一行、换成块级源码态，原句被隔成前后两段，
+// 换行符落进块里，光标停在新行行首接着写。
+function docBlocks(page) {
+  return page.evaluate(() => {
+    const text = (node) => node.text || (node.content || []).map(text).join('');
+    return window.trial.state().doc.content.map((block) => ({ type: block.type, text: text(block) }));
+  });
+}
+test('Enter inside an inline formula lifts it onto its own line as a block formula', async ({
+  page,
+}) => {
+  const editor = await openEditor(page, '正文 $a + b$ 结尾');
+  await editFormula(page, editor);
+  await page.keyboard.press('Enter');
+  expect(await docBlocks(page)).toEqual([
+    { type: 'paragraph', text: '正文 ' },
+    { type: 'math_source_block', text: 'a\n + b' },
+    { type: 'paragraph', text: ' 结尾' },
+  ]);
+  expect(await page.evaluate(() => window.trial.markdown())).toBe(
+    '正文 \n\n$$\na\n + b\n$$\n\n 结尾\n',
+  );
+  // 块级源码态一到位，预览就排在源码块上方；光标落在换行之后那一格（` + b` 的行首）。
+  await expect(editor.locator('.moki-math-preview--block')).toHaveCount(1);
+  await page.keyboard.type('\\gamma ');
+  expect(await page.evaluate(() => window.trial.markdown())).toBe(
+    '正文 \n\n$$\na\n\\gamma  + b\n$$\n\n 结尾\n',
+  );
+});
+
+test('Shift+Enter inside an inline formula lifts it the same way instead of a hard break', async ({
+  page,
+}) => {
+  const editor = await openEditor(page, '正文 $a + b$ 结尾');
+  await editFormula(page, editor);
+  await page.keyboard.press('Shift+Enter');
+  expect(await page.evaluate(() => window.trial.markdown())).toBe(
+    '正文 \n\n$$\na\n + b\n$$\n\n 结尾\n',
+  );
+  expect(await docBlocks(page).then((blocks) => blocks.map(({ type }) => type))).toEqual([
+    'paragraph',
+    'math_source_block',
+    'paragraph',
+  ]);
+});
+
+test('Enter in an unfinished $$ pair lifts it into a block formula, stranding no delimiter', async ({
+  page,
+}) => {
+  const editor = await openEditor(page);
+  await editor.click();
+  await page.keyboard.type('正文 $$\\alpha + \\beta');
+  await page.keyboard.press('Enter');
+  // 草稿那两枚字面 `$` 连同裁掉的空白一起退场，文档里不该留下落单的定界符。
+  expect(await page.evaluate(() => window.trial.markdown())).toBe(
+    '正文 \n\n$$\n\\alpha + \\beta\n\n$$\n',
+  );
+  expect(await docBlocks(page)).toEqual([
+    { type: 'paragraph', text: '正文 ' },
+    { type: 'math_source_block', text: '\\alpha + \\beta\n' },
+  ]);
+});
+
+test('Enter in an empty $$ pair opens an empty block editor instead of a stray dollar', async ({
+  page,
+}) => {
+  const editor = await openEditor(page);
+  await editor.click();
+  await page.keyboard.type('正文 $$');
+  await expect(editor.locator('.moki-math-draft-marker')).toHaveCount(2);
+  await page.keyboard.press('Enter');
+  expect(await page.evaluate(() => window.trial.markdown())).toBe('正文 \n\n$$\n$$\n');
+  expect(await docBlocks(page)).toEqual([
+    { type: 'paragraph', text: '正文 ' },
+    { type: 'math_source_block', text: '' },
+  ]);
+});
+
+test('Enter just outside an inline formula still splits the paragraph and keeps the formula', async ({
+  page,
+}) => {
+  await openEditor(page, '正文 $a + b$ 结尾');
+  // 光标停在句尾，离公式差一格。这里不用「点段落再按 End」：单击之后 live-syntax 会延一拍把
+  // 光标按点击落点重新按上去，End 有时被盖回段首（实测过，跟公式无关，纯文本段落一样中），
+  // 这一下就变成了在段首断行。selectTextblock 直接把光标钉在段末。
+  await page.evaluate(() => window.trial.selectTextblock(0, 'end'));
+  await page.keyboard.press('Enter');
+  expect(await page.evaluate(() => window.trial.markdown())).toBe('正文 $a + b$ 结尾\n\n');
+  // docBlocks 量的是节点文字，不含画出来的定界符；公式完整与否由上面那条 markdown 盯。
+  expect(await docBlocks(page)).toEqual([
+    { type: 'paragraph', text: '正文 a + b 结尾' },
+    { type: 'paragraph', text: '' },
+  ]);
 });
 
 test('a completion narrows to the closest code when several macros share the prefix', async ({ page }) => {
@@ -894,8 +1093,9 @@ test('an abandoned $$ stays visible source instead of an empty formula', async (
 
 test('an abandoned block formula stays source instead of an empty render', async ({ page }) => {
   const editor = await openEditor(page, '上面一行');
-  await editor.locator('p').first().click();
-  await page.keyboard.press('Control+End');
+  // 光标钉在段末，别再走「点段落 + Control+End」：单击之后延一拍重放的落点有时把 Control+End
+  // 盖回段首（实测过，与公式无关），那一下 `$$ ` 就打到了正文左边。
+  await page.evaluate(() => window.trial.selectTextblock(0, 'end'));
   await page.keyboard.press('Enter');
   await page.keyboard.type('$$ ');
   // 源码块空着走开，折过去只剩一只空框，写回文件还平白留下 `$$\n\n$$` 这段没写完的语法。
