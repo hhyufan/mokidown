@@ -790,6 +790,7 @@
             border-inline-start: 1px solid var(--text, #2c2c2e);
             animation: ProseMirror-cursor-blink 1.1s steps(2, start) infinite;
             content: '';
+            z-index: 1;
             @media (prefers-reduced-motion: reduce) {
               animation: none;
             }

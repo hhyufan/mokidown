@@ -677,9 +677,13 @@ test('Enter with several candidates left stays the editor’s own', async ({ pag
   // 还没写完的编码该由接着打字的人自己决定，列表不许抢走 Enter。
   expect((await page.evaluate(() => window.trial.state())).doc.content).toHaveLength(2);
   // 列表没接走这一下，也没有替用户挑 `\infty`；Enter 交给编辑器，按行内公式的规矩抬成块级。
-  expect(await page.evaluate(() => window.trial.markdown())).toBe('正文 \n\n$$\n\\in\n\n$$\n');
-  expect(await page.evaluate(() => window.trial.state().doc.content[1].content[0].text)).toBe('\\in\n');
-  await expect(list).toHaveCount(0);
+  expect(await page.evaluate(() => window.trial.markdown())).toBe('正文 \n\n$$\n\\in\n$$\n');
+  expect(await page.evaluate(() => window.trial.state().doc.content[1].content[0].text)).toBe(
+    '\\in',
+  );
+  await expect(list.getByRole('option')).toHaveCount(2);
+  // 光标还贴在 `\in` 后面，列表就照旧跟着抬进块级的式子——块级源码态认的是同一张符号表。
+  await expect(list).toBeVisible();
 });
 
 test('a macro still being typed is not handed to KaTeX', async ({ page }) => {
@@ -796,13 +800,13 @@ test('typing at the left edge keeps every stroke in the prose', async ({ page })
   await expect.poll(() => visibleMarkers(editor)).toEqual([]);
 });
 
-// 反过来，贴着尾巴打字还是「这条式子要续写」——左边界改规矩不该把这一头也带跑。
-test('typing at the right edge still continues the formula', async ({ page }) => {
+// 贴着尾巴打字现在写正文：右边界改规矩后，两边打字都落在公式外面，不续写公式。
+test('typing at the right edge now writes in the prose', async ({ page }) => {
   const editor = await openEditor(page, '上面一行\n\n正文 $x^2$ 结尾');
   await walkToMathEdge(page, editor, 'right');
-  await page.keyboard.type('\\alpha');
+  await page.keyboard.type('A');
   expect(await page.evaluate(() => window.trial.markdown())).toBe(
-    '上面一行\n\n正文 $x^2\\alpha$ 结尾\n',
+    '上面一行\n\n正文 $x^2$A 结尾\n',
   );
 });
 
@@ -903,12 +907,45 @@ test('a held single click never paints the source without its delimiters', async
 
 // 行内公式的正文是一个 mark 区间，mark 跨不了段落：默认的 Enter 会把 `$a + b$` 从中间
 // 劈成 `$a$` 与 `$ + b$` 两条公式，写回文件就是一段坏语法（实测过）。所以这一下改成
-// 「这条式子要写成多行」：整条抬到新的一行、换成块级源码态，原句被隔成前后两段，
-// 换行符落进块里，光标停在新行行首接着写。
+// 「这条式子要独立成块」：整条抬成块级源码态、原句被隔成前后两段，式子本身还是那一行，
+// 一个换行符都不插——想分行就再按一次，块级源码态里的 Enter 本来就是插换行。
 function docBlocks(page) {
   return page.evaluate(() => {
     const text = (node) => node.text || (node.content || []).map(text).join('');
     return window.trial.state().doc.content.map((block) => ({ type: block.type, text: text(block) }));
+  });
+}
+// 光标是不是正踩在公式收尾那格上（抬不动的地方 Enter 只做这一件事）。公式的收尾坐标从 doc
+// 的 JSON 里算：文本节点占自身长度，容器占「开 + 内容 + 闭」，与 PM 的 nodeSize 同一套；
+// 用的三个夹具在公式之前既没有空段落也没有原子块，这套算法不会歧义。
+function caretAtFormulaTail(page) {
+  return page.evaluate(() => {
+    const size = (node) =>
+      node.text !== undefined
+        ? node.text.length
+        : node.content
+          ? 2 + node.content.reduce((sum, child) => sum + size(child), 0)
+          : 1;
+    const tail = (node, start) => {
+      if (node.text !== undefined)
+        return node.marks?.some((mark) => mark.type === 'math') ? start + node.text.length : null;
+      let pos = start + 1;
+      for (const child of node.content || []) {
+        const found = tail(child, pos);
+        if (found !== null) return found;
+        pos += size(child);
+      }
+      return null;
+    };
+    const doc = window.trial.state().doc;
+    const head = window.trial.state().selection.head;
+    let pos = 0;
+    for (const child of doc.content) {
+      const to = tail(child, pos);
+      if (to !== null) return { to, head };
+      pos += size(child);
+    }
+    return { to: null, head };
   });
 }
 test('Enter inside an inline formula lifts it onto its own line as a block formula', async ({
@@ -919,17 +956,17 @@ test('Enter inside an inline formula lifts it onto its own line as a block formu
   await page.keyboard.press('Enter');
   expect(await docBlocks(page)).toEqual([
     { type: 'paragraph', text: '正文 ' },
-    { type: 'math_source_block', text: 'a\n + b' },
+    { type: 'math_source_block', text: 'a + b' },
     { type: 'paragraph', text: ' 结尾' },
   ]);
   expect(await page.evaluate(() => window.trial.markdown())).toBe(
-    '正文 \n\n$$\na\n + b\n$$\n\n 结尾\n',
+    '正文 \n\n$$\na + b\n$$\n\n 结尾\n',
   );
-  // 块级源码态一到位，预览就排在源码块上方；光标落在换行之后那一格（` + b` 的行首）。
+  // 块级源码态一到位，预览就排在源码块上方；光标还停在按 Enter 前那个字符后面（`a` 之后）。
   await expect(editor.locator('.moki-math-preview--block')).toHaveCount(1);
   await page.keyboard.type('\\gamma ');
   expect(await page.evaluate(() => window.trial.markdown())).toBe(
-    '正文 \n\n$$\na\n\\gamma  + b\n$$\n\n 结尾\n',
+    '正文 \n\n$$\na\\gamma  + b\n$$\n\n 结尾\n',
   );
 });
 
@@ -940,7 +977,7 @@ test('Shift+Enter inside an inline formula lifts it the same way instead of a ha
   await editFormula(page, editor);
   await page.keyboard.press('Shift+Enter');
   expect(await page.evaluate(() => window.trial.markdown())).toBe(
-    '正文 \n\n$$\na\n + b\n$$\n\n 结尾\n',
+    '正文 \n\n$$\na + b\n$$\n\n 结尾\n',
   );
   expect(await docBlocks(page).then((blocks) => blocks.map(({ type }) => type))).toEqual([
     'paragraph',
@@ -956,13 +993,13 @@ test('Enter in an unfinished $$ pair lifts it into a block formula, stranding no
   await editor.click();
   await page.keyboard.type('正文 $$\\alpha + \\beta');
   await page.keyboard.press('Enter');
-  // 草稿那两枚字面 `$` 连同裁掉的空白一起退场，文档里不该留下落单的定界符。
+  // 草稿那两枚字面 `$` 连同裁掉的空白一起退场，文档里不该留下落单的定界符，也不该多一个空行。
   expect(await page.evaluate(() => window.trial.markdown())).toBe(
-    '正文 \n\n$$\n\\alpha + \\beta\n\n$$\n',
+    '正文 \n\n$$\n\\alpha + \\beta\n$$\n',
   );
   expect(await docBlocks(page)).toEqual([
     { type: 'paragraph', text: '正文 ' },
-    { type: 'math_source_block', text: '\\alpha + \\beta\n' },
+    { type: 'math_source_block', text: '\\alpha + \\beta' },
   ]);
 });
 
@@ -996,6 +1033,136 @@ test('Enter just outside an inline formula still splits the paragraph and keeps 
     { type: 'paragraph', text: '正文 a + b 结尾' },
     { type: 'paragraph', text: '' },
   ]);
+});
+
+// 列表项的内容表达式是「paragraph block*」，块级式子塞得进去，但塞进去就是缩进在项里的一行。
+// 按 Enter 要的「这条式子独立成块」是跟这条列表同级，所以列表照式子劈成前后两段：前半截留着
+// 式子前面的话，后半截从「尾巴」开始接着数（有序列表续原编号），式子夹在中间顶格排。
+function topBlocks(page) {
+  return page.evaluate(() => {
+    const text = (node) => {
+      if (node.type === 'math_block') return node.attrs?.value || '';
+      return node.text || (node.content || []).map(text).join('');
+    };
+    return window.trial.state().doc.content.map((block) => ({
+      type: block.type,
+      value: block.attrs?.value ?? '',
+      order: block.attrs?.order,
+      kids: block.content?.length ?? 0,
+      text: text(block),
+    }));
+  });
+}
+
+for (const [name, opener, type, order] of [
+  ['bulleted', '- ', 'bullet_list', undefined],
+  ['ordered', '1. ', 'ordered_list', 1],
+]) {
+  test(`Enter inside a formula in a ${name} list item keeps the block inside the list`, async ({
+    page,
+  }) => {
+    const editor = await openEditor(page, `${opener}正文 $a + b$ 尾巴\n${opener}第二项`);
+    await editFormula(page, editor);
+    await page.keyboard.press('Enter');
+    const markdown = await page.evaluate(() => window.trial.markdown());
+    // 式子没被劈开，列表保持完整，公式在当前项内部，尾巴另起一项。
+    expect(markdown).not.toMatch(/\$a\$|\$ \+ b\$/);
+    expect(await topBlocks(page)).toEqual([
+      { type, value: '', order, kids: 3, text: '正文 a + b 尾巴第二项' },
+    ]);
+    // 读回来还是这个形状：列表完整，公式在项里面（序列化会裁掉段落首尾空白）。
+    await openEditor(page, markdown);
+    expect(await topBlocks(page)).toEqual([
+      { type, value: '', order, kids: 3, text: '正文a + b尾巴第二项' },
+    ]);
+  });
+}
+
+// 任务列表（- [ ]）也是 bullet_list，只是 list_item 多了 checked 属性。
+// 公式抬升后 checked 属性要保留，尾巴那项继承原项的 checked。
+test('Enter inside a formula in a task list item keeps the block inside and preserves checked', async ({
+  page,
+}) => {
+  const editor = await openEditor(page, '- [ ] 正文 $a + b$ 尾巴\n- [ ] 第二项');
+  await editFormula(page, editor);
+  await page.keyboard.press('Enter');
+  const markdown = await page.evaluate(() => window.trial.markdown());
+  expect(markdown).not.toMatch(/\$a\$|\$ \+ b\$/);
+  // 任务列表的容器仍是 bullet_list，公式在项内部。
+  expect(await topBlocks(page)).toEqual([
+    { type: 'bullet_list', value: '', order: undefined, kids: 3, text: '正文 a + b 尾巴第二项' },
+  ]);
+});
+
+// 式子正好在列表项开头（前面没话）：公式仍然在列表项里面，前面补一个空段落，尾巴另起一项。
+test('Enter inside a formula at the start of a list item keeps the block inside the list', async ({
+  page,
+}) => {
+  const editor = await openEditor(page, '- $a + b$ 尾巴\n- 第二项');
+  await editFormula(page, editor);
+  await page.keyboard.press('Enter');
+  const markdown = await page.evaluate(() => window.trial.markdown());
+  expect(markdown).not.toMatch(/\$a\$|\$ \+ b\$/);
+  expect(await topBlocks(page)).toEqual([
+    { type: 'bullet_list', value: '', order: undefined, kids: 3, text: 'a + b 尾巴第二项' },
+  ]);
+});
+
+// 表格里：格子只收一个段落，块级式子中插不进去，所以抽走式子后格子里首尾接回一句，式子作为
+// 表格的兄弟节点排在整张表之后。表格的行与其余格子一个字都不动。
+test('Enter inside a formula in a table cell puts the block after the table', async ({ page }) => {
+  const editor = await openEditor(
+    page,
+    '| 甲 | 乙 |\n| --- | --- |\n| 正文 $a + b$ 尾巴 | 丁 |\n| 戊 | 己 |',
+  );
+  await editFormula(page, editor);
+  await page.keyboard.press('Enter');
+  const markdown = await page.evaluate(() => window.trial.markdown());
+  expect(markdown).not.toMatch(/\$a\$|\$ \+ b\$/);
+  expect(await topBlocks(page)).toEqual([
+    { type: 'table', value: '', order: undefined, kids: 3, text: '甲乙正文 尾巴丁戊己' },
+    { type: 'math_source_block', value: '', order: undefined, kids: 1, text: 'a + b' },
+  ]);
+  await openEditor(page, markdown);
+  expect(await topBlocks(page)).toEqual([
+    { type: 'table', value: '', order: undefined, kids: 3, text: '甲乙正文 尾巴丁戊己' },
+    { type: 'math_block', value: 'a + b', order: undefined, kids: 0, text: 'a + b' },
+  ]);
+});
+
+// 引用块走的是同一条路：式子抬进引用里面，写回文件再读回来还是这一份，式子整条一行。
+test('Enter inside a formula in a blockquote lifts it into a block inside the quote', async ({
+  page,
+}) => {
+  const editor = await openEditor(page, '> 引用 $a + b$ 尾巴');
+  await editFormula(page, editor);
+  await page.keyboard.press('Enter');
+  const markdown = await page.evaluate(() => window.trial.markdown());
+  expect(markdown).not.toMatch(/\$a\$|\$ \+ b\$/);
+  expect(markdown).toContain('> $$\n> a + b\n> $$');
+  // 读回来还是那一条式子、还在同一个引用里。序列化会抹掉段落首尾的空白，所以比的是式子那几行，
+  // 不是整份字节；块级公式是原子节点，docBlocks 那种「把文字串起来」的量法看不见它的 value。
+  await openEditor(page, markdown);
+  const again = await page.evaluate(() => window.trial.markdown());
+  expect(again).toContain('$$\n> a + b\n> $$');
+  expect(again).not.toMatch(/\$a\$|\$ \+ b\$/);
+});
+
+// 抬不动的地方只剩标题：heading 只收行内，式子抬走就把标题本身弄没了。Enter 这一下只把光标
+// 送出式子，文档一个字都不动。mark 跨不了段落，从中间断行就是两段坏语法；光标已经在公式外面，
+// 下一次 Enter 走的就是普通正文的断行，式子整条留在前面那一行。
+test('Enter inside a formula in a heading only steps the caret out and keeps the mark whole', async ({
+  page,
+}) => {
+  const editor = await openEditor(page, '# 标题 $a + b$ 尾巴');
+  await editFormula(page, editor);
+  const before = await page.evaluate(() => window.trial.markdown());
+  await page.keyboard.press('Enter');
+  expect(await page.evaluate(() => window.trial.markdown())).toBe(before);
+  const { to, head } = await caretAtFormulaTail(page);
+  expect({ head, to }).toEqual({ head: to, to });
+  await page.keyboard.press('Enter');
+  expect(await page.evaluate(() => window.trial.markdown())).toContain('$a + b$');
 });
 
 test('a completion narrows to the closest code when several macros share the prefix', async ({ page }) => {
