@@ -1404,6 +1404,7 @@
 
     .codemirror-host {
       overflow: auto;
+      container-type: inline-size;
     }
 
     .cm-editor {
@@ -1417,6 +1418,20 @@
     .cm-content {
       min-height: 52px;
       padding: 34px 16px 6px;
+    }
+
+    .cm-line.moki-indented-code-line {
+      // Reserve space for wrapped rows. The negative first-line indent leaves
+      // the document's actual spaces and tabs in their original position.
+      --moki-wrap-indent: min(var(--moki-code-indent), 50cqi);
+      padding-inline-start: var(--moki-wrap-indent);
+      text-indent: calc(-1 * var(--moki-wrap-indent));
+    }
+
+    .moki-code-indent-tab {
+      display: inline-block;
+      text-indent: 0;
+      white-space: pre;
     }
 
     .preview-panel {
