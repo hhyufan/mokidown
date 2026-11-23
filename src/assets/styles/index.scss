@@ -134,6 +134,10 @@ html::view-transition-new(root) {
 }
 
 .content-transition {
+  &::view-transition {
+    pointer-events: none;
+  }
+
   &::view-transition-group(root) {
     animation-duration: 240ms;
   }
@@ -318,19 +322,13 @@ html[data-theme='dark'] {
   background: transparent;
 }
 
-// Monaco owns scroll geometry; visibility follows its own scroll container.
-@media (hover: hover) {
-  .monaco-scrollable-element > .scrollbar {
-    opacity: 0 !important;
-    pointer-events: none !important;
-    transition: opacity var(--moki-scrollbar-fade-out) linear !important;
-  }
+// Keep Monaco's own visibility and drag state in charge of hit testing.
+.monaco-scrollable-element > .scrollbar.visible {
+  transition-duration: var(--moki-scrollbar-fade-in);
+}
 
-  .monaco-scrollable-element:hover > .scrollbar:not(.invisible) {
-    opacity: 1 !important;
-    pointer-events: auto !important;
-    transition-duration: var(--moki-scrollbar-fade-in) !important;
-  }
+.monaco-scrollable-element > .scrollbar.invisible.fade {
+  transition-duration: var(--moki-scrollbar-fade-out);
 }
 
 @media (prefers-reduced-motion: reduce) {
