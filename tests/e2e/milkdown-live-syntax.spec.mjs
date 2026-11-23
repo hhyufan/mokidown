@@ -810,6 +810,17 @@ test('typing at the right edge now writes in the prose', async ({ page }) => {
   );
 });
 
+// 屏幕上真在闪的那一个有两个载体：光标落在正文里由 `.moki-writing-caret` 画，落在画出来的
+// 那枚 `$` 上则由该 marker 自己的 `i::after` 描出一道 1px 竖线（`.moki-writing-caret` 藏起）。
+// 量错载体就会一直等不到变化，所以先看虚拟光标那枚 marker 在不在。
+async function liveCaretBox(page) {
+  const marker = page.locator('.moki-markdown-marker--with-caret > i');
+  if (await marker.count()) return marker.first().boundingBox();
+  const drawn = page.locator('.moki-writing-caret:not([hidden])');
+  await expect(drawn).toBeVisible();
+  return drawn.boundingBox();
+}
+
 // 点在画出来的左 `$` 上，光标该停在源码这一行。气泡就挂在公式开头同一个位置，
 // 兜底量坐标时按「位置之后」读 DOM，读到的其实是气泡的盒子，光标于是跳到气泡那一行：
 // 第一行的公式气泡朝下（看着像跑到下一行），第二行的气泡朝上（看着像跑到上一行）。
@@ -819,16 +830,16 @@ const clickLeftDelimiter = async (page, content) => {
   await page.mouse.click(box.x + box.width / 2, box.y + box.height / 2);
   await expect.poll(() => visibleMarkers(editor)).toEqual(['$', '$']);
   const dollar = await editor.locator('.moki-markdown-marker').first().boundingBox();
-  const caret = page.locator('.moki-writing-caret');
   // 画光标排在 requestAnimationFrame 上：先等它从「点正文那一下」的位置挪开再量，不然量到旧位置。
-  const before = await caret.evaluate((element) => element.style.transform);
+  const before = await liveCaretBox(page);
   await page.mouse.click(dollar.x + dollar.width / 2, dollar.y + dollar.height / 2);
-  await expect.poll(() => caret.evaluate((element) => element.style.transform)).not.toBe(before);
-  const drawn = page.locator('.moki-writing-caret:not([hidden])');
-  await expect(drawn).toBeVisible();
+  await expect
+    .poll(() => liveCaretBox(page).then((caret) => caret && Math.round(caret.x)))
+    .not.toBe(Math.round(before.x));
   return {
     head: await page.evaluate(() => window.trial.state().selection.head),
-    caret: await drawn.boundingBox(),
+    caret: await liveCaretBox(page),
+    dollar,
     source: await editor.locator('[data-moki-math-mark]').boundingBox(),
     bubble: await editor.locator('.moki-math-preview--inline').boundingBox(),
   };
@@ -838,11 +849,13 @@ test('clicking the left delimiter draws the caret on the source line, not on the
   page,
 }) => {
   for (const content of ['正文 $\\alpha^2$ 结尾', '上面一行\n\n正文 $\\alpha^2$ 结尾']) {
-    const { caret, source, bubble, head } = await clickLeftDelimiter(page, content);
-    const measured = JSON.stringify({ head, caret, source, bubble });
+    const { caret, dollar, source, bubble, head } = await clickLeftDelimiter(page, content);
+    const measured = JSON.stringify({ head, caret, dollar, source, bubble });
     // 这一行摆得下就朝上、摆不下就朝下：两种翻法都得让光标留在源码那一行。
     expect(bubble.y > source.y, measured).toBe(content.startsWith('正文'));
-    expect(Math.abs(caret.x - source.x), measured).toBeLessThanOrEqual(2);
+    // 点的是左边界，光标就落在「画出来的 `$` 到源码第一个字」这一格里，不会跑到气泡那头。
+    expect(caret.x, measured).toBeGreaterThanOrEqual(dollar.x - 2);
+    expect(caret.x, measured).toBeLessThanOrEqual(source.x + 2);
     expect(caret.y, measured).toBeGreaterThanOrEqual(source.y - 2);
     expect(caret.y + caret.height, measured).toBeLessThanOrEqual(source.y + source.height + 2);
   }
@@ -872,37 +885,46 @@ test('a formula clicked open shows its source with the bubble, and keeps editing
 
 // 单击那一下不该有中间态。从前按下还没抬起的那一段里，预览插件按实时选区把源码摊开，
 // 实时语法却把定界符冻在点击前的选区上（原生选词与拖动选中期间不许正文在指针底下重排），
-// 于是按住的一拍屏幕上只有 `\alpha^2`、两头缺 `$`，抬起才补齐。逐帧钉住：源码一摊开，两枚就得同时在。
-const watchFlipFrames = (page) =>
+// 于是按住的一拍屏幕上只有 `\alpha^2`、两头缺 `$`，抬起才补齐。源码一摊开，两枚就得同时在。
+// 盯的是 DOM 每一次改动，不是画面：这套无头环境里 requestAnimationFrame 只肯给十来帧，
+// 撑不到抬起那一下，逐帧采样会把「没采到」误报成「翻态有问题」。
+const watchFlipStates = (page) =>
   page.evaluate(() => {
-    window.__frames = [];
+    window.__states = [];
     const sample = () => [
       document.querySelector('.moki-math-source') ? 1 : 0,
       [...document.querySelectorAll('.moki-markdown-marker[data-moki-marker="$"]')].filter(
         (node) => node.getBoundingClientRect().width > 0,
       ).length,
     ];
-    let frames = 0;
-    const loop = () => {
-      window.__frames.push(sample());
-      if (++frames < 200) requestAnimationFrame(loop);
-    };
-    requestAnimationFrame(loop);
+    const observer = new MutationObserver(() => window.__states.push(sample()));
+    observer.observe(document.querySelector('.ProseMirror'), {
+      childList: true,
+      subtree: true,
+      attributes: true,
+    });
+    window.__states.push(sample());
+    window.__stopFlipWatch = () => observer.disconnect();
   });
 
 test('a held single click never paints the source without its delimiters', async ({ page }) => {
   const editor = await openEditor(page, '正文 $\\alpha^2$ 结尾');
   const box = await editor.locator('[data-moki-math-mark]').boundingBox();
   await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
-  await watchFlipFrames(page);
+  await watchFlipStates(page);
   await page.mouse.down();
   await page.waitForTimeout(120);
   await page.mouse.up();
   await expect.poll(() => visibleMarkers(editor)).toEqual(['$', '$']);
-  const frames = await page.evaluate(() => window.__frames);
-  const revealed = frames.findIndex(([source]) => source);
-  expect(revealed).toBeGreaterThan(-1);
-  expect(frames.slice(revealed).every(([, markers]) => markers === 2)).toBe(true);
+  const states = await page.evaluate(() => {
+    window.__stopFlipWatch();
+    return window.__states;
+  });
+  const revealed = states.findIndex(([source]) => source);
+  expect(revealed, JSON.stringify(states)).toBeGreaterThan(-1);
+  expect(states.slice(revealed).every(([, markers]) => markers === 2), JSON.stringify(states)).toBe(
+    true,
+  );
 });
 
 // 行内公式的正文是一个 mark 区间，mark 跨不了段落：默认的 Enter 会把 `$a + b$` 从中间
