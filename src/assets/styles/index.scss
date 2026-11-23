@@ -474,14 +474,15 @@ html[data-theme='dark'] .theme-switch-icons .theme-icon--moon {
 }
 
 /* Monaco 彩虹缩进：颜色取 indent-rainbow 默认色相，线/面由设置切换。 */
-.monaco-editor {
+.monaco-editor,
+.md-preview--milkdown {
   --moki-rainbow-0: rgba(255, 255, 64, 0.1);
   --moki-rainbow-1: rgba(127, 255, 127, 0.1);
   --moki-rainbow-2: rgba(255, 127, 255, 0.1);
   --moki-rainbow-3: rgba(79, 236, 236, 0.1);
 }
 
-html[data-theme='dark'] .monaco-editor {
+html[data-theme='dark'] :is(.monaco-editor, .md-preview--milkdown) {
   --moki-rainbow-0: rgba(255, 255, 64, 0.12);
   --moki-rainbow-1: rgba(127, 255, 127, 0.12);
   --moki-rainbow-2: rgba(255, 127, 255, 0.12);
@@ -497,6 +498,27 @@ html[data-theme='dark'] .monaco-editor {
     var(--moki-rainbow-3) calc(var(--moki-indent-width) * 3) calc(var(--moki-indent-width) * 4)
   );
   background-repeat: no-repeat;
+}
+
+html[data-indent-rainbow='surface'] .cm-line.moki-indented-code-line {
+  @include moki-rainbow-stripes;
+  background-size: var(--moki-wrap-indent) 100%;
+}
+
+html[data-indent-rainbow='line'] .cm-line.moki-indented-code-line {
+  background-image: repeating-linear-gradient(
+    90deg,
+    var(--moki-rainbow-0) 0 1px,
+    transparent 1px var(--moki-indent-width),
+    var(--moki-rainbow-1) var(--moki-indent-width) calc(var(--moki-indent-width) + 1px),
+    transparent calc(var(--moki-indent-width) + 1px) calc(var(--moki-indent-width) * 2),
+    var(--moki-rainbow-2) calc(var(--moki-indent-width) * 2) calc(var(--moki-indent-width) * 2 + 1px),
+    transparent calc(var(--moki-indent-width) * 2 + 1px) calc(var(--moki-indent-width) * 3),
+    var(--moki-rainbow-3) calc(var(--moki-indent-width) * 3) calc(var(--moki-indent-width) * 3 + 1px),
+    transparent calc(var(--moki-indent-width) * 3 + 1px) calc(var(--moki-indent-width) * 4)
+  );
+  background-repeat: no-repeat;
+  background-size: var(--moki-wrap-indent) 100%;
 }
 
 html[data-indent-rainbow='surface'] {
