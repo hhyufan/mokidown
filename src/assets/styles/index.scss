@@ -125,7 +125,8 @@ html[data-theme='dark'] {
     .monaco-editor .monaco-mouse-cursor-text,
     .monaco-editor .lines-content,
     .milkdown-editor:not(.milkdown-editor--readonly),
-    .milkdown-editor:not(.milkdown-editor--readonly) .cm-content
+    .milkdown-editor:not(.milkdown-editor--readonly) .cm-content,
+    .md-preview
   ) {
     cursor:
       url('../cursors/text-blue.svg?inline') 12 12,
