@@ -22,6 +22,7 @@ const INTERACTIVE_SELECTOR = [
   '.ant-select-dropdown',
   '.ant-modal-root',
   '.monaco-editor',
+  '.md-preview',
 ].join(', ');
 
 // 缓存全屏状态：全屏窗口不应被拖动。切换全屏必然触发 resize，

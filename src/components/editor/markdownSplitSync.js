@@ -120,6 +120,11 @@ export function bindMarkdownScroll(editor, preview) {
   let expectedPreview;
   let writingEditor = false;
   let geometryObserver;
+  const readPaneSize = () => {
+    const { width, height } = editor.getLayoutInfo();
+    return `${width}:${height}:${preview.clientWidth}:${preview.clientHeight}`;
+  };
+  let paneSize = readPaneSize();
 
   const measure = () => {
     const height = editor.getLayoutInfo().height;
@@ -160,6 +165,11 @@ export function bindMarkdownScroll(editor, preview) {
   };
   const invalidate = () => { anchors = undefined; schedule(); };
   const invalidateGeometry = () => {
+    const nextSize = readPaneSize();
+    // Reflow can move the preview's scroll anchor. Keep that movement from
+    // changing the source scroll position when the resize settles.
+    if (paneSize !== nextSize) direction = 0;
+    paneSize = nextSize;
     anchors = undefined;
     if (frame) { cancelAnimationFrame(frame); frame = 0; }
     clearTimeout(resizeTimer);

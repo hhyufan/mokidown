@@ -659,6 +659,12 @@ function EditorContent() {
     pending?.transition?.skipTransition();
   }, []);
   useLayoutEffect(() => stopWorkspaceTransition, [stopWorkspaceTransition]);
+  useLayoutEffect(() => {
+    // Snapshots taken at the old viewport size must not cover the resized editor.
+    const handleResize = () => workspaceTransition.current?.transition?.skipTransition();
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
 
   const transitionWorkspace = useCallback(
     (update) => {
