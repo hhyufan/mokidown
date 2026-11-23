@@ -582,6 +582,8 @@
     font-family: var(--font-editor);
     font-size: 0.9em;
     line-height: 1.6;
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
     background: var(--md-code-bg);
     border: none;
     border-radius: var(--md-radius);
@@ -594,6 +596,8 @@
       border-radius: 0;
       font-size: inherit;
       color: inherit;
+      white-space: inherit;
+      overflow-wrap: inherit;
     }
   }
 }
