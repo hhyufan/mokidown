@@ -120,6 +120,17 @@ html[data-theme='dark'] {
   --shadow-lg: 0 8px 24px rgba(0, 0, 0, 0.6);
 }
 
+@media (forced-colors: none) {
+  html:not([data-theme='dark']) :is(
+    .monaco-editor .monaco-mouse-cursor-text,
+    .monaco-editor .lines-content,
+    .milkdown-editor:not(.milkdown-editor--readonly),
+    .milkdown-editor:not(.milkdown-editor--readonly) .cm-content
+  ) {
+    cursor: url('../cursors/text-light.png?inline') 8 12, text;
+  }
+}
+
 *,
 *::before,
 *::after {
