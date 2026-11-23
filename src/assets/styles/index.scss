@@ -121,13 +121,15 @@ html[data-theme='dark'] {
 }
 
 @media (forced-colors: none) {
-  html:not([data-theme='dark']) :is(
+  :is(
     .monaco-editor .monaco-mouse-cursor-text,
     .monaco-editor .lines-content,
     .milkdown-editor:not(.milkdown-editor--readonly),
     .milkdown-editor:not(.milkdown-editor--readonly) .cm-content
   ) {
-    cursor: url('../cursors/text-light.png?inline') 8 12, text;
+    cursor:
+      url('../cursors/text-blue.svg?inline') 12 12,
+      text;
   }
 }
 
@@ -521,9 +523,11 @@ html[data-indent-rainbow='line'] .cm-line.moki-indented-code-line {
     transparent 1px var(--moki-indent-width),
     var(--moki-rainbow-1) var(--moki-indent-width) calc(var(--moki-indent-width) + 1px),
     transparent calc(var(--moki-indent-width) + 1px) calc(var(--moki-indent-width) * 2),
-    var(--moki-rainbow-2) calc(var(--moki-indent-width) * 2) calc(var(--moki-indent-width) * 2 + 1px),
+    var(--moki-rainbow-2) calc(var(--moki-indent-width) * 2)
+      calc(var(--moki-indent-width) * 2 + 1px),
     transparent calc(var(--moki-indent-width) * 2 + 1px) calc(var(--moki-indent-width) * 3),
-    var(--moki-rainbow-3) calc(var(--moki-indent-width) * 3) calc(var(--moki-indent-width) * 3 + 1px),
+    var(--moki-rainbow-3) calc(var(--moki-indent-width) * 3)
+      calc(var(--moki-indent-width) * 3 + 1px),
     transparent calc(var(--moki-indent-width) * 3 + 1px) calc(var(--moki-indent-width) * 4)
   );
   background-repeat: no-repeat;
