@@ -35,8 +35,12 @@ import {
   mathMarkName,
   previewKey,
 } from './milkdownMathMark';
-import { liveSyntaxKey } from './milkdownLiveSyntax';
-import { delimiterCaret, pendingPointerSelection, unfoldMathPair } from './milkdownLiveSyntax';
+import {
+  delimiterCaret,
+  liveSyntaxKey,
+  pendingPointerSelection,
+  unfoldMathPair,
+} from './milkdownLiveSyntax';
 import { endsWithPartialMacro } from './milkdownMathSymbols';
 
 // 块级源码态的节点名与文档协议绑定，改动会让已存文档的公式失效。
@@ -123,8 +127,9 @@ function mathRanges(doc, type) {
 // 选完，落光标得再等一拍，详见下面那段。
 function revealClickedMath(view, event) {
   const { state } = view;
-  if (!view.editable || event.button !== 0 || event.detail !== 2) return;
-  if (!event.target.closest?.('[data-moki-math-mark]') && !isInspecting(previewKey.getState(state))) return;
+  const double = event.type === 'dblclick';
+  if (!view.editable || event.button !== 0) return;
+  if (double ? event.detail !== 2 : event.detail !== 1) return;
   const math = state.schema.marks[mathMarkName];
   if (!math) return;
   const ranges = mathRanges(state.doc, math);
@@ -519,6 +524,7 @@ export const milkdownMathPreview = $prose(() => {
       // 之后才应用到 DOM。用 queueMicrotask 延迟到当前事务处理完毕再量，确保 DOM 已包含所有装饰。
       const refitAsync = () => queueMicrotask(refit);
       window.addEventListener('resize', refit);
+      editorView.dom.addEventListener('mouseup', onClick);
       editorView.dom.addEventListener('dblclick', onClick);
       return {
         update() {
@@ -530,6 +536,7 @@ export const milkdownMathPreview = $prose(() => {
         },
         destroy() {
           window.removeEventListener('resize', refit);
+          editorView.dom.removeEventListener('mouseup', onClick);
           editorView.dom.removeEventListener('dblclick', onClick);
           scroller?.removeEventListener('scroll', refit);
           scroller = null;
