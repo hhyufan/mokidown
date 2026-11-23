@@ -72,6 +72,12 @@ export function attachWritingCaret(view) {
     }
   };
   const schedule = () => {
+    if (view.dom.matches('.moki-markdown-virtual-caret, .moki-markdown-pointer-pending')) {
+      if (frame) window.cancelAnimationFrame(frame);
+      frame = 0;
+      hide();
+      return;
+    }
     if (!frame && (document.activeElement === view.dom || !caret.hidden))
       frame = window.requestAnimationFrame(draw);
   };

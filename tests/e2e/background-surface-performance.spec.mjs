@@ -7,21 +7,17 @@ test('background geometry ignores editor scroll and coalesces viewport scroll wi
   await expect(page.locator('.monaco-context-menu')).toBeVisible();
   await expect.poll(() => page.locator('.monaco-context-menu').evaluate((el) => el.style.getPropertyValue('--moki-popup-x'))).not.toBe('');
 
-  const wallpaper = () => page.locator('.app').evaluate((app) => {
-    const layer = getComputedStyle(app, '::before');
-    return {
-      width: Number.parseFloat(layer.width), height: Number.parseFloat(layer.height),
-      scale: new DOMMatrixReadOnly(layer.transform).a,
-    };
-  });
-  await expect.poll(async () => (await wallpaper()).width).toBe(600);
+  const wallpaper = page.locator('.app');
   for (const [width, height] of [[900, 620], [1280, 530], [800, 660]]) {
     await page.setViewportSize({ width, height });
-    await expect.poll(async () => {
-      const layer = await wallpaper();
-      return layer.width === 600 && layer.height === 300
-        && Math.abs(layer.scale - Math.max(width / 600, height / 300)) < 0.001;
-    }).toBe(true);
+    await expect(wallpaper).toHaveCSS('background-size', 'auto, cover');
+    await expect.poll(() => wallpaper.evaluate((app) => {
+      const { width, height } = app.getBoundingClientRect();
+      const scale = Math.max(width / 600, height / 300);
+      const size = document.documentElement.style.getPropertyValue('--moki-background-size');
+      const [imageWidth, imageHeight] = size.split(' ').map(Number.parseFloat);
+      return Math.abs(imageWidth - 600 * scale) < 0.01 && Math.abs(imageHeight - 300 * scale) < 0.01;
+    })).toBe(true);
   }
 
   const measurements = await page.evaluate(async () => {

@@ -8,7 +8,7 @@ import { $prose } from '@milkdown/kit/utils';
 import { isImeComposing } from '@utils/keyboard';
 import { liftInlineMath, inlineMathSlot } from './milkdownMathPreview';
 
-const enclosedBlocks = new Set(['code_block', 'table', 'math_block', 'table_source_block', 'math_source_block', 'html_block']);
+const enclosedBlocks = new Set(['code_block', 'table', 'math_block', 'table_source_block', 'math_source_block', 'html_block', 'hr']);
 const temporaryParagraphsKey = new PluginKey('moki-temporary-paragraphs');
 
 // Empty caret landing places are view state, not document content. Keep them
@@ -71,6 +71,14 @@ export function handleMilkdownBlankPointerDown(view, event) {
   const wrapper = view.dom.closest('.md-preview--milkdown');
   if (!target || !wrapper?.contains(target)
     || target.closest('input, textarea, button, select, .md-code-execution-mount, .editor-context-menu')) return false;
+  // Native scrollbar events can target the scroll container itself.
+  if (target === wrapper || target.matches('.tableWrapper')) {
+    const { left, top } = target.getBoundingClientRect();
+    const x = event.clientX - left - target.clientLeft;
+    const y = event.clientY - top - target.clientTop;
+    if ((target.scrollHeight > target.clientHeight && (x < 0 || x >= target.clientWidth))
+      || (target.scrollWidth > target.clientWidth && y >= target.clientHeight)) return false;
+  }
   const { state } = view;
   const first = state.doc.firstChild;
   const empty = !first || (state.doc.childCount === 1 && first.type.name === 'paragraph' && !first.content.size);
@@ -138,6 +146,29 @@ function outdentListLine(view) {
   return true;
 }
 
+function removeHorizontalRule(view, backward) {
+  const { state } = view;
+  const { selection } = state;
+  const { $from } = selection;
+  let boundary = $from;
+  if (selection instanceof NodeSelection) {
+    if (selection.node.type.name !== 'hr') return false;
+    backward = false;
+  } else if (selection instanceof TextSelection && selection.empty && $from.parent.isTextblock) {
+    const atEdge = $from.parentOffset === (backward ? 0 : $from.parent.content.size);
+    if (!atEdge) return false;
+    boundary = state.doc.resolve(backward ? $from.before() : $from.after());
+  } else if (!(selection instanceof GapCursor)) {
+    return false;
+  }
+  const rule = backward ? boundary.nodeBefore : boundary.nodeAfter;
+  if (rule?.type.name !== 'hr') return false;
+  const from = backward ? boundary.pos - rule.nodeSize : boundary.pos;
+  view.dispatch(closeHistory(state.tr).delete(from, from + rule.nodeSize).scrollIntoView());
+  view.focus();
+  return true;
+}
+
 // Capture at the wrapper because CodeMirror owns its keyboard events and the
 // normal ProseMirror keymap does not see them.
 export function handleMilkdownBlockKeyDown(view, event) {
@@ -172,9 +203,13 @@ export function handleMilkdownBlockKeyDown(view, event) {
     }
   }
   const { selection } = view.state;
-  if (['Backspace', 'Delete'].includes(event.key) && selection.empty
+  if (['Backspace', 'Delete'].includes(event.key)
     && !event.ctrlKey && !event.metaKey && !event.shiftKey) {
     if (target.closest('.cm-editor')) return false;
+    if (removeHorizontalRule(view, event.key === 'Backspace')) {
+      event.preventDefault(); event.stopPropagation(); return true;
+    }
+    if (!selection.empty) return false;
     const { $from } = selection;
     // A gap caret is a block boundary, not an empty paragraph. Backspace here
     // must not delete the preceding HTML/code/table as if it were whitespace.
