@@ -748,7 +748,7 @@
         font-family: var(--font-editor);
         font-weight: 400;
         font-style: normal;
-        pointer-events: none;
+        pointer-events: auto;
         user-select: none;
         white-space: pre-wrap;
         &::before {

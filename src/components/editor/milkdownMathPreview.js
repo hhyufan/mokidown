@@ -22,6 +22,7 @@ import { $prose } from '@milkdown/kit/utils';
 import { isImeComposing } from '@utils/keyboard';
 import katex from 'katex';
 import { mathDraftAt, mathMarkName } from './milkdownMathMark';
+import { liveSyntaxKey } from './milkdownLiveSyntax';
 import { endsWithPartialMacro } from './milkdownMathSymbols';
 
 // 块级源码态的节点名与文档协议绑定，改动会让已存文档的公式失效。
@@ -131,9 +132,8 @@ export const isMathInspecting = (state) => isInspecting(previewKey.getState(stat
 // 选完，落光标得再等一拍，详见下面那段。
 function revealClickedMath(view, event) {
   const { state } = view;
-  const double = event.type === 'dblclick';
-  if (!view.editable || event.button !== 0) return;
-  if (double ? event.detail !== 2 : event.detail !== 1) return;
+  if (!view.editable || event.button !== 0 || event.detail !== 2) return;
+  if (!event.target.closest?.('[data-moki-math-mark]') && !isInspecting(previewKey.getState(state))) return;
   const math = state.schema.marks[mathMarkName];
   if (!math) return;
   const ranges = mathRanges(state.doc, math);
@@ -142,11 +142,7 @@ function revealClickedMath(view, event) {
   // 覆盖层那么高塌回源码那么矮，第二下的坐标常常已经不在字上。那就退回选区那头去量。
   const at = view.posAtCoords({ left: event.clientX, top: event.clientY })?.pos ?? head;
   const range = ranges.find(({ from, to }) => at >= from && at <= to)
-    ?? (double ? ranges.find(({ from, to }) => end > from && start < to) : null);
-  if (!double) {
-    if (range) view.dispatch(state.tr.setMeta(previewKey, { ...range, inspect: true }));
-    return;
-  }
+    ?? ranges.find(({ from, to }) => end > from && start < to);
   // 双击第二下交回来的是浏览器的原生选词，可公式刚被第一下重新排过，Chromium 找不回
   // 那个词，退化成整行选中（`正文 $x^2$ 结尾` 量到 8→17）：两头都在公式外面，之后方向键、
   // 打字全都跑偏，定界符与补全也因为选区非空而收走。所以这一下由我们自己落进正文。
@@ -293,9 +289,13 @@ export const milkdownMathPreview = $prose(() => {
     key: previewKey,
     state: {
       init: () => null,
-      apply(tr, clicked) {
+      apply(tr, clicked, oldState) {
         const marked = tr.getMeta(previewKey);
         if (marked !== undefined) return marked;
+        const syntax = tr.getMeta(liveSyntaxKey);
+        if (syntax?.math !== undefined) return syntax.math;
+        const pointer = syntax && 'pointer' in syntax ? syntax.pointer : liveSyntaxKey.getState(oldState)?.pointer;
+        if (!tr.docChanged && pointer) return clicked;
         // 文档一改，区间坐标就全变了。只有改动整段落在记住的那条公式里才跟得上——
         // 贴在公式右边界进编辑态之后接着打字，光标一直压在边界上，一忘就把刚掀开的源码合上了。
         // 两个端点各自往外让一格：敲在首尾那两格上的字属于这条公式，不是把它挤短。
@@ -312,6 +312,7 @@ export const milkdownMathPreview = $prose(() => {
     // `inclusive:false` 就跑到正文外面去了（`$x^2$` 末尾连打两个字会变成 `$x^2A$B`）。
     // 只要还认这条公式在编辑，就把 mark 重新按上：光标停在尾巴上也还是在正文里打字。
     appendTransaction(transactions, oldState, state) {
+      if (liveSyntaxKey.getState(state)?.pointer) return null;
       const math = state.schema.marks[mathMarkName];
       const folded = math && foldDraft(transactions, oldState, state, math);
       if (folded) return folded;
@@ -331,7 +332,6 @@ export const milkdownMathPreview = $prose(() => {
       const onClick = (event) => revealClickedMath(editorView, event);
       const onKeydown = (event) => releaseInspect(editorView, event);
       window.addEventListener('resize', refit);
-      editorView.dom.addEventListener('mouseup', onClick);
       editorView.dom.addEventListener('dblclick', onClick);
       editorView.dom.addEventListener('keydown', onKeydown);
       return {
@@ -345,7 +345,6 @@ export const milkdownMathPreview = $prose(() => {
         },
         destroy() {
           window.removeEventListener('resize', refit);
-          editorView.dom.removeEventListener('mouseup', onClick);
           editorView.dom.removeEventListener('dblclick', onClick);
           editorView.dom.removeEventListener('keydown', onKeydown);
           scroller?.removeEventListener('scroll', refit);
@@ -367,7 +366,8 @@ export const milkdownMathPreview = $prose(() => {
         return true;
       },
       decorations(state) {
-        const { doc, selection } = state;
+        const { doc } = state;
+        const selection = liveSyntaxKey.getState(state)?.pointer?.selection ?? state.selection;
         const decorations = [];
         const active = new Set();
 
