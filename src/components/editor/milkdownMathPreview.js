@@ -12,11 +12,12 @@
  * 什么时候算「在编辑这条公式」由 milkdownMathMark 的 isMathEditing 一处说了算——严格在内、
  * 被鼠标点开过、或正踩在画出来的那枚 `$` 上。贴着边界路过不算，实时语法读的是同一个条件，
  * 两边一起翻态才不会出现「正文还压在覆盖层底下、两头却摆着 `$`」。
- * 光标落在公式边界上时，inclusive:false 本来会把下一笔字送到正文外面，编辑档把 mark 按住，
- * 这一笔才落进式子里。
+ * 光标贴在公式尾巴上时，inclusive:false 本来会把下一笔字送到正文外面，编辑档把 mark 按住，
+ * 这一笔才续进式子里；`$` 左边那格不按，在那儿打字写的是正文。
  *
  * 从零写一条公式走的是草稿：连打两个 `$` 由实时语法补成一对，光标停在中间，那两枚定界符
- * 在这里被染透明（本插件的活儿），光标一走就把定界符删掉、正文挂上 mark 折成公式。
+ * 按编辑态同款摆成淡色（本插件的活儿），光标一走就把定界符删掉、正文挂上 mark 折成公式。
+ * 在行内公式里按 Enter 是把它抬成块级式子：块级源码态能多行，行内 mark 不能跨段落。
  */
 import { Decoration, DecorationSet } from '@milkdown/kit/prose/view';
 import { Plugin, TextSelection } from '@milkdown/kit/prose/state';
@@ -31,7 +32,7 @@ import {
   mathMarkName,
   previewKey,
 } from './milkdownMathMark';
-import { delimiterCaret, unfoldMathPair } from './milkdownLiveSyntax';
+import { delimiterCaret, pendingPointerSelection, unfoldMathPair } from './milkdownLiveSyntax';
 import { endsWithPartialMacro } from './milkdownMathSymbols';
 
 // 块级源码态的节点名与文档协议绑定，改动会让已存文档的公式失效。
@@ -203,6 +204,58 @@ function mathDraft(state, ranges) {
   return draft;
 }
 
+// 行内公式里按 Enter：这条式子整条抬走、换成块级源码态排在它原来占的那一格，
+// 原句被隔成前后两行；光标那一格的换行符落进块里，接着写就是多行式子
+// （块级源码态里 Enter 本来就是插换行）。
+// 非拦不可：mark 只能在同一个 textblock 里活着，默认的 splitBlock 会把
+// `$a + b$` 从中间劈成 `$a$` 与 `$ + b$` 两条公式，写回文件就是一段坏语法（实测）。
+function liftInlineMathToBlock(view) {
+  const { state } = view;
+  const { selection, doc } = state;
+  if (!view.editable || !selection.empty) return false;
+  const math = state.schema.marks[mathMarkName];
+  const blockType = state.schema.nodes[blockSource];
+  const $caret = selection.$from;
+  // 只搬段落里的公式：标题抬走就把标题本身弄没了；列表项、表格格子那些放不下块级式子的位置
+  // 由下面的 canReplaceWith 拦下，照旧走默认断行。
+  if (!math || !blockType || $caret.parent.type.name !== 'paragraph') return false;
+  const ranges = mathRanges(doc, math);
+  const inside = ranges.find(({ from, to }) => $caret.pos > from && $caret.pos < to);
+  let slot, body, cut;
+  if (inside) {
+    slot = inside;
+    body = doc.textBetween(inside.from, inside.to);
+    cut = $caret.pos - inside.from;
+  } else {
+    const draft = mathDraft(state, ranges);
+    if (!draft) return false;
+    // 草稿那两枚字面 `$` 连同正文两侧被裁掉的空白一起退场，与 foldDraft 同一套取舍。
+    slot = { from: draft.anchor, to: draft.close + 1 };
+    body = doc.textBetween(draft.from, draft.to);
+    cut = Math.min(Math.max($caret.pos - draft.from, 0), body.length);
+  }
+  if (!$caret.node(-1).canReplaceWith($caret.index(-1), $caret.indexAfter(-1), blockType))
+    return false;
+  const content = $caret.parent.content;
+  const head = content.cut(0, slot.from - $caret.start());
+  const tail = content.cut(slot.to - $caret.start(), content.size);
+  const paragraph = $caret.parent.type;
+  // 空对抬走只是换了个更大的编辑框，块里留个换行就成了 `$$\n\n$$` 那种没写完的语法。
+  const source = body ? `${body.slice(0, cut)}\n${body.slice(cut)}` : '';
+  const nodes = [];
+  if (head.size) nodes.push(paragraph.create(null, head));
+  nodes.push(blockType.create(null, source ? [state.schema.text(source)] : []));
+  if (tail.size) nodes.push(paragraph.create(null, tail));
+  const blockPos = $caret.before() + (head.size ? head.size + 2 : 0);
+  const tr = closeHistory(state.tr).replaceWith($caret.before(), $caret.after(), nodes);
+  // 光标落在换行符后面那一格的开头，正是「另起一行」那一下该到的地方。
+  view.dispatch(
+    tr.setSelection(TextSelection.create(tr.doc, blockPos + 1 + (source ? cut + 1 : 0)))
+      .scrollIntoView(),
+  );
+  return true;
+}
+
 // 光标离开那一对 `$` 才算这个式子写完：定界符从文档里删掉，正文挂上 math mark，
 // 屏幕上当场退回渲染态。打字的时候不折——那几笔人还在式子里，正文随时会长。
 // 只在纯选区移动的事务上折，两份文档是同一份，区间不用换算。
@@ -281,11 +334,15 @@ export const milkdownMathPreview = $prose(() => {
         return from === to && from >= memory.from && to <= memory.to ? memory : null;
       },
     },
-    // 贴在公式边界打字算改这条公式：mark 是 inclusive:false，本来这一笔会被送到正文外面
-    // （`$x^2$` 尾巴上打字变成 `$x^2$A`）。光标一走到边界就把正文那串 marks 记成待插入的
-    // marks，这一笔才落进式子的头上或尾巴——进编辑态不必先用退格把源码掀开。
+    // 贴在公式尾巴打字算续写这条公式：mark 是 inclusive:false，本来这一笔会被送到正文外面
+    // （`$x^2$` 尾巴上打字变成 `$x^2$A`）。光标一走到右边界就把正文那串 marks 记成待插入的
+    // marks，这一笔才落进式子的尾巴——进编辑态不必先用退格把源码掀开。
     // 已经摊开的公式里，PM 每敲一个字就把 storedMarks 清空，同一个事务再把 mark 按回去，
     // 光标停在尾巴上也还是在正文里打字。
+    // 左边界不按回去：`$` 左边是白话文字的地盘，在那儿打字就该写正文；要往式子头上写，
+    // 再走一格进正文，或按 Delete 掀源码（enterAtEdge 自己会把 mark 按上）。从前左右一视同仁，
+    // 于是「先落在外面一笔、光标正好停在新排出来的左边界」之后，第二笔起全被灌进正文头上——
+    // 实时语法那份「下一笔在公式外面」的意思（storedMarks 里没有 math）只活得过一笔。
     appendTransaction(transactions, oldState, state) {
       const math = state.schema.marks[mathMarkName];
       const folded = math && foldDraft(transactions, oldState, state, math);
@@ -299,14 +356,12 @@ export const milkdownMathPreview = $prose(() => {
       // （selectDelimiterPosition 按格子算出的 marks），意思是「下一笔落在公式外面」。
       // 这里再按回去不但抹掉这层意思，还会连带把插件记着的那一格清掉——光标就再也走不出尾巴。
       if (current && !current.some((mark) => mark.type.name === mathMarkName)) return null;
-      // 左右邻居都没挂 math 就不贴在公式边上，用不着把整篇扫一遍找区间。
+      // 左边邻居没挂 math 就不贴在公式尾巴上，用不着把整篇扫一遍找区间。
       const beside = (node) => node?.marks.some((mark) => mark.type.name === mathMarkName);
-      if (!beside($from.nodeBefore) && !beside($from.nodeAfter)) return null;
-      const range = mathRanges(state.doc, math).find(
-        ({ from: start, to }) => start === $from.pos || to === $from.pos,
-      );
+      if (!beside($from.nodeBefore)) return null;
+      const range = mathRanges(state.doc, math).find(({ to }) => to === $from.pos);
       if (!range) return null;
-      const marks = ($from.pos === range.to ? $from.nodeBefore : $from.nodeAfter).marks;
+      const marks = $from.nodeBefore.marks;
       const same = current?.length === marks.length && current?.every((mark, i) => mark.eq(marks[i]));
       if (same) return null;
       // 只有真的落了一笔字才顺手把这条公式记成「已点开」。光标走到边界本身不算在编辑，
@@ -342,6 +397,16 @@ export const milkdownMathPreview = $prose(() => {
     },
     props: {
       handleKeyDown(view, event) {
+        // Enter 在公式里是「这条式子要写成多行」，不是把式子劈成两段。Shift+Enter 走同一条：
+        // 它在这里只会把正文拦腰切成两段，写回去同样是坏语法。
+        // 带 ctrl / meta / alt 的那几路与公式无关。
+        if (event.key === 'Enter') {
+          if (event.ctrlKey || event.metaKey || event.altKey) return false;
+          if (!view.editable || view.composing || isImeComposing(event)) return false;
+          if (!liftInlineMathToBlock(view)) return false;
+          event.preventDefault();
+          return true;
+        }
         const forward = event.key === 'Delete';
         if (event.key !== 'Backspace' && !forward) return false;
         if (!view.editable || view.composing || isImeComposing(event)
@@ -360,7 +425,10 @@ export const milkdownMathPreview = $prose(() => {
         return true;
       },
       decorations(state) {
-        const { doc, selection } = state;
+        const { doc } = state;
+        // 按住还没抬起的那一段，读实时语法冻住的那份选区：它这会儿不画定界符，源码也就别先摊开，
+        // 否则中间会露出一拍只有 `\alpha`、两头缺 `$` 的样子。
+        const selection = pendingPointerSelection(state);
         const decorations = [];
         const active = new Set();
 
