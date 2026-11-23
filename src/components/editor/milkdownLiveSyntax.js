@@ -144,6 +144,13 @@ export function delimiterCaret(state) {
   return syntax.pointer ? syntax.pointer.caret : syntax.caret;
 }
 
+// 按下到抬起之间那一段，标记层冻在点击前的选区上：原生选词与拖动选中正在进行，正文不能在
+// 指针底下重排。公式预览摊开源码要读同一个选区，否则源码先摊开、`$` 等抬起才补上，
+// 中间露出一拍只有 `\alpha` 的样子。
+export function pendingPointerSelection(state) {
+  return liveSyntaxKey.getState(state)?.pointer?.selection ?? state.selection;
+}
+
 function delimiterBoundary(
   state,
   $pos,
