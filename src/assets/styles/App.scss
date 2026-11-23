@@ -26,36 +26,13 @@
   display: none;
 }
 
-// 图片只绘制一层，透明度不影响文字与控件。
+// Paint the wallpaper with its opaque base in one background so resizing the
+// workspace does not also resize a separate, transformed wallpaper surface.
 .app--background {
   isolation: isolate;
-  background: var(--moki-background-base);
-  &::before {
-    content: '';
-    position: absolute;
-    inset: 0;
-    z-index: -1;
-    pointer-events: none;
-    background: var(--moki-background-image) center / cover no-repeat;
-    opacity: var(--moki-background-opacity, 0.2);
-  }
-  @supports (scale: calc(1px / 1px)) {
-    &::before {
-      // Resize the composited wallpaper with a transform. The editor and its
-      // wallpaper no longer have to repaint a newly sized background together.
-      --wallpaper-width: var(--moki-wallpaper-width, 100dvw);
-      --wallpaper-height: var(--moki-wallpaper-height, 100dvh);
-      position: fixed;
-      inset: 50% auto auto 50%;
-      width: var(--wallpaper-width);
-      height: var(--wallpaper-height);
-      transform: translate(-50%, -50%) scale(max(
-        calc(100dvw / var(--wallpaper-width)),
-        calc(100dvh / var(--wallpaper-height))
-      ));
-      will-change: transform;
-    }
-  }
+  background:
+    linear-gradient(var(--moki-background-wash), var(--moki-background-wash)),
+    var(--moki-background-image, none) center / cover no-repeat var(--moki-background-base);
   .app__main,
   .sidebar,
   .titlebar,

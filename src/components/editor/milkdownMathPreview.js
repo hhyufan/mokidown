@@ -35,6 +35,7 @@ import {
   mathMarkName,
   previewKey,
 } from './milkdownMathMark';
+import { liveSyntaxKey } from './milkdownLiveSyntax';
 import { delimiterCaret, pendingPointerSelection, unfoldMathPair } from './milkdownLiveSyntax';
 import { endsWithPartialMacro } from './milkdownMathSymbols';
 
@@ -122,9 +123,8 @@ function mathRanges(doc, type) {
 // 选完，落光标得再等一拍，详见下面那段。
 function revealClickedMath(view, event) {
   const { state } = view;
-  const double = event.type === 'dblclick';
-  if (!view.editable || event.button !== 0) return;
-  if (double ? event.detail !== 2 : event.detail !== 1) return;
+  if (!view.editable || event.button !== 0 || event.detail !== 2) return;
+  if (!event.target.closest?.('[data-moki-math-mark]') && !isInspecting(previewKey.getState(state))) return;
   const math = state.schema.marks[mathMarkName];
   if (!math) return;
   const ranges = mathRanges(state.doc, math);
@@ -457,9 +457,13 @@ export const milkdownMathPreview = $prose(() => {
     key: previewKey,
     state: {
       init: () => null,
-      apply(tr, clicked) {
+      apply(tr, clicked, oldState) {
         const marked = tr.getMeta(previewKey);
         if (marked !== undefined) return marked;
+        const syntax = tr.getMeta(liveSyntaxKey);
+        if (syntax?.math !== undefined) return syntax.math;
+        const pointer = syntax && 'pointer' in syntax ? syntax.pointer : liveSyntaxKey.getState(oldState)?.pointer;
+        if (!tr.docChanged && pointer) return clicked;
         // 文档一改，区间坐标就全变了。只有改动整段落在记住的那条公式里才跟得上——
         // 贴在公式右边界进编辑态之后接着打字，光标一直压在边界上，一忘就把刚掀开的源码合上了。
         // 两个端点各自往外让一格：敲在首尾那两格上的字属于这条公式，不是把它挤短。
@@ -482,6 +486,7 @@ export const milkdownMathPreview = $prose(() => {
     // 于是「先落在外面一笔、光标正好停在新排出来的左边界」之后，第二笔起全被灌进正文头上——
     // 实时语法那份「下一笔在公式外面」的意思（storedMarks 里没有 math）只活得过一笔。
     appendTransaction(transactions, oldState, state) {
+      if (liveSyntaxKey.getState(state)?.pointer) return null;
       const math = state.schema.marks[mathMarkName];
       const folded = math && foldDraft(transactions, oldState, state, math);
       if (folded) return folded;
@@ -514,7 +519,6 @@ export const milkdownMathPreview = $prose(() => {
       // 之后才应用到 DOM。用 queueMicrotask 延迟到当前事务处理完毕再量，确保 DOM 已包含所有装饰。
       const refitAsync = () => queueMicrotask(refit);
       window.addEventListener('resize', refit);
-      editorView.dom.addEventListener('mouseup', onClick);
       editorView.dom.addEventListener('dblclick', onClick);
       return {
         update() {
@@ -526,7 +530,6 @@ export const milkdownMathPreview = $prose(() => {
         },
         destroy() {
           window.removeEventListener('resize', refit);
-          editorView.dom.removeEventListener('mouseup', onClick);
           editorView.dom.removeEventListener('dblclick', onClick);
           scroller?.removeEventListener('scroll', refit);
           scroller = null;

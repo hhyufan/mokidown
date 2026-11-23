@@ -120,6 +120,20 @@ html[data-theme='dark'] {
   --shadow-lg: 0 8px 24px rgba(0, 0, 0, 0.6);
 }
 
+@media (forced-colors: none) {
+  :is(
+    .monaco-editor .monaco-mouse-cursor-text,
+    .monaco-editor .lines-content,
+    .milkdown-editor:not(.milkdown-editor--readonly),
+    .milkdown-editor:not(.milkdown-editor--readonly) .cm-content,
+    .md-preview
+  ) {
+    cursor:
+      url('../cursors/text-blue.svg?inline') 12 12,
+      text;
+  }
+}
+
 *,
 *::before,
 *::after {
@@ -134,6 +148,10 @@ html::view-transition-new(root) {
 }
 
 .content-transition {
+  &::view-transition {
+    pointer-events: none;
+  }
+
   &::view-transition-group(root) {
     animation-duration: 240ms;
   }
@@ -318,19 +336,13 @@ html[data-theme='dark'] {
   background: transparent;
 }
 
-// Monaco owns scroll geometry; visibility follows its own scroll container.
-@media (hover: hover) {
-  .monaco-scrollable-element > .scrollbar {
-    opacity: 0 !important;
-    pointer-events: none !important;
-    transition: opacity var(--moki-scrollbar-fade-out) linear !important;
-  }
+// Keep Monaco's own visibility and drag state in charge of hit testing.
+.monaco-scrollable-element > .scrollbar.visible {
+  transition-duration: var(--moki-scrollbar-fade-in);
+}
 
-  .monaco-scrollable-element:hover > .scrollbar:not(.invisible) {
-    opacity: 1 !important;
-    pointer-events: auto !important;
-    transition-duration: var(--moki-scrollbar-fade-in) !important;
-  }
+.monaco-scrollable-element > .scrollbar.invisible.fade {
+  transition-duration: var(--moki-scrollbar-fade-out);
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -474,14 +486,15 @@ html[data-theme='dark'] .theme-switch-icons .theme-icon--moon {
 }
 
 /* Monaco 彩虹缩进：颜色取 indent-rainbow 默认色相，线/面由设置切换。 */
-.monaco-editor {
+.monaco-editor,
+.md-preview--milkdown {
   --moki-rainbow-0: rgba(255, 255, 64, 0.1);
   --moki-rainbow-1: rgba(127, 255, 127, 0.1);
   --moki-rainbow-2: rgba(255, 127, 255, 0.1);
   --moki-rainbow-3: rgba(79, 236, 236, 0.1);
 }
 
-html[data-theme='dark'] .monaco-editor {
+html[data-theme='dark'] :is(.monaco-editor, .md-preview--milkdown) {
   --moki-rainbow-0: rgba(255, 255, 64, 0.12);
   --moki-rainbow-1: rgba(127, 255, 127, 0.12);
   --moki-rainbow-2: rgba(255, 127, 255, 0.12);
@@ -497,6 +510,29 @@ html[data-theme='dark'] .monaco-editor {
     var(--moki-rainbow-3) calc(var(--moki-indent-width) * 3) calc(var(--moki-indent-width) * 4)
   );
   background-repeat: no-repeat;
+}
+
+html[data-indent-rainbow='surface'] .cm-line.moki-indented-code-line {
+  @include moki-rainbow-stripes;
+  background-size: var(--moki-wrap-indent) 100%;
+}
+
+html[data-indent-rainbow='line'] .cm-line.moki-indented-code-line {
+  background-image: repeating-linear-gradient(
+    90deg,
+    var(--moki-rainbow-0) 0 1px,
+    transparent 1px var(--moki-indent-width),
+    var(--moki-rainbow-1) var(--moki-indent-width) calc(var(--moki-indent-width) + 1px),
+    transparent calc(var(--moki-indent-width) + 1px) calc(var(--moki-indent-width) * 2),
+    var(--moki-rainbow-2) calc(var(--moki-indent-width) * 2)
+      calc(var(--moki-indent-width) * 2 + 1px),
+    transparent calc(var(--moki-indent-width) * 2 + 1px) calc(var(--moki-indent-width) * 3),
+    var(--moki-rainbow-3) calc(var(--moki-indent-width) * 3)
+      calc(var(--moki-indent-width) * 3 + 1px),
+    transparent calc(var(--moki-indent-width) * 3 + 1px) calc(var(--moki-indent-width) * 4)
+  );
+  background-repeat: no-repeat;
+  background-size: var(--moki-wrap-indent) 100%;
 }
 
 html[data-indent-rainbow='surface'] {

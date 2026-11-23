@@ -74,6 +74,7 @@ import { history } from '@milkdown/kit/plugin/history';
 import { clipboard } from '@milkdown/kit/plugin/clipboard';
 import { listener, listenerCtx } from '@milkdown/kit/plugin/listener';
 import { codeBlockComponent, codeBlockConfig } from '@milkdown/kit/component/code-block';
+import { milkdownCodeIndent } from './milkdownCodeIndent';
 import {
   $ctx,
   $inputRule,
@@ -341,6 +342,7 @@ const codeBlockExtensions = [
   milkdownFenceConfirmation,
   codeMirrorTheme,
   CodeMirrorView.lineWrapping,
+  milkdownCodeIndent,
   syntaxHighlighting(codeHighlightStyle),
 ];
 
