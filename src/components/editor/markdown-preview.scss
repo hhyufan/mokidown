@@ -138,7 +138,7 @@
   }
   :is(.task-list-item, [data-item-type='task']) > .md-preview__fold,
   :is(.task-list-item, [data-item-type='task']) > p > .md-preview__fold {
-    inset-inline-end: calc(100% + 2px);
+    inset-inline-end: calc(100% + var(--task-checkbox-gutter) + 2px);
   }
 
   .moki-code-fold {
@@ -391,19 +391,9 @@
     list-style-type: circle;
   }
 
-  ul.contains-task-list,
-  ol.contains-task-list,
-  ul:has(> li.task-list-item),
-  ol:has(> li.task-list-item),
-  ul:has(> li[data-item-type='task']),
-  ol:has(> li[data-item-type='task']) {
-    padding-left: 1.2em;
-    list-style: none;
-  }
-
   :is(li.task-list-item, li[data-item-type='task']) {
+    --task-checkbox-gutter: 1.2em;
     position: relative;
-    padding-inline-start: 1.7em;
     list-style: none;
 
     > p:first-of-type {
@@ -442,7 +432,7 @@
     position: absolute;
     z-index: 1;
     inset-block-start: 0.5lh;
-    inset-inline-start: 0;
+    inset-inline-start: calc(-1 * var(--task-checkbox-gutter, 1.2em));
     transform: translateY(-50%);
     font: inherit;
     inline-size: 14px;
@@ -509,7 +499,7 @@
     --task-row-gap: 0.25em;
     align-content: start;
     row-gap: var(--task-row-gap);
-    margin-inline-start: calc(7px - 1.7em);
+    margin-inline-start: calc(7px - var(--task-checkbox-gutter));
     padding-inline-start: var(--task-branch-indent);
 
     > li {
