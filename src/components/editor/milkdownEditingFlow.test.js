@@ -10,6 +10,7 @@ const schema = new Schema({
     doc: { content: 'block+' },
     paragraph: { group: 'block', content: 'inline*', createGapCursor: true },
     heading: { group: 'block', content: 'inline*', createGapCursor: true },
+    hr: { group: 'block' },
     code_block: { group: 'block', content: 'text*', code: true },
     blockquote: { group: 'block', content: 'block+' },
     bullet_list: { group: 'block', content: 'list_item+' },
@@ -124,6 +125,23 @@ it('focuses an empty document without inserting another paragraph', () => {
   expect(view.focus).toHaveBeenCalledOnce();
 });
 
+it.each([[197, 40], [40, 157]])('leaves a native scrollbar press at %i, %i to the browser', (clientX, clientY) => {
+  const view = viewFor(schema.nodes.doc.create(null, paragraph()));
+  const event = { ...blankViewport(view), clientX, clientY };
+  event.target.getBoundingClientRect = () => ({ left: 0, top: 0 });
+  Object.defineProperties(event.target, {
+    clientWidth: { value: 194 },
+    clientHeight: { value: 154 },
+    scrollWidth: { value: 260 },
+    scrollHeight: { value: 220 },
+  });
+
+  expect(handleMilkdownBlankPointerDown(view, event)).toBe(false);
+  expect(event.preventDefault).not.toHaveBeenCalled();
+  expect(event.stopPropagation).not.toHaveBeenCalled();
+  expect(view.dispatch).not.toHaveBeenCalled();
+});
+
 it('creates an initial paragraph on click if the parser provided no blocks', () => {
   const view = viewFor(schema.nodes.doc.create());
   expect(handleMilkdownBlankPointerDown(view, blankViewport(view))).toBe(true);
@@ -146,6 +164,51 @@ it('does not activate blank documents during readonly, composition or multi-touc
 
 const htmlParagraph = (value = '<!-- keep -->') => schema.nodes.html_block.create({ value });
 const deleteKey = (key = 'Backspace') => ({ key, target: document.createElement('div'), preventDefault: vi.fn(), stopPropagation: vi.fn() });
+
+it('opens a temporary input paragraph when clicking below a trailing divider', () => {
+  const rule = schema.nodes.hr.create();
+  const doc = schema.nodes.doc.create(null, rule);
+  const view = viewFor(doc);
+  const event = { ...blankViewport(view), clientY: 50 };
+  const dom = document.createElement('hr');
+  dom.getBoundingClientRect = () => ({ top: 20, bottom: 22 });
+  view.dom.append(dom);
+  view.nodeDOM = () => dom;
+
+  expect(handleMilkdownBlankPointerDown(view, event)).toBe(true);
+  expect(view.state.selection).toBeInstanceOf(TextSelection);
+  expect(view.state.selection.$from.parent.type.name).toBe('paragraph');
+  expect(persistentMilkdownDocument(view.state).eq(doc)).toBe(true);
+  view.dispatch(view.state.tr.insertText('After the divider'));
+  expect(persistentMilkdownDocument(view.state).lastChild.textContent).toBe('After the divider');
+});
+
+it.each(['selected', 'after', 'before', 'gap'])('deletes a divider from the %s position and supports undo', (position) => {
+  const rule = schema.nodes.hr.create();
+  const before = paragraph('before');
+  const after = paragraph('after');
+  const doc = schema.nodes.doc.create(null, [before, rule, after]);
+  const start = before.nodeSize;
+  const end = start + rule.nodeSize;
+  const selections = {
+    selected: NodeSelection.create(doc, start),
+    after: TextSelection.create(doc, end + 1),
+    before: TextSelection.create(doc, start - 1),
+    gap: new GapCursor(doc.resolve(end)),
+  };
+  const view = viewFor(doc, selections[position]);
+  view.state = EditorState.create({
+    doc,
+    selection: selections[position],
+    plugins: [history(), createMilkdownEditingFlowPlugin()],
+  });
+  expect(handleMilkdownBlockKeyDown(view, deleteKey(position === 'before' ? 'Delete' : 'Backspace'))).toBe(true);
+  expect(view.state.doc.childCount).toBe(2);
+  expect(view.state.doc.firstChild.eq(before)).toBe(true);
+  expect(view.state.doc.lastChild.eq(after)).toBe(true);
+  expect(undo(view.state, view.dispatch)).toBe(true);
+  expect(view.state.doc.eq(doc)).toBe(true);
+});
 
 const listItem = (...blocks) => schema.nodes.list_item.create(null, blocks);
 const bulletList = (...items) => schema.nodes.bullet_list.create(null, items);

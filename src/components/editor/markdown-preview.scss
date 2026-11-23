@@ -138,7 +138,7 @@
   }
   :is(.task-list-item, [data-item-type='task']) > .md-preview__fold,
   :is(.task-list-item, [data-item-type='task']) > p > .md-preview__fold {
-    inset-inline-end: calc(100% + 2px);
+    inset-inline-end: calc(100% + var(--task-checkbox-gutter) + 2px);
   }
 
   .moki-code-fold {
@@ -391,19 +391,9 @@
     list-style-type: circle;
   }
 
-  ul.contains-task-list,
-  ol.contains-task-list,
-  ul:has(> li.task-list-item),
-  ol:has(> li.task-list-item),
-  ul:has(> li[data-item-type='task']),
-  ol:has(> li[data-item-type='task']) {
-    padding-left: 1.2em;
-    list-style: none;
-  }
-
   :is(li.task-list-item, li[data-item-type='task']) {
+    --task-checkbox-gutter: 1.2em;
     position: relative;
-    padding-inline-start: 1.7em;
     list-style: none;
 
     > p:first-of-type {
@@ -442,7 +432,7 @@
     position: absolute;
     z-index: 1;
     inset-block-start: 0.5lh;
-    inset-inline-start: 0;
+    inset-inline-start: calc(-1 * var(--task-checkbox-gutter, 1.2em));
     transform: translateY(-50%);
     font: inherit;
     inline-size: 14px;
@@ -509,7 +499,7 @@
     --task-row-gap: 0.25em;
     align-content: start;
     row-gap: var(--task-row-gap);
-    margin-inline-start: calc(7px - 1.7em);
+    margin-inline-start: calc(7px - var(--task-checkbox-gutter));
     padding-inline-start: var(--task-branch-indent);
 
     > li {
@@ -592,6 +582,8 @@
     font-family: var(--font-editor);
     font-size: 0.9em;
     line-height: 1.6;
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
     background: var(--md-code-bg);
     border: none;
     border-radius: var(--md-radius);
@@ -604,6 +596,8 @@
       border-radius: 0;
       font-size: inherit;
       color: inherit;
+      white-space: inherit;
+      overflow-wrap: inherit;
     }
   }
 }
@@ -699,6 +693,9 @@
   .milkdown-editor .ProseMirror-selectednode {
     outline: none;
   }
+  .milkdown-editor hr.ProseMirror-selectednode {
+    background-color: var(--accent);
+  }
 
   // 单击块级公式落下的是整块 NodeSelection，这一圈蓝框是「选中了它」唯一的提示，
   // 别跟着上面那条一刀切一起抹掉。只描边不填色：壁纸透出来时才不会被一块底色盖住。
@@ -757,7 +754,7 @@
         font-family: var(--font-editor);
         font-weight: 400;
         font-style: normal;
-        pointer-events: none;
+        pointer-events: auto;
         user-select: none;
         white-space: pre-wrap;
         &::before {
@@ -1424,6 +1421,7 @@
 
     .codemirror-host {
       overflow: auto;
+      container-type: inline-size;
     }
 
     .cm-editor {
@@ -1437,6 +1435,20 @@
     .cm-content {
       min-height: 52px;
       padding: 34px 16px 6px;
+    }
+
+    .cm-line.moki-indented-code-line {
+      // Reserve space for wrapped rows. The negative first-line indent leaves
+      // the document's actual spaces and tabs in their original position.
+      --moki-wrap-indent: min(var(--moki-code-indent), 50cqi);
+      padding-inline-start: var(--moki-wrap-indent);
+      text-indent: calc(-1 * var(--moki-wrap-indent));
+    }
+
+    .moki-code-indent-tab {
+      display: inline-block;
+      text-indent: 0;
+      white-space: pre;
     }
 
     .preview-panel {

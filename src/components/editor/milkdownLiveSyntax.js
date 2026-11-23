@@ -15,7 +15,7 @@ import { characterEscapeMarkName, syntaxScanText } from './milkdownRawText';
 import { attachWritingCaret } from './milkdownWritingCaret';
 
 const sourceTypeName = 'moki_inline_syntax_source';
-const liveSyntaxKey = new PluginKey('moki-live-syntax');
+export const liveSyntaxKey = new PluginKey('moki-live-syntax');
 const inlinePointerCleanup = new WeakMap();
 const inlineLinkPattern = /(?<!\\)!?\[([^\n[\]]*)\]\((?:[^()\n]|\([^()\n]*\))*\)$/;
 const graphemes = Intl.Segmenter && new Intl.Segmenter(undefined, { granularity: 'grapheme' });
@@ -189,15 +189,16 @@ function delimiterBoundary(
     text,
     parts,
     heading,
+    closingLength,
     defaultOffset: closingLength ? (opening.length ? closingLength : 0) : text.length,
   };
 }
 
 // A mark delimiter has no ProseMirror document positions of its own. Keep
 // its caret offset in plugin state and leave the document untouched.
-function selectDelimiterPosition(view, $pos, boundary, offset, scroll = true) {
+function selectDelimiterPosition(view, $pos, boundary, offset, scroll = true, math) {
   const tr = view.state.tr.setSelection(TextSelection.create(view.state.doc, $pos.pos));
-  const meta = { pointer: null };
+  const meta = { pointer: null, math };
   if (boundary) {
     let marks = $pos.nodeBefore?.marks || [];
     let end = 0;
@@ -208,6 +209,12 @@ function selectDelimiterPosition(view, $pos, boundary, offset, scroll = true) {
     }
     tr.setStoredMarks(marks);
     meta.caret = { offset };
+    if (math === null && marks.some((mark) => mark.type.name === mathMarkName)) {
+      const range = [...activeMarkRanges($pos), ...activeMarkRanges($pos, -1)].find(
+        ({ mark }) => mark.type.name === mathMarkName && mark.isInSet(marks),
+      );
+      if (range) meta.math = { from: range.from, to: range.to, inspect: true };
+    }
   }
   tr.setMeta(liveSyntaxKey, meta);
   view.dispatch(scroll ? tr.scrollIntoView() : tr);
@@ -439,45 +446,59 @@ function trackInlineClick(view, event) {
     event.ctrlKey ||
     event.metaKey ||
     event.altKey ||
-    event.target.closest?.('a, button, .cm-editor')
+    event.target.closest?.('a, button, input, textarea, select, .cm-editor')
   )
     return;
   const marker = event.target.closest?.('.moki-markdown-marker');
-  // 行内公式的正文也走这条路：点进公式时两个 `$` 要跟着浮出来，不然只看得到源码文字。
   const inline = event.target.closest?.('strong, b, em, i, del, s, code, [data-moki-math-mark]');
-  if (!marker && !inline) return;
+  const mathElement = event.target.closest?.('[data-moki-math-mark]');
 
-  // Resolve the click before revealing or hiding delimiters, which reflows
-  // the rendered text underneath the pointer.
+  // Resolve against the layout on pointer down. Focus and selection can
+  // reveal or hide delimiters before the browser finishes the click.
   let pos;
-  let markerOffset;
   if (marker) {
     pos = view.posAtDOM(marker, 0);
-    const box = marker.getBoundingClientRect();
-    const text = marker.dataset.mokiMarker;
-    markerOffset = box.width
-      ? Math.round(Math.max(0, Math.min(1, (event.clientX - box.left) / box.width)) * text.length)
-      : 0;
   } else {
     const range = view.dom.ownerDocument.caretRangeFromPoint?.(event.clientX, event.clientY);
-    if (range && inline.contains(range.startContainer))
+    if (range && view.dom.contains(range.startContainer) && (!inline || inline.contains(range.startContainer))) {
       pos = view.posAtDOM(range.startContainer, range.startOffset);
-    else pos = view.posAtCoords({ left: event.clientX, top: event.clientY })?.pos;
+    } else {
+      pos = view.posAtCoords({ left: event.clientX, top: event.clientY })?.pos;
+    }
   }
   if (pos == null) return;
   const $pos = view.state.doc.resolve(pos);
   if (!$pos.parent.isTextblock || $pos.parent.type.spec.code) return;
   const boundary = delimiterBoundary(view.state, $pos);
-  let offset = boundary?.defaultOffset;
+  if (!marker && !inline && !boundary &&
+      !view.dom.querySelector('.moki-markdown-marker, .moki-math-source')) return;
+  let offset;
   if (marker && boundary) {
-    offset = markerOffset;
-    if (
-      Number(marker.dataset.markerSide) < 0 &&
-      !marker.classList.contains('moki-markdown-marker--with-caret')
-    ) {
-      offset += boundary.text.length - marker.dataset.mokiMarker.length;
+    const box = marker.getBoundingClientRect();
+    const length = marker.dataset.mokiMarker.length;
+    const ratio = box.width ? (event.clientX - box.left) / box.width : 0;
+    offset = Math.round(Math.max(0, Math.min(1, ratio)) * length);
+    if (marker.classList.contains('moki-markdown-heading-marker') &&
+        !marker.classList.contains('moki-markdown-marker--with-caret')) {
+      offset += boundary.closingLength;
+    } else if (Number(marker.dataset.markerSide) < 0 &&
+        !marker.classList.contains('moki-markdown-marker--with-caret')) {
+      offset += boundary.text.length - length;
+    }
+  } else if (boundary) {
+    offset = boundary.heading && !boundary.parts.some(({ mark }) => mark)
+      ? boundary.defaultOffset
+      : boundary.closingLength;
+    if (inline) {
+      const atStart = view.posAtDOM(inline, 0) === pos;
+      const atEnd = view.posAtDOM(inline, inline.childNodes.length) === pos;
+      offset = atStart ? boundary.text.length : atEnd ? 0 : boundary.defaultOffset;
     }
   }
+  const math = mathElement &&
+    [...activeMarkRanges($pos), ...activeMarkRanges($pos, -1)].find(
+      ({ mark }) => mark.type.name === mathMarkName,
+    );
   // Keep the rendered layout stable while native drag/word selection runs.
   // Reveal the caret and its delimiters together with the final selection.
   const { doc, selection } = view.state;
@@ -505,9 +526,10 @@ function trackInlineClick(view, event) {
       )
         return;
       const nativeSelection = view.dom.ownerDocument.getSelection();
-      if (click && nativeSelection?.isCollapsed !== false) {
+      if (click && (marker || nativeSelection?.isCollapsed !== false)) {
         view.focus();
-        selectDelimiterPosition(view, $pos, boundary, offset, false);
+        const inspectedMath = math ? { from: math.from, to: math.to, inspect: true } : null;
+        selectDelimiterPosition(view, $pos, boundary, offset, false, inspectedMath);
       } else {
         view.dispatch(view.state.tr.setMeta(liveSyntaxKey, { pointer: null }));
       }
@@ -1025,10 +1047,12 @@ export const milkdownLiveSyntax = $prose((ctx) => new Plugin({
   key: liveSyntaxKey,
   state: {
     init: () => ({ closing: false, caret: null, composition: null, pointer: null }),
-    apply(tr, previous) {
+    apply(tr, previous, oldState) {
       const update = tr.getMeta(liveSyntaxKey);
       if (!update && !tr.docChanged && !tr.selectionSet && !tr.storedMarksSet) return previous;
-      return { closing: update?.closing || false, caret: update?.caret || null,
+      const caret = update ? update.caret ?? null
+        : !tr.docChanged && tr.selection.eq(oldState.selection) ? previous.caret : null;
+      return { closing: update?.closing || false, caret,
         composition: tr.getMeta('composition') ?? previous.composition,
         pointer: update && 'pointer' in update ? update.pointer : tr.docChanged ? null : previous.pointer };
     },
