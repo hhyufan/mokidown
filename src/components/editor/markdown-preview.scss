@@ -1168,7 +1168,7 @@
     // 正文两侧留白比旧版宽一倍，字不再贴着气泡边。
     padding: 4px 16px;
     width: max-content;
-    max-width: min(320px, calc(100vw - 16px));
+    // 气泡宽度由内容决定，fitBubbles 负责横向平移收回，不需要 max-width 截断。
     // 横向收回的位移量、以及放不下时要不要翻到下方，都由 milkdownMathPreview 按
     // 编辑区可视范围量出来后写成行内样式/属性。不能交给 position-try：它只按
     // 「包含块」判断放得下放不下，而气泡的包含块是正文那段源码的宽度，量不到
