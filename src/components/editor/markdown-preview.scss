@@ -696,6 +696,15 @@
   .milkdown-editor hr.ProseMirror-selectednode {
     background-color: var(--accent);
   }
+
+  // 单击块级公式落下的是整块 NodeSelection，这一圈蓝框是「选中了它」唯一的提示，
+  // 别跟着上面那条一刀切一起抹掉。只描边不填色：壁纸透出来时才不会被一块底色盖住。
+  .milkdown-editor .md-preview__math--block.ProseMirror-selectednode {
+    outline: 2px solid var(--accent);
+    outline-offset: 3px;
+    border-radius: 6px;
+  }
+
   .milkdown-editor li.ProseMirror-selectednode::after {
     content: none;
   }
@@ -778,6 +787,7 @@
             border-inline-start: 1px solid var(--text, #2c2c2e);
             animation: ProseMirror-cursor-blink 1.1s steps(2, start) infinite;
             content: '';
+            z-index: 1;
             @media (prefers-reduced-motion: reduce) {
               animation: none;
             }

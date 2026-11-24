@@ -7,7 +7,8 @@ export const markdownBrackets = new Map(bracketPairs);
 const closers = new Set(markdownBrackets.values());
 const openByClose = new Map([...markdownBrackets].map(([open, close]) => [close, open]));
 export const markdownPairOptions = [
-  ...bracketPairs, ['*', '*', 'asterisk'], ['_', '_', 'underscore'], ['~', '~', 'tilde'], ['`', '`', 'backtick'],
+  ...bracketPairs, ['*', '*', 'asterisk'], ['_', '_', 'underscore'], ['~', '~', 'tilde'],
+  ['`', '`', 'backtick'], ['$', '$', 'math'],
 ].map(([open, close, name]) => ({ value: open, label: `${open} ${close}`, name }));
 const defaultPairs = markdownPairOptions.map(({ value }) => value);
 
@@ -112,13 +113,39 @@ export function matchingMarkdownBracket(text, offset, input) {
   return isEscaped(text, offset) ? null : { text: input + close, advance: 1 };
 }
 
+// 一对 `$` 的认法与 milkdownMathMark 的 mathDraftRange 同源：贴着字母数字冒号反斜杠的那枚
+// 是正文里的价钱符号，连写到第三枚不再是定界符，正文只剩空白或跨了占位符都不算式子。
+// 收尾那枚的宽度跟着开界符走，所以行内 `$x$` 与单行块级 `$$x$$` 各配各的对。
+// 返回收尾那枚的下标，配不成对给 -1。
+function mathPairClosing(text, start, width) {
+  if (width > 2 || isEscaped(text, start)) return -1;
+  if (start > 0 && /[\w:/\\]/.test(text[start - 1])) return -1;
+  for (let close = start + width; close < text.length; ) {
+    if (text[close] !== '$') {
+      close++;
+      continue;
+    }
+    let end = close;
+    while (text[end + 1] === '$') end++;
+    if (end - close + 1 === width && !isEscaped(text, close)) {
+      const body = text.slice(start + width, close);
+      // 空对（`$|$`）与 `*|*` 同规矩：两枚一起删。只摊着一串空白的那对连草稿都算不上，
+      // 跨了占位符（代码片段那类不可拆的单元）也不是一整段式子。
+      if (body.includes('\ufffc') || (body && !body.trim())) return -1;
+      return close;
+    }
+    close = end + 1;
+  }
+  return -1;
+}
+
 // Return the two ranges to delete, using offsets in a single Markdown line.
 // Code spans are consumed as units so punctuation inside them stays literal.
 export function markdownPairDeletion(text, offset, key, includeMarkup = true) {
   const target = key === 'Backspace' ? offset - 1 : offset;
   const character = text[target];
   if (!character || text.length > 65536 || (!markdownBrackets.has(character) && !closers.has(character)
-    && (!includeMarkup || !/^[*_~`]$/.test(character)))) return null;
+    && (!includeMarkup || !/^[*_~`$]$/.test(character)))) return null;
   const brackets = [], marks = new Map();
   const hit = (open, close, width = 1, remove = 1) => {
     if ((target >= open && target < open + width) || (target >= close && target < close + width)) {
@@ -158,6 +185,16 @@ export function markdownPairDeletion(text, offset, key, includeMarkup = true) {
         if (pair) return pair;
         marks.delete(id);
       } else if (/\S/.test(after)) marks.set(id, start);
+    } else if (includeMarkup && token === '$') {
+      const start = index;
+      while (text[index + 1] === '$') index++;
+      const width = index - start + 1;
+      const close = mathPairClosing(text, start, width);
+      if (close < 0) continue;
+      const pair = hit(start, close, width, width);
+      if (pair) return pair;
+      // 整对一起跨过去：里那些被反斜杠躲过的 `$` 不该再当第二个开界符。
+      index = close + width - 1;
     } else if (markdownBrackets.has(token)) brackets.push({ index, close: markdownBrackets.get(token) });
     else if (closers.has(token) && brackets.at(-1)?.close === token) {
       const opening = brackets.pop();

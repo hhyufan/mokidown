@@ -11,6 +11,7 @@
  * 在写回 Markdown 时丢掉斜体。
  */
 import { $markSchema } from '@milkdown/kit/utils';
+import { PluginKey } from '@milkdown/kit/prose/state';
 import { syntaxScanText } from './milkdownRawText';
 
 export const mathMarkName = 'math';
@@ -76,6 +77,47 @@ export function mathDraftAt($caret) {
     to: at(draft.to),
     close: at(draft.close),
   };
+}
+
+/**
+ * 「这条公式正在编辑」的唯一判定。
+ *
+ * 摊开源码（预览插件）和画出那两枚 `$`、切出光标格子（实时语法）必须读同一个条件，
+ * 否则就会出现「屏幕两边摆着 `$`、正文却还压在 KaTeX 覆盖层底下」这种两边各说各话的状态。
+ * 键放在这里，两个插件都从这片叶子导入，谁都不绕着谁。
+ */
+export const previewKey = new PluginKey('moki-math-preview');
+
+// 展开源码的条件是光标整个落在公式里。按「与选区相交就展开」写的话，Ctrl+A 会把
+// 全文公式一起掀开，整篇重排。空光标还要更严一档，必须严格在内：贴在公式左右边界打字
+// 落在正文外面，那时候掀开源码反而对不上手。
+// 非空选区允许正好框住整段——双击选词拿到的就是这个形状。
+export function isRevealed({ from, to }, range) {
+  if (from === to) return from > range.from && to < range.to;
+  return from >= range.from && to <= range.to;
+}
+
+// 点在公式正文上（含首尾那个字的两半边）时，浏览器给的光标正好压在边界上，
+// 上面那条严格在内的判定不放行，看起来就是「单击没反应」；正文只有一个字符时
+// 根本没有向内的光标位，永远掀不开。鼠标这一下点的是这段正文，所以额外记住
+// 「刚被点开的公式」，让源码翻出来。光标挪走或文档一改就忘。
+export function isClicked(clicked, range) {
+  return !!clicked && clicked.from === range.from && clicked.to === range.to;
+}
+
+/**
+ * 三种情形算在编辑：光标严格在内、被鼠标点开过、正踩在这条公式画出来的那枚定界符上。
+ *
+ * 踩格子只可能是从正文里走出来的——贴在边界路过不落格子（这正是与斜体那类标记的差别：
+ * 它们的源码就是渲染结果，没有再盖一层预览这回事，贴边摊开也不矛盾）。
+ * `caret` 由实时语法记着，没走过定界符就是 null。
+ */
+export function isMathEditing(state, selection, caret, range) {
+  return (
+    isRevealed(selection, range) ||
+    isClicked(previewKey.getState(state), range) ||
+    (!!caret && (selection.from === range.from || selection.from === range.to))
+  );
 }
 
 export const milkdownMathMark = $markSchema(mathMarkName, () => ({

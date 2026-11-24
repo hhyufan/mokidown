@@ -351,6 +351,7 @@ const mathSourceBlockType = 'math_source_block';
 const imageSourceInlineType = 'image_source_inline';
 const tableSourceBlockType = 'table_source_block';
 const mathSourceEditMeta = 'mokidownMathSourceEdit';
+const mathBlockSelectMeta = 'mokidownMathBlockSelect';
 const markdownSourceEditMeta = 'mokidownMarkdownSourceEdit';
 const remarkMathPlugin = $remark('remarkMath', () => remarkMath);
 const taskListSpacingPlugin = $remark('mokiTaskListSpacing', () => remarkTaskListSpacing);
@@ -706,8 +707,8 @@ const mathBlockInputRule = $inputRule(
 /**
  * 数学公式、图片和表格的“渲染态/源码态”切换插件。
  *
- * 负责在删除键命中原子渲染节点时回退到可编辑源码表示，并在源码恢复成合法
- * 语法后自动重新折叠为渲染节点。
+ * 负责在公式被整块选中（键盘走位、大纲跳转）或删除键命中原子渲染节点时换到可编辑源码
+ * 表示，并在源码恢复成合法语法后自动重新折叠为渲染节点。
  */
 const mathValueEditPlugin = $prose((ctx) => {
   const blockType = mathBlockSchema.type(ctx);
@@ -819,7 +820,7 @@ const mathValueEditPlugin = $prose((ctx) => {
   const replaceMathWithSource = (view, pos, node, fromEnd) => {
     if (!node.attrs.value) return removeEmptyMathBlock(view, pos, node, fromEnd);
     view.dispatch(
-      mathSourceTransaction(view, pos, node, blockSourceType, fromEnd, false).scrollIntoView(),
+      mathSourceTransaction(view.state, pos, node, blockSourceType, fromEnd, false).scrollIntoView(),
     );
     return true;
   };
@@ -863,6 +864,24 @@ const mathValueEditPlugin = $prose((ctx) => {
         })
       )
         return null;
+      // 整块选中就是「我要看它」：方向键走位与大纲跳转落到的都是这个选中态，就地掀开源码。
+      // 光标一离开又由下面那条规矩合回渲染态，所以路过公式不会把它一直摊着。
+      // 鼠标那一下另算（单击只选中，双击才展开），由事件那头带上 meta 把它排除在外。
+      const { selection } = newState;
+      if (
+        selection instanceof NodeSelection
+        && isMathNode(selection.node)
+        // 只认把选区放上来的那一笔：跟着来的补正事务不带 meta，不能算第二次「刚被选中」。
+        && transactions.some((tr) => tr.selectionSet && !tr.getMeta(mathBlockSelectMeta))
+      )
+        return mathSourceTransaction(
+          newState,
+          selection.from,
+          selection.node,
+          blockSourceType,
+          false,
+          true,
+        ).scrollIntoView();
       let tr = null;
       const replaceSource = (pos, node, replacement) => {
         tr ||= newState.tr;
@@ -879,6 +898,9 @@ const mathValueEditPlugin = $prose((ctx) => {
         if (node.type === blockSourceType) {
           const { from, to } = newState.selection;
           if (from > pos && to < pos + node.nodeSize) return false;
+          // 空的源码块折出去只剩一只空框，写回文件还平白留下 `$$\n\n$$` 这段没写完的语法。
+          // 与行内空对同一条规矩（见 foldDraft）：没什么可折的就摊着，等用户回来接着写。
+          if (!source.trim()) return false;
           replaceSource(pos, node, blockType.create({ value: source }));
           return;
         }
@@ -1283,18 +1305,17 @@ function isNonEditablePreviewTarget(target) {
 /**
  * 生成把块级渲染态公式换成源码态节点的事务。
  *
- * @param {object} view ProseMirror 编辑器视图。
+ * @param {object} state 换节点用的编辑器状态。
  * @param {number} pos 公式节点位置。
  * @param {object} node 公式节点。
  * @param {object} sourceType 块级源码态节点类型。
  * @param {boolean} fromEnd 删除方向，`true` 时去掉正文末尾的字符。
- * @param {boolean} keepValue 双击进入时原样展开，不删字符。
+ * @param {boolean} keepValue 原样展开，不删字符。
  * @returns {object} 换好节点并落好光标的事务。
  */
-function mathSourceTransaction(view, pos, node, sourceType, fromEnd, keepValue) {
+function mathSourceTransaction(state, pos, node, sourceType, fromEnd, keepValue) {
   const value = node.attrs.value || '';
   const nextValue = keepValue ? value : fromEnd ? value.slice(0, -1) : value.slice(1);
-  const { state } = view;
   const tr = state.tr
     .replaceWith(
       pos,
@@ -1364,7 +1385,7 @@ function createNonEditablePreviewSelectionHandler(getEditor, readOnly) {
         if (event.type === 'dblclick' && node.type === nodes[mathBlockType]) {
           view.dispatch(
             mathSourceTransaction(
-              view,
+              view.state,
               pos,
               node,
               nodes[mathSourceBlockType],
@@ -1376,7 +1397,11 @@ function createNonEditablePreviewSelectionHandler(getEditor, readOnly) {
           return;
         }
         view.dispatch(
-          view.state.tr.setSelection(NodeSelection.create(view.state.doc, pos)).scrollIntoView(),
+          view.state.tr
+            // 单击只落下整块选中：自动展开那条规矩认键盘走位与大纲跳转，这一刀要避开。
+            .setSelection(NodeSelection.create(view.state.doc, pos))
+            .setMeta(mathBlockSelectMeta, true)
+            .scrollIntoView(),
         );
         view.focus();
       } catch {

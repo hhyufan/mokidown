@@ -6,6 +6,7 @@ import { liftListItem } from '@milkdown/kit/prose/schema-list';
 import { EditorView as CodeMirrorView } from '@codemirror/view';
 import { $prose } from '@milkdown/kit/utils';
 import { isImeComposing } from '@utils/keyboard';
+import { liftInlineMath, inlineMathSlot } from './milkdownMathPreview';
 
 const enclosedBlocks = new Set(['code_block', 'table', 'math_block', 'table_source_block', 'math_source_block', 'html_block', 'hr']);
 const temporaryParagraphsKey = new PluginKey('moki-temporary-paragraphs');
@@ -185,9 +186,21 @@ export function handleMilkdownBlockKeyDown(view, event) {
     }
   }
   if (!['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Enter', 'Home', 'End', 'Backspace', 'Delete'].includes(event.key)) return false;
-  if (event.key === 'Enter' && !event.ctrlKey && !event.metaKey && !event.shiftKey && !target.closest('.cm-editor')
-    && outdentListLine(view)) {
-    event.preventDefault(); event.stopPropagation(); return true;
+  
+  // Check if cursor is inside a formula - if so, handle it with the math plugin
+  if (event.key === 'Enter' && !event.ctrlKey && !event.metaKey && !event.shiftKey && !target.closest('.cm-editor')) {
+    const { state } = view;
+    const { selection } = state;
+    if (selection.empty) {
+      const slot = inlineMathSlot(state);
+      if (slot && liftInlineMath(view, slot)) {
+        event.preventDefault(); event.stopPropagation(); return true;
+      }
+    }
+    
+    if (outdentListLine(view)) {
+      event.preventDefault(); event.stopPropagation(); return true;
+    }
   }
   const { selection } = view.state;
   if (['Backspace', 'Delete'].includes(event.key)

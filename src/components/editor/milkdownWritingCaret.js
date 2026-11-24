@@ -49,7 +49,9 @@ export function attachWritingCaret(view) {
     const range = document.createRange();
     range.setStart(currentSelection.focusNode, currentSelection.focusOffset);
     const native = range.getBoundingClientRect();
-    const { left, top, bottom } = native.height > 0 ? native : view.coordsAtPos(selection.head);
+    // Ask for the left neighbour: a formula's preview bubble is a widget drawn at the very
+    // position its source starts at, and the default side reads the node after it.
+    const { left, top, bottom } = native.height > 0 ? native : view.coordsAtPos(selection.head, -1);
     const box = pane.getBoundingClientRect();
     if (bottom <= box.top || top >= box.bottom || left < box.left - 1 || left > box.right) {
       hide();
