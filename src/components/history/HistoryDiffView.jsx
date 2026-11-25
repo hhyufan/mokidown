@@ -549,7 +549,7 @@ export default function HistoryDiffView() {
   const editorRef = useRef(null);
   const comparisonBoundsRef = useRef(null);
 
-  const tab = tabs.find((item) => item.id === diff?.tabId) || null;
+  const tab = tabs.find((item) => item.id === (diff?.sourceTabId ?? diff?.tabId)) || null;
   const external = diff?.external;
   const comparisonId = external ? `external:${diff.timestamp}` : tab?.id;
   const pluginActions = diff?.pluginId && diff.actions?.length ? diff.actions : null;

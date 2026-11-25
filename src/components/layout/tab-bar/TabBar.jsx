@@ -408,6 +408,7 @@ function TabBar({ onRequestCloseTab, onRequestCloseTabs }) {
                 key={tab.id}
                 data-tab-id={tab.id}
                 data-web-tab={tab.builtin === 'web' || undefined}
+                data-diff-tab={tab.builtin === 'diff' || undefined}
                 draggable={false}
                 className={cn(
                   'tabbar__tab',

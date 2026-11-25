@@ -1,4 +1,5 @@
 import { create } from 'zustand';
+import useEditorStore from '@store/useEditorStore';
 
 let comparisonSequence = Date.now();
 
@@ -10,7 +11,7 @@ export function isMarkdownComparison(tab, diff) {
   }
   return Boolean(
     tab &&
-    diff?.tabId === tab.id &&
+    (diff?.sourceTabId ?? diff?.tabId) === tab.id &&
     (/^(?:md|markdown|mdx)$/i.test(tab.ext || '') ||
       /\.(?:md|markdown|mdx)$/i.test(tab.name || tab.path || '')),
   );
@@ -23,14 +24,29 @@ export function isMarkdownComparison(tab, diff) {
  * 为 null 时正常编辑。时间线（侧栏）点击版本写入 diff，编辑区据此切换为
  * 对比视图；关闭对比或切换标签后清空。
  */
-const useHistoryStore = create((set) => ({
+const useHistoryStore = create((set, get) => ({
   diff: null,
   historyWrite: null,
   viewMode: 'preview',
   setDiff: (diff) => set({ diff, viewMode: diff?.external ? 'edit' : 'preview' }),
-  openFileComparison: (tabId, content, external, label) =>
+  openFileComparison: (tabId, content, external, label) => {
+    const id = `diff:${crypto.randomUUID()}`;
+    const source = useEditorStore.getState().tabs.find((tab) => tab.id === tabId);
+    const name = external?.modifiedName || label || source?.name || 'diff';
+    const previous = get().diff;
+    if (previous?.tabId && previous.tabId !== id) {
+      useEditorStore.getState().closeTabs([previous.tabId]);
+    }
+    useEditorStore.getState().openComparisonTab({ id, name, sourceTabId: tabId });
     set({
-      diff: { tabId, timestamp: ++comparisonSequence, content, external, label },
+      diff: {
+        tabId: id,
+        sourceTabId: tabId,
+        timestamp: ++comparisonSequence,
+        content,
+        external,
+        label,
+      },
       // Markdown 文件默认进 Markdown 对比（渲染态），源码对比留一键切换。
       viewMode:
         external &&
@@ -39,7 +55,8 @@ const useHistoryStore = create((set) => ({
         )
           ? 'preview'
           : 'edit',
-    }),
+    });
+  },
   toggleViewMode: () =>
     set((state) => ({ viewMode: state.viewMode === 'preview' ? 'edit' : 'preview' })),
   clearDiff: (comparison) =>

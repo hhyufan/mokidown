@@ -152,6 +152,34 @@ const useEditorStore = create(
         });
       },
 
+      /**
+       * 为一次历史对比创建独立标签页，避免对比覆盖当前文件标签。
+       *
+       * @param {{ id: string, name: string, sourceTabId: string }} comparison 对比标签信息。
+       */
+      openComparisonTab: ({ id, name, sourceTabId }) => {
+        const { tabs, tabRenderList, activeTabId } = get();
+        flushEditorBuffer(activeTabId);
+        if (tabs.some((tab) => tab.id === id)) {
+          set({ activeTabId: id });
+          return;
+        }
+        const source = tabs.find((tab) => tab.id === sourceTabId);
+        const tab = {
+          id,
+          name,
+          path: null,
+          ext: source?.ext || name.split('.').pop() || '',
+          builtin: 'diff',
+          modified: false,
+        };
+        set({
+          tabs: [...tabs, tab],
+          tabRenderList: [...tabRenderList, toTabMeta(tab)],
+          activeTabId: id,
+        });
+      },
+
       openPluginDocs: (name) => {
         const { tabs, tabRenderList, activeTabId } = get();
         if (activeTabId === pluginDocsTabId) return;
@@ -485,6 +513,13 @@ const useEditorStore = create(
           conflicts.delete(path);
         }
         const remaining = tabs.filter((tab) => !requested.has(tab.id));
+        if (closing.some((tab) => tab.builtin === 'diff')) {
+          // 动态引入，避免 editor / history 两个 store 的静态循环依赖。
+          void import('@store/useHistoryStore').then(({ default: history }) => {
+            const current = history.getState().diff;
+            if (current && requested.has(current.tabId)) history.getState().clearDiff(current);
+          });
+        }
         // 关闭最后一个网页标签时同步收起网页分屏，否则分屏用的原生网页视图会留在原地。
         const closedWebTab = closing.some((tab) => tab.builtin === 'web');
         const remainingWebTab = remaining.some((tab) => tab.builtin === 'web');
