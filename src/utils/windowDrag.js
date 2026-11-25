@@ -13,6 +13,8 @@ const INTERACTIVE_SELECTOR = [
   '.tabbar__tab',
   '.tabbar__actions',
   '.footer__breadcrumb',
+  // 整个侧栏都不参与窗口拖动：面包屑、滚动条、文件列表都要自己处理鼠标。
+  '.sidebar',
   '.file-tree__item',
   '.project-tree__row',
   '.sidebar__recent-item',
@@ -34,9 +36,12 @@ function installFullscreenWatch() {
   if (fullscreenWatchInstalled || !appWindow) return;
   fullscreenWatchInstalled = true;
   const refresh = () => {
-    appWindow.isFullscreen?.().then((value) => {
-      windowFullscreen = Boolean(value);
-    }).catch(() => {});
+    appWindow
+      .isFullscreen?.()
+      .then((value) => {
+        windowFullscreen = Boolean(value);
+      })
+      .catch(() => {});
   };
   refresh();
   appWindow.onResized?.(refresh).catch?.(() => {});
@@ -66,8 +71,11 @@ export function beginWindowDrag(event, { maximized } = {}) {
   if (windowFullscreen) return;
   event.preventDefault();
   // 只有标题栏知道最大化状态；其它空白区域双击不切换最大化。
-  const action = event.detail === 2 && maximized !== undefined
-    ? (maximized ? appWindow.unmaximize() : appWindow.maximize())
-    : appWindow.startDragging();
+  const action =
+    event.detail === 2 && maximized !== undefined
+      ? maximized
+        ? appWindow.unmaximize()
+        : appWindow.maximize()
+      : appWindow.startDragging();
   action?.catch?.(() => {});
 }
