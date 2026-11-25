@@ -147,11 +147,19 @@ fn repository_root(exe: &Path, directory: &str) -> Result<PathBuf, String> {
 }
 
 fn github_remote(executable: &Path, root: &Path) -> Option<String> {
-    let output = git(executable, Some(root), ["config", "--get", "remote.origin.url"]).ok()?;
+    let output = git(
+        executable,
+        Some(root),
+        ["config", "--get", "remote.origin.url"],
+    )
+    .ok()?;
     if !output.status.success() {
         return None;
     }
-    let remote = String::from_utf8_lossy(&output.stdout).trim().trim_end_matches(".git").to_string();
+    let remote = String::from_utf8_lossy(&output.stdout)
+        .trim()
+        .trim_end_matches(".git")
+        .to_string();
     let path = remote
         .strip_prefix("git@github.com:")
         .or_else(|| remote.strip_prefix("https://github.com/"))
@@ -202,7 +210,7 @@ fn parse_changes(list: &[u8]) -> Result<Vec<Change>, String> {
                 old_path: None,
                 code: if *index == b'?' { '?' } else { 'U' },
                 layer: Layer::Worktree,
-            mtime: 0,
+                mtime: 0,
             });
             continue;
         }
@@ -574,7 +582,7 @@ pub(crate) async fn git_compare_branches(
                 old_path,
                 code,
                 layer: Layer::Worktree,
-            mtime: 0,
+                mtime: 0,
             });
         }
         Ok(BranchComparison {
