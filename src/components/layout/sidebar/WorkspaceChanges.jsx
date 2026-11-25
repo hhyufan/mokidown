@@ -4,6 +4,7 @@ import { Dropdown, Popover, Tooltip } from 'antd';
 import {
   BranchesOutlined,
   CheckOutlined,
+  CloseOutlined,
   FileTextOutlined,
   FolderOpenOutlined,
   GithubOutlined,
