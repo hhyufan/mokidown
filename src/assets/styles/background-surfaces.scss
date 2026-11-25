@@ -241,16 +241,11 @@ body.moki-has-background {
   // editor during the opacity fade. Show image-backed popups at final geometry.
   .ant-dropdown,
   .ant-select-dropdown,
-  .ant-picker-dropdown {
-    &[class*='-enter'],
-    &[class*='-appear'] {
-      animation: none !important;
-      transform: none !important;
-      opacity: 1 !important;
-    }
-  }
-
-  .moki-tree-jump-popup {
+  .ant-picker-dropdown,
+  .ant-tooltip,
+  .ant-popover,
+  .moki-tree-jump-popup,
+  .workspace-compare-popup {
     &[class*='-enter'],
     &[class*='-appear'] {
       animation: none !important;

@@ -112,4 +112,34 @@ for (const theme of ['light', 'dark']) {
     await verifyImageOnly(page, '.monaco-context-menu');
     await page.screenshot({ path: testInfo.outputPath(`${theme}-image-only-context-menu.png`) });
   });
+
+  test(`tooltip opens without entry scale animation or first-frame wallpaper offset (${theme})`, async ({ page }) => {
+    await page.goto('/tests/background-harness.html');
+    await page.waitForFunction(() => window.trial);
+    await page.evaluate((theme) => window.trial.apply({ theme, background: true }), theme);
+    await page.locator('.footer__toggle-sidebar').hover();
+    const tooltip = page.locator('.ant-tooltip');
+    await expect(tooltip).toBeVisible();
+    const state = await tooltip.evaluate((el) => {
+      const inner = el.querySelector('.ant-tooltip-inner');
+      const style = getComputedStyle(el);
+      const box = inner.getBoundingClientRect();
+      return {
+        transform: style.transform,
+        opacity: style.opacity,
+        animationName: style.animationName,
+        popupX: inner.style.getPropertyValue('--moki-popup-x'),
+        popupY: inner.style.getPropertyValue('--moki-popup-y'),
+        rectX: `${box.left}px`,
+        rectY: `${box.top}px`,
+      };
+    });
+    expect(state).toMatchObject({
+      transform: 'none',
+      opacity: '1',
+      animationName: 'none',
+      popupX: state.rectX,
+      popupY: state.rectY,
+    });
+  });
 }

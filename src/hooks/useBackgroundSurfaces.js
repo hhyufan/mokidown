@@ -83,6 +83,10 @@ export function useBackgroundSurfaces({ enabled, imageUrl, opacity, workspaceSel
         if (popup.isConnected && popup.getAnimations().some((a) => a.playState === 'running'))
           return true;
       }
+      for (const element of positions) {
+        if (element.isConnected && element.getAnimations().some((a) => a.playState === 'running'))
+          return true;
+      }
       return false;
     };
     let following = false;
@@ -116,8 +120,10 @@ export function useBackgroundSurfaces({ enabled, imageUrl, opacity, workspaceSel
             record.attributeName !== 'style' ||
             record.target.getAttribute('style') !== writtenStyles.get(record.target),
         )
-      )
+      ) {
         sync();
+        if (!following) follow();
+      }
     });
     const observePosition = (element) => {
       if (positions.has(element)) return;
