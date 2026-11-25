@@ -588,8 +588,11 @@ export default function HistoryDiffView() {
     let active = true;
     const read = () => {
       readFileContent(externalModifiedPath)
-        .then((content) => {
-          if (active) setLiveModified(content);
+        .then((result) => {
+          // readFileContent 返回 { success, content, ... }，不是裸字符串。
+          if (active && result?.success && typeof result.content === 'string') {
+            setLiveModified(result.content);
+          }
         })
         .catch(() => {});
     };
