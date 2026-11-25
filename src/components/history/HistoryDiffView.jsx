@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Button, Tooltip } from 'antd';
 import { CheckOutlined, CloseOutlined, HistoryOutlined } from '@ant-design/icons';
+import ScrollEdgeShadows from '@components/editor/ScrollEdgeShadows';
 import useHistoryStore, { isMarkdownComparison } from '@store/useHistoryStore';
 import useEditorStore from '@store/useEditorStore';
 import useThemeStore from '@store/useThemeStore';
@@ -18,7 +19,7 @@ import {
   recordMarkdownEdit,
 } from '@utils/markdownUndo';
 import { sha256 } from '../../../shared/plugin-package.mjs';
-import { historyCapture } from '@utils/tauriApi';
+import { historyCapture, writeFileContent } from '@utils/tauriApi';
 import { getFileLanguage } from '@utils/fileLanguage';
 import {
   hasSelectedHistoryChanges,
@@ -43,6 +44,13 @@ function formatTime(timestamp) {
 const normalizeLines = (text) => text.replace(/\r\n|\r/g, '\n');
 const NO_CHANGES = [];
 const defaultFoldState = () => ({ defaultExpanded: false, overrides: new Map() });
+
+function hiddenLineCount(editor) {
+  return editor
+    ._getViewModel?.()
+    ?.getHiddenAreas?.()
+    .reduce((count, range) => count + range.endLineNumber - range.startLineNumber + 1, 0);
+}
 
 async function captureAppliedHistory(path, previousContent, content, restoredFrom, onError) {
   if (!path || /^[a-z][a-z\d+.-]*:\/\//i.test(path)) return;
@@ -124,6 +132,9 @@ function MonacoHistoryDiff({
   useEffect(() => {
     if (!containerRef.current) return undefined;
     let cancelled = false;
+    let revealFrame = 0;
+    let revealed = false;
+    let diffInitialized = false;
     const listeners = [];
     Promise.all([import('monaco-editor'), import('@utils/monacoShiki')])
       .then(async ([monaco, { initMonacoShiki, getMonacoThemeName }]) => {
@@ -201,9 +212,33 @@ function MonacoHistoryDiff({
         let computedVersion = -1;
         let computed;
         let expandInitial = props.initiallyExpanded;
+        const readFolds = () => diff.saveViewState?.()?.modelState?.collapsedRegions;
+        const scheduleReveal = () => {
+          if (cancelled || revealed || revealFrame || !diffInitialized) return;
+          revealFrame = requestAnimationFrame(() => {
+            revealFrame = 0;
+            if (cancelled) return;
+            const expected = (readFolds() || []).reduce(
+              (count, { range: [start, end] }) => count + end - start,
+              0,
+            );
+            // The diff result can arrive before both view models consume the hidden ranges.
+            if (
+              [originalEditor, modifiedEditor].some((editor) => {
+                const actual = hiddenLineCount(editor);
+                return actual !== undefined && actual !== expected;
+              })
+            )
+              return;
+            originalEditor.render(true);
+            modifiedEditor.render(true);
+            revealed = true;
+            setReady(true);
+          });
+        };
         const reportComparison = () => {
           if (!computed || computedVersion !== modifiedModel.getVersionId()) return;
-          const regions = diff.saveViewState?.()?.modelState?.collapsedRegions;
+          const regions = readFolds();
           const folds = Array.isArray(regions)
             ? regions.map(({ range }) => range).filter(([start, end]) => end > start)
             : null;
@@ -213,8 +248,14 @@ function MonacoHistoryDiff({
             foldableCount: regions?.length ?? 0,
           });
         };
-        if (modifiedEditor.onDidChangeHiddenAreas) {
-          listeners.push(modifiedEditor.onDidChangeHiddenAreas(reportComparison));
+        for (const editor of [originalEditor, modifiedEditor]) {
+          if (editor.onDidChangeHiddenAreas)
+            listeners.push(
+              editor.onDidChangeHiddenAreas(() => {
+                if (editor === modifiedEditor) reportComparison();
+                scheduleReveal();
+              }),
+            );
         }
         const getSelection = () =>
           (side === 'original' ? originalEditor : modifiedEditor).getSelection();
@@ -268,6 +309,7 @@ function MonacoHistoryDiff({
               diff.showAllUnchangedRegions?.();
             }
             reportComparison();
+            scheduleReveal();
           }),
         );
         const restore = (changes, selection, selectedSide) => {
@@ -334,6 +376,9 @@ function MonacoHistoryDiff({
           );
         };
         apiRef.current = {
+          goToDiff(direction) {
+            diff.goToDiff(direction);
+          },
           refreshArrows() {
             if (computedVersion === modifiedModel.getVersionId())
               updateArrows(diff.getLineChanges());
@@ -365,7 +410,14 @@ function MonacoHistoryDiff({
         listeners.push(foldLabels);
         foldLabelsRef.current = foldLabels;
         updateSplit();
-        setReady(true);
+        await diff.waitForDiff();
+        if (cancelled) return;
+        if (expandInitial) {
+          expandInitial = false;
+          diff.showAllUnchangedRegions();
+        }
+        diffInitialized = true;
+        scheduleReveal();
       })
       .catch((failure) => {
         if (!cancelled) setError(String(failure?.message || failure));
@@ -373,6 +425,7 @@ function MonacoHistoryDiff({
 
     return () => {
       cancelled = true;
+      if (revealFrame) cancelAnimationFrame(revealFrame);
       listeners.forEach((listener) => listener.dispose());
       apiRef.current = null;
       diffRef.current?.dispose();
@@ -436,12 +489,16 @@ function MonacoHistoryDiff({
           {error}
         </div>
       )}
-      <div
-        className="history-diff__editor"
-        ref={containerRef}
-        data-ready={ready}
-        hidden={noChanges}
-      />
+      <div className="history-diff__surface editor-scroll-frame" hidden={noChanges}>
+        <div
+          className="history-diff__editor"
+          ref={containerRef}
+          data-ready={ready}
+          data-comparison-zoom="edit"
+          hidden={noChanges}
+        />
+        {ready && !noChanges && <ScrollEdgeShadows editor={diffRef.current?.getModifiedEditor()} />}
+      </div>
       <MilkdownTooltips
         rootRef={containerRef}
         targetSelector=".fold-unchanged"
@@ -493,6 +550,8 @@ export default function HistoryDiffView() {
   const comparisonBoundsRef = useRef(null);
 
   const tab = tabs.find((item) => item.id === diff?.tabId) || null;
+  const external = diff?.external;
+  const comparisonId = external ? `external:${diff.timestamp}` : tab?.id;
   const pluginActions = diff?.pluginId && diff.actions?.length ? diff.actions : null;
   useEffect(() => {
     setDraftState(null);
@@ -504,7 +563,7 @@ export default function HistoryDiffView() {
   useEffect(() => () => clearMarkdownUndo(diff), [diff]);
   const historyContent = diff?.content;
   useEffect(() => {
-    if (historyContent == null) return undefined;
+    if (historyContent == null || external) return undefined;
     let cancelled = false;
     Promise.resolve()
       .then(() => crypto.subtle.digest('SHA-256', new TextEncoder().encode(historyContent)))
@@ -519,8 +578,8 @@ export default function HistoryDiffView() {
     return () => {
       cancelled = true;
     };
-  }, [historyContent]);
-  const current = tab ? getBuffer(tab.id, tab.content || '') : '';
+  }, [historyContent, external]);
+  const current = external?.modified ?? (tab ? getBuffer(tab.id, tab.content || '') : '');
   const draft = draftState?.comparison === diff ? draftState?.content : null;
   const modified = draft ?? current;
   const updateDraft = useCallback(
@@ -535,7 +594,7 @@ export default function HistoryDiffView() {
     [current, diff],
   );
   useEffect(() => {
-    if (!diff || busy) return undefined;
+    if (!diff || external || busy) return undefined;
     const onKeyDown = (event) => {
       const direction = markdownUndoDirection(event);
       if (!direction || useHistoryStore.getState().diff !== diff) return;
@@ -559,7 +618,7 @@ export default function HistoryDiffView() {
     };
     document.addEventListener('keydown', onKeyDown, true);
     return () => document.removeEventListener('keydown', onKeyDown, true);
-  }, [busy, current, diff]);
+  }, [busy, current, diff, external]);
   const rendered = mode === 'preview' && isMarkdownComparison(tab, diff);
   // Monaco 按行比较，不把 CRLF/LF 的差别当成代码修改。
   const originalText = normalizeLines(historyContent ?? '');
@@ -574,7 +633,7 @@ export default function HistoryDiffView() {
   const currentDiff = (rendered ? preview : renderedDiff)?.modified === modifiedText;
   const noChanges = identical || (rendered && currentDiff && Boolean(preview?.identical));
   const showEmpty = noChanges && (!rendered || draft == null);
-  if (!diff || !tab) return null;
+  if (!diff || (!tab && !external)) return null;
 
   const hash = historyHash?.content === diff.content ? historyHash.hash : '';
   const hasDraft = draft != null && modifiedText !== normalizeLines(current);
@@ -648,6 +707,20 @@ export default function HistoryDiffView() {
     } catch (error) {
       console.warn('[history] restore failed:', error);
       if (useHistoryStore.getState().diff === diff) setActionError(t('history.applyFailed'));
+    } finally {
+      setPendingDiff((pending) => (pending === diff ? null : pending));
+    }
+  };
+
+  const saveExternal = async (content) => {
+    if (busy || !external?.modifiedPath) return;
+    setPendingDiff(diff);
+    setActionError('');
+    try {
+      await writeFileContent(external.modifiedPath, content);
+      clearDiff(diff);
+    } catch (error) {
+      if (useHistoryStore.getState().diff === diff) setActionError(String(error?.message || error));
     } finally {
       setPendingDiff((pending) => (pending === diff ? null : pending));
     }
@@ -728,55 +801,90 @@ export default function HistoryDiffView() {
               />
             </span>
           </Tooltip>
-          {pluginActions ? (
-            pluginActions.map((action) => (
-              <Button
-                key={action.id}
-                size="small"
-                disabled={busy || action.disabled}
-                type={action === pluginActions.at(-1) ? 'primary' : 'default'}
-                onClick={() => runPluginAction(action)}
-              >
-                {action.title}
-              </Button>
-            ))
-          ) : (
+          {external && (
             <>
-              <Tooltip title={applyLabel} placement="top" mouseEnterDelay={0.3}>
+              <Tooltip title={t('history.applyChanges')} placement="top" mouseEnterDelay={0.3}>
                 <span className="history-diff__action">
                   <Button
                     type="primary"
                     size="small"
-                    aria-label={applyLabel}
+                    aria-label={t('history.applyChanges')}
                     icon={<CheckOutlined aria-hidden="true" />}
                     loading={busy}
-                    disabled={busy || (!hasDraft && !applySelection)}
+                    disabled={busy || !hasDraft}
                     onClick={() => {
-                      const content = applySelection
-                        ? editorRef.current?.getSelectedContent()
-                        : draft;
-                      if (content != null && content !== current) void saveChanges(content);
+                      if (draft != null && draft !== current) void saveExternal(draft);
                     }}
                   />
                 </span>
               </Tooltip>
               <Tooltip
-                title={diff.actionLabel || t('history.restore')}
+                title={t('workspaceDiff.revertChanges')}
                 placement="top"
                 mouseEnterDelay={0.3}
               >
                 <span className="history-diff__action">
                   <Button
                     size="small"
-                    aria-label={diff.actionLabel || t('history.restore')}
+                    aria-label={t('workspaceDiff.revertChanges')}
                     icon={<HistoryOutlined aria-hidden="true" />}
                     disabled={busy}
-                    onClick={() => saveChanges(diff.content, !diff.label)}
+                    onClick={() => void saveExternal(diff.content)}
                   />
                 </span>
               </Tooltip>
             </>
           )}
+          {!external &&
+            (pluginActions ? (
+              pluginActions.map((action) => (
+                <Button
+                  key={action.id}
+                  size="small"
+                  disabled={busy || action.disabled}
+                  type={action === pluginActions.at(-1) ? 'primary' : 'default'}
+                  onClick={() => runPluginAction(action)}
+                >
+                  {action.title}
+                </Button>
+              ))
+            ) : (
+              <>
+                <Tooltip title={applyLabel} placement="top" mouseEnterDelay={0.3}>
+                  <span className="history-diff__action">
+                    <Button
+                      type="primary"
+                      size="small"
+                      aria-label={applyLabel}
+                      icon={<CheckOutlined aria-hidden="true" />}
+                      loading={busy}
+                      disabled={busy || (!hasDraft && !applySelection)}
+                      onClick={() => {
+                        const content = applySelection
+                          ? editorRef.current?.getSelectedContent()
+                          : draft;
+                        if (content != null && content !== current) void saveChanges(content);
+                      }}
+                    />
+                  </span>
+                </Tooltip>
+                <Tooltip
+                  title={diff.actionLabel || t('history.restore')}
+                  placement="top"
+                  mouseEnterDelay={0.3}
+                >
+                  <span className="history-diff__action">
+                    <Button
+                      size="small"
+                      aria-label={diff.actionLabel || t('history.restore')}
+                      icon={<HistoryOutlined aria-hidden="true" />}
+                      disabled={busy}
+                      onClick={() => saveChanges(diff.content, !diff.label)}
+                    />
+                  </span>
+                </Tooltip>
+              </>
+            ))}
         </div>
       </header>
       {actionError && (
@@ -791,19 +899,29 @@ export default function HistoryDiffView() {
         style={{ '--history-split': rendered || splitOffset == null ? '50%' : `${splitOffset}px` }}
       >
         <div className="history-diff__file" role="group" aria-label={t('history.title')}>
-          <span className="history-diff__filename">{tab.name}</span>
+          <span className="history-diff__filename" title={external?.originalPath}>
+            {external?.originalName ?? tab?.name}
+          </span>
           {hash && (
             <Tooltip title={`SHA-256: ${hash}`} placement="top" mouseEnterDelay={0.3}>
               <code className="history-diff__hash">{hash.slice(0, 8)}</code>
             </Tooltip>
           )}
-          <time dateTime={new Date(diff.timestamp).toISOString()}>
-            {formatTime(diff.timestamp)}
-          </time>
+          {external ? (
+            <span className="history-diff__version">{external.originalLabel}</span>
+          ) : (
+            <time dateTime={new Date(diff.timestamp).toISOString()}>
+              {formatTime(diff.timestamp)}
+            </time>
+          )}
         </div>
         <div className="history-diff__file" role="group" aria-label={t('history.current')}>
-          <span className="history-diff__filename">{tab.name}</span>
-          <span className="history-diff__version">{t('history.current')}</span>
+          <span className="history-diff__filename" title={external?.modifiedPath}>
+            {external?.modifiedName ?? tab?.name}
+          </span>
+          <span className="history-diff__version">
+            {external?.modifiedLabel ?? t('history.current')}
+          </span>
         </div>
       </div>
       {showEmpty && (
@@ -814,7 +932,7 @@ export default function HistoryDiffView() {
         <div className="history-diff__empty" role="status">
           <MokiStatusEmpty
             art="history"
-            title={t('empty.historyDiff.title')}
+            title={t(external ? 'workspaceDiff.identical' : 'empty.historyDiff.title')}
             hint={t('empty.historyDiff.hint')}
           />
         </div>
@@ -825,34 +943,39 @@ export default function HistoryDiffView() {
         </div>
       )}
       {rendered && preview?.layout && (
-        <MarkdownHistoryDiff
-          key={`${tab.id}:${diff.timestamp}`}
-          tabId={tab.id}
-          original={diff.content}
-          draftContent={modified}
-          comparison={preview.layout}
-          previewBoundsRef={comparisonBoundsRef}
-          hidden={showEmpty}
-          foldState={markdownFolds}
-          ready={currentDiff}
-          busy={busy}
-          onRevert={revertPreviewChange}
-          onDraftChange={updateDraft}
-          onFoldSummary={setMarkdownFoldSummary}
-          onToggleFold={({ key }, expanded) => {
-            setMarkdownFolds((state) => ({
-              ...state,
-              overrides: new Map(state.overrides).set(key, expanded),
-            }));
-          }}
-        />
+        <div className="history-diff__surface editor-scroll-frame" hidden={showEmpty}>
+          <MarkdownHistoryDiff
+            key={`${comparisonId}:${diff.timestamp}`}
+            tabId={comparisonId}
+            originalPath={external?.originalPath}
+            modifiedPath={external?.modifiedPath}
+            original={diff.content}
+            draftContent={modified}
+            comparison={preview.layout}
+            previewBoundsRef={comparisonBoundsRef}
+            hidden={showEmpty}
+            foldState={markdownFolds}
+            ready={currentDiff}
+            busy={busy}
+            onRevert={revertPreviewChange}
+            onDraftChange={updateDraft}
+            onFoldSummary={setMarkdownFoldSummary}
+            onToggleFold={({ key }, expanded) => {
+              setMarkdownFolds((state) => ({
+                ...state,
+                overrides: new Map(state.overrides).set(key, expanded),
+              }));
+            }}
+          />
+          {!showEmpty && <ScrollEdgeShadows selector=".history-markdown-diff" />}
+        </div>
       )}
       {!rendered && (
         <MonacoHistoryDiff
-          key={`${tab.id}:${diff.timestamp}`}
+          key={`${comparisonId}:${diff.timestamp}`}
           original={diff.content}
           modified={modified}
-          fileName={tab.name}
+          fileName={external?.modifiedName ?? tab?.name}
           theme={theme}
           fontSize={fontSize}
           fontFamily={fontFamily}

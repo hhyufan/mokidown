@@ -1,6 +1,13 @@
 import { create } from 'zustand';
 
+let comparisonSequence = Date.now();
+
 export function isMarkdownComparison(tab, diff) {
+  if (diff?.external) {
+    return [diff.external.originalPath, diff.external.modifiedPath].every((path) =>
+      /\.(?:md|markdown|mdx)$/i.test(path),
+    );
+  }
   return Boolean(
     tab &&
     diff?.tabId === tab.id &&
@@ -20,7 +27,19 @@ const useHistoryStore = create((set) => ({
   diff: null,
   historyWrite: null,
   viewMode: 'preview',
-  setDiff: (diff) => set({ diff, viewMode: 'preview' }),
+  setDiff: (diff) => set({ diff, viewMode: diff?.external ? 'edit' : 'preview' }),
+  openFileComparison: (tabId, content, external, label) =>
+    set({
+      diff: { tabId, timestamp: ++comparisonSequence, content, external, label },
+      // Markdown 文件默认进 Markdown 对比（渲染态），源码对比留一键切换。
+      viewMode:
+        external &&
+        [external.originalPath, external.modifiedPath].every((path) =>
+          /\.(?:md|markdown|mdx)$/i.test(path),
+        )
+          ? 'preview'
+          : 'edit',
+    }),
   toggleViewMode: () =>
     set((state) => ({ viewMode: state.viewMode === 'preview' ? 'edit' : 'preview' })),
   clearDiff: (comparison) =>

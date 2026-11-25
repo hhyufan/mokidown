@@ -133,6 +133,8 @@ function DiffCell({ change, gap, side }) {
 export default function MarkdownHistoryDiff({
   tabId,
   original,
+  originalPath,
+  modifiedPath,
   draftContent,
   comparison,
   previewBoundsRef,
@@ -192,8 +194,8 @@ export default function MarkdownHistoryDiff({
       ref={scrollRef}
       className="history-markdown-diff history-markdown-draft"
       aria-busy={!ready}
+      data-comparison-zoom="preview"
       hidden={hidden}
-      style={{ visibility: showOriginal ? 'visible' : 'hidden' }}
     >
       <div className="history-markdown-draft__layout">
         {visible.map((row) => {
@@ -262,7 +264,7 @@ export default function MarkdownHistoryDiff({
                   />
                 </>
               )}
-              {['left', 'right'].map((direction) => {
+              {onRevert && ['left', 'right'].map((direction) => {
                 const actions = row.actions.filter((action) => action.direction === direction);
                 const label = t(
                   direction === 'left' ? 'history.revertAddition' : 'history.revertChange',
@@ -310,6 +312,7 @@ export default function MarkdownHistoryDiff({
             content={original}
             layout={originalLayout}
             previewBoundsRef={previewBoundsRef}
+            filePath={originalPath}
             readOnly
           />
         ) : (
@@ -323,7 +326,10 @@ export default function MarkdownHistoryDiff({
         )}
         <MarkdownComparisonEditor
           tabId={tabId}
+          side="modified"
           content={draftContent}
+          filePath={modifiedPath}
+          readOnly={!onDraftChange}
           layout={ready ? modifiedLayout : null}
           previewBoundsRef={previewBoundsRef}
           onDraftChange={onDraftChange}

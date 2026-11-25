@@ -139,6 +139,7 @@ beforeEach(() => {
       executeEdits: (_source, edits) => mock.models[side].setValue(edits[0].text),
     });
     const diff = {
+      waitForDiff: () => Promise.resolve(),
       getOriginalEditor: () => editor(0),
       getModifiedEditor: () => editor(1),
       onDidUpdateDiff: (fn) => {

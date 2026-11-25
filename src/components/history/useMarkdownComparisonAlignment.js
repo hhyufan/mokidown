@@ -84,6 +84,7 @@ export function useMarkdownComparisonAlignment(ref, visibleRows) {
         setPixels(row, 'height', height);
         if (row.dataset.positioned === undefined) row.dataset.positioned = '';
       }
+      if (!root.hasAttribute('data-aligned')) root.setAttribute('data-aligned', '');
     };
 
     const schedule = () => {

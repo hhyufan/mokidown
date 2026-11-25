@@ -11,12 +11,14 @@ const MilkdownMarkdownEditor = lazyWithRetry(
 export default function MarkdownComparisonEditor({
   tabId,
   content,
+  filePath,
   onDraftChange,
   busy,
   layout,
   boundsRef,
   previewBoundsRef,
   readOnly = false,
+  side = readOnly ? 'original' : 'modified',
   onReady,
 }) {
   const { t } = useTranslation();
@@ -27,7 +29,7 @@ export default function MarkdownComparisonEditor({
     <>
       <section
         className="history-markdown-draft__pane"
-        data-side={readOnly ? 'original' : 'modified'}
+        data-side={side}
         aria-busy={busy}
         inert={!readOnly && busy ? '' : undefined}
       >
@@ -38,6 +40,7 @@ export default function MarkdownComparisonEditor({
             readOnly={readOnly}
             comparison={{
               tabId,
+              filePath,
               initialContent,
               content,
               onChange: onDraftChange,

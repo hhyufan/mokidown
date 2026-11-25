@@ -30,6 +30,35 @@
   letter-spacing: 0.04em;
 }
 
+.timeline--git + .timeline {
+  margin-top: 0;
+}
+
+.timeline__git-hash {
+  flex: none;
+  color: var(--text-sec);
+  font-size: 10px;
+  font-family: var(--font-mono, monospace);
+}
+
+.timeline__git-subject {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  // 与两侧 hash / 时间的小字同一档；用应用字体（微软雅黑 / 系统 UI），更周正。
+  color: var(--text);
+  font-family: var(--font-app);
+  font-size: 11px;
+}
+
+.timeline--git .timeline__item time {
+  flex: none;
+  color: var(--text-sec);
+  font-size: 10px;
+}
+
 .timeline__toggle {
   display: grid;
   place-items: center;
@@ -407,10 +436,30 @@ body.moki-has-background .history-diff {
   color: var(--text);
 }
 
+.history-diff__surface {
+  display: flex;
+  flex: 1;
+  min-height: 0;
+  min-width: 0;
+  &[hidden] {
+    display: none;
+  }
+}
+
+.history-diff__navigation-icon {
+  display: block;
+  width: 14px;
+  height: 14px;
+}
+
 .history-diff__editor {
   position: relative;
   flex: 1;
   min-height: 0;
+  &[data-ready='false'] {
+    opacity: 0;
+    pointer-events: none;
+  }
   &[hidden] {
     display: none;
   }
@@ -497,6 +546,9 @@ body.moki-has-background .history-diff {
   min-height: 0;
   overflow: auto;
   scrollbar-gutter: stable;
+  &.history-markdown-draft:not([data-aligned]) {
+    visibility: hidden;
+  }
   &[hidden] {
     display: none;
   }
