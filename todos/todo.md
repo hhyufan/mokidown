@@ -164,3 +164,37 @@
   * [ ] 现象四：任务列表同级的代码块与无序 / 有序列表同级的代码块左边缘不一致。
   * [ ] 现象五：Milkdown 代码块折行后，折行续行不保留当前行缩进层级（续行从行首开始），彩虹缩进在折行处中断或错位；多次修改未解决。
   * [ ] 现象六：Markdown 预览代码块长行不折行（横向溢出 / 滚动），与 Milkdown 代码块折行行为不一致。
+
+* [ ] **待办（2026-11-25）**
+
+  * [ ] fix(history): 取消 Monaco / Markdown 对比编辑器的加载中间态，未就绪前不渲染对比视图。
+
+  * [ ] fix(ui): 修复 Tooltip 与变动下拉列表打开首帧的背景图错位（需等待一帧布局）。
+
+  * [ ] fix(markdown): Markdown 预览无法渲染 Base64 图片；Base64 图片应在 Monaco 中折叠。
+
+  * [ ] feat(settings): 增加默认图片目录设置（支持图床链接），设置后粘贴图片保存到该目录。
+
+  * [ ] fix(markdown): 任务列表输入完成后出现异常中间态（见截图）。
+
+    ![任务列表中间态 1](images/task-list-intermediate-1.png)
+
+    ![任务列表中间态 2](images/task-list-intermediate-2.png)
+
+  * [ ] fix(editor): 取消 Milkdown 删除图片时删除末尾 `]` 并显示原语法的逻辑。
+
+  * [ ] fix(editor): Monaco 折行编辑时出现错位重叠（见截图）。
+
+    ![Monaco 折行错位](images/monaco-wrap-overlap.png)
+
+  * [ ] feat(editor): 增加代码 / Markdown 右键截图，或选中文本 + 快捷键截图。
+
+  * [ ] feat(settings): 更新快捷键设置，覆盖项目所有可用快捷键。
+
+  * [ ] fix(ui): Monaco 工具栏与 LSP 语言服务弹层的 hover 背景不透明。
+
+  * [ ] fix(i18n): Monaco 工具栏汉化方案在 build 后失效，寻找更有效的实现。
+
+  * [ ] fix(history): Markdown 同块对比的撤销行箭头挤在顶部，未与具体行对应（见截图）。
+
+    ![撤销行箭头](images/markdown-revert-arrows.png)
