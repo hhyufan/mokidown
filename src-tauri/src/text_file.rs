@@ -141,7 +141,7 @@ pub struct TextDocument {
     pub encoding: String,
 }
 
-fn decode(bytes: &[u8], partial: bool) -> Result<TextDocument, TextFileError> {
+pub(crate) fn decode(bytes: &[u8], partial: bool) -> Result<TextDocument, TextFileError> {
     if bytes.starts_with(&[0xff, 0xfe, 0, 0]) || bytes.starts_with(&[0, 0, 0xfe, 0xff]) {
         return Err(TextFileError::new("invalid-encoding"));
     }

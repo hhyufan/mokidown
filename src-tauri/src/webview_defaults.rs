@@ -22,6 +22,81 @@ pub(crate) fn app_window<'a, M: tauri::Manager<Wry>>(
 }
 
 #[cfg(windows)]
+pub(crate) fn prepare_editor_resize(window: &tauri::WebviewWindow<Wry>) {
+    use windows::Win32::Foundation::{HWND, LPARAM, LRESULT, RECT, WPARAM};
+    use windows::Win32::UI::Shell::{DefSubclassProc, RemoveWindowSubclass, SetWindowSubclass};
+    use windows::Win32::UI::WindowsAndMessaging::{
+        GetClassLongW, GetClientRect, GetParent, SetClassLongW, SetWindowPos, CS_HREDRAW,
+        CS_VREDRAW, GCL_STYLE, SIZE_MINIMIZED, SWP_NOACTIVATE, SWP_NOMOVE, SWP_NOZORDER,
+        WM_NCDESTROY, WM_SIZE,
+    };
+
+    unsafe extern "system" fn resize_container_first(
+        host: HWND,
+        message: u32,
+        wparam: WPARAM,
+        lparam: LPARAM,
+        subclass_id: usize,
+        container: usize,
+    ) -> LRESULT {
+        if message == WM_SIZE && wparam.0 != SIZE_MINIMIZED as usize {
+            let container = HWND(container as *mut _);
+            let mut viewport = RECT::default();
+            let mut current = RECT::default();
+            // Wry sets the controller bounds before resizing its container. Enlarge
+            // the container first so it cannot clip the new frame to the old size.
+            if GetClientRect(host, &mut viewport).is_ok()
+                && GetClientRect(container, &mut current).is_ok()
+                && viewport.right > 0
+                && viewport.bottom > 0
+                && viewport != current
+            {
+                let _ = SetWindowPos(
+                    container,
+                    None,
+                    0,
+                    0,
+                    viewport.right,
+                    viewport.bottom,
+                    SWP_NOACTIVATE | SWP_NOMOVE | SWP_NOZORDER,
+                );
+            }
+        } else if message == WM_NCDESTROY {
+            let _ = RemoveWindowSubclass(host, Some(resize_container_first), subclass_id);
+        }
+        DefSubclassProc(host, message, wparam, lparam)
+    }
+
+    let Ok(host) = window.hwnd() else { return };
+    // The editor has its own window class. Retain its painted client area
+    // while the WebView submits a frame at the new size.
+    unsafe {
+        let style = GetClassLongW(host, GCL_STYLE);
+        let redraw_styles = (CS_HREDRAW | CS_VREDRAW).0;
+        if style & redraw_styles != 0
+            && SetClassLongW(host, GCL_STYLE, (style & !redraw_styles) as i32) == 0
+        {
+            log::warn!("Could not disable full-window redraws on editor resize");
+        }
+    }
+
+    let host = host.0 as usize;
+    if let Err(error) = window.with_webview(move |webview| unsafe {
+        let host = HWND(host as *mut _);
+        let mut container = HWND::default();
+        if webview.controller().ParentWindow(&mut container).is_ok()
+            && GetParent(container).is_ok_and(|parent| parent == host)
+            && !SetWindowSubclass(host, Some(resize_container_first), 1, container.0 as usize)
+                .as_bool()
+        {
+            log::warn!("Could not install the editor WebView resize handler");
+        }
+    }) {
+        log::warn!("Could not access the editor WebView: {error}");
+    }
+}
+
+#[cfg(windows)]
 fn disable_browser_ui(controller: ICoreWebView2Controller) -> Result<()> {
     // Tauri invokes this on the owning UI thread. Editing and clipboard input
     // are still delivered to the application with browser accelerators off.
