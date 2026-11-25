@@ -33,17 +33,21 @@ MokiDown is an open-source Markdown editor built with Tauri 2, React, Monaco, an
 
 * **Three editing modes**: source, WYSIWYG, and split view, with GFM, LaTeX math, and Mermaid diagrams.
 
+* **Virtual rendering**: inline code, bold, italic, strikethrough, links, and math render in place, with delimiters that follow the caret. Inline math adds a KaTeX live preview bubble, symbol completion, and paired input gestures.
+
 * **Runnable code blocks**: on desktop, run C#, JavaScript, Python, Java, Kotlin, and Rust with output, interactive input, and stop; the matching language runtime must be installed.
+
+* **Git workspaces and history**: the Changes panel lists staged and working-tree changes by file mtime and watches the repository automatically, with a Markdown-only filter, branch switching, and open on GitHub. History comparison offers rendered Markdown diff, an editable right side, per-line revert, save, and revert-all.
+
+* **Plugin system**: a standalone plugin SDK with a permissioned capability catalog (commands, document/selection access, workspace files, network, status bar, file icons, notifications, Markdown styles, theme); incremental sync ships as a built-in plugin.
 
 * **Language services**: install LSP plugins on demand for completion, hover info, and diagnostics.
 
 * **Knowledge trees**: organize note hierarchy with `.mgtree` files, with node editing and jumps to document code blocks.
 
-* **Files and workspace**: multiple tabs, directory browsing, outline, global search, bookmarks, and auto-save.
+* **Files and workspace**: multiple tabs, directory browsing, outline, global search, bookmarks, and auto-save; reader windows, terminal, and web split view.
 
-* **Personalization**: light and dark themes plus a Chinese/English interface.
-
-
+* **Personalization**: light and dark themes, Chinese/English UI, and wallpapers; rainbow indentation for Monaco and code blocks (auto-detects 2/4-space units), a shared blue I-beam cursor across editor and preview, and auto-wrapping Markdown preview code blocks.
 
 ## 📸 Screenshots
 
