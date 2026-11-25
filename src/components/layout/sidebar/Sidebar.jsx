@@ -23,7 +23,10 @@ import { useKnowledgeTreesState } from '@hooks/useKnowledgeTrees';
 import { useOpenTreeEditor } from '@hooks/useOpenTreeEditor';
 import { useEditorBufferContent } from '@hooks/useEditorBufferContent';
 import Timeline from '@components/history/Timeline';
+import GitFileTimeline from '@components/history/GitFileTimeline';
 import PluginPanel from './PluginPanel';
+import WorkspaceChanges from './WorkspaceChanges';
+import ManualFileCompare from './ManualFileCompare';
 
 import FileTypeIcon from '@components/ui/FileTypeIcon';
 import TreeExpansionIcon from '@components/ui/TreeExpansionIcon';
@@ -35,6 +38,10 @@ import useUpdateStore from '@store/useUpdateStore';
 import { getVersion } from '@tauri-apps/api/app';
 import { REPO_URL } from '@/configs/repository';
 import { cn } from '@utils/classNames';
+import { BranchesOutlined } from '@ant-design/icons';
+import { invoke } from '@tauri-apps/api/core';
+import { isAndroidRuntime } from '@utils/platform';
+import useConfigStore from '@store/useConfigStore';
 import './sidebar.scss';
 
 /**
@@ -165,6 +172,7 @@ function ExplorerToolbar() {
       <ToolbarButton title={t('sidebar.explorer.save')} onClick={saveCurrentFile}>
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z" /><polyline points="17 21 17 13 7 13 7 21" /><polyline points="7 3 7 8 15 8" /></svg>
       </ToolbarButton>
+      <ManualFileCompare />
       <div className="stb-sep" />
       <ToolbarButton title={t('sidebar.explorer.openFolder')} onClick={openFolderDialog}>
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z" /><line x1="12" y1="11" x2="12" y2="17" /><line x1="9" y1="14" x2="15" y2="14" /></svg>
@@ -296,6 +304,7 @@ function RecentList() {
  * @returns {JSX.Element} 对应页签图标。
  */
 function SidebarTabIcon({ id }) {
+  if (id === 'changes') return <BranchesOutlined />;
   if (id === 'knowledge') return <span className="sidebar__knowledge-icon"><FileTypeIcon extension="mgtree" size={14} /></span>;
   if (id === 'explorer') {
     return (
@@ -332,6 +341,29 @@ function Sidebar({ onOpenSettings }) {
   const { t } = useTranslation();
   const sidebarVisible = useEditorStore((s) => s.sidebarVisible);
   const sidebarView = useEditorStore((s) => s.sidebarView);
+  const directory = useFileStore((s) => s.currentDir);
+  const gitPath = useConfigStore((s) => s.gitExecutablePath);
+  const [gitWorkspace, setGitWorkspace] = useState(null);
+  useEffect(() => {
+    if (!directory || !window.__TAURI_INTERNALS__ || isAndroidRuntime()) return undefined;
+    let request = 0;
+    const probe = () => {
+      const current = ++request;
+      invoke('git_workspace_available', { directory, gitPath })
+        .then((available) => {
+          if (current === request) setGitWorkspace({ directory, available });
+        }).catch(() => {
+          if (current === request) setGitWorkspace({ directory, available: false });
+        });
+    };
+    probe();
+    window.addEventListener('focus', probe);
+    return () => {
+      request++;
+      window.removeEventListener('focus', probe);
+    };
+  }, [directory, gitPath]);
+  const gitVisible = Boolean(directory && gitWorkspace?.directory === directory && gitWorkspace.available);
   const setSidebarView = useEditorStore((s) => s.setSidebarView);
   const activeTab = useEditorStore((s) => s.tabs.find((tab) => tab.id === s.activeTabId));
   const sidebarWidth = useEditorStore((s) => s.sidebarWidth);
@@ -345,7 +377,7 @@ function Sidebar({ onOpenSettings }) {
   useLayoutEffect(() => { lastKnowledgeVisible.current = knowledgeVisible; }, [knowledgeVisible]);
   const openTreeEditor = useOpenTreeEditor();
   const effectiveView = sidebarView === 'knowledge' && !knowledgeVisible ? (isMarkdown ? 'outline' : 'explorer')
-    : sidebarView === 'outline' && !isMarkdown ? 'explorer' : sidebarView;
+    : (sidebarView === 'outline' && !isMarkdown) || (sidebarView === 'changes' && !gitVisible) ? 'explorer' : sidebarView;
   const { toggleTheme } = useThemeStore();
 
   const themeButtonRef = useRef(null);
@@ -369,6 +401,7 @@ function Sidebar({ onOpenSettings }) {
     { id: 'outline', label: t('sidebar.tab.outline'), visible: isMarkdown },
     { id: 'knowledge', label: t('knowledgeTree.title'), visible: knowledgeVisible },
     { id: 'recent', label: t('sidebar.tab.recent'), visible: true },
+    ...(gitVisible ? [{ id: 'changes', label: t('workspaceDiff.tab'), visible: true }] : []),
   ];
 
   // 主题切换优先使用 View Transition API 做径向过渡；若运行环境不支持，
@@ -419,6 +452,7 @@ function Sidebar({ onOpenSettings }) {
           <div className="sidebar__view">
             <ExplorerToolbar />
             <ExplorerModes />
+            <GitFileTimeline />
             <Timeline />
             <PluginPanel />
           </div>
@@ -432,6 +466,7 @@ function Sidebar({ onOpenSettings }) {
         {effectiveView === 'recent' && (
           <RecentList />
         )}
+        {effectiveView === 'changes' && <WorkspaceChanges key={directory} directory={directory} />}
       </div>
 
       <footer className="sidebar__footer">

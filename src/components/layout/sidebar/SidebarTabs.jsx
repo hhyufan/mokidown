@@ -76,6 +76,7 @@ export default function SidebarTabs({ items, activeId, onChange, onMinWidthChang
       aria-hidden={!item.visible || undefined}>
       <Tooltip title={item.label} mouseEnterDelay={0.3}><button ref={(element) => { if (element) buttons.current.set(item.id, element); else buttons.current.delete(item.id); }}
         type="button" role="tab"  disabled={!item.visible} tabIndex={item.visible ? 0 : -1}
+        aria-label={item.label}
         aria-selected={item.visible && activeId === item.id}
         className={cn('sidebar__tab', activeId === item.id && item.visible && 'sidebar__tab--active')}
         onClick={() => onChange(item.id)}>
@@ -93,7 +94,7 @@ export default function SidebarTabs({ items, activeId, onChange, onMinWidthChang
       {['sidebar.explorer.title', 'sidebar.project.title'].map((label) => (
         <div className="sidebar__toolbar" key={label}>
           <span className="sidebar__toolbar-label sidebar__explorer-heading"><span data-measure-label={t(label)} /><span className="sidebar__mode-toggle" /></span>
-          <span className="stb" /><span className="stb" /><span className="stb" />
+          <span className="stb" /><span className="stb" /><span className="stb" /><span className="stb" />
           <span className="stb-sep" /><span className="stb" />
         </div>
       ))}

@@ -1,0 +1,473 @@
+.workspace-changes {
+  min-height: 0;
+
+  // 与项目 / 最近面板一致：它们的标题行右侧有 28px 的 ToolbarButton，
+  // 标题实际高度是 8 + 28 + 8。这里没有按钮，显式撑到同一高度，
+  // 否则下面的导航栏会比另外两个面板高一截。
+  .sidebar__toolbar {
+    min-height: 44px;
+  }
+
+  // 与文件面板一致：工具栏、导航栏、搜索栏紧贴，各自用 padding 控制高度。
+  gap: 0;
+
+  &__controls {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 6px;
+    min-width: 0;
+    // 与项目根行对齐，整体比文件行稍微靠左一点。
+    padding: 6px 16px 6px 10px;
+    // 分支行与文件列表之间加分隔线。
+    border-bottom: 1px solid var(--border-light);
+  }
+
+  &__file,
+  &__row {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    min-width: 0;
+  }
+
+  &__nav {
+    // 复用项目导航栏样式；只补一个原生 disabled 状态。
+    .file-tree__nav-btn:disabled {
+      opacity: 0.3;
+      cursor: default;
+    }
+  }
+
+  &__search {
+    display: grid;
+    grid-template-rows: 0fr;
+    opacity: 0;
+    flex-shrink: 0;
+    transition:
+      grid-template-rows 200ms ease,
+      opacity 160ms ease;
+
+    &--open {
+      grid-template-rows: 1fr;
+      opacity: 1;
+    }
+  }
+
+  &__search-clip {
+    min-height: 0;
+    overflow: hidden;
+  }
+
+  &__search-bar {
+    display: flex;
+    align-items: center;
+    gap: 2px;
+    padding: 5px 8px;
+    border-bottom: 1px solid var(--border-light);
+
+    > svg {
+      width: 14px;
+      height: 14px;
+      flex-shrink: 0;
+      color: var(--accent);
+      margin-right: 4px;
+    }
+
+    input {
+      width: 0;
+      flex: 1;
+      min-width: 24px;
+      border: 0;
+      background: transparent;
+      outline: none;
+      color: var(--text);
+      font: inherit;
+      font-size: 12px;
+    }
+
+    input::placeholder {
+      color: var(--text-dim);
+    }
+
+    button {
+      width: 23px;
+      height: 26px;
+      padding: 3px;
+      border: 0;
+      background: transparent;
+      color: var(--text-sec);
+      cursor: pointer;
+    }
+  }
+
+  &__branch-toggle {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    min-width: 0;
+    max-width: 58%;
+    padding: 2px 4px;
+    border: 0;
+    border-radius: 6px;
+    background: transparent;
+    color: var(--text);
+    font: 600 13px var(--font-app);
+    cursor: pointer;
+
+    &:hover {
+      background: transparent;
+      color: var(--accent);
+    }
+
+    &[aria-expanded='true'] .workspace-changes__chevron {
+      transform: rotate(90deg);
+    }
+
+    > span {
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+  }
+
+  &__branch-menu {
+    min-width: 180px;
+    max-height: 320px;
+    overflow: auto;
+    padding: 2px;
+  }
+
+  &__branch-group {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin: 2px 4px 4px;
+    color: var(--text-sec);
+    font: 600 11px var(--font-app);
+
+    &::after {
+      content: '';
+      flex: 1;
+      border-top: 1px solid var(--border);
+    }
+  }
+
+  &__branch-option {
+    width: 100%;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 5px 6px;
+    border: 0;
+    border-radius: 6px;
+    background: transparent;
+    color: var(--text);
+    font: 12px var(--font-app);
+    text-align: left;
+    cursor: pointer;
+
+    &:hover:not(:disabled) {
+      background: var(--hover);
+    }
+
+    &:disabled {
+      color: var(--accent);
+      cursor: default;
+    }
+
+    > span {
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+  }
+
+  &__repository {
+    display: flex;
+    align-items: center;
+    min-width: 0;
+    gap: 4px;
+    margin-inline-start: auto;
+    white-space: nowrap;
+    > svg {
+      flex: none;
+    }
+  }
+
+  &__chevron {
+    flex: none;
+    width: 12px;
+    height: 12px;
+    transition: transform 180ms ease;
+  }
+
+  &__branch[aria-expanded='true'] &__chevron,
+  &__group[data-expanded='true'] &__chevron {
+    transform: rotate(90deg);
+  }
+
+  &__hint {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    color: var(--text-sec);
+    font-size: 12px;
+  }
+
+  &__list {
+    min-height: 0;
+    overflow: auto;
+    // 行自带 16px 内边距，容器只留上下呼吸空间。
+    padding: 4px 0;
+  }
+
+  &__group-toggle {
+    width: 100%;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    cursor: pointer;
+    padding: 6px;
+    border: 0;
+    border-radius: 6px;
+    background: transparent;
+    color: var(--text-sec);
+    font: 600 12px var(--font-app);
+    &:hover {
+      background: var(--moki-glass-hover, var(--hover));
+    }
+    &:focus-visible {
+      outline: 1px solid var(--accent);
+      outline-offset: -1px;
+    }
+  }
+
+  &__total {
+    margin-inline-start: 6px;
+    padding-inline: 5px;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    font-weight: 400;
+  }
+
+  &__breadcrumb {
+    display: flex;
+    align-items: center;
+    gap: 2px;
+    min-width: 0;
+    overflow: hidden;
+    color: var(--text-sec);
+    font-size: 11px;
+  }
+
+  &__crumb {
+    display: inline-flex;
+    align-items: center;
+    gap: 2px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  &__crumb-sep {
+    flex: none;
+    width: 12px;
+    height: 12px;
+    color: var(--accent);
+  }
+
+  &__worktree {
+    display: grid;
+  }
+
+  &__count {
+    margin-inline-start: auto;
+    padding-inline: 5px;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    font-weight: 400;
+  }
+
+  &__drawer {
+    display: grid;
+    grid-template-rows: 0fr;
+    opacity: 0;
+    transition:
+      grid-template-rows 180ms ease,
+      opacity 140ms ease;
+  }
+
+  &__group[data-expanded='true'] &__drawer {
+    grid-template-rows: 1fr;
+    opacity: 1;
+  }
+
+  &__drawer-content {
+    min-height: 0;
+    overflow: hidden;
+  }
+
+  &__file {
+    gap: 0;
+    border-radius: 6px;
+    &:hover {
+      background: var(--moki-glass-hover, var(--surface));
+    }
+    &[data-selected='true'] {
+      background: var(--moki-glass-selected, var(--surface));
+    }
+  }
+
+  &__row {
+    width: 100%;
+    gap: 8px;
+    text-align: start;
+    border: 0;
+    border-radius: inherit;
+    background: transparent;
+    // 与文件面板的 .file-tree__item 对齐：6px 16px、13px。
+    padding: 6px 16px;
+    color: var(--text);
+    font-size: 13px;
+    cursor: pointer;
+    > svg {
+      flex: 0 0 auto;
+    }
+  }
+
+  &__name {
+    display: grid;
+    flex: 1;
+    min-width: 0;
+    font-size: 13px;
+    span,
+    small {
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    small {
+      color: var(--text-sec);
+      font-size: 10px;
+    }
+  }
+
+  &__status {
+    display: inline-flex;
+    flex: none;
+    margin-inline-start: auto;
+    color: #a57900;
+    svg {
+      width: 13px;
+      height: 13px;
+    }
+    &[data-code='A'],
+    &[data-code='C'],
+    &[data-code='?'] {
+      color: #218b55;
+    }
+    &[data-code='R'],
+    &[data-code='T'] {
+      color: var(--accent);
+    }
+    &[data-code='D'],
+    &[data-code='U'] {
+      color: var(--danger, #dc535d);
+    }
+  }
+
+  &__error {
+    font-size: 12px;
+    color: var(--danger, #dc535d);
+    overflow-wrap: anywhere;
+    white-space: pre-wrap;
+  }
+}
+
+.workspace-compare-popup .ant-popover-inner {
+  background-color: var(--surface);
+  border: 1px solid var(--border);
+}
+
+html[data-theme='dark'] .workspace-changes__status {
+  &[data-code='M'] {
+    color: #e4b235;
+  }
+  &[data-code='A'],
+  &[data-code='C'],
+  &[data-code='?'] {
+    color: #48b67b;
+  }
+}
+
+.workspace-compare-picker {
+  display: grid;
+  gap: 4px;
+  width: min(220px, 72vw);
+  &__row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    min-width: 0;
+    gap: 8px;
+    padding: 4px 5px;
+    border-radius: 6px;
+    background: var(--moki-glass-hover, var(--hover));
+  }
+  &__file {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    min-width: 0;
+    > svg,
+    > .anticon {
+      flex: none;
+    }
+    > div {
+      display: grid;
+      min-width: 0;
+    }
+    div > span {
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      font-size: 12px;
+    }
+    small {
+      color: var(--text-sec);
+      font-size: 11px;
+    }
+  }
+  &__actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: 4px;
+    margin-top: 4px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .workspace-changes__drawer,
+  .workspace-changes__chevron {
+    transition: none;
+  }
+}
+
+.workspace-branches {
+  display: grid;
+  gap: 8px;
+  width: min(270px, 72vw);
+  &__list {
+    display: grid;
+    max-height: 220px;
+    overflow: auto;
+    button {
+      justify-content: flex-start;
+      min-width: 0;
+    }
+    button > span:last-child {
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+  }
+}

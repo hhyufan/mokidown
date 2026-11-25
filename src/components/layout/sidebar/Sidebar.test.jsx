@@ -1,6 +1,6 @@
 import * as React from 'react';
 import { afterEach, expect, it, vi } from 'vitest';
-import { act, cleanup, fireEvent, render, screen } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import useEditorStore from '@store/useEditorStore';
 import useFileStore from '@store/useFileStore';
 
@@ -11,12 +11,14 @@ import Sidebar from './Sidebar';
 
 globalThis.React = React;
 const openFile = vi.hoisted(() => vi.fn());
+const invoke = vi.hoisted(() => vi.fn());
+vi.mock('@tauri-apps/api/core', async (original) => ({ ...await original(), invoke }));
 vi.mock('@hooks/useFileManager', () => ({ useFileManager: () => ({ openFileFromPath: openFile }) }));
 vi.mock('./explorer/FileTree', () => ({ default: () => null }));
 vi.mock('./outline/OutlineView', () => ({ default: () => null }));
 
 vi.mock('@components/ui/FileTypeIcon', () => ({ default: () => null }));
-afterEach(() => { cleanup(); vi.restoreAllMocks(); });
+afterEach(() => { cleanup(); vi.unstubAllGlobals(); vi.restoreAllMocks(); });
 
 it('keeps recent-file identity and clicks correct when the list is reordered without key warnings', () => {
   const errors = vi.spyOn(console, 'error').mockImplementation(() => {});
@@ -47,4 +49,19 @@ it('shows outline only for Markdown and falls back to files when it becomes unav
   expect(screen.getByRole('tab', { name: 'Files' })).toHaveAttribute('aria-selected', 'true');
   act(() => useEditorStore.setState({ activeTabId: markdown.id }));
   expect(screen.getByRole('tab', { name: 'Outline' })).toHaveAttribute('aria-selected', 'true');
+});
+
+it('shows Changes only for the currently opened Git folder', async () => {
+  await i18n.changeLanguage('en');
+  vi.stubGlobal('__TAURI_INTERNALS__', {});
+  invoke.mockImplementation((command, { directory } = {}) =>
+    Promise.resolve(command === 'git_workspace_available' && directory === '/repo'));
+  useEditorStore.setState({ sidebarView: 'recent', sidebarVisible: true });
+  useFileStore.setState({ currentDir: '/repo' });
+  render(<Sidebar />);
+  expect(await screen.findByRole('tab', { name: 'Changes' })).toBeInTheDocument();
+  act(() => useFileStore.setState({ currentDir: '/plain' }));
+  await waitFor(() => expect(invoke).toHaveBeenCalledWith('git_workspace_available',
+    expect.objectContaining({ directory: '/plain' })));
+  expect(screen.queryByRole('tab', { name: 'Changes' })).not.toBeInTheDocument();
 });

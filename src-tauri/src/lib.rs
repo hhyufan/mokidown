@@ -39,6 +39,8 @@ mod text_file;
 mod webview_defaults;
 #[cfg(windows)]
 mod windows_external;
+#[cfg(desktop)]
+mod workspace_git;
 
 /// 返回给前端的轻量级文件系统条目元数据，
 /// 用于资源管理器界面展示文件和目录。
@@ -1557,12 +1559,13 @@ async fn open_external(url: String) -> Result<(), String> {
 ///
 /// 背景：Windows 下 Tauri 把「无边框窗口的 1px 边框」和 DWM 阴影绑在一起，
 /// 只要 `shadow: true`，Win11 就会沿窗口画一圈系统强调色（通常为蓝色）的边框。
-/// 因此窗口配置里关闭了 `shadow`（见 tauri.conf.json），这里再做两件事：
+/// 因此窗口配置里关闭了 `shadow`（见 tauri.conf.json）。
 ///
 /// - `DWMWA_WINDOW_CORNER_PREFERENCE` 显式要求圆角，补回关闭阴影后失去的
 ///   Win11 圆角外观；
 /// - `DWMWA_BORDER_COLOR` 置为 `DWMWA_COLOR_NONE`，万一以后重新开启阴影，
 ///   边框依然不会出现。
+/// - 关闭主窗口的系统过渡，避免缩放时混合尺寸不同的两帧。
 ///
 /// 旧版 Windows 不认识这些属性，调用失败时静默忽略。
 #[cfg(windows)]
@@ -1579,6 +1582,7 @@ fn style_window_frame(window: &tauri::WebviewWindow<tauri::Wry>) {
         ) -> i32;
     }
 
+    const DWMWA_TRANSITIONS_FORCEDISABLED: u32 = 3;
     const DWMWA_WINDOW_CORNER_PREFERENCE: u32 = 33;
     const DWMWA_BORDER_COLOR: u32 = 34;
     const DWMWCP_ROUND: u32 = 2;
@@ -1594,6 +1598,7 @@ fn style_window_frame(window: &tauri::WebviewWindow<tauri::Wry>) {
     }
 
     for (attribute, value) in [
+        (DWMWA_TRANSITIONS_FORCEDISABLED, 1),
         (DWMWA_WINDOW_CORNER_PREFERENCE, DWMWCP_ROUND),
         (DWMWA_BORDER_COLOR, DWMWA_COLOR_NONE),
     ] {
@@ -1801,6 +1806,7 @@ pub fn run() {
         #[cfg(windows)]
         if let Some(window) = main_window.as_ref() {
             style_window_frame(window);
+            webview_defaults::prepare_editor_resize(window);
         }
         // Both windows start hidden; the decoded splash and mounted App announce
         // readiness independently. Never open devtools here and steal focus.
@@ -1864,6 +1870,20 @@ pub fn run() {
         })
         // 注册通过 `invoke` 暴露给前端的 Rust <-> WebView 桥接接口。
         .invoke_handler(tauri::generate_handler![
+            #[cfg(desktop)]
+            workspace_git::git_workspace_available,
+            #[cfg(desktop)]
+            workspace_git::git_workspace_status,
+            #[cfg(desktop)]
+            workspace_git::git_workspace_diff,
+            #[cfg(desktop)]
+            workspace_git::git_workspace_switch,
+            #[cfg(desktop)]
+            workspace_git::git_compare_branches,
+            #[cfg(desktop)]
+            workspace_git::git_compare_revisions,
+            #[cfg(desktop)]
+            workspace_git::git_file_history,
             runtime_logs::read_runtime_logs,
             runtime_logs::shared_runtime_logs,
             runtime_logs::record_runtime_log,
