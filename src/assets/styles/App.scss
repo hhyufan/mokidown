@@ -53,11 +53,6 @@
   .monaco-editor .margin,
   .monaco-editor .minimap,
   .monaco-editor .minimap-decorations-layer { background: transparent !important; }
-  // 底部雾变层保留：默认样式渐隐到实色 --surface，在背景模式下会糊住底图，
-  // 因此改为渐隐到玻璃底色，既维持底部柔化又能透出背景。
-  .editor-content__fade {
-    background: linear-gradient(to bottom, transparent, var(--moki-glass-popup));
-  }
 }
 @media (max-width: 768px) {
   // 抽屉侧栏套用下拉/tooltip 的壁纸底：重绘壁纸而不是让 backdrop-filter
