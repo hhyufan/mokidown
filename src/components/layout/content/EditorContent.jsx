@@ -290,6 +290,14 @@ function EditorContent() {
     [toggleSidebar, toggleEditPreview],
   );
   const historyDiff = useHistoryStore((s) => s.diff);
+  useEffect(() => {
+    if (!activeTabId) return;
+    const tab = useEditorStore.getState().tabRenderList.find((item) => item.id === activeTabId);
+    if (tab?.builtin !== 'diff') return;
+    if (historyDiff?.tabId !== activeTabId) {
+      useHistoryStore.getState().activateComparison(activeTabId);
+    }
+  }, [activeTabId, historyDiff?.tabId]);
   const monacoRef = useRef(null);
   const milkdownRef = useRef(null);
   const surfaceRef = useRef(null);

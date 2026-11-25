@@ -520,11 +520,11 @@ const useEditorStore = create(
           conflicts.delete(path);
         }
         const remaining = tabs.filter((tab) => !requested.has(tab.id));
-        if (closing.some((tab) => tab.builtin === 'diff')) {
+        const diffTabs = closing.filter((tab) => tab.builtin === 'diff').map((tab) => tab.id);
+        if (diffTabs.length) {
           // 动态引入，避免 editor / history 两个 store 的静态循环依赖。
           void import('@store/useHistoryStore').then(({ default: history }) => {
-            const current = history.getState().diff;
-            if (current && requested.has(current.tabId)) history.getState().clearDiff(current);
+            history.getState().discardComparisons(diffTabs);
           });
         }
         // 关闭最后一个网页标签时同步收起网页分屏，否则分屏用的原生网页视图会留在原地。
