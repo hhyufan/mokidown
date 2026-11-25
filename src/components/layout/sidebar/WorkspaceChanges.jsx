@@ -15,6 +15,7 @@ import useHistoryStore from '@store/useHistoryStore';
 import { useFileManager } from '@hooks/useFileManager';
 import FileTypeIcon from '@components/ui/FileTypeIcon';
 import MarkdownIcon from '@components/ui/MarkdownIcon';
+import MokiStatusEmpty from '@components/moki/MokiStatusEmpty';
 import { ExplorerIcon } from './explorer/ExplorerNavigation';
 import './explorer/file-tree.scss';
 import ChevronIcon from '@components/ui/ChevronIcon';
@@ -587,17 +588,12 @@ export default function WorkspaceChanges({ directory }) {
                 </>
               );
             })()}
-            {!list.length && (
-              <p className="workspace-changes__hint">
-                {t(
-                  comparing
-                    ? 'editor.loading'
-                    : normalizedQuery
-                      ? 'workspaceDiff.noMatches'
-                      : 'workspaceDiff.clean',
-                )}
-              </p>
-            )}
+            {!list.length &&
+              (normalizedQuery ? (
+                <p className="workspace-changes__hint">{t('workspaceDiff.noMatches')}</p>
+              ) : comparing ? null : (
+                <MokiStatusEmpty title={t('empty.changes.title')} hint={t('empty.changes.hint')} />
+              ))}
           </div>
         </>
       ) : null}

@@ -1089,5 +1089,7 @@
   "workspaceDiff.markdownOnly": "Markdown only",
   "workspaceDiff.allFiles": "All files",
   "workspaceDiff.openOnGitHub": "Open on GitHub",
-  "workspaceDiff.switchBranch": "Switch branch"
+  "workspaceDiff.switchBranch": "Switch branch",
+  "empty.changes.title": "No changes in the workspace",
+  "empty.changes.hint": "Edits to files will show up here."
 }

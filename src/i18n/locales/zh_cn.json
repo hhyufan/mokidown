@@ -1089,5 +1089,7 @@
   "workspaceDiff.markdownOnly": "只显示 Markdown",
   "workspaceDiff.allFiles": "显示所有文件",
   "workspaceDiff.openOnGitHub": "在 GitHub 打开",
-  "workspaceDiff.switchBranch": "切换分支"
+  "workspaceDiff.switchBranch": "切换分支",
+  "empty.changes.title": "工作区没有变动",
+  "empty.changes.hint": "对文件的改动会显示在这里。"
 }
