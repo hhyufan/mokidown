@@ -485,11 +485,15 @@ const useEditorStore = create(
           conflicts.delete(path);
         }
         const remaining = tabs.filter((tab) => !requested.has(tab.id));
+        // 关闭最后一个网页标签时同步收起网页分屏，否则分屏用的原生网页视图会留在原地。
+        const closedWebTab = closing.some((tab) => tab.builtin === 'web');
+        const remainingWebTab = remaining.some((tab) => tab.builtin === 'web');
         set({
           tabs: remaining,
           tabRenderList: tabRenderList.filter((tab) => !requested.has(tab.id)),
           activeTabId: requested.has(activeTabId) ? (remaining.at(-1)?.id ?? null) : activeTabId,
           externalFileConflicts: conflicts,
+          ...(closedWebTab && !remainingWebTab ? { webSplitUrl: null } : {}),
         });
       },
 
