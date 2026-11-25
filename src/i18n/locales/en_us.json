@@ -1088,5 +1088,6 @@
   "workspaceDiff.markdownOnlySettingDesc": "List only Markdown files in the changes panel by default; the panel button toggles it temporarily.",
   "workspaceDiff.markdownOnly": "Markdown only",
   "workspaceDiff.allFiles": "All files",
-  "workspaceDiff.openOnGitHub": "Open on GitHub"
+  "workspaceDiff.openOnGitHub": "Open on GitHub",
+  "workspaceDiff.switchBranch": "Switch branch"
 }

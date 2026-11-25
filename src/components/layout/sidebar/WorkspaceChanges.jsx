@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Dropdown, Popover } from 'antd';
+import { Dropdown, Popover, Tooltip } from 'antd';
 import {
   BranchesOutlined,
   CheckOutlined,
@@ -20,7 +20,7 @@ import './explorer/file-tree.scss';
 import ChevronIcon from '@components/ui/ChevronIcon';
 import { fileName, filePath } from '@utils/gitHistory';
 import { textSearchRange } from '@utils/searchMatching';
-import { externalLink } from '@utils/editorLinks';
+import { openEditorLink } from '@utils/editorLinks';
 import {
   onDirectoryChanged,
   onFileChanged,
@@ -103,6 +103,20 @@ function ChangeStatus({ code, label }) {
   );
 }
 
+const navButton = (label, icon, onClick, extra = {}) => (
+  <Tooltip title={label} placement="bottom" mouseEnterDelay={0.3}>
+    <button
+      type="button"
+      className="file-tree__nav-btn"
+      aria-label={label}
+      onClick={onClick}
+      {...extra}
+    >
+      {icon}
+    </button>
+  </Tooltip>
+);
+
 function BranchSwitcher({ repository, onSwitch, busy }) {
   const { t } = useTranslation();
   const [open, setOpen] = useState(false);
@@ -138,16 +152,18 @@ function BranchSwitcher({ repository, onSwitch, busy }) {
         </div>
       }
     >
-      <button
-        type="button"
-        className="workspace-changes__branch-toggle"
-        aria-label={t('workspaceDiff.branches')}
-        aria-expanded={open}
-      >
-        <ChevronIcon className="workspace-changes__chevron" />
-        <BranchesOutlined />
-        <span>{repository.branch || t('workspaceDiff.detached')}</span>
-      </button>
+      <Tooltip title={t('workspaceDiff.switchBranch')} placement="bottom" mouseEnterDelay={0.3}>
+        <button
+          type="button"
+          className="workspace-changes__branch-toggle"
+          aria-label={t('workspaceDiff.switchBranch')}
+          aria-expanded={open}
+        >
+          <ChevronIcon className="workspace-changes__chevron" />
+          <BranchesOutlined />
+          <span>{repository.branch || t('workspaceDiff.detached')}</span>
+        </button>
+      </Tooltip>
     </Popover>
   );
 }
@@ -458,64 +474,38 @@ export default function WorkspaceChanges({ directory }) {
         </span>
       </div>
       <div className="file-tree__nav workspace-changes__nav">
-        <button
-          type="button"
-          className="file-tree__nav-btn"
-          aria-label={t('workspaceDiff.previous')}
-          disabled={!list.length}
-          onClick={() => stepChange(-1)}
-        >
-          <ExplorerIcon name="previous" />
-        </button>
-        <button
-          type="button"
-          className="file-tree__nav-btn"
-          aria-label={t('workspaceDiff.next')}
-          disabled={!list.length}
-          onClick={() => stepChange(1)}
-        >
-          <ExplorerIcon name="next" />
-        </button>
-        <button
-          type="button"
-          className="file-tree__nav-btn"
-          aria-label={t('workspaceDiff.filterFiles')}
-          aria-pressed={searchOpen}
-          aria-expanded={searchOpen}
-          onClick={() => setSearchOpen((open) => !open)}
-        >
-          <ExplorerIcon name="search" />
-        </button>
-        <span className="file-tree__nav-sep" />
-        <button
-          type="button"
-          className="file-tree__nav-btn"
-          aria-label={t('workspaceDiff.refresh')}
-          disabled={busy}
-          onClick={update}
-        >
-          <ExplorerIcon name="refresh" />
-        </button>
-        <button
-          type="button"
-          className="file-tree__nav-btn"
-          aria-label={t(markdownOnly ? 'workspaceDiff.markdownOnly' : 'workspaceDiff.allFiles')}
-          aria-pressed={markdownOnly}
-          onClick={() => setMarkdownOnly((value) => !value)}
-        >
-          <MarkdownIcon />
-        </button>
+        {navButton(
+          t('workspaceDiff.previous'),
+          <ExplorerIcon name="previous" />,
+          () => stepChange(-1),
+          {
+            disabled: !list.length,
+          },
+        )}
+        {navButton(t('workspaceDiff.next'), <ExplorerIcon name="next" />, () => stepChange(1), {
+          disabled: !list.length,
+        })}
+        {navButton(
+          t('workspaceDiff.filterFiles'),
+          <ExplorerIcon name="search" />,
+          () => setSearchOpen((open) => !open),
+          { 'aria-pressed': searchOpen, 'aria-expanded': searchOpen },
+        )}
+        {navButton(t('workspaceDiff.refresh'), <ExplorerIcon name="refresh" />, update, {
+          disabled: busy,
+        })}
+        {navButton(
+          t(markdownOnly ? 'workspaceDiff.markdownOnly' : 'workspaceDiff.allFiles'),
+          <MarkdownIcon />,
+          () => setMarkdownOnly((value) => !value),
+          { 'aria-pressed': markdownOnly },
+        )}
         {repository?.github && (
           <>
             <span className="file-tree__nav-sep" />
-            <button
-              type="button"
-              className="file-tree__nav-btn"
-              aria-label={t('workspaceDiff.openOnGitHub')}
-              onClick={() => externalLink(repository.github)}
-            >
-              <GithubOutlined />
-            </button>
+            {navButton(t('workspaceDiff.openOnGitHub'), <GithubOutlined />, () => {
+              void openEditorLink(repository.github, { browserFallback: true });
+            })}
           </>
         )}
       </div>
@@ -535,9 +525,11 @@ export default function WorkspaceChanges({ directory }) {
               onChange={(event) => setQuery(event.target.value)}
             />
             {query && (
-              <button type="button" aria-label={t('search.clear')} onClick={() => setQuery('')}>
-                <CloseOutlined />
-              </button>
+              <Tooltip title={t('search.clear')} placement="bottom" mouseEnterDelay={0.3}>
+                <button type="button" aria-label={t('search.clear')} onClick={() => setQuery('')}>
+                  <CloseOutlined />
+                </button>
+              </Tooltip>
             )}
           </div>
         </div>

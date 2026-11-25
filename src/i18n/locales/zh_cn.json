@@ -1088,5 +1088,6 @@
   "workspaceDiff.markdownOnlySettingDesc": "变动列表默认只列出 Markdown 文件；面板上的按钮可临时切换。",
   "workspaceDiff.markdownOnly": "只显示 Markdown",
   "workspaceDiff.allFiles": "显示所有文件",
-  "workspaceDiff.openOnGitHub": "在 GitHub 打开"
+  "workspaceDiff.openOnGitHub": "在 GitHub 打开",
+  "workspaceDiff.switchBranch": "切换分支"
 }
