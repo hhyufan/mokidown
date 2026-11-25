@@ -19,7 +19,7 @@ import {
   recordMarkdownEdit,
 } from '@utils/markdownUndo';
 import { sha256 } from '../../../shared/plugin-package.mjs';
-import { historyCapture, writeFileContent } from '@utils/tauriApi';
+import { historyCapture, onFileChanged, readFileContent, writeFileContent } from '@utils/tauriApi';
 import { getFileLanguage } from '@utils/fileLanguage';
 import {
   hasSelectedHistoryChanges,
@@ -535,6 +535,7 @@ export default function HistoryDiffView() {
   const [pendingDiff, setPendingDiff] = useState(null);
   const busy = diff != null && pendingDiff === diff;
   const [draftState, setDraftState] = useState(null);
+  const [liveModified, setLiveModified] = useState(null);
   const draftRef = useRef(null);
   const [selectionReady, setSelectionReady] = useState(false);
   const [historyHash, setHistoryHash] = useState(null);
@@ -579,7 +580,42 @@ export default function HistoryDiffView() {
       cancelled = true;
     };
   }, [historyContent, external]);
-  const current = external?.modified ?? (tab ? getBuffer(tab.id, tab.content || '') : '');
+  // 外部对比的右侧是工作区文件：磁盘变化后跟随刷新，避免一直显示打开时的快照。
+  const externalModifiedPath = external?.modifiedPath;
+  useEffect(() => {
+    setLiveModified(null);
+    if (!externalModifiedPath) return undefined;
+    let active = true;
+    const read = () => {
+      readFileContent(externalModifiedPath)
+        .then((content) => {
+          if (active) setLiveModified(content);
+        })
+        .catch(() => {});
+    };
+    read();
+    const stop = onFileChanged((payload) => {
+      const changed = String(payload?.path || '')
+        .replaceAll('\\', '/')
+        .toLowerCase();
+      if (changed && changed === externalModifiedPath.replaceAll('\\', '/').toLowerCase()) read();
+    });
+    const timer = window.setInterval(() => {
+      if (document.visibilityState === 'visible') read();
+    }, 2500);
+    return () => {
+      active = false;
+      window.clearInterval(timer);
+      Promise.resolve(stop)
+        .then((off) => off?.())
+        .catch(() => {});
+    };
+  }, [externalModifiedPath]);
+  const current = external
+    ? (liveModified ?? external.modified)
+    : tab
+      ? getBuffer(tab.id, tab.content || '')
+      : '';
   const draft = draftState?.comparison === diff ? draftState?.content : null;
   const modified = draft ?? current;
   const updateDraft = useCallback(
