@@ -16,24 +16,63 @@ vi.mock('react-i18next', () => ({
 }));
 vi.mock('@utils/tauriApi', () => ({ openExternal: vi.fn(async () => {}) }));
 vi.mock('@hooks/useFileManager', () => ({ useFileManager: () => ({ triggerAutoSave: vi.fn() }) }));
-vi.mock('@hooks/useResponsiveLayout', () => ({ useResponsiveLayout: () => ({ isMobileLayout: false }) }));
-vi.mock('@components/editor/LazyMonacoEditor', () => ({ default: React.forwardRef(({ className }, _ref) => <div data-testid="source" className={className}>source</div>) }));
-vi.mock('@components/editor/MarkdownPreview', () => ({ default: React.forwardRef(({ className, onReady }, _ref) => {
-  React.useLayoutEffect(() => { onReady?.(); }, [onReady]);
-  return <div className={className}><a href="https://example.com/doc">preview link</a><a href="next.md">local link</a></div>;
-}) }));
-vi.mock('@components/editor/MilkdownMarkdownEditor', () => ({ default: React.forwardRef(({ className }, _ref) => <div className={className}><a href="https://example.com/doc"><span>editable link</span></a></div>) }));
+vi.mock('@hooks/useResponsiveLayout', () => ({
+  useResponsiveLayout: () => ({ isMobileLayout: false }),
+}));
+vi.mock('@components/editor/LazyMonacoEditor', () => ({
+  default: React.forwardRef(({ className }, _ref) => (
+    <div data-testid="source" className={className}>
+      source
+    </div>
+  )),
+}));
+vi.mock('@components/editor/MarkdownPreview', () => ({
+  default: React.forwardRef(({ className, onReady }, _ref) => {
+    React.useLayoutEffect(() => {
+      onReady?.();
+    }, [onReady]);
+    return (
+      <div className={className}>
+        <a href="https://example.com/doc">preview link</a>
+        <a href="next.md">local link</a>
+      </div>
+    );
+  }),
+}));
+vi.mock('@components/editor/MilkdownMarkdownEditor', () => ({
+  default: React.forwardRef(({ className }, _ref) => (
+    <div className={className}>
+      <a href="https://example.com/doc">
+        <span>editable link</span>
+      </a>
+    </div>
+  )),
+}));
 vi.mock('@components/editor/FloatingToolbar', () => ({ default: () => null }));
 vi.mock('@components/editor/FloatingRunButton', () => ({ default: () => null }));
-vi.mock('@components/history/HistoryDiffView', () => ({ default: () => {
-  const mode = useHistoryStore((state) => state.viewMode);
-  return <div data-comparison-zoom={mode}><div>original pane</div><div>modified pane</div></div>;
-} }));
+vi.mock('@components/history/HistoryDiffView', () => ({
+  default: function HistoryDiffViewMock() {
+    const mode = useHistoryStore((state) => state.viewMode);
+    return (
+      <div data-comparison-zoom={mode}>
+        <div>original pane</div>
+        <div>modified pane</div>
+      </div>
+    );
+  },
+}));
 vi.mock('@components/ui/Toast', () => ({ default: () => null }));
 beforeEach(() => {
   useHistoryStore.getState().clearDiff();
   useEditorStore.setState({ tabs: [], tabRenderList: [], activeTabId: null, viewMode: 'edit' });
-  useConfigStore.setState({ fontSize: 14, lineHeight: 24, previewFontSize: 14, previewLineHeight: 24, previewZoomSync: true, openLinksInEditor: false });
+  useConfigStore.setState({
+    fontSize: 14,
+    lineHeight: 24,
+    previewFontSize: 14,
+    previewLineHeight: 24,
+    previewZoomSync: true,
+    openLinksInEditor: false,
+  });
   vi.clearAllMocks();
 });
 
@@ -51,7 +90,14 @@ it('zooms both diff panes with the typography setting for the current comparison
 });
 afterEach(cleanup);
 function open(name, mode = 'edit') {
-  act(() => useEditorStore.setState({ activeTabId: name, tabs: [{ id: name, name }], tabRenderList: [{ id: name, name }], viewMode: mode }));
+  act(() =>
+    useEditorStore.setState({
+      activeTabId: name,
+      tabs: [{ id: name, name }],
+      tabRenderList: [{ id: name, name }],
+      viewMode: mode,
+    }),
+  );
 }
 it('drifts the welcome ornaments while keeping the character static', () => {
   useConfigStore.setState({ mokiDisplay: 'welcome' });
@@ -77,7 +123,8 @@ it('binds Ctrl+wheel after an empty workspace opens its first source file', asyn
   expect(useConfigStore.getState().fontSize).toBe(15);
 });
 it('updates the visible synced font in WYSIWYG and opens nested Ctrl+click links', async () => {
-  render(<EditorContent />); open('test.md', 'preview');
+  render(<EditorContent />);
+  open('test.md', 'preview');
   const link = await screen.findByText('editable link');
   fireEvent.wheel(link, { ctrlKey: true, deltaY: -120 });
   expect(useConfigStore.getState()).toMatchObject({ fontSize: 15, previewFontSize: 15 });
@@ -86,16 +133,20 @@ it('updates the visible synced font in WYSIWYG and opens nested Ctrl+click links
 });
 it('routes Markdown web links to a tab when link takeover is enabled', async () => {
   useConfigStore.setState({ openLinksInEditor: true });
-  render(<EditorContent />); open('test.md', 'preview');
+  render(<EditorContent />);
+  open('test.md', 'preview');
   fireEvent.click(await screen.findByText('editable link'));
-  expect(useEditorStore.getState().tabs).toEqual(expect.arrayContaining([
-    expect.objectContaining({ builtin: 'web', url: 'https://example.com/doc' }),
-  ]));
+  expect(useEditorStore.getState().tabs).toEqual(
+    expect.arrayContaining([
+      expect.objectContaining({ builtin: 'web', url: 'https://example.com/doc' }),
+    ]),
+  );
   expect(openExternal).not.toHaveBeenCalled();
 });
 it('keeps split preview zoom independent and only intercepts external modifier clicks', async () => {
   useConfigStore.setState({ previewZoomSync: false });
-  render(<EditorContent />); open('test.md', 'split');
+  render(<EditorContent />);
+  open('test.md', 'split');
   const link = await screen.findByText('preview link');
   fireEvent.wheel(link, { ctrlKey: true, deltaY: -120 });
   expect(useConfigStore.getState()).toMatchObject({ fontSize: 14, previewFontSize: 15 });
@@ -106,4 +157,3 @@ it('keeps split preview zoom independent and only intercepts external modifier c
   fireEvent.click(local, { ctrlKey: true });
   expect(openExternal).toHaveBeenCalledOnce();
 });
-
