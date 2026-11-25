@@ -495,6 +495,7 @@ export default function WorkspaceChanges({ directory }) {
           () => setSearchOpen((open) => !open),
           { 'aria-pressed': searchOpen, 'aria-expanded': searchOpen },
         )}
+        <span className="file-tree__nav-sep" />
         {navButton(t('workspaceDiff.refresh'), <ExplorerIcon name="refresh" />, update, {
           disabled: busy,
         })}
