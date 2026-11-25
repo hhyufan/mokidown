@@ -7,8 +7,10 @@ function setPixels(element, property, value) {
     element.style[property] = `${value}px`;
 }
 
-export function useMarkdownComparisonAlignment(ref, visibleRows) {
+export function useMarkdownComparisonAlignment(ref, visibleRows, onAligned) {
   const alignRows = useRef(null);
+  const onAlignedRef = useRef(onAligned);
+  onAlignedRef.current = onAligned;
   useLayoutEffect(() => {
     const root = ref.current;
     if (!root) return undefined;
@@ -85,6 +87,7 @@ export function useMarkdownComparisonAlignment(ref, visibleRows) {
         if (row.dataset.positioned === undefined) row.dataset.positioned = '';
       }
       if (!root.hasAttribute('data-aligned')) root.setAttribute('data-aligned', '');
+      onAlignedRef.current?.();
     };
 
     const schedule = () => {

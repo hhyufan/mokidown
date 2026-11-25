@@ -544,3 +544,31 @@ it('keeps a fully restored draft applicable and keeps the editor alive to reveal
     expect(historyCapture).toHaveBeenLastCalledWith(path, 'older', { force: true }),
   );
 });
+
+it('does not render loading placeholders or reveal the comparison view before the editor is ready', async () => {
+  let resolveInit;
+  mock.init.mockReturnValue(
+    new Promise((resolve) => {
+      resolveInit = resolve;
+    }),
+  );
+  useHistoryStore.setState({ diff: { tabId: path, timestamp: 10, content: 'older' } });
+  const { container } = render(<HistoryDiffView />);
+  expect(container.querySelector('.history-diff')).toHaveAttribute('data-ready', 'false');
+  expect(screen.queryByText('editor.loading')).toBeNull();
+  expect(screen.queryByRole('status')).toBeNull();
+
+  await act(async () => resolveInit());
+  await waitFor(() =>
+    expect(container.querySelector('.history-diff')).toHaveAttribute('data-ready', 'true'),
+  );
+
+  const mdPath = 'C:/notes/no-loading-state.md';
+  useEditorStore.getState().openFile({ path: mdPath, name: 'no-loading-state.md', content: '# Current' });
+  act(() => {
+    useHistoryStore.getState().setDiff({ tabId: mdPath, timestamp: 20, content: '# Older' });
+  });
+  expect(container.querySelector('.history-diff')).toHaveAttribute('data-ready', 'false');
+  expect(screen.queryByText('editor.loading')).toBeNull();
+  clearBuffer(mdPath);
+});

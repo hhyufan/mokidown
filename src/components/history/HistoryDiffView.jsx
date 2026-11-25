@@ -94,6 +94,8 @@ function MonacoHistoryDiff({
   onSelectionReady,
   onSplitChange,
   onDiffComputed,
+  onReadyChange,
+  onErrorChange,
   apiRef,
 }) {
   const { t } = useTranslation();
@@ -230,6 +232,7 @@ function MonacoHistoryDiff({
               })
             )
               return;
+            updateSplit();
             originalEditor.render?.(true);
             modifiedEditor.render?.(true);
             revealed = true;
@@ -482,6 +485,16 @@ function MonacoHistoryDiff({
     foldLabelsRef.current?.update();
   }, [t]);
 
+  useEffect(() => {
+    onReadyChange?.(ready);
+    return () => onReadyChange?.(false);
+  }, [onReadyChange, ready]);
+
+  useEffect(() => {
+    onErrorChange?.(error);
+    return () => onErrorChange?.('');
+  }, [onErrorChange, error]);
+
   return (
     <>
       {error && (
@@ -542,6 +555,9 @@ export default function HistoryDiffView() {
   const [splitOffset, setSplitOffset] = useState(null);
   const [actionError, setActionError] = useState('');
   const [computedDiff, setComputedDiff] = useState(null);
+  const [monacoReady, setMonacoReady] = useState(null);
+  const [monacoError, setMonacoError] = useState(null);
+  const [markdownAligned, setMarkdownAligned] = useState(null);
   const [markdownFolds, setMarkdownFolds] = useState(defaultFoldState);
   const [markdownFoldSummary, setMarkdownFoldSummary] = useState({
     collapsedCount: 0,
@@ -659,6 +675,18 @@ export default function HistoryDiffView() {
     return () => document.removeEventListener('keydown', onKeyDown, true);
   }, [busy, current, diff, external]);
   const rendered = mode === 'preview' && isMarkdownComparison(tab, diff);
+  const handleMonacoReady = useCallback(
+    (value) => setMonacoReady(value ? { diff, rendered } : null),
+    [diff, rendered],
+  );
+  const handleMonacoError = useCallback(
+    (value) => setMonacoError(value ? { diff, rendered, message: value } : null),
+    [diff, rendered],
+  );
+  const handleMarkdownAligned = useCallback(
+    (value) => setMarkdownAligned(value ? { diff, rendered } : null),
+    [diff, rendered],
+  );
   // Monaco 按行比较，不把 CRLF/LF 的差别当成代码修改。
   const originalText = normalizeLines(historyContent ?? '');
   const modifiedText = normalizeLines(modified);
@@ -672,6 +700,17 @@ export default function HistoryDiffView() {
   const currentDiff = (rendered ? preview : renderedDiff)?.modified === modifiedText;
   const noChanges = identical || (rendered && currentDiff && Boolean(preview?.identical));
   const showEmpty = noChanges && (!rendered || draft == null);
+  const isMonacoReady =
+    !rendered && monacoReady?.diff === diff && monacoReady?.rendered === rendered;
+  const hasMonacoError = Boolean(
+    !rendered && monacoError?.diff === diff && monacoError?.rendered === rendered && monacoError?.message,
+  );
+  const isMarkdownAligned =
+    rendered && markdownAligned?.diff === diff && markdownAligned?.rendered === rendered;
+  const diffReady =
+    showEmpty ||
+    hasMonacoError ||
+    (rendered ? Boolean(preview?.error) || (Boolean(preview?.layout) && isMarkdownAligned) : isMonacoReady);
   if (!diff || (!tab && !external)) return null;
 
   const hash = historyHash?.content === diff.content ? historyHash.hash : '';
@@ -792,7 +831,7 @@ export default function HistoryDiffView() {
   };
 
   return (
-    <div className="history-diff" ref={comparisonBoundsRef}>
+    <div className="history-diff" ref={comparisonBoundsRef} data-ready={diffReady}>
       <header className="history-diff__bar">
         <span className="history-diff__title">{diff.label || t('history.title')}</span>
         <div className="history-diff__actions">
@@ -976,9 +1015,9 @@ export default function HistoryDiffView() {
           />
         </div>
       )}
-      {rendered && !showEmpty && !preview?.layout && (
-        <div className="history-diff__error" role={preview?.error ? 'alert' : 'status'}>
-          {preview?.error ? `${t('editor.loadFailed')} ${preview.error}` : t('editor.loading')}
+      {rendered && !showEmpty && !preview?.layout && preview?.error && (
+        <div className="history-diff__error" role="alert">
+          {`${t('editor.loadFailed')} ${preview.error}`}
         </div>
       )}
       {rendered && preview?.layout && (
@@ -999,6 +1038,7 @@ export default function HistoryDiffView() {
             onRevert={revertPreviewChange}
             onDraftChange={updateDraft}
             onFoldSummary={setMarkdownFoldSummary}
+            onAlignedChange={handleMarkdownAligned}
             onToggleFold={({ key }, expanded) => {
               setMarkdownFolds((state) => ({
                 ...state,
@@ -1028,6 +1068,8 @@ export default function HistoryDiffView() {
           onSelectionReady={setSelectionReady}
           onSplitChange={setSplitOffset}
           onDiffComputed={setComputedDiff}
+          onReadyChange={handleMonacoReady}
+          onErrorChange={handleMonacoError}
           apiRef={editorRef}
         />
       )}

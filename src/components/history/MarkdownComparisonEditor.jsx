@@ -1,5 +1,4 @@
 import { Suspense, useRef, useState } from 'react';
-import { useTranslation } from 'react-i18next';
 import FloatingToolbar from '@components/editor/FloatingToolbar';
 import { applyMarkdownToolbarAction } from '@components/editor/applyMarkdownToolbarAction';
 import { lazyWithRetry } from '@utils/lazyWithRetry';
@@ -21,7 +20,6 @@ export default function MarkdownComparisonEditor({
   side = readOnly ? 'original' : 'modified',
   onReady,
 }) {
-  const { t } = useTranslation();
   const [initialContent] = useState(content);
   const editorRef = useRef(null);
 
@@ -33,7 +31,7 @@ export default function MarkdownComparisonEditor({
         aria-busy={busy}
         inert={!readOnly && busy ? '' : undefined}
       >
-        <Suspense fallback={<div role="status">{t('editor.loading')}</div>}>
+        <Suspense fallback={null}>
           <MilkdownMarkdownEditor
             ref={editorRef}
             className="editor-content__preview editor-content__editor--milkdown history-markdown-draft__editor"

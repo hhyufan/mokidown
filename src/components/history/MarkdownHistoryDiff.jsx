@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useLayoutEffect, useMemo, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Tooltip } from 'antd';
 import MarkdownComparisonEditor from './MarkdownComparisonEditor';
@@ -146,28 +146,11 @@ export default function MarkdownHistoryDiff({
   onToggleFold,
   onFoldSummary,
   onDraftChange,
+  onAlignedChange,
 }) {
   const { t } = useTranslation();
   const scrollRef = useRef(null);
   const previousFolds = useRef(null);
-  const [currentReady, setCurrentReady] = useState(false);
-  const [showOriginal, setShowOriginal] = useState(false);
-  const markCurrentReady = useCallback(() => {
-    setCurrentReady(true);
-  }, []);
-  useEffect(() => {
-    if (!currentReady) return undefined;
-    let next;
-    const first = requestAnimationFrame(() => {
-      next = requestAnimationFrame(() => {
-        setShowOriginal(true);
-      });
-    });
-    return () => {
-      cancelAnimationFrame(first);
-      if (next) cancelAnimationFrame(next);
-    };
-  }, [currentReady]);
   const { rows, originalBlocks, modifiedBlocks } = comparison;
   const { visible, collapsedCount, expandedCount, collapsedRanges } = useMemo(
     () => foldRows(rows, foldState, previousFolds.current),
@@ -176,7 +159,8 @@ export default function MarkdownHistoryDiff({
   useLayoutEffect(() => {
     previousFolds.current = { foldState, collapsedRanges };
   }, [foldState, collapsedRanges]);
-  useMarkdownComparisonAlignment(scrollRef, visible);
+  useEffect(() => () => onAlignedChange?.(false), [onAlignedChange]);
+  useMarkdownComparisonAlignment(scrollRef, visible, () => onAlignedChange?.(true));
   useEffect(() => {
     onFoldSummary({ collapsedCount, expandedCount });
   }, [collapsedCount, expandedCount, onFoldSummary]);
@@ -306,24 +290,14 @@ export default function MarkdownHistoryDiff({
             </div>
           );
         })}
-        {showOriginal ? (
-          <MarkdownComparisonEditor
-            tabId={tabId}
-            content={original}
-            layout={originalLayout}
-            previewBoundsRef={previewBoundsRef}
-            filePath={originalPath}
-            readOnly
-          />
-        ) : (
-          <div
-            className="history-markdown-draft__pane history-diff__error"
-            data-side="original"
-            role="status"
-          >
-            {t('editor.loading')}
-          </div>
-        )}
+        <MarkdownComparisonEditor
+          tabId={tabId}
+          content={original}
+          layout={originalLayout}
+          previewBoundsRef={previewBoundsRef}
+          filePath={originalPath}
+          readOnly
+        />
         <MarkdownComparisonEditor
           tabId={tabId}
           side="modified"
@@ -335,7 +309,6 @@ export default function MarkdownHistoryDiff({
           onDraftChange={onDraftChange}
           boundsRef={scrollRef}
           busy={busy}
-          onReady={markCurrentReady}
         />
       </div>
     </div>
