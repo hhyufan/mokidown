@@ -25,6 +25,7 @@ import MonacoEditor from '@components/editor/LazyMonacoEditor';
 import FloatingToolbar from '@components/editor/FloatingToolbar';
 import { applyMarkdownToolbarAction } from '@components/editor/applyMarkdownToolbarAction';
 import FloatingRunButton from '@components/editor/FloatingRunButton';
+import ScrollEdgeShadows from '@components/editor/ScrollEdgeShadows';
 import { useFileManager } from '@hooks/useFileManager';
 import { useResponsiveLayout } from '@hooks/useResponsiveLayout';
 import usePreviewFrame from '@hooks/usePreviewFrame';
@@ -480,7 +481,8 @@ function EditorContent() {
 
   useEffect(() => {
     const container = containerRef.current;
-    if (!container) return undefined;
+    const surface = surfaceRef.current;
+    if (!container || !surface) return undefined;
 
     const applyTypography = (update) => {
       Object.entries(update).forEach(([key, value]) => {
@@ -496,6 +498,8 @@ function EditorContent() {
 
     const handleWheel = (event) => {
       if (!(event.ctrlKey || event.metaKey) || event.deltaY === 0) return;
+      const comparisonMode = event.target.closest?.('[data-comparison-zoom]')?.dataset.comparisonZoom;
+      if (!comparisonMode && !container.contains(event.target)) return;
 
       event.preventDefault();
       event.stopPropagation();
@@ -510,7 +514,9 @@ function EditorContent() {
       if (Math.abs(wheelAccumulator) < WHEEL_ZOOM_THRESHOLD) return;
 
       const step = wheelAccumulator > 0 ? -1 : 1;
-      const zoomTarget = resolveZoomTarget(event.target, { viewMode, isMarkdown: hasPreview });
+      const zoomTarget = resolveZoomTarget(event.target, comparisonMode
+        ? { viewMode: comparisonMode, isMarkdown: comparisonMode === 'preview' }
+        : { viewMode, isMarkdown: hasPreview });
       wheelAccumulator = 0;
       applyTypography(getNextTypographyUpdate(zoomTarget, step));
     };
@@ -580,7 +586,7 @@ function EditorContent() {
       }
     };
 
-    container.addEventListener('wheel', handleWheel, { passive: false, capture: true });
+    surface.addEventListener('wheel', handleWheel, { passive: false, capture: true });
     container.addEventListener('click', handleExternalClick, true);
     container.addEventListener('touchstart', handleTouchStart, { passive: true });
     container.addEventListener('touchmove', handleTouchMove, { passive: false });
@@ -589,7 +595,7 @@ function EditorContent() {
 
     return () => {
       if (wheelResetTimer) clearTimeout(wheelResetTimer);
-      container.removeEventListener('wheel', handleWheel, { capture: true });
+      surface.removeEventListener('wheel', handleWheel, { capture: true });
       container.removeEventListener('click', handleExternalClick, true);
       container.removeEventListener('touchstart', handleTouchStart);
       container.removeEventListener('touchmove', handleTouchMove);
@@ -785,7 +791,7 @@ function EditorContent() {
           ))}
         {(showMonaco || monacoMounted) && (
           <div
-            className="editor-content__monaco-surface editor-content__primary-surface"
+            className="editor-content__monaco-surface editor-content__primary-surface editor-scroll-frame"
             hidden={!showMonaco}
           >
             <MonacoEditor
@@ -796,6 +802,7 @@ function EditorContent() {
               onAutoSave={triggerAutoSave}
               appHotkeyHandlers={appHotkeyHandlers}
             />
+            {showMonaco && <ScrollEdgeShadows editor={splitEditor} />}
           </div>
         )}
         {editableTabs.map((tab) => {
@@ -804,7 +811,7 @@ function EditorContent() {
           return (
             <div
               key={tab.id}
-              className="editor-content__editable-preview editor-content__primary-surface"
+              className="editor-content__editable-preview editor-content__primary-surface editor-scroll-frame"
               data-inactive={!active || undefined}
               inert={!active ? '' : undefined}
             >
@@ -833,6 +840,7 @@ function EditorContent() {
                   )}
                 </Suspense>
               </RendererErrorBoundary>
+              {active && !tree && <ScrollEdgeShadows selector=".md-preview--milkdown" />}
             </div>
           );
         })}
@@ -918,14 +926,17 @@ function EditorContent() {
                         <RendererReady tabId={activeTabId} onReady={markEditorReady} />
                       </>
                     ) : (
-                      <MarkdownPreview
-                        ref={attachPreview}
-                        visible={isSplit}
-                        onReady={markMarkdownPreviewReady}
-                        foldedRanges={foldedRanges}
-                        onToggleFold={togglePreviewFold}
-                        className="editor-content__preview editor-content__preview--half"
-                      />
+                      <div className="editor-content__preview-frame editor-content__preview--half editor-scroll-frame">
+                        <MarkdownPreview
+                          ref={attachPreview}
+                          visible={isSplit}
+                          onReady={markMarkdownPreviewReady}
+                          foldedRanges={foldedRanges}
+                          onToggleFold={togglePreviewFold}
+                          className="editor-content__preview"
+                        />
+                        {isSplit && <ScrollEdgeShadows selector=".md-preview" />}
+                      </div>
                     )}
                   </Suspense>
                 </RendererErrorBoundary>
@@ -974,7 +985,6 @@ function EditorContent() {
                 />
               </div>
             )}
-            {!isTree && !isHtml && !isWebPage && <div className="editor-content__fade" />}
             <FloatingRunButton />
           </>
         )}

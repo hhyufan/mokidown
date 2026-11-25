@@ -73,6 +73,7 @@
 
 .editor-content__primary-surface { min-width: 0; min-height: 0; }
 .editor-content__monaco-surface,
+.editor-content__preview-frame,
 .editor-content__editable-preview {
   display: flex;
   flex: 1;
@@ -165,18 +166,6 @@
   }
 }
 
-// 底部渐隐层，覆盖编辑器/预览区的最后一行
-.editor-content__fade {
-  position: absolute;
-  bottom: 0;
-  left: 0;
-  right: 0;
-  height: 56px;
-  background: linear-gradient(to bottom, transparent, var(--surface));
-  pointer-events: none;
-  z-index: 5;
-}
-
 .editor-content__split-divider {
   @include resize-handle.surface;
   width: resize-handle.$track-size;
@@ -235,9 +224,6 @@
 
   .editor-content__workspace--split .editor-content__preview--half { grid-column: 1; grid-row: 3; }
 
-  .editor-content__fade {
-    height: 32px;
-  }
 }
 .editor-content__builtin-html {
   display: block;

@@ -1611,6 +1611,7 @@ function MilkdownInner(
     onDraftChange,
     comparisonLayout,
     comparisonSource,
+    comparisonPath,
     onReady,
     previewBoundsRef,
   },
@@ -1689,8 +1690,9 @@ function MilkdownInner(
   const markTabDirty = useEditorStore((s) => s.markTabDirty);
   const setCharacterCount = useEditorStore((s) => s.setCharacterCount);
   const documentPath = useMemo(() => {
+    if (comparisonPath != null) return comparisonPath;
     return useEditorStore.getState().tabs.find((tab) => tab.id === activeTabId)?.path || '';
-  }, [activeTabId]);
+  }, [activeTabId, comparisonPath]);
 
   currentTabIdRef.current = activeTabId;
   onAutoSaveRef.current = onAutoSave;
@@ -2597,6 +2599,7 @@ const MilkdownMarkdownEditor = forwardRef(function MilkdownMarkdownEditor(
           onDraftChange={comparison?.onChange}
           comparisonLayout={comparison?.layout}
           comparisonSource={comparison?.content}
+          comparisonPath={comparison?.filePath}
           onReady={notifyReady}
           previewBoundsRef={comparison?.previewBoundsRef}
           readOnly={readOnly}

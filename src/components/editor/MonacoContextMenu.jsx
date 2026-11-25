@@ -2,6 +2,8 @@ import { useEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { useTranslation } from 'react-i18next';
 import { hasNativeMenuClipboard, readMenuClipboardText } from '@utils/menuClipboard';
+import useNotificationStore from '@store/useNotificationStore';
+import { formatJsonDocument } from '@utils/jsonDocument';
 import './monaco-context-menu.scss';
 
 const isMac = /Mac|iPod|iPhone|iPad/.test(navigator.platform);
@@ -68,6 +70,32 @@ export default function MonacoContextMenu({ visible, x, y, onClose, editorRef, r
     }
   };
 
+  const json = editorRef.current?.getModel?.()?.getLanguageId?.() === 'json';
+  const reflowJson = (mode) => (event) => {
+    event.preventDefault();
+    event.stopPropagation();
+    onClose();
+    const editor = editorRef.current;
+    const model = editor?.getModel();
+    if (model?.getLanguageId() !== 'json') return;
+    try {
+      const { tabSize, insertSpaces } = model.getOptions();
+      const indentation = mode === 'minify' ? '' : insertSpaces ? ' '.repeat(tabSize) : '\t';
+      const content = model.getValue();
+      const formatted = formatJsonDocument(content, indentation);
+      if (formatted !== content) {
+        editor.pushUndoStop();
+        editor.executeEdits('format-json', [{ range: model.getFullModelRange(), text: formatted }]);
+        editor.pushUndoStop();
+      }
+      if (mode === 'expand') editor.trigger('contextmenu', 'editor.unfoldAll', null);
+    } catch {
+      useNotificationStore.getState().notify('error', t('editor.menu.invalidJson'), '');
+    } finally {
+      editor.focus();
+    }
+  };
+
   // 菜单项顺序与常见编辑器右键菜单保持一致，分隔项仅用于视觉分组。
   const items = [
     { key: 'undo', label: t('editor.menu.undo'), shortcut: `${Mod}+Z`, action: trigger('undo') },
@@ -83,7 +111,11 @@ export default function MonacoContextMenu({ visible, x, y, onClose, editorRef, r
     { key: 'replace', label: t('editor.menu.replace'), shortcut: `${Mod}+H`, action: trigger('editor.action.startFindReplaceAction') },
     { key: 's4', type: 'separator' },
     { key: 'changeAll', label: t('editor.menu.changeAllOccurrences'), shortcut: `${Mod}+F2`, action: trigger('editor.action.changeAll') },
-    { key: 'format', label: t('editor.menu.formatDocument'), shortcut: `${Mod}+Shift+F`, action: trigger('editor.action.formatDocument') },
+    { key: 'format', label: t('editor.menu.formatDocument'), shortcut: `${Mod}+Shift+F`, action: json ? reflowJson('format') : trigger('editor.action.formatDocument') },
+    ...(json ? [
+      { key: 'minify-json', label: t('editor.menu.minifyJson'), action: reflowJson('minify') },
+      { key: 'expand-json', label: t('editor.menu.expandJson'), action: reflowJson('expand') },
+    ] : []),
     { key: 's5', type: 'separator' },
     { key: 'cmd', label: t('editor.menu.commandPalette'), shortcut: 'F1', action: trigger('editor.action.quickCommand') },
   ];
