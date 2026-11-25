@@ -230,8 +230,8 @@ function MonacoHistoryDiff({
               })
             )
               return;
-            originalEditor.render(true);
-            modifiedEditor.render(true);
+            originalEditor.render?.(true);
+            modifiedEditor.render?.(true);
             revealed = true;
             setReady(true);
           });

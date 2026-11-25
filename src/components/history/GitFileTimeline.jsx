@@ -11,7 +11,7 @@ import useNotificationStore from '@store/useNotificationStore';
 import { fileName, filePath, githubFileHistoryUrl } from '@utils/gitHistory';
 import { formatHistoryTime } from '@utils/historyFormat';
 import { isAndroidRuntime } from '@utils/platform';
-import { openExternal } from '@utils/tauriApi';
+import { openEditorLink } from '@utils/editorLinks';
 import './history.scss';
 
 export default function GitFileTimeline() {
@@ -155,7 +155,7 @@ export default function GitFileTimeline() {
               className="timeline__refresh"
               aria-label={t('workspaceDiff.githubHistory')}
               onClick={() => {
-                void openExternal(online).catch(notifyError);
+                void openEditorLink(online, { browserFallback: true }).catch(notifyError);
               }}
             >
               <GithubOutlined />
