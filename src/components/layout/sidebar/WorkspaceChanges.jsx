@@ -83,24 +83,26 @@ function Highlight({ text, query }) {
 
 function ChangeStatus({ code, label }) {
   return (
-    <span className="workspace-changes__status" data-code={code} title={label}>
-      <svg
-        viewBox="0 0 16 16"
-        fill="none"
-        aria-hidden="true"
-        stroke="currentColor"
-        strokeWidth="1.4"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      >
-        <rect x="2" y="2" width="12" height="12" rx="2" />
-        {statusMark[code] ? (
-          <path d={statusMark[code]} />
-        ) : (
-          <circle cx="8" cy="8" r="1.7" fill="currentColor" stroke="none" />
-        )}
-      </svg>
-    </span>
+    <Tooltip title={label} placement="top">
+      <span className="workspace-changes__status" data-code={code}>
+        <svg
+          viewBox="0 0 16 16"
+          fill="none"
+          aria-hidden="true"
+          stroke="currentColor"
+          strokeWidth="1.4"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+        >
+          <rect x="2" y="2" width="12" height="12" rx="2" />
+          {statusMark[code] ? (
+            <path d={statusMark[code]} />
+          ) : (
+            <circle cx="8" cy="8" r="1.7" fill="currentColor" stroke="none" />
+          )}
+        </svg>
+      </span>
+    </Tooltip>
   );
 }
 
@@ -429,39 +431,40 @@ export default function WorkspaceChanges({ directory }) {
           ],
         }}
       >
-        <button
-          type="button"
-          className="workspace-changes__file workspace-changes__row"
-          data-selected={selectedChange === key}
-          disabled={busy}
-          aria-pressed={selectedChange === key}
-          aria-label={`${title} · ${statusLabel}`}
-          title={title}
-          onClick={() => compareChange(change)}
-        >
-          <FileTypeIcon fileName={name} size={18} />
-          <span className="workspace-changes__name">
-            <span>
-              <Highlight text={name} query={query} />
-            </span>
-            {folder && (
-              <span className="workspace-changes__breadcrumb">
-                {folder
-                  .split('/')
-                  .filter(Boolean)
-                  .map((part, index, parts) => (
-                    <span className="workspace-changes__crumb" key={`${part}-${index}`}>
-                      <Highlight text={part} query={query} />
-                      {index < parts.length - 1 && (
-                        <ChevronIcon className="workspace-changes__crumb-sep" />
-                      )}
-                    </span>
-                  ))}
+        <Tooltip title={title} placement="top">
+          <button
+            type="button"
+            className="workspace-changes__file workspace-changes__row"
+            data-selected={selectedChange === key}
+            disabled={busy}
+            aria-pressed={selectedChange === key}
+            aria-label={`${title} · ${statusLabel}`}
+            onClick={() => compareChange(change)}
+          >
+            <FileTypeIcon fileName={name} size={18} />
+            <span className="workspace-changes__name">
+              <span>
+                <Highlight text={name} query={query} />
               </span>
-            )}
-          </span>
-          <ChangeStatus code={change.code} label={statusLabel} />
-        </button>
+              {folder && (
+                <span className="workspace-changes__breadcrumb">
+                  {folder
+                    .split('/')
+                    .filter(Boolean)
+                    .map((part, index, parts) => (
+                      <span className="workspace-changes__crumb" key={`${part}-${index}`}>
+                        <Highlight text={part} query={query} />
+                        {index < parts.length - 1 && (
+                          <ChevronIcon className="workspace-changes__crumb-sep" />
+                        )}
+                      </span>
+                    ))}
+                </span>
+              )}
+            </span>
+            <ChangeStatus code={change.code} label={statusLabel} />
+          </button>
+        </Tooltip>
       </Dropdown>
     );
   };
@@ -544,10 +547,12 @@ export default function WorkspaceChanges({ directory }) {
         <>
           <div className="workspace-changes__controls">
             <BranchSwitcher repository={repository} onSwitch={switchBranch} busy={busy} />
-            <span className="workspace-changes__repository" title={repository.root}>
-              <FileTypeIcon fileName={fileName(repository.root)} isFolder size={16} />
-              <span className="workspace-changes__hint">{fileName(repository.root)}</span>
-            </span>
+            <Tooltip title={repository.root} placement="top">
+              <span className="workspace-changes__repository">
+                <FileTypeIcon fileName={fileName(repository.root)} isFolder size={16} />
+                <span className="workspace-changes__hint">{fileName(repository.root)}</span>
+              </span>
+            </Tooltip>
           </div>
           <div className="workspace-changes__list" aria-busy={busy || comparing}>
             {(() => {

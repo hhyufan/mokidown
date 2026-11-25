@@ -88,17 +88,19 @@ export default function ManualFileCompare() {
         <div className="workspace-compare-picker">
           {['left', 'right'].map((side) => (
             <div className="workspace-compare-picker__row" key={side}>
-              <div className="workspace-compare-picker__file" title={files[side]?.path}>
-                {files[side] ? (
-                  <FileTypeIcon fileName={files[side].name} size={16} />
-                ) : (
-                  <FileOutlined />
-                )}
-                <div>
-                  <small>{t(`workspaceDiff.${side}`)}</small>
-                  {files[side] && <span>{files[side].name}</span>}
+              <Tooltip title={files[side]?.path} placement="top">
+                <div className="workspace-compare-picker__file">
+                  {files[side] ? (
+                    <FileTypeIcon fileName={files[side].name} size={16} />
+                  ) : (
+                    <FileOutlined />
+                  )}
+                  <div>
+                    <small>{t(`workspaceDiff.${side}`)}</small>
+                    {files[side] && <span>{files[side].name}</span>}
+                  </div>
                 </div>
-              </div>
+              </Tooltip>
               <Tooltip title={t('workspaceDiff.selectFile')}>
                 <Button
                   type="text"
@@ -128,6 +130,7 @@ export default function ManualFileCompare() {
               )}
             </div>
           ))}
+
           {error && (
             <div className="workspace-changes__error" role="alert">
               {error}
@@ -163,15 +166,11 @@ export default function ManualFileCompare() {
         </div>
       }
     >
-      <button
-        type="button"
-        className="stb"
-        aria-label={title}
-        title={title}
-        aria-expanded={panelOpen}
-      >
-        <DiffOutlined />
-      </button>
+      <Tooltip title={title} placement="bottom">
+        <button type="button" className="stb" aria-label={title} aria-expanded={panelOpen}>
+          <DiffOutlined />
+        </button>
+      </Tooltip>
     </Popover>
   );
 }

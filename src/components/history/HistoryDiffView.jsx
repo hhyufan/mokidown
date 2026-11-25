@@ -899,9 +899,9 @@ export default function HistoryDiffView() {
         style={{ '--history-split': rendered || splitOffset == null ? '50%' : `${splitOffset}px` }}
       >
         <div className="history-diff__file" role="group" aria-label={t('history.title')}>
-          <span className="history-diff__filename" title={external?.originalPath}>
-            {external?.originalName ?? tab?.name}
-          </span>
+          <Tooltip title={external?.originalPath} placement="top">
+            <span className="history-diff__filename">{external?.originalName ?? tab?.name}</span>
+          </Tooltip>
           {hash && (
             <Tooltip title={`SHA-256: ${hash}`} placement="top" mouseEnterDelay={0.3}>
               <code className="history-diff__hash">{hash.slice(0, 8)}</code>
@@ -916,9 +916,9 @@ export default function HistoryDiffView() {
           )}
         </div>
         <div className="history-diff__file" role="group" aria-label={t('history.current')}>
-          <span className="history-diff__filename" title={external?.modifiedPath}>
-            {external?.modifiedName ?? tab?.name}
-          </span>
+          <Tooltip title={external?.modifiedPath} placement="top">
+            <span className="history-diff__filename">{external?.modifiedName ?? tab?.name}</span>
+          </Tooltip>
           <span className="history-diff__version">
             {external?.modifiedLabel ?? t('history.current')}
           </span>

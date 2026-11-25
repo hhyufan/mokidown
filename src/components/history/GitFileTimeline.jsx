@@ -183,16 +183,20 @@ export default function GitFileTimeline() {
         <ul className="timeline__list">
           {data.revisions.map((revision) => (
             <li key={revision.hash}>
-              <button
-                type="button"
-                className={`timeline__item${selected?.file === file && selected?.hash === revision.hash ? ' is-selected' : ''}`}
-                onClick={() => void openRevision(revision)}
+              <Tooltip
                 title={`${revision.subject}\n${revision.author} · ${formatHistoryTime(revision.time)} · ${revision.hash}`}
+                placement="top"
               >
-                <span className="timeline__git-hash">{revision.hash.slice(0, 8)}</span>
-                <span className="timeline__git-subject">{revision.subject}</span>
-                <time dateTime={revision.time}>{formatHistoryTime(revision.time)}</time>
-              </button>
+                <button
+                  type="button"
+                  className={`timeline__item${selected?.file === file && selected?.hash === revision.hash ? ' is-selected' : ''}`}
+                  onClick={() => void openRevision(revision)}
+                >
+                  <span className="timeline__git-hash">{revision.hash.slice(0, 8)}</span>
+                  <span className="timeline__git-subject">{revision.subject}</span>
+                  <time dateTime={revision.time}>{formatHistoryTime(revision.time)}</time>
+                </button>
+              </Tooltip>
             </li>
           ))}
           {data.hasMore && (
