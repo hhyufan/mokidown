@@ -12,6 +12,7 @@ import { normalizeMarkdownPairSettings } from '@utils/markdownPairs';
 
 const DEVICE_LOCAL_CONFIG_KEYS = new Set([
   'workspacePath',
+  'gitExecutablePath',
   'htmlPreviewPort',
   'htmlPreviewLiveReload',
   'associatedOpenMode',
@@ -72,6 +73,9 @@ const useConfigStore = create(
       // 是否用 Moki 形象徽章替换界面左上角的 M 图标。纯外观偏好，默认关闭。
       autoSave: true,
       workspacePath: '',
+      gitExecutablePath: '',
+      // 变动列表默认只显示 Markdown；面板上的按钮是临时状态。
+      gitChangesMarkdownOnly: true,
       associatedOpenMode: 'editor',
       externalFileDrag: 'explorer',
 

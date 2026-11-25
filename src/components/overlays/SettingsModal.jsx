@@ -28,9 +28,9 @@ import {
   StarFilled,
   AppstoreOutlined,
   ThunderboltOutlined,
-  FileMarkdownOutlined,
 } from '@ant-design/icons';
 import AppMark from '@components/ui/AppMark';
+import MarkdownIcon from '@components/ui/MarkdownIcon';
 import { REPO_URL, INSTALLER_URL } from '@/configs/repository';
 import { resolveInstallerUrl } from '@utils/installerDownload';
 import { open, save } from '@tauri-apps/plugin-dialog';
@@ -42,6 +42,7 @@ import { useTranslation } from 'react-i18next';
 import { markdownPairOptions, normalizeMarkdownPairs } from '@utils/markdownPairs';
 import { canCheckUpdates } from '@utils/appUpdater';
 import { isWebDemo } from '@utils/webDemo';
+import { isAndroidRuntime } from '@utils/platform';
 import useUpdateStore from '@store/useUpdateStore';
 import useConfigStore from '@store/useConfigStore';
 
@@ -63,7 +64,7 @@ const NAV_ICONS = {
   general: <SettingOutlined />,
   appearance: <BgColorsOutlined />,
   editor: <EditOutlined />,
-  renderer: <FileMarkdownOutlined />,
+  renderer: <MarkdownIcon />,
   shortcuts: <ThunderboltOutlined />,
   languages: <AppstoreOutlined />,
 
@@ -303,6 +304,37 @@ function SettingsModal({ open: openProp, onClose }) {
                       placeholder="/path/to/workspace"
                     />
                   </SettingRow>
+                  {window.__TAURI_INTERNALS__ && !isAndroidRuntime() && (
+                    <>
+                      <SettingGroup label={t('workspaceDiff.gitSettings')} />
+                      <SettingRow
+                        label={t('workspaceDiff.gitPath')}
+                        desc={t('workspaceDiff.autoDetect')}
+                      >
+                        <Input
+                          key={config.gitExecutablePath}
+                          aria-label={t('workspaceDiff.gitPath')}
+                          defaultValue={config.gitExecutablePath}
+                          placeholder={t('workspaceDiff.autoDetect')}
+                          onPressEnter={(event) => event.currentTarget.blur()}
+                          onBlur={(event) => {
+                            const value = event.currentTarget.value.trim();
+                            if (value !== config.gitExecutablePath)
+                              handleChange('gitExecutablePath', value);
+                          }}
+                        />
+                      </SettingRow>
+                      <SettingRow
+                        label={t('workspaceDiff.markdownOnlySetting')}
+                        desc={t('workspaceDiff.markdownOnlySettingDesc')}
+                      >
+                        <Switch
+                          checked={config.gitChangesMarkdownOnly}
+                          onChange={(value) => handleChange('gitChangesMarkdownOnly', value)}
+                        />
+                      </SettingRow>
+                    </>
+                  )}
                   <SettingGroup label={t('settings.group.behavior')} />
                   <SettingRow
                     label={t('settings.general.associatedOpenMode')}
