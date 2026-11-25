@@ -1168,12 +1168,16 @@
     // 正文两侧留白比旧版宽一倍，字不再贴着气泡边。
     padding: 4px 16px;
     width: max-content;
-    max-width: min(320px, calc(100vw - 16px));
+    // 不设 max-width：公式本身不能断行，硬截断会吃掉内容。超宽时由
+    // milkdownMathPreview 量出编辑区可视宽度，把整颗气泡等比缩到放得下
+    // （--moki-preview-scale），内容完整、边框与尾巴一起缩，不会探出边界。
     // 横向收回的位移量、以及放不下时要不要翻到下方，都由 milkdownMathPreview 按
     // 编辑区可视范围量出来后写成行内样式/属性。不能交给 position-try：它只按
     // 「包含块」判断放得下放不下，而气泡的包含块是正文那段源码的宽度，量不到
     // 编辑区边界，滚动起来更是对不上。
-    transform: translate(calc(-50% + var(--moki-preview-shift, 0px)));
+    transform: translate(calc(-50% + var(--moki-preview-shift, 0px)))
+      scale(var(--moki-preview-scale, 1));
+    transform-origin: 50% 100%;
 
     // 第一行写公式：上方放不下，翻到正文下方，尾巴跟着翻到气泡上沿。
     &[data-moki-math-preview-side='below'] {

@@ -11,17 +11,32 @@ function indentedLines(view) {
   let lastLine = 0;
   for (const { from, to } of view.visibleRanges) {
     const endLine = doc.lineAt(to).number;
-    for (let number = Math.max(doc.lineAt(from).number, lastLine + 1); number <= endLine; number++) {
+    const startLine = Math.max(doc.lineAt(from).number, lastLine + 1);
+    let inheritedWidth = null;
+    for (let number = startLine; number <= endLine; number++) {
       const line = doc.line(number);
       const prefix = /^[ \t]+/.exec(line.text)?.[0];
       lastLine = number;
-      if (!prefix) continue;
-      const columns = countColumn(prefix, tabSize);
+      if (!line.text && inheritedWidth == null) {
+        let neighbor = number + 1;
+        while (neighbor <= doc.lines && !doc.line(neighbor).text.trim()) neighbor++;
+        if (neighbor > doc.lines) {
+          neighbor = number - 1;
+          while (neighbor > 0 && !doc.line(neighbor).text.trim()) neighbor--;
+        }
+        const neighborIndent = neighbor > 0 && neighbor <= doc.lines
+          ? /^[ \t]*/.exec(doc.line(neighbor).text)[0] : '';
+        inheritedWidth = countColumn(neighborIndent, tabSize);
+      } else if (line.text.trim()) {
+        inheritedWidth = null;
+      }
+      const columns = prefix ? countColumn(prefix, tabSize) : (!line.text ? inheritedWidth : 0);
+      if (!columns) continue;
       lines.push(Decoration.line({
         class: 'moki-indented-code-line',
         attributes: { style: `--moki-code-indent: ${columns}ch; --moki-indent-width: ${tabSize}ch` },
       }).range(line.from));
-      if (!prefix.includes('\t')) continue;
+      if (!prefix?.includes('\t')) continue;
       // Padding shifts native tab stops. Give leading tabs their original
       // widths so the first line and its continuations use the same columns.
       let column = 0;

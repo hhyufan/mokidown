@@ -61,7 +61,9 @@ function previewHtml(value, displayMode) {
   let html;
   try {
     // KaTeX 默认 trust:false，输出会转义正文，因此可直接作为 innerHTML 注入。
-    html = { html: katex.renderToString(value, { displayMode, throwOnError: true, strict: false }) };
+    html = {
+      html: katex.renderToString(value, { displayMode, throwOnError: true, strict: false }),
+    };
   } catch {
     html = { error: true };
   }
@@ -81,7 +83,9 @@ function isPreviewable(value, displayMode) {
 function coverHtml(value) {
   const result = previewHtml(value, false);
   if (!result.error) return result;
-  return { html: katex.renderToString(value, { displayMode: false, throwOnError: false, strict: false }) };
+  return {
+    html: katex.renderToString(value, { displayMode: false, throwOnError: false, strict: false }),
+  };
 }
 
 function renderPreview(value, spec) {
@@ -91,7 +95,8 @@ function renderPreview(value, spec) {
   bubble.setAttribute('contenteditable', 'false');
   bubble.setAttribute('aria-hidden', 'true');
   // 正文为空时不摆东西：气泡只在有正文时才挂上来（见 addBubble）。
-  bubble.innerHTML = (spec.cover ? coverHtml(value) : previewHtml(value, spec.displayMode)).html || '';
+  bubble.innerHTML =
+    (spec.cover ? coverHtml(value) : previewHtml(value, spec.displayMode)).html || '';
   if (!spec.draft) return bubble;
   // 草稿正文没挂 mark，PM 又会在 widget 两侧断开装饰 span，气泡在正文里找不到
   // position:relative 的参照物。所以让 widget 自带一个零宽锚点当包含块。
@@ -137,8 +142,9 @@ function revealClickedMath(view, event) {
   // 坐标算不出文档位置也要接着判：第一下把源码揭开之后正文在指针底下挪了位，行盒还从
   // 覆盖层那么高塌回源码那么矮，第二下的坐标常常已经不在字上。那就退回选区那头去量。
   const at = view.posAtCoords({ left: event.clientX, top: event.clientY })?.pos ?? head;
-  const range = ranges.find(({ from, to }) => at >= from && at <= to)
-    ?? (double ? ranges.find(({ from, to }) => end > from && start < to) : null);
+  const range =
+    ranges.find(({ from, to }) => at >= from && at <= to) ??
+    (double ? ranges.find(({ from, to }) => end > from && start < to) : null);
   if (!double) {
     if (range) view.dispatch(state.tr.setMeta(previewKey, { from: range.from, to: range.to }));
     return;
@@ -183,9 +189,11 @@ function edgeToEdit(state, math, forward) {
   if (!selection.empty) return null;
   const pos = forward ? selection.from : selection.to;
   const clicked = previewKey.getState(state);
-  return mathRanges(state.doc, math).find((range) => (forward
-    ? range.from === pos
-    : range.to === pos) && !isClicked(clicked, range)) ?? null;
+  return (
+    mathRanges(state.doc, math).find(
+      (range) => (forward ? range.from === pos : range.to === pos) && !isClicked(clicked, range),
+    ) ?? null
+  );
 }
 
 function enterAtEdge(view, math, range, forward) {
@@ -193,11 +201,13 @@ function enterAtEdge(view, math, range, forward) {
   // Backspace/Delete 打开源码后，用户意图是编辑公式，所以把 math mark 记成待插入的 marks，
   // 紧接着打字才落得进公式的头上或尾巴。
   const marks = [math.create()];
-  view.dispatch(state.tr
-    .setSelection(TextSelection.create(state.doc, forward ? range.from : range.to))
-    .setStoredMarks(marks)
-    .setMeta(previewKey, { from: range.from, to: range.to })
-    .scrollIntoView());
+  view.dispatch(
+    state.tr
+      .setSelection(TextSelection.create(state.doc, forward ? range.from : range.to))
+      .setStoredMarks(marks)
+      .setMeta(previewKey, { from: range.from, to: range.to })
+      .scrollIntoView(),
+  );
 }
 
 // 行内公式草稿只在光标停着的时候预览：成对手势打出的那对 `$` 还摊在文档里，正文是一段
@@ -208,7 +218,8 @@ function mathDraft(state, ranges) {
   if (!selection.empty) return null;
   const draft = mathDraftAt(selection.$from);
   // 框进了已有公式（正文里挂着 code mark 的转义符这类）就不算草稿：那两枚 `$` 是画出来的。
-  if (!draft || ranges.some(({ from, to }) => draft.close >= from && draft.anchor <= to)) return null;
+  if (!draft || ranges.some(({ from, to }) => draft.close >= from && draft.anchor <= to))
+    return null;
   return draft;
 }
 
@@ -272,14 +283,14 @@ function liftInlineMathInsideList(view, slot, blockType) {
   const leading = item.content.cutByIndex(0, index);
   const trailing = item.content.cutByIndex(index + 1, item.childCount);
   const block = blockType.create(null, slot.body ? [state.schema.text(slot.body)] : []);
-  const currentItemContent = leading.append(
-    Fragment.from(head.size ? paragraphType.create(null, head) : paragraphType.createAndFill()),
-  ).append(Fragment.from(block)).append(trailing);
+  const currentItemContent = leading
+    .append(
+      Fragment.from(head.size ? paragraphType.create(null, head) : paragraphType.createAndFill()),
+    )
+    .append(Fragment.from(block))
+    .append(trailing);
   const currentItem = item.copy(currentItemContent);
-  const tailItem =
-    tail.size
-      ? item.copy(Fragment.from(paragraphType.create(null, tail)))
-      : null;
+  const tailItem = tail.size ? item.copy(Fragment.from(paragraphType.create(null, tail))) : null;
   const at = $caret.index(-2);
   const newItems = [currentItem];
   if (tailItem) newItems.push(tailItem);
@@ -290,12 +301,7 @@ function liftInlineMathInsideList(view, slot, blockType) {
   const listPos = $caret.before(-2);
   const tr = closeHistory(state.tr).replaceWith(listPos, $caret.after(-2), newList);
   const blockPos =
-    listPos +
-    1 +
-    itemsBefore.size +
-    leading.size +
-    (head.size ? head.size + 2 : 2) +
-    1;
+    listPos + 1 + itemsBefore.size + leading.size + (head.size ? head.size + 2 : 2) + 1;
   view.dispatch(
     tr.setSelection(TextSelection.create(tr.doc, blockPos + slot.cut)).scrollIntoView(),
   );
@@ -384,8 +390,8 @@ export function liftInlineMath(view, slot) {
   if (!blockType) return false;
   return Boolean(
     liftInlineMathInsideList(view, slot, blockType) ||
-      liftInlineMathAfterTable(view, slot, blockType) ||
-      liftInlineMathInPlace(view, slot, blockType),
+    liftInlineMathAfterTable(view, slot, blockType) ||
+    liftInlineMathInPlace(view, slot, blockType),
   );
 }
 
@@ -440,9 +446,22 @@ function fitBubbles(view) {
     // 先退回默认摆法再量：属性留着的话，量到的是上一次挪完之后的位置。
     bubble.removeAttribute('data-moki-math-preview-side');
     bubble.style.setProperty('--moki-preview-shift', '0px');
+    bubble.style.setProperty('--moki-preview-scale', '1');
+    // 长公式（例如一长串数字）没有可断行的位置，气泡会按内容宽度撑出编辑区。
+    // 先量内容宽度，超出可视范围就整颗缩放到放得下，而不是截断公式。
+    const available = Math.min(320, box.width - 32);
+    const contentWidth = bubble.getBoundingClientRect().width;
+    if (available > 0 && contentWidth > available) {
+      bubble.style.setProperty('--moki-preview-scale', String(available / contentWidth));
+    }
     const rect = bubble.getBoundingClientRect();
     if (rect.top < box.top) bubble.dataset.mokiMathPreviewSide = 'below';
-    const shift = rect.right > box.right ? box.right - rect.right : rect.left < box.left ? box.left - rect.left : 0;
+    const shift =
+      rect.right > box.right
+        ? box.right - rect.right
+        : rect.left < box.left
+          ? box.left - rect.left
+          : 0;
     bubble.style.setProperty('--moki-preview-shift', `${shift}px`);
   }
 }
@@ -467,14 +486,22 @@ export const milkdownMathPreview = $prose(() => {
         if (marked !== undefined) return marked;
         const syntax = tr.getMeta(liveSyntaxKey);
         if (syntax?.math !== undefined) return syntax.math;
-        const pointer = syntax && 'pointer' in syntax ? syntax.pointer : liveSyntaxKey.getState(oldState)?.pointer;
+        const pointer =
+          syntax && 'pointer' in syntax
+            ? syntax.pointer
+            : liveSyntaxKey.getState(oldState)?.pointer;
         if (!tr.docChanged && pointer) return clicked;
         // 文档一改，区间坐标就全变了。只有改动整段落在记住的那条公式里才跟得上——
         // 贴在公式右边界进编辑态之后接着打字，光标一直压在边界上，一忘就把刚掀开的源码合上了。
         // 两个端点各自往外让一格：敲在首尾那两格上的字属于这条公式，不是把它挤短。
-        const memory = !tr.docChanged ? clicked
+        const memory = !tr.docChanged
+          ? clicked
           : staysInside(tr.steps, clicked)
-            ? { ...clicked, from: tr.mapping.map(clicked.from, -1), to: tr.mapping.map(clicked.to, 1) }
+            ? {
+                ...clicked,
+                from: tr.mapping.map(clicked.from, -1),
+                to: tr.mapping.map(clicked.to, 1),
+              }
             : null;
         if (!memory || !tr.selectionSet) return memory;
         const { from, to } = tr.selection;
@@ -495,7 +522,8 @@ export const milkdownMathPreview = $prose(() => {
       const math = state.schema.marks[mathMarkName];
       const folded = math && foldDraft(transactions, oldState, state, math);
       if (folded) return folded;
-      if (!transactions.some(({ docChanged, selectionSet }) => docChanged || selectionSet)) return null;
+      if (!transactions.some(({ docChanged, selectionSet }) => docChanged || selectionSet))
+        return null;
       const { selection } = state;
       if (!selection.empty) return null;
       const { $from } = selection;
@@ -513,7 +541,8 @@ export const milkdownMathPreview = $prose(() => {
         : $from.nodeAfter?.marks.some((m) => m.type.name === mathMarkName)
           ? $from.nodeAfter.marks
           : [math.create()];
-      const same = current?.length === marks.length && current?.every((mark, i) => mark.eq(marks[i]));
+      const same =
+        current?.length === marks.length && current?.every((mark, i) => mark.eq(marks[i]));
       if (same) return null;
       return state.tr.setStoredMarks(marks);
     },
@@ -559,8 +588,16 @@ export const milkdownMathPreview = $prose(() => {
         }
         const forward = event.key === 'Delete';
         if (event.key !== 'Backspace' && !forward) return false;
-        if (!view.editable || view.composing || isImeComposing(event)
-          || event.ctrlKey || event.metaKey || event.altKey || event.shiftKey) return false;
+        if (
+          !view.editable ||
+          view.composing ||
+          isImeComposing(event) ||
+          event.ctrlKey ||
+          event.metaKey ||
+          event.altKey ||
+          event.shiftKey
+        )
+          return false;
         const math = view.state.schema.marks[mathMarkName];
         const range = math && edgeToEdit(view.state, math, forward);
         if (range) {
@@ -584,9 +621,15 @@ export const milkdownMathPreview = $prose(() => {
 
         // widget 不带 marks:[]，才会嵌进 math mark 自己的 span 里，被那个
         // position:relative 的盒子当包含块——覆盖层和气泡都靠这一点对齐正文。
-        const attach = (pos, value, spec, side, key) => decorations.push(Decoration.widget(pos,
-          () => renderPreview(value, spec),
-          { key, side, stopEvent: () => true, ignoreSelection: true }));
+        const attach = (pos, value, spec, side, key) =>
+          decorations.push(
+            Decoration.widget(pos, () => renderPreview(value, spec), {
+              key,
+              side,
+              stopEvent: () => true,
+              ignoreSelection: true,
+            }),
+          );
 
         // 正文不成立时沿用上一次成功的样子；还没成功渲染过就没有可沿用的预览，
         // 等用户写出可解析的东西再出现气泡。
@@ -602,7 +645,8 @@ export const milkdownMathPreview = $prose(() => {
 
         // 块级气泡排在源码块前头：挂在它后面会让预览和源码块上下颠倒。
         doc.descendants((node, pos) => {
-          if (node.type.name === blockSource) addBubble(`${blockSource}:${pos}`, pos, node.textContent.trim(), blockSpec, -1);
+          if (node.type.name === blockSource)
+            addBubble(`${blockSource}:${pos}`, pos, node.textContent.trim(), blockSpec, -1);
         });
 
         const math = state.schema.marks[mathMarkName];
@@ -612,7 +656,9 @@ export const milkdownMathPreview = $prose(() => {
         for (const range of ranges) {
           const value = doc.textBetween(range.from, range.to);
           if (!isMathEditing(state, selection, caret, range)) {
-            decorations.push(Decoration.inline(range.from, range.to, { class: 'moki-math-rendered' }));
+            decorations.push(
+              Decoration.inline(range.from, range.to, { class: 'moki-math-rendered' }),
+            );
             attach(range.from, value, coverSpec, 1, `cover:${range.from}:${value}`);
             continue;
           }
@@ -633,13 +679,21 @@ export const milkdownMathPreview = $prose(() => {
           // 要是压在草稿正文和收尾那枚 `$` 之间，`$$` 收尾那一下就认不到定界符，实测变成再开一对
           // 空草稿——既不跳过定界符，也不折。
           if (draft.anchor + 1 < draft.close) {
-            decorations.push(Decoration.inline(draft.anchor + 1, draft.close, { class: 'moki-math-source' }));
+            decorations.push(
+              Decoration.inline(draft.anchor + 1, draft.close, { class: 'moki-math-source' }),
+            );
           }
-          addBubble(`draft:${draft.anchor}`, draft.from + ((draft.to - draft.from) >> 1),
-            doc.textBetween(draft.from, draft.to), draftSpec, 1);
+          addBubble(
+            `draft:${draft.anchor}`,
+            draft.from + ((draft.to - draft.from) >> 1),
+            doc.textBetween(draft.from, draft.to),
+            draftSpec,
+            1,
+          );
         }
 
-        for (const identity of lastGood.keys()) if (!active.has(identity)) lastGood.delete(identity);
+        for (const identity of lastGood.keys())
+          if (!active.has(identity)) lastGood.delete(identity);
 
         return decorations.length ? DecorationSet.create(doc, decorations) : DecorationSet.empty;
       },
