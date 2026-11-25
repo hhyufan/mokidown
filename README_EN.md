@@ -4,7 +4,7 @@
 
 <h1 align="center">MokiDown</h1>
 
-<p align="center">A local-first Markdown workbench where writing, code, and knowledge live together.</p>
+<p align="center">A local-first personal workbench: writing, code, versions, and knowledge in one window.</p>
 
 <p align="center">
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-green" alt="MIT License" /></a>
@@ -23,31 +23,68 @@
 
 ## Overview
 
-MokiDown is an open-source Markdown editor built with Tauri 2, React, Monaco, and Milkdown. Local-first: it reads and writes local files by default, with no sign-in and no network required.
+MokiDown is a **local-first personal workbench**.
+
+It starts from Markdown editing, but is no longer just an editor: files, code, version history, plugins, and reading views are organized around the same local workspace. The daily loop of *write → run → compare → roll back* stays in one window, without moving content between separate tools.
+
+The workbench follows four principles:
+
+* **Files are the source of truth**: read and write local files directly, with no private database; the workspace opens on any machine.
+* **Keep the workflow in place**: edit, run code, inspect Git changes, compare history, and write back without leaving the workspace.
+* **Extend rather than pile up**: language services, sync, file icons, and Markdown styles plug in around a small core.
+* **Offline by default**: no login and no network required; history and versions stay on your machine.
 
 <p align="center">
   <img src="screenshots/hero-demo.gif" width="1920" alt="MokiDown in action: create a blank note, write task lists, code blocks and tables, run code in WYSIWYG, edit in split view, switch themes, edit knowledge trees and navigate to code" />
 </p>
 
-## Features
+## Capabilities
+
+### Writing and rendering
 
 * **Three editing modes**: source, WYSIWYG, and split view, with GFM, LaTeX math, and Mermaid diagrams.
+* **Virtual rendering**: inline code, bold, italic, strikethrough, links, and math render in place, with delimiters that follow the caret.
+* **Math**: inline math adds a KaTeX live preview bubble, symbol completion, and paired input gestures; block math shares one layout with preview.
+* **Markdown preview**: tables, task lists, footnotes, quotes, images, Mermaid, and KaTeX; code blocks wrap instead of scrolling horizontally.
+* **Folding and outline**: headings, task lists, regular lists, and code blocks fold; the outline follows the caret.
+* **Typographic details**: Monaco and code blocks share rainbow indentation (auto-detects 2/4-space units), and a blue I-beam cursor is shared by editor and preview.
 
-* **Virtual rendering**: inline code, bold, italic, strikethrough, links, and math render in place, with delimiters that follow the caret. Inline math adds a KaTeX live preview bubble, symbol completion, and paired input gestures.
+### Code and execution
 
 * **Runnable code blocks**: on desktop, run C#, JavaScript, Python, Java, Kotlin, and Rust with output, interactive input, and stop; the matching language runtime must be installed.
-
-* **Git workspaces and history**: the Changes panel lists staged and working-tree changes by file mtime and watches the repository automatically, with a Markdown-only filter, branch switching, and open on GitHub. History comparison offers rendered Markdown diff, an editable right side, per-line revert, save, and revert-all.
-
-* **Plugin system**: a standalone plugin SDK with a permissioned capability catalog (commands, document/selection access, workspace files, network, status bar, file icons, notifications, Markdown styles, theme); incremental sync ships as a built-in plugin.
-
 * **Language services**: install LSP plugins on demand for completion, hover info, and diagnostics.
+* **Source editing**: Monaco provides multi-cursor, find and replace, folding, and code navigation.
+* **Terminal**: an integrated terminal runs commands in the current workspace.
+* **Command palette**: common actions, file jumps, and view switches in one entry point.
 
+### Versions and history
+
+* **Git workspace**: the Changes panel lists staged and working-tree changes by file mtime and watches the repository automatically, with a Markdown-only filter, branch switching, and open on GitHub.
+* **History comparison**: Markdown files open in rendered diff by default; the right side is editable with per-line revert, save, and revert-all. Each comparison gets its own tab and does not overwrite the file being edited.
+* **Local history**: file snapshots and version lists stay on the machine and can roll back to any version.
+* **Git file history**: tracks local branches, remote-tracking branches, and the checked-out commit for a file, following renames across paths.
+
+### Extensions and plugins
+
+* **Plugin SDK**: a versioned capability catalog and permission model (commands, document / selection access, workspace files, network, plugin storage, status bar, file icons, notifications, Markdown styles, theme).
+* **Built-in plugins**: incremental sync (standalone implementation, off by default) and the plugin panel (install, enable, disable, configure).
+* **Extension points**: commands, status bar, file icons, Markdown styles, notifications, theme observation, and lifecycle cleanup.
+
+### Files and workspace
+
+* **Tabs**: open files and comparisons side by side without stealing the current tab.
+* **File and project trees**: directory browsing, breadcrumb jumps, context menus, and file operations.
+* **Find and locate**: global search, outline, bookmarks, and recent files.
+* **Auto-save**: external-change detection and conflict handling, backed by local history.
+* **Reading and split view**: multi-window reader, web split view, and live HTML preview.
 * **Knowledge trees**: organize note hierarchy with `.mgtree` files, with node editing and jumps to document code blocks.
+* **Import paths**: file drop, image insertion, and Markdown paste conversion.
 
-* **Files and workspace**: multiple tabs, directory browsing, outline, global search, bookmarks, and auto-save; reader windows, terminal, and web split view.
+### Personalization and mobile
 
-* **Personalization**: light and dark themes, Chinese/English UI, and wallpapers; rainbow indentation for Monaco and code blocks (auto-detects 2/4-space units), a shared blue I-beam cursor across editor and preview, and auto-wrapping Markdown preview code blocks.
+* **Theme and appearance**: light / dark themes, wallpapers and opacity, Chinese / English UI, fonts, line height, and indent width.
+* **Interaction preferences**: custom hotkeys, command palette, and settings search.
+* **Android**: responsive layout with platform-specific file access; see the build section below.
 
 ## 📸 Screenshots
 
@@ -57,7 +94,7 @@ MokiDown is an open-source Markdown editor built with Tauri 2, React, Monaco, an
 
 | Three editing modes (source / WYSIWYG / split) |               Tree editor (mgtree)               |
 | :--------------------------------------------: | :----------------------------------------------: |
-| ![Three editing modes](screenshots/editor.png) | ![Running code blocks](screenshots/code-run.png) |
+| ![Three editing modes](screenshots/editor.png) | ![Tree editor](screenshots/tree.png) |
 
 |          Running code blocks         |
 | :----------------------------------: |
