@@ -131,8 +131,26 @@ fn stdout(result: Output) -> Result<Vec<u8>, String> {
     }
 }
 
+/// 当前目录位于某个 .git 里时，取它所属的工作树根。
+fn worktree_root(directory: &Path) -> Option<&Path> {
+    let mut current = Some(directory);
+    while let Some(path) = current {
+        if path
+            .file_name()
+            .and_then(|name| name.to_str())
+            .is_some_and(|name| name.eq_ignore_ascii_case(".git"))
+        {
+            return path.parent();
+        }
+        current = path.parent();
+    }
+    None
+}
+
 fn repository_root(exe: &Path, directory: &str) -> Result<PathBuf, String> {
     let directory = Path::new(directory);
+    // 打开 .git、.git/hooks 等位置时仍然属于外层工作树，不能把 .git 当根。
+    let directory = worktree_root(directory).unwrap_or(directory);
     if !directory.is_absolute() || !directory.is_dir() {
         return Err("noRepository".into());
     }
