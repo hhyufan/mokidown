@@ -19,7 +19,13 @@ vi.mock('@utils/monacoShiki', () => ({
   initMonacoShiki: () => new Promise(() => {}),
   getMonacoThemeName: () => '',
 }));
-vi.mock('@utils/tauriApi', () => ({ historyCapture: vi.fn() }));
+vi.mock('@utils/tauriApi', () => ({
+  historyCapture: vi.fn(),
+  // 对比右侧会尝试从磁盘刷新；失败时保留对比快照，测试保持确定性。
+  readFileContent: vi.fn(async () => ({ success: false })),
+  writeFileContent: vi.fn(async () => {}),
+  onFileChanged: vi.fn(async () => () => {}),
+}));
 vi.mock('@components/moki/MokiStatusEmpty', () => ({ default: () => null }));
 vi.mock('react-i18next', async (importOriginal) => ({
   ...(await importOriginal()),
@@ -44,16 +50,14 @@ function prepare() {
     tabRenderList: [],
     activeTabId: 'doc',
   });
-  useHistoryStore
-    .getState()
-    .setDiff({
-      pluginId: 'example.provider',
-      tabId: 'doc',
-      timestamp: 1,
-      content: 'reference',
-      label: 'Comparison',
-      actions,
-    });
+  useHistoryStore.getState().setDiff({
+    pluginId: 'example.provider',
+    tabId: 'doc',
+    timestamp: 1,
+    content: 'reference',
+    label: 'Comparison',
+    actions,
+  });
   return render(<HistoryDiffView />);
 }
 for (const action of actions)
