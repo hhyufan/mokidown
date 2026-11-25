@@ -161,7 +161,14 @@ const useEditorStore = create(
         const { tabs, tabRenderList, activeTabId } = get();
         flushEditorBuffer(activeTabId);
         if (tabs.some((tab) => tab.id === id)) {
-          set({ activeTabId: id });
+          const source = tabs.find((tab) => tab.id === sourceTabId);
+          const ext = source?.ext || name.split('.').pop() || '';
+          const update = (list) => list.map((tab) => (tab.id === id ? { ...tab, name, ext } : tab));
+          set({
+            tabs: update(tabs),
+            tabRenderList: update(tabRenderList),
+            activeTabId: id,
+          });
           return;
         }
         const source = tabs.find((tab) => tab.id === sourceTabId);

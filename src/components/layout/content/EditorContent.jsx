@@ -498,7 +498,8 @@ function EditorContent() {
 
     const handleWheel = (event) => {
       if (!(event.ctrlKey || event.metaKey) || event.deltaY === 0) return;
-      const comparisonMode = event.target.closest?.('[data-comparison-zoom]')?.dataset.comparisonZoom;
+      const comparisonMode =
+        event.target.closest?.('[data-comparison-zoom]')?.dataset.comparisonZoom;
       if (!comparisonMode && !container.contains(event.target)) return;
 
       event.preventDefault();
@@ -514,9 +515,12 @@ function EditorContent() {
       if (Math.abs(wheelAccumulator) < WHEEL_ZOOM_THRESHOLD) return;
 
       const step = wheelAccumulator > 0 ? -1 : 1;
-      const zoomTarget = resolveZoomTarget(event.target, comparisonMode
-        ? { viewMode: comparisonMode, isMarkdown: comparisonMode === 'preview' }
-        : { viewMode, isMarkdown: hasPreview });
+      const zoomTarget = resolveZoomTarget(
+        event.target,
+        comparisonMode
+          ? { viewMode: comparisonMode, isMarkdown: comparisonMode === 'preview' }
+          : { viewMode, isMarkdown: hasPreview },
+      );
       wheelAccumulator = 0;
       applyTypography(getNextTypographyUpdate(zoomTarget, step));
     };
@@ -752,10 +756,12 @@ function EditorContent() {
       ref={surfaceRef}
       className={`editor-content content-transition ${isMobileLayout ? 'editor-content--mobile' : ''}`}
     >
-      {showHistoryDiff && (
-        <Suspense fallback={null}>
-          <HistoryDiffView />
-        </Suspense>
+      {historyDiff && (
+        <div className="editor-content__history-diff" hidden={!showHistoryDiff}>
+          <Suspense fallback={null}>
+            <HistoryDiffView />
+          </Suspense>
+        </div>
       )}
       {!showHistoryDiff &&
         !showWorkspace &&

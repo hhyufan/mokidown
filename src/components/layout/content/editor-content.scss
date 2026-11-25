@@ -14,7 +14,11 @@
   position: relative;
 }
 
-.editor-content__welcome { flex: 1; min-width: 0; overflow: auto; }
+.editor-content__welcome {
+  flex: 1;
+  min-width: 0;
+  overflow: auto;
+}
 
 .editor-content__empty {
   display: flex;
@@ -43,7 +47,6 @@
   opacity: 0.6;
 }
 
-
 .editor-content__workspace {
   flex: 1;
   display: flex;
@@ -53,32 +56,51 @@
 
   &--split {
     display: grid;
-    grid-template-columns: minmax(0, var(--split-ratio, 50%)) resize-handle.$track-size minmax(0, 1fr);
+    grid-template-columns: minmax(0, var(--split-ratio, 50%)) resize-handle.$track-size minmax(
+        0,
+        1fr
+      );
     grid-template-rows: minmax(0, 1fr);
   }
 }
 
 .editor-content__split-surfaces {
   display: contents;
-  &[hidden] { display: none; }
+  &[hidden] {
+    display: none;
+  }
 }
 
 .editor-content__workspace--split {
   .editor-content__primary-surface,
   .editor-content__builtin-html,
-  .editor-content__editor { grid-column: 1; grid-row: 1; }
-  .editor-content__split-divider { grid-column: 2; grid-row: 1; }
-  .editor-content__preview--half { grid-column: 3; grid-row: 1; }
+  .editor-content__editor {
+    grid-column: 1;
+    grid-row: 1;
+  }
+  .editor-content__split-divider {
+    grid-column: 2;
+    grid-row: 1;
+  }
+  .editor-content__preview--half {
+    grid-column: 3;
+    grid-row: 1;
+  }
 }
 
-.editor-content__primary-surface { min-width: 0; min-height: 0; }
+.editor-content__primary-surface {
+  min-width: 0;
+  min-height: 0;
+}
 .editor-content__monaco-surface,
 .editor-content__preview-frame,
 .editor-content__editable-preview {
   display: flex;
   flex: 1;
 }
-.editor-content__monaco-surface[hidden] { display: none; }
+.editor-content__monaco-surface[hidden] {
+  display: none;
+}
 .editor-content__editable-preview[data-inactive] {
   position: absolute;
   inset: 0;
@@ -86,7 +108,9 @@
   opacity: 0;
   pointer-events: none;
 }
-.editor-content__workspace[hidden] { display: none; }
+.editor-content__workspace[hidden] {
+  display: none;
+}
 
 .editor-content__run {
   position: absolute;
@@ -104,12 +128,29 @@
   box-shadow: 0 2px 8px rgb(0 0 0 / 8%);
   font: 12px var(--font-app);
   cursor: pointer;
-  transition: background 0.15s, border-color 0.15s;
-  svg { width: 15px; height: 15px; }
-  kbd { color: var(--text-dim); font: 10px var(--font-editor); }
-  &:hover { background: var(--accent-bg); border-color: var(--accent); }
-  &:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
-  &:disabled { opacity: 0.5; cursor: default; }
+  transition:
+    background 0.15s,
+    border-color 0.15s;
+  svg {
+    width: 15px;
+    height: 15px;
+  }
+  kbd {
+    color: var(--text-dim);
+    font: 10px var(--font-editor);
+  }
+  &:hover {
+    background: var(--accent-bg);
+    border-color: var(--accent);
+  }
+  &:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 2px;
+  }
+  &:disabled {
+    opacity: 0.5;
+    cursor: default;
+  }
 }
 
 .editor-content__editor {
@@ -222,8 +263,10 @@
     }
   }
 
-  .editor-content__workspace--split .editor-content__preview--half { grid-column: 1; grid-row: 3; }
-
+  .editor-content__workspace--split .editor-content__preview--half {
+    grid-column: 1;
+    grid-row: 3;
+  }
 }
 .editor-content__builtin-html {
   display: block;
@@ -239,10 +282,30 @@
   flex: 1;
   min-height: 0;
   min-width: 0;
-  &[hidden] { display: none; }
-  &--half { grid-column: 3; grid-row: 1; }
+  &[hidden] {
+    display: none;
+  }
+  &--half {
+    grid-column: 3;
+    grid-row: 1;
+  }
 }
 
 @media (max-width: 768px) {
-  .editor-content__html-surface--half { grid-column: 1; grid-row: 3; }
+  .editor-content__html-surface--half {
+    grid-column: 1;
+    grid-row: 3;
+  }
+}
+
+// 对比视图常驻挂载，切换标签时只隐藏不卸载，避免切回时重建对比编辑器。
+.editor-content__history-diff {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+
+  &[hidden] {
+    display: none;
+  }
 }

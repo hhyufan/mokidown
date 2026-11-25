@@ -30,18 +30,21 @@ const useHistoryStore = create((set, get) => ({
   viewMode: 'preview',
   setDiff: (diff) => set({ diff, viewMode: diff?.external ? 'edit' : 'preview' }),
   openFileComparison: (tabId, content, external, label) => {
-    const id = `diff:${crypto.randomUUID()}`;
-    const source = useEditorStore.getState().tabs.find((tab) => tab.id === tabId);
-    const name = external?.modifiedName || label || source?.name || 'diff';
     const previous = get().diff;
-    if (previous?.tabId && previous.tabId !== id) {
-      useEditorStore.getState().closeTabs([previous.tabId]);
-    }
-    useEditorStore.getState().openComparisonTab({ id, name, sourceTabId: tabId });
+    const editor = useEditorStore.getState();
+    // 如果当前激活的是对比标签，真正要对比的是它记录的原文件标签。
+    const requested = editor.tabs.find((tab) => tab.id === tabId);
+    const sourceTabId = requested?.builtin === 'diff' ? (previous?.sourceTabId ?? tabId) : tabId;
+    const source = editor.tabs.find((tab) => tab.id === sourceTabId);
+    const name = external?.modifiedName || label || source?.name || 'diff';
+    // 复用已有对比标签：再次打开同一处修改时不应再堆一个新标签。
+    const existingDiffTab = previous?.tabId && editor.tabs.some((tab) => tab.id === previous.tabId);
+    const id = existingDiffTab ? previous.tabId : `diff:${crypto.randomUUID()}`;
+    editor.openComparisonTab({ id, name, sourceTabId });
     set({
       diff: {
         tabId: id,
-        sourceTabId: tabId,
+        sourceTabId,
         timestamp: ++comparisonSequence,
         content,
         external,
