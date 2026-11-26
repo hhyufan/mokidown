@@ -93,6 +93,7 @@
 
   .inputarea.ime-input {
     caret-color: var(--code-caret) !important;
+    background-color: var(--surface) !important;
   }
 
   @media (forced-colors: active) {

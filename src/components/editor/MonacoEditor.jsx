@@ -347,6 +347,9 @@ const MonacoEditorComponent = forwardRef(function MonacoEditorComponent(
       overviewRulerBorder: false,
       renderLineHighlight: 'none',
       unusualLineTerminators: 'off',
+      // Keep the hidden textarea scoped to active IME composition text on desktop
+      // so wrapped lines never freeze or scroll the whole line over `.view-line`.
+      accessibilitySupport: isAndroid ? 'auto' : 'off',
       scrollbar: {
         verticalScrollbarSize: 6,
         ...horizontalScrollbarOptions(wordWrap),

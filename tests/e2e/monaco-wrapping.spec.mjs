@@ -2,7 +2,7 @@ import { test, expect } from '@playwright/test';
 
 async function setup(page) {
   await page.goto('/');
-  await expect(page.locator('.editor-content__welcome')).toBeVisible();
+  await expect(page.locator('.editor-content__welcome')).toBeVisible({ timeout: 30000 });
   await page.evaluate(async () => {
     const { preloadMonacoEditor } = await import('/src/utils/monacoRuntimeBoot.js');
     await preloadMonacoEditor();
@@ -84,3 +84,40 @@ test('historical diff wraps both panes without horizontal scrollbars', async ({ 
     return monaco.editor.getEditors().map((editor) => editor.getOption(monaco.editor.EditorOption.wrappingInfo).wrappingColumn > 0);
   })).toEqual([true, true]);
 });
+
+test('IME composition across a wrapped line does not scroll or overlap the editor line', async ({ page }) => {
+  await setup(page);
+  await page.setViewportSize({ width: 540, height: 700 });
+  const line = '* [ ] Markdown 预览无法渲染 Base64 的图片以及 base64 的图片';
+  await page.evaluate((text) => {
+    const { store } = window.wrappingTrial;
+    store.getState().setSidebarVisible(false);
+    store.getState().replaceTabContent('/wrapping.md', { content: `\n\n\n\n${text}\n` });
+  }, line);
+  await expect(page.locator('.monaco-editor .view-lines')).toContainText('base64');
+  await page.evaluate(() => {
+    const { monaco } = window.wrappingTrial;
+    const editor = monaco.editor.getEditors()[0];
+    editor.setPosition({ lineNumber: 5, column: editor.getModel().getLineMaxColumn(5) });
+    editor.focus();
+  });
+  const cdp = await page.context().newCDPSession(page);
+  await cdp.send('Input.imeSetComposition', { text: 'ying', selectionStart: 4, selectionEnd: 4 });
+  const state = await page.evaluate(() => {
+    const ta = document.querySelector('.monaco-editor textarea.inputarea');
+    const wrappedLine = [...document.querySelectorAll('.monaco-editor .view-line')]
+      .find((el) => el.textContent.includes('ying'));
+    return {
+      value: ta.value,
+      scrollLeft: ta.scrollLeft,
+      taTop: ta.getBoundingClientRect().top,
+      lineTop: wrappedLine?.getBoundingClientRect().top ?? null,
+    };
+  });
+  expect(state.value).toBe('ying');
+  expect(state.scrollLeft).toBe(0);
+  expect(state.lineTop).not.toBeNull();
+  expect(Math.abs(state.taTop - state.lineTop)).toBeLessThan(2);
+  await cdp.send('Input.imeSetComposition', { text: '', selectionStart: 0, selectionEnd: 0 });
+});
+

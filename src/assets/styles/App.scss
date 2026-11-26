@@ -52,7 +52,8 @@
   .monaco-editor-background,
   .monaco-editor .margin,
   .monaco-editor .minimap,
-  .monaco-editor .minimap-decorations-layer { background: transparent !important; }
+  .monaco-editor .minimap-decorations-layer,
+  .monaco-editor .inputarea.ime-input { background: transparent !important; }
 }
 @media (max-width: 768px) {
   // 抽屉侧栏套用下拉/tooltip 的壁纸底：重绘壁纸而不是让 backdrop-filter

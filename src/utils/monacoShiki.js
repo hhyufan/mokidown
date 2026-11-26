@@ -84,6 +84,7 @@ function themeOverrides(dark) {
   const caret = dark ? '#528bff' : '#526fff';
   const colors = {
     'minimap.background': '#00000000',
+    'editor.lineHighlightBackground': '#00000000',
     'editorCursor.foreground': caret,
     'editorMultiCursor.primary.foreground': caret,
     'editorMultiCursor.secondary.foreground': caret,
