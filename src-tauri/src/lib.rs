@@ -2139,6 +2139,7 @@ pub fn run() {
             workspace_git::git_workspace_status,
             #[cfg(desktop)]
             workspace_git::git_workspace_diff,
+            workspace_git::git_workspace_read_worktree,
             #[cfg(desktop)]
             workspace_git::git_workspace_apply,
             #[cfg(desktop)]

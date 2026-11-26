@@ -11,6 +11,7 @@ import { installIndentRainbow } from '@utils/monacoIndentRainbow';
 import useConfigStore from '@store/useConfigStore';
 import useNotificationStore from '@store/useNotificationStore';
 import { useFileManager } from '@hooks/useFileManager';
+import { useEditorBufferContent } from '@hooks/useEditorBufferContent';
 import { broadcastToPlugins, executePluginCommand, sendToPlugin } from '@utils/pluginBus';
 import { getBuffer, flushEditorBuffer } from '@utils/editorBuffer';
 import {
@@ -576,12 +577,14 @@ export default function HistoryDiffView() {
   const comparisonBoundsRef = useRef(null);
 
   const tab = tabs.find((item) => item.id === (diff?.sourceTabId ?? diff?.tabId)) || null;
+  const bufferContent = useEditorBufferContent(tab?.id, tab?.content || '');
   const external = diff?.external;
   const gitEdit = external?.gitEdit;
   const editable = !external || Boolean(gitEdit) || !external.repository;
   const comparisonId = external ? `external:${diff.timestamp}` : tab?.id;
   const pluginActions = diff?.pluginId && diff.actions?.length ? diff.actions : null;
   useEffect(() => {
+    draftRef.current = null;
     setDraftState(null);
     setSelectionReady(false);
     setActionError('');
@@ -607,57 +610,87 @@ export default function HistoryDiffView() {
       cancelled = true;
     };
   }, [historyContent, external]);
-  // 外部对比的右侧是工作区文件：磁盘变化后跟随刷新，避免一直显示打开时的快照。
-  const externalModifiedPath = external && !external.repository ? external.modifiedPath : null;
+  const externalModifiedPath =
+    external && (!external.repository || gitEdit?.layer === 'worktree')
+      ? external.modifiedPath
+      : null;
   useEffect(() => {
-    setLiveModified(null);
     if (!externalModifiedPath) return undefined;
     let active = true;
+    let issued = 0;
+    let applied = 0;
+    const readCurrent = async () => {
+      if (external.gitEdit?.layer === 'worktree') {
+        const content = await invoke('git_workspace_read_worktree', {
+          directory: external.repository,
+          path: external.gitEdit.path,
+        });
+        if (typeof content === 'string') return { content, missing: false };
+        return content === null ? { content: '', missing: true } : null;
+      }
+      const result = await readFileContent(externalModifiedPath);
+      if (result?.success && typeof result.content === 'string') {
+        return { content: result.content, missing: false };
+      }
+      return result?.blockedReason === 'missing' ? { content: '', missing: true } : null;
+    };
     const read = () => {
-      readFileContent(externalModifiedPath)
+      const request = ++issued;
+      readCurrent()
         .then((result) => {
-          // readFileContent 返回 { success, content, ... }，不是裸字符串。
-          if (active && result?.success && typeof result.content === 'string') {
-            setLiveModified(result.content);
-          }
+          if (!active || request < applied) return;
+          applied = request;
+          if (!result) return;
+          const { content, missing } = result;
+          setLiveModified((previous) =>
+            previous?.external === external && previous.content === content && previous.missing === missing
+              ? previous
+              : { external, content, missing },
+          );
         })
         .catch(() => {});
     };
     read();
+    const path = comparablePath(externalModifiedPath);
     const stop = onFileChanged((payload) => {
-      const changed = String(payload?.path || '')
-        .replaceAll('\\', '/')
-        .toLowerCase();
-      if (changed && changed === externalModifiedPath.replaceAll('\\', '/').toLowerCase()) read();
-    });
+      if (comparablePath(payload?.path) === path) read();
+    }).catch(() => {});
+    window.addEventListener('focus', read);
+    // A comparison can reference a file that has no open editor or native watcher.
     const timer = window.setInterval(() => {
       if (document.visibilityState === 'visible') read();
     }, 2500);
     return () => {
       active = false;
+      window.removeEventListener('focus', read);
       window.clearInterval(timer);
-      Promise.resolve(stop)
-        .then((off) => off?.())
-        .catch(() => {});
+      void stop.then((off) => off?.()).catch(() => {});
     };
-  }, [externalModifiedPath]);
+  }, [external, externalModifiedPath]);
+  const disk = liveModified?.external === external ? liveModified : null;
   const current = external
-    ? (gitEdit ? external.modified : (liveModified ?? external.modified))
-    : tab
-      ? getBuffer(tab.id, tab.content || '')
-      : '';
+    ? (disk?.content ?? external.modified)
+    : bufferContent;
+  const currentMissing = disk?.missing ?? gitEdit?.expectedMissing ?? false;
   const draft = draftState?.comparison === diff ? draftState?.content : null;
   const modified = draft ?? current;
+  const writeDraft = useCallback((content) => {
+    const previous = draftRef.current;
+    const base = previous?.comparison === diff
+      ? previous.base
+      : { content: current, missing: currentMissing };
+    draftRef.current = content === current ? null : { comparison: diff, content, base };
+    setDraftState(draftRef.current);
+  }, [current, currentMissing, diff]);
   const updateDraft = useCallback(
     (content) => {
       if (!diff || useHistoryStore.getState().diff !== diff) return;
       const previous = draftRef.current?.comparison === diff ? draftRef.current.content : current;
       if (previous === content) return;
       recordMarkdownEdit(diff, null, previous, content);
-      draftRef.current = { comparison: diff, content };
-      setDraftState(draftRef.current);
+      writeDraft(content);
     },
-    [current, diff],
+    [current, diff, writeDraft],
   );
   useEffect(() => {
     if (!diff || !editable || busy) return undefined;
@@ -679,12 +712,11 @@ export default function HistoryDiffView() {
       event.stopPropagation();
       if (!step) return;
       step.commit();
-      draftRef.current = { comparison: diff, content: step.text };
-      setDraftState(draftRef.current);
+      writeDraft(step.text);
     };
     document.addEventListener('keydown', onKeyDown, true);
     return () => document.removeEventListener('keydown', onKeyDown, true);
-  }, [busy, current, diff, editable]);
+  }, [busy, current, diff, editable, writeDraft]);
   const rendered = mode === 'preview' && isMarkdownComparison(tab, diff);
   const handleMonacoReady = useCallback(
     (value) => setMonacoReady(value ? { diff, rendered } : null),
@@ -807,6 +839,10 @@ export default function HistoryDiffView() {
     setActionError('');
     try {
       const path = external.modifiedPath;
+      const pending = draftRef.current;
+      const base = pending?.comparison === diff && pending.content === content
+        ? pending.base
+        : { content: current, missing: currentMissing };
       if (gitEdit) {
         const worktree = gitEdit.layer === 'worktree';
         const findTarget = () => useEditorStore.getState().tabs.find((item) =>
@@ -822,7 +858,11 @@ export default function HistoryDiffView() {
             }
           }
           return invoke('git_workspace_apply', {
-            ...gitEdit, directory: external.repository, expected: external.modified, content,
+            ...gitEdit,
+            directory: external.repository,
+            expected: base.content,
+            expectedMissing: base.missing,
+            content,
           });
         };
         const saved = worktree ? await withFileOperation(findTarget()?.path || path, apply) : await apply();
@@ -830,7 +870,13 @@ export default function HistoryDiffView() {
         if (worktree) void captureAppliedHistory(path, current, saved ?? content, undefined, (messageKey) => {
           useNotificationStore.getState().notify('warning', t('history.title'), t(messageKey));
         });
-      } else await writeFileContent(path, content);
+      } else {
+        if (base.content !== current || base.missing !== currentMissing) {
+          setActionError(t('history.applyConflict'));
+          return;
+        }
+        await writeFileContent(path, content);
+      }
       clearDiff(diff);
     } catch (error) {
       if (useHistoryStore.getState().diff === diff) {

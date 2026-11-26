@@ -304,8 +304,12 @@ fn working_text(root: &Path, path: &str) -> Result<String, String> {
         return Err("invalidGitPath".into());
     }
     let target = root.join(path);
+    let parent = target
+        .parent()
+        .and_then(|parent| parent.ancestors().find(|ancestor| ancestor.exists()))
+        .ok_or("invalidGitPath")?;
     let canonical = |path: &Path| path.canonicalize().map_err(|error| error.to_string());
-    if !canonical(target.parent().ok_or("invalidGitPath")?)?.starts_with(canonical(root)?) {
+    if !canonical(parent)?.starts_with(canonical(root)?) {
         return Err("invalidGitPath".into());
     }
     if let Ok(link) = std::fs::read_link(&target) {
@@ -322,6 +326,19 @@ async fn background<T: Send + 'static>(
     tauri::async_runtime::spawn_blocking(run)
         .await
         .map_err(|error| error.to_string())?
+}
+
+#[tauri::command]
+pub(crate) async fn git_workspace_read_worktree(
+    directory: String,
+    path: String,
+) -> Result<Option<String>, String> {
+    background(move || match working_text(Path::new(&directory), &path) {
+        Ok(content) => Ok(Some(content)),
+        Err(error) if error == "missing" => Ok(None),
+        Err(error) => Err(error),
+    })
+    .await
 }
 
 #[tauri::command]

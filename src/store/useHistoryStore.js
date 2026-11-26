@@ -19,7 +19,7 @@ export function isMarkdownComparison(tab, diff) {
 
 /** 同一个变更的稳定标识：源标签 + 左右两侧路径。 */
 function comparisonIdentity(sourceTabId, external) {
-  return `${sourceTabId}|${external?.originalPath ?? ''}|${external?.modifiedPath ?? ''}`;
+  return `${sourceTabId}|${external?.originalPath ?? ''}|${external?.modifiedPath ?? ''}|${external?.gitEdit?.layer ?? ''}`;
 }
 
 function viewModeFor(external) {
