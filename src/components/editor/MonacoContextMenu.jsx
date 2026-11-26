@@ -1,13 +1,13 @@
 import { useEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { useTranslation } from 'react-i18next';
-import { hasNativeMenuClipboard, readMenuClipboardText } from '@utils/menuClipboard';
 import useNotificationStore from '@store/useNotificationStore';
 import { formatJsonDocument } from '@utils/jsonDocument';
+import { useHotkeys } from '@hooks/useHotkeys';
+import { formatKeybinding } from '@utils/keybinding';
+import { monacoEditingCommands, pasteMonacoClipboard } from './monacoImagePaste';
+import { editingShortcutOf } from '@utils/basicEditingShortcuts';
 import './monaco-context-menu.scss';
-
-const isMac = /Mac|iPod|iPhone|iPad/.test(navigator.platform);
-const Mod = isMac ? '\u2318' : 'Ctrl';
 
 /**
  * Monaco 编辑器自定义右键菜单。
@@ -15,6 +15,8 @@ const Mod = isMac ? '\u2318' : 'Ctrl';
  */
 export default function MonacoContextMenu({ visible, x, y, onClose, editorRef, replayHistory }) {
   const { t } = useTranslation();
+  const { keybindingOf } = useHotkeys();
+  const shortcutOf = (id) => formatKeybinding(keybindingOf(id));
   const menuRef = useRef(null);
 
   useEffect(() => {
@@ -51,20 +53,14 @@ export default function MonacoContextMenu({ visible, x, y, onClose, editorRef, r
   };
 
   const paste = async (event) => {
-    if (!hasNativeMenuClipboard()) return trigger('editor.action.clipboardPasteAction')(event);
     event.preventDefault();
     event.stopPropagation();
     onClose();
     const editor = editorRef.current;
-    const model = editor?.getModel();
-    if (!model) return;
+    if (!editor) return;
     editor.focus();
-    const version = model.getVersionId();
     try {
-      const text = await readMenuClipboardText();
-      if (text && editorRef.current?.getModel() === model && model.getVersionId() === version) {
-        editor.trigger('contextmenu', 'paste', { text, pasteOnNewLine: false, multicursorText: null });
-      }
+      await pasteMonacoClipboard(editor);
     } catch (error) {
       console.error('Unable to paste from the system clipboard:', error);
     }
@@ -97,27 +93,30 @@ export default function MonacoContextMenu({ visible, x, y, onClose, editorRef, r
   };
 
   // 菜单项顺序与常见编辑器右键菜单保持一致，分隔项仅用于视觉分组。
+  const editing = (key, action = trigger(monacoEditingCommands[key])) => ({
+    key, label: t(`editor.menu.${key}`), ...editingShortcutOf(key), action,
+  });
   const items = [
-    { key: 'undo', label: t('editor.menu.undo'), shortcut: `${Mod}+Z`, action: trigger('undo') },
-    { key: 'redo', label: t('editor.menu.redo'), shortcut: `${Mod}+Y`, action: trigger('redo') },
+    editing('undo'),
+    editing('redo'),
     { key: 's1', type: 'separator' },
-    { key: 'cut', label: t('editor.menu.cut'), shortcut: `${Mod}+X`, action: trigger('editor.action.clipboardCutAction') },
-    { key: 'copy', label: t('editor.menu.copy'), shortcut: `${Mod}+C`, action: trigger('editor.action.clipboardCopyAction') },
-    { key: 'paste', label: t('editor.menu.paste'), shortcut: `${Mod}+V`, action: paste },
+    editing('cut'),
+    editing('copy'),
+    editing('paste', paste),
     { key: 's2', type: 'separator' },
-    { key: 'selectAll', label: t('editor.menu.selectAll'), shortcut: `${Mod}+A`, action: trigger('editor.action.selectAll') },
+    editing('selectAll'),
     { key: 's3', type: 'separator' },
-    { key: 'find', label: t('editor.menu.find'), shortcut: `${Mod}+F`, action: trigger('actions.find') },
-    { key: 'replace', label: t('editor.menu.replace'), shortcut: `${Mod}+H`, action: trigger('editor.action.startFindReplaceAction') },
+    { key: 'find', label: t('editor.menu.find'), shortcut: shortcutOf('findInEditor'), action: trigger('actions.find') },
+    { key: 'replace', label: t('editor.menu.replace'), shortcut: shortcutOf('replaceInEditor'), action: trigger('editor.action.startFindReplaceAction') },
     { key: 's4', type: 'separator' },
-    { key: 'changeAll', label: t('editor.menu.changeAllOccurrences'), shortcut: `${Mod}+F2`, action: trigger('editor.action.changeAll') },
-    { key: 'format', label: t('editor.menu.formatDocument'), shortcut: `${Mod}+Shift+F`, action: json ? reflowJson('format') : trigger('editor.action.formatDocument') },
+    { key: 'changeAll', label: t('editor.menu.changeAllOccurrences'), shortcut: shortcutOf('changeAllOccurrences'), action: trigger('editor.action.changeAll') },
+    { key: 'format', label: t('editor.menu.formatDocument'), shortcut: shortcutOf('formatDocument'), action: json ? reflowJson('format') : trigger('editor.action.formatDocument') },
     ...(json ? [
       { key: 'minify-json', label: t('editor.menu.minifyJson'), action: reflowJson('minify') },
       { key: 'expand-json', label: t('editor.menu.expandJson'), action: reflowJson('expand') },
     ] : []),
     { key: 's5', type: 'separator' },
-    { key: 'cmd', label: t('editor.menu.commandPalette'), shortcut: 'F1', action: trigger('editor.action.quickCommand') },
+    { key: 'cmd', label: t('editor.menu.commandPalette'), shortcut: shortcutOf('commandPalette'), action: trigger('editor.action.quickCommand') },
   ];
 
   return createPortal(

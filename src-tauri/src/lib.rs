@@ -8,7 +8,7 @@ use std::collections::{HashMap, HashSet};
 #[cfg(unix)]
 use std::fs::File;
 use std::fs::{self, OpenOptions};
-use std::io::Write;
+use std::io::{Read, Write};
 use std::path::{Path, PathBuf};
 #[cfg(not(target_os = "android"))]
 use std::process::Command;
@@ -514,6 +514,44 @@ async fn read_binary_file(path: String) -> Result<BinaryFileResult, String> {
         mime_type: guess_mime_from_path(file_path).to_string(),
         size: bytes.len() as u64,
     })
+}
+
+#[tauri::command]
+async fn download_clipboard_image(url: String) -> Result<BinaryFileResult, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        const LIMIT: u64 = 32 * 1024 * 1024;
+        let url = reqwest::Url::parse(&url).map_err(|error| error.to_string())?;
+        if !matches!(url.scheme(), "http" | "https") {
+            return Err("Image URL must use HTTP or HTTPS".into());
+        }
+        let response = reqwest::blocking::Client::builder()
+            .timeout(std::time::Duration::from_secs(20))
+            .build()
+            .and_then(|client| client.get(url).send())
+            .and_then(reqwest::blocking::Response::error_for_status)
+            .map_err(|error| error.to_string())?;
+        let mime_type = response
+            .headers()
+            .get(reqwest::header::CONTENT_TYPE)
+            .and_then(|value| value.to_str().ok())
+            .unwrap_or("application/octet-stream")
+            .to_owned();
+        let mut bytes = Vec::new();
+        response
+            .take(LIMIT + 1)
+            .read_to_end(&mut bytes)
+            .map_err(|error| error.to_string())?;
+        if bytes.len() as u64 > LIMIT {
+            return Err("Image exceeds the 32 MiB clipboard download limit".into());
+        }
+        Ok(BinaryFileResult {
+            size: bytes.len() as u64,
+            content_base64: general_purpose::STANDARD.encode(bytes),
+            mime_type,
+        })
+    })
+    .await
+    .map_err(|error| error.to_string())?
 }
 
 /// 按本地规则把图片上传到图床，返回最终 URL。
@@ -2164,6 +2202,7 @@ pub fn run() {
             check_file_text_head,
             read_clipboard_for_paste,
             read_binary_file,
+            download_clipboard_image,
             write_binary_file,
             upload_image,
             write_file_content,

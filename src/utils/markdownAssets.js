@@ -5,7 +5,7 @@
  */
 import { invoke } from '@utils/tauriInvoke';
 
-const EXTERNAL_SRC_RE = /^(?:https?:|data:|blob:|tauri:|asset:|content:|#)/i;
+const EXTERNAL_SRC_RE = /^(?:https?:|\/\/|data:|blob:|tauri:|asset:|content:|#)/i;
 const EXTERNAL_LINK_RE = /^(?:https?:|mailto:|tel:|sms:|data:|blob:|javascript:|tauri:|asset:)/i;
 const SAFE_MARKDOWN_PROTOCOL_RE = /^(?:https?|ircs?|mailto|xmpp)$/i;
 const DATA_IMAGE_URI_RE = /^data:image\/[a-z0-9.+-]+(?:;[^,]*)?,/i;
@@ -111,7 +111,7 @@ function isExternalSrc(src) {
  * 判断是否已经是可直接访问的本地绝对路径。
  */
 function isAbsolutePath(src) {
-  return /^[A-Z]:[\\/]/i.test(src) || src.startsWith('/');
+  return /^[A-Z]:[\\/]/i.test(src) || src.startsWith('/') || src.startsWith('\\\\');
 }
 
 /**
@@ -122,6 +122,7 @@ function fileUrlToPath(src) {
   try {
     const url = new URL(src);
     const pathname = decodeURIComponent(url.pathname || '');
+    if (url.hostname) return `\\\\${url.hostname}${pathname.replace(/\//g, '\\')}`;
     if (/^\/[A-Z]:\//i.test(pathname)) return pathname.slice(1).replace(/\//g, '\\');
     return pathname;
   } catch (_) {
@@ -152,7 +153,8 @@ function joinPath(base, child) {
  */
 function normalizeLocalPath(path, sep = path.includes('\\') ? '\\' : '/') {
   const drive = /^[A-Z]:/i.exec(path)?.[0] || '';
-  const absolute = path.startsWith('/') || !!drive;
+  const unc = path.startsWith('\\\\');
+  const absolute = path.startsWith('/') || !!drive || unc;
   const rest = drive ? path.slice(drive.length) : path;
   const parts = rest.split(/[\\/]+/);
   const out = [];
@@ -160,7 +162,7 @@ function normalizeLocalPath(path, sep = path.includes('\\') ? '\\' : '/') {
   for (const part of parts) {
     if (!part || part === '.') continue;
     if (part === '..') {
-      if (out.length && out[out.length - 1] !== '..') out.pop();
+      if (out.length > (unc ? 2 : 0) && out[out.length - 1] !== '..') out.pop();
       else if (!absolute) out.push(part);
       continue;
     }
@@ -168,6 +170,7 @@ function normalizeLocalPath(path, sep = path.includes('\\') ? '\\' : '/') {
   }
 
   if (drive) return `${drive}${sep}${out.join(sep)}`;
+  if (unc) return `\\\\${out.join(sep)}`;
   return `${absolute ? sep : ''}${out.join(sep)}`;
 }
 
@@ -182,14 +185,15 @@ function mimeFromPath(path) {
 
 export function resolveMarkdownAssetPath(src, documentPath) {
   const normalizedSrc = fileUrlToPath(src);
-  if (!normalizedSrc || isExternalSrc(normalizedSrc) || isAbsolutePath(normalizedSrc)) return normalizedSrc;
-  if (!documentPath || documentPath.startsWith('content://') || /^[a-z][a-z\d+.-]*:\/\//i.test(documentPath)) return src;
+  if (!normalizedSrc || isExternalSrc(normalizedSrc)) return normalizedSrc;
   let decodedSrc = normalizedSrc;
   try {
-    decodedSrc = decodeURI(normalizedSrc);
+    if (!/^file:/i.test(src)) decodedSrc = decodeURI(normalizedSrc);
   } catch {
     /* 保留无法解码的原始相对路径 */
   }
+  if (isAbsolutePath(decodedSrc)) return decodedSrc;
+  if (!documentPath || documentPath.startsWith('content://') || /^[a-z][a-z\d+.-]*:\/\//i.test(documentPath)) return src;
   return joinPath(dirname(documentPath), decodedSrc);
 }
 

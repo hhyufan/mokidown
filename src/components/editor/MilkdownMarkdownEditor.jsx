@@ -26,6 +26,7 @@ import { createMilkdownHeadingFoldsPlugin, restoreMilkdownFolds } from './milkdo
 import { jumpToFootnote } from '@utils/footnoteParser';
 import { createMilkdownFoldBridge } from './milkdownFoldBridge';
 import {
+  bindComparisonLineReader,
   comparisonDecorations,
   comparisonLayoutKey,
   mapComparisonDecorations,
@@ -86,9 +87,9 @@ import {
   replaceRange,
 } from '@milkdown/kit/utils';
 import { toggleMark } from '@milkdown/kit/prose/commands';
-import { closeHistory, isHistoryTransaction } from '@milkdown/kit/prose/history';
+import { closeHistory, isHistoryTransaction, redo, undo } from '@milkdown/kit/prose/history';
 import { InputRule } from '@milkdown/kit/prose/inputrules';
-import { NodeSelection, Plugin, TextSelection } from '@milkdown/kit/prose/state';
+import { AllSelection, NodeSelection, Plugin, TextSelection } from '@milkdown/kit/prose/state';
 import { findChildren } from '@milkdown/kit/prose';
 import {
   HighlightStyle,
@@ -156,7 +157,10 @@ import 'katex/dist/katex.min.css';
 import { useFileManager } from '@hooks/useFileManager';
 import { useEditorContextMenu } from '@hooks/useEditorContextMenu';
 import EditorContextMenu from './EditorContextMenu';
-import { milkdownContextItems } from './milkdownContextMenu';
+import { milkdownContextItems, pasteMilkdownClipboard } from './milkdownContextMenu';
+import { copyMarkdownImage, selectedImageSource } from './milkdownImageClipboard';
+import { disablePresetMarkdownShortcuts, milkdownHotkeys } from './milkdownHotkeys';
+import { handleEditingShortcut, runTextFieldShortcut } from '@utils/basicEditingShortcuts';
 import useEditorStore from '@store/useEditorStore';
 import useConfigStore from '@store/useConfigStore';
 import useNotificationStore from '@store/useNotificationStore';
@@ -168,7 +172,7 @@ import {
   requestDocumentViewStateSave,
 } from '@utils/documentViewState';
 import { getBuffer, setBuffer, registerEditorBufferFlusher } from '@utils/editorBuffer';
-import { hasMarkdownUndoStep, markdownUndoDirection } from '@utils/markdownUndo';
+import { hasMarkdownUndoStep } from '@utils/markdownUndo';
 import { milkdownSharedHistory, replayMilkdownHistory } from './milkdownSharedHistory';
 import { isImeComposing } from '@utils/keyboard';
 import {
@@ -1659,6 +1663,7 @@ function MilkdownInner(
       target: event.target,
       x: event.clientX,
       y: event.clientY,
+      documentPath,
       t: i18n.t.bind(i18n),
       canReplayHistory: isComparison
         ? undefined
@@ -1761,6 +1766,7 @@ function MilkdownInner(
         .config((ctx) => {
           configureEditingWhitespace(ctx, { readOnly: readOnly && !isComparison });
           configureEditingTables(ctx);
+          if (!readOnly) disablePresetMarkdownShortcuts(ctx);
           ctx.set(rootCtx, root);
           ctx.set(defaultValueCtx, content || '');
           ctx.set(katexOptionsCtx.key, {
@@ -1862,6 +1868,7 @@ function MilkdownInner(
         );
       if (!readOnly)
         editor
+          .use(milkdownHotkeys)
           .use(milkdownMarkdownPaste)
           .use(clipboard)
           .use(milkdownEditingFlow)
@@ -1887,11 +1894,10 @@ function MilkdownInner(
                 props: {
                   decorations: (state) => comparisonLayoutKey.getState(state),
                 },
-                view: readOnly
-                  ? undefined
-                  : () => ({
+                view: (view) => ({
+                      destroy: bindComparisonLineReader(view, () => comparisonLayoutRef.current),
                       update(view, previous) {
-                        if (view.state.doc === previous.doc) return;
+                        if (readOnly || view.state.doc === previous.doc) return;
                         queueMicrotask(() => {
                           if (!view.isDestroyed) publishEditorContent(ctx);
                         });
@@ -2407,19 +2413,46 @@ function MilkdownInner(
       ref={wrapperRef}
       onClickCapture={(event) => handleFootnoteClick(event, footnoteOrigins.current)}
       onContextMenu={handleContextMenu}
-      onKeyDownCapture={(event) => {
-        const direction = markdownUndoDirection(event.nativeEvent);
-        if (
-          isComparison ||
-          readOnly ||
-          !direction ||
-          !event.target.closest('.milkdown-editor') ||
-          event.target.closest('input, textarea, select') ||
-          !replayHistory(direction)
-        )
-          return;
+      onCopyCapture={(event) => {
+        const view = getMediaView();
+        if (!view?.dom.contains(event.target) ||
+          event.target.closest('input, textarea, .cm-editor, .milkdown-media-inline')) return;
+        const src = selectedImageSource(view.state);
+        if (!src) return;
         event.preventDefault();
         event.stopPropagation();
+        void copyMarkdownImage(src, documentPath);
+      }}
+      onKeyDownCapture={(event) => {
+        const view = getMediaView();
+        if (!view?.dom.contains(event.target)) return;
+        const input = event.target.closest('input, textarea');
+        const handled = handleEditingShortcut(event.nativeEvent, (action, custom) => {
+          if (input) return runTextFieldShortcut(input, action, custom);
+          const direction = action === 'undo' ? -1 : action === 'redo' ? 1 : 0;
+          if (direction && !isComparison && !readOnly && replayHistory(direction)) return true;
+          if (!custom) return false;
+          if (readOnly && action !== 'copy' && action !== 'selectAll') return true;
+          const cmRoot = event.target.closest('.cm-editor');
+          const cm = cmRoot && CodeMirrorView.findFromDOM(cmRoot);
+          if (direction) {
+            (direction < 0 ? undo : redo)(view.state, view.dispatch);
+          } else if (action === 'paste') {
+            const { doc, selection } = cm?.state ?? view.state;
+            void pasteMilkdownClipboard(view, cm, () => {
+              const state = cm?.state ?? view.state;
+              return !view.isDestroyed && (!cm || cm.dom.isConnected) &&
+                state.doc === doc && state.selection.eq(selection);
+            }).catch(() => useNotificationStore.getState().notify('error', i18n.t('editor.menu.actionFailed'), '', 2500));
+          } else if (action === 'selectAll') {
+            if (cm) cm.dispatch({ selection: { anchor: 0, head: cm.state.doc.length } });
+            else view.dispatch(view.state.tr.setSelection(new AllSelection(view.state.doc)));
+          } else {
+            view.dom.ownerDocument.execCommand(action);
+          }
+          return true;
+        });
+        if (handled) event.stopPropagation();
       }}
       className={`md-preview md-preview--milkdown ${editorInfo.loading ? 'md-preview--stale' : ''} ${className || ''}`}
       style={{

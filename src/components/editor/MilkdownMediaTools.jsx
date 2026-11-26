@@ -12,6 +12,7 @@ import { createPortal } from 'react-dom';
 import { Image, Input, Tooltip } from 'antd';
 import {
   CheckOutlined,
+  CopyOutlined,
   DeleteOutlined,
   DisconnectOutlined,
   EditOutlined,
@@ -22,6 +23,9 @@ import { useTranslation } from 'react-i18next';
 import { TextSelection } from '@milkdown/kit/prose/state';
 import { closeHistory } from '@milkdown/kit/prose/history';
 import { loadMarkdownImageSrc } from '@utils/markdownAssets';
+import { matchesHotkey } from '@hooks/useHotkeys';
+import { isImeComposing } from '@utils/keyboard';
+import { copyMarkdownImage } from './milkdownImageClipboard';
 import {
   mediaAt,
   imageDescription,
@@ -45,6 +49,18 @@ const MilkdownMediaTools = forwardRef(function MilkdownMediaTools(
   const previewSource = preview?.source;
   const previewSrc =
     resolvedPreview?.source === previewSource ? resolvedPreview?.src : previewSource?.rendered;
+  useEffect(() => {
+    if (!previewSource) return;
+    const copy = (event) => {
+      if (isImeComposing(event) || !matchesHotkey(event, 'editCopy') ||
+        event.target.closest?.('input, textarea, [contenteditable="true"]')) return;
+      event.preventDefault();
+      event.stopPropagation();
+      void copyMarkdownImage(previewSource.address, documentPath);
+    };
+    document.addEventListener('keydown', copy, true);
+    return () => document.removeEventListener('keydown', copy, true);
+  }, [previewSource, documentPath]);
   useLayoutEffect(() => {
     const bounds = previewBoundsRef.current;
     if (!previewHost || !bounds) return;
@@ -287,10 +303,11 @@ const MilkdownMediaTools = forwardRef(function MilkdownMediaTools(
         return;
       }
       if (readOnly) return;
-      if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'k') {
+      if (!isImeComposing(event) && matchesHotkey(event, 'editMarkdownLink')) {
+        const view = getView();
+        if (!view) return;
         event.preventDefault();
         event.stopPropagation();
-        const view = getView();
         show('link', mediaAt(view, view.state.selection.from, 'link'), true);
       }
       if (event.key === 'Escape') clear();
@@ -481,6 +498,15 @@ const MilkdownMediaTools = forwardRef(function MilkdownMediaTools(
                 </button>
               </Tooltip>
             )}
+            {surface.kind === 'image' && surface.address && (
+              <Tooltip title={t('media.copyImage')}>
+                <button type="button" aria-label={t('media.copyImage')}
+                  onMouseDown={(event) => event.preventDefault()}
+                  onClick={() => copyMarkdownImage(surface.address, documentPath)}>
+                  <CopyOutlined />
+                </button>
+              </Tooltip>
+            )}
             <Tooltip title={t(surface.kind === 'image' ? 'media.remove' : 'media.unlink')}>
               <button
                 type="button"
@@ -524,11 +550,18 @@ const MilkdownMediaTools = forwardRef(function MilkdownMediaTools(
                 original,
                 { className: `${original.props.className} milkdown-media-preview-toolbar` },
                 original.props.children,
-                !readOnly && preview.target && (
+                (
                   <div
                     className="milkdown-media-preview-tools"
                     onMouseDown={(event) => event.stopPropagation()}
                   >
+                    <Tooltip title={t('media.copyImage')}>
+                      <button type="button" aria-label={t('media.copyImage')}
+                        onClick={() => copyMarkdownImage(preview.source.address, documentPath)}>
+                        <CopyOutlined />
+                      </button>
+                    </Tooltip>
+                    {!readOnly && preview.target && (<>
                     <Tooltip title={t('media.editDescription')}>
                       <button
                         type="button"
@@ -551,6 +584,7 @@ const MilkdownMediaTools = forwardRef(function MilkdownMediaTools(
                         <PictureOutlined />
                       </button>
                     </Tooltip>
+                    </>)}
                     {previewEdit && (
                       <div className="milkdown-media-preview-editor">
                         <Input
