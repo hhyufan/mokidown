@@ -32,7 +32,6 @@ import { initMonacoShiki, isMonacoShikiReady, getMonacoThemeName } from '@utils/
 import { installIndentRainbow } from '@utils/monacoIndentRainbow';
 import { setBuffer, getBuffer, registerEditorBufferFlusher } from '@utils/editorBuffer';
 import {
-  markdownUndoDirection,
   markdownUndoStep,
   noteNativeMarkdownUndo,
   recordMarkdownEdit,
@@ -54,6 +53,9 @@ import { bindMonacoMarkdownPairs } from './monacoMarkdownPairs';
 import MarkdownCodeLanguageMenu from './MarkdownCodeLanguageMenu';
 import './monaco-editor.scss';
 import { markdownFoldingRanges } from './markdownSections';
+import { bindMonacoBase64Folds } from './monacoBase64Folds';
+import { monacoEditingCommands, pasteMonacoClipboard, pasteMonacoImages } from './monacoImagePaste';
+import { handleEditingShortcut } from '@utils/basicEditingShortcuts';
 import { bindMonacoFoldControls, restoreMonacoViewState } from './markdownSplitSync';
 import { computeRanges } from 'monaco-editor/esm/vs/editor/contrib/folding/browser/indentRangeProvider.js';
 import { conf as markdownLanguage } from 'monaco-editor/esm/vs/basic-languages/markdown/markdown.js';
@@ -63,14 +65,6 @@ const markdownFoldingProvider = monaco.languages.registerFoldingRangeProvider('m
   provideFoldingRanges(model) {
     const source = model.getValue();
     const ranges = markdownFoldingRanges(source);
-    // Base64 图片语法是单行，Monaco 折叠不接受单行区域；把它和后面的空行
-    // 一起折叠，视觉上收起这一行，展开后仍可直接编辑。
-    const lines = source.split('\n');
-    for (let index = 0; index < lines.length - 1; index++) {
-      if (lines[index].includes('data:image/') && lines[index + 1].trim() === '') {
-        ranges.push({ start: index + 1, end: index + 2 });
-      }
-    }
     const existing = computeRanges(model, false, markdownLanguage.folding.markers);
     for (let index = 0; index < existing.length; index++) {
       ranges.push({
@@ -185,24 +179,9 @@ const MonacoEditorComponent = forwardRef(function MonacoEditorComponent(
     event.nativeEvent.stopImmediatePropagation?.();
     const editor = editorRef.current;
     if (!editor) return;
-    const markdown = editor.getModel()?.getLanguageId() === 'markdown';
-    void (async () => {
-      try {
-        const { markdownImageDestination, resolvePastedImage } =
-          await import('./milkdownMarkdownPaste');
-        const parts = [];
-        for (let index = 0; index < files.length; index++) {
-          const { src, name } = await resolvePastedImage(files[index], index);
-          if (src) parts.push(markdown ? `![${name}](${markdownImageDestination(src)})` : src);
-        }
-        if (!parts.length) return;
-        const selection = editor.getSelection();
-        editor.executeEdits('paste-image', [{ range: selection, text: parts.join('\n') }]);
-        editor.pushUndoStop();
-      } catch (error) {
-        console.warn('[paste] Failed to store pasted image:', error);
-      }
-    })();
+    void pasteMonacoImages(editor, files).catch((error) => {
+      console.warn('[paste] Failed to store pasted image:', error);
+    });
   }, []);
   const closeCodeLanguageMenu = useCallback(() => setCodeLanguageMenu(null), []);
   const { isAndroid, isMobileLayout, isTouchLike } = useResponsiveLayout();
@@ -223,10 +202,6 @@ const MonacoEditorComponent = forwardRef(function MonacoEditorComponent(
   const closeContextMenu = useCallback(() => {
     setContextMenu({ visible: false, x: 0, y: 0 });
   }, []);
-
-  // 说明：Monaco 自带界面文案（查找框、命令面板、右键菜单）目前固定使用其内置英文，
-  // 这是有意为之的过渡状态——之前通过 `monaco-editor-nls-adapter` 在构建期重写
-  // Monaco 源码实现的本地化已经整体下线，相关依赖与启动顺序约束一并移除。
 
   useImperativeHandle(
     ref,
@@ -359,6 +334,7 @@ const MonacoEditorComponent = forwardRef(function MonacoEditorComponent(
 
     editorRef.current = editor;
     const stopIndentRainbow = installIndentRainbow(editor, monaco);
+    const stopBase64Folds = bindMonacoBase64Folds(editor, monaco);
     const stopFoldControls = bindMonacoFoldControls(editor, () => currentTabIdRef.current);
     // Follow effective wrapping, including temporary runtime overrides, so an
     // unwrapped line never becomes inaccessible behind a hidden scrollbar.
@@ -768,6 +744,7 @@ const MonacoEditorComponent = forwardRef(function MonacoEditorComponent(
       stopFoldControls();
       linkOpener.dispose();
       stopIndentRainbow();
+      stopBase64Folds();
       editor.dispose();
       for (const entry of models.values()) disposeDocumentModel(entry.model);
       models.clear();
@@ -1062,10 +1039,17 @@ const MonacoEditorComponent = forwardRef(function MonacoEditorComponent(
         onContextMenu={(e) => e.preventDefault()}
         onPasteCapture={handleContainerPaste}
         onKeyDownCapture={(event) => {
-          const direction = markdownUndoDirection(event.nativeEvent);
-          if (!direction || !editorRef.current?.hasTextFocus() || !replayHistory(direction)) return;
-          event.preventDefault();
-          event.stopPropagation();
+          const editor = editorRef.current;
+          if (!editor?.hasTextFocus()) return;
+          if (handleEditingShortcut(event.nativeEvent, (action, custom) => {
+            const direction = action === 'undo' ? -1 : action === 'redo' ? 1 : 0;
+            if (direction && replayHistory(direction)) return true;
+            if (!custom) return false;
+            if (action === 'paste') {
+              void pasteMonacoClipboard(editor).catch((error) => console.warn('[paste]', error));
+            } else editor.trigger('shortcut', monacoEditingCommands[action], null);
+            return true;
+          })) event.stopPropagation();
         }}
       />
       {activeTabId != null && !useSelectionBar && (

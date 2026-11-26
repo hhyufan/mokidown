@@ -55,6 +55,35 @@ export function markdownFoldingRanges(source) {
   return collectFoldingRanges(parser.parse(source).children, source.split('\n').length + 1);
 }
 
+export function markdownBase64Ranges(source) {
+  if (!/data:image\//i.test(source)) return [];
+  const ranges = [];
+  const visit = (node) => {
+    if (['image', 'definition', 'html'].includes(node.type)) {
+      const { start, end } = node.position;
+      const raw = source.slice(start.offset, end.offset);
+      const pattern = node.type === 'html'
+        ? /<img\b[^>]*?\s+src\s*=\s*["']?(data:image\/[\w.+-]+;base64,[A-Za-z0-9+/=]+)[^>]*>/gi
+        : /(?:\(|:)\s*<?(data:image\/[\w.+-]+;base64,[A-Za-z0-9+/=]+)/gi;
+      if (node.type === 'html' || /^data:image\/[\w.+-]+;base64,/i.test(node.url)) {
+        for (const match of raw.matchAll(pattern)) {
+          const before = raw.slice(0, match.index + match[0].indexOf(match[1]));
+          const lines = before.split(/\r\n|\r|\n/);
+          const column = (lines.length === 1 ? start.column : 1) + lines.at(-1).length;
+          ranges.push({
+            line: start.line + lines.length - 1,
+            start: column,
+            end: column + match[1].length,
+          });
+        }
+      }
+    }
+    node.children?.forEach(visit);
+  };
+  visit(parser.parse(source));
+  return ranges;
+}
+
 function collectFoldingRanges(blocks, documentEnd) {
   const headings = blocks
     .filter((node) => node.type === 'heading')

@@ -18,6 +18,58 @@
 .monaco-editor {
   background: transparent !important;
 
+  .mtkoverflow,
+  .mtkoverflow:hover {
+    background-color: transparent;
+  }
+
+  .moki-base64-payload,
+  .view-line:has(.moki-base64-collapsed) .mtkoverflow {
+    display: none;
+  }
+
+  .moki-base64-toggle {
+    position: relative;
+    color: var(--accent);
+    cursor: pointer;
+
+    &::before {
+      position: absolute;
+      inset-inline-start: 0;
+      inset-block-start: 50%;
+      width: 0.85em;
+      height: 0.85em;
+      background: currentColor;
+      mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 1024 1024'%3E%3Cpath d='M704 514.368a52.864 52.864 0 0 1-15.808 37.888L415.872 819.2a55.296 55.296 0 0 1-73.984-2.752 52.608 52.608 0 0 1-2.816-76.512l233.6-228.928-233.6-228.992a52.736 52.736 0 0 1 2.816-76.512 55.296 55.296 0 0 1 73.984-2.816l272.32 266.88c9.92 9.792 15.616 23.04 15.808 36.8z'/%3E%3C/svg%3E") center / contain no-repeat;
+      transform: translateY(-50%) rotate(90deg);
+      content: '';
+    }
+
+    &.moki-base64-collapsed::before {
+      transform: translateY(-50%);
+    }
+
+    @media (prefers-reduced-motion: no-preference) {
+      &.moki-base64-rotating::before {
+        animation: moki-base64-open 160ms ease;
+      }
+
+      &.moki-base64-rotating.moki-base64-collapsed::before {
+        animation: moki-base64-close 160ms ease;
+      }
+    }
+  }
+
+  @keyframes moki-base64-open {
+    from { transform: translateY(-50%); }
+    to { transform: translateY(-50%) rotate(90deg); }
+  }
+
+  @keyframes moki-base64-close {
+    from { transform: translateY(-50%) rotate(90deg); }
+    to { transform: translateY(-50%); }
+  }
+
   .margin-view-overlays :is(.moki-fold-hovered, .moki-fold-rotating) {
     pointer-events: none;
   }
