@@ -7,7 +7,83 @@ import { invoke } from '@utils/tauriInvoke';
 
 const EXTERNAL_SRC_RE = /^(?:https?:|data:|blob:|tauri:|asset:|content:|#)/i;
 const EXTERNAL_LINK_RE = /^(?:https?:|mailto:|tel:|sms:|data:|blob:|javascript:|tauri:|asset:)/i;
+const SAFE_MARKDOWN_PROTOCOL_RE = /^(?:https?|ircs?|mailto|xmpp)$/i;
+const DATA_IMAGE_URI_RE = /^data:image\/[a-z0-9.+-]+(?:;[^,]*)?,/i;
+const WINDOWS_DRIVE_PATH_RE = /^[A-Z]:[\\/]/i;
+const SAFE_IMAGE_PROTOCOL_RE = /^(?:file|blob|asset|tauri|content):/i;
 const LINE_HINT_RE = /(?:^|[\s([{\u3000])L\s*(\d+)(?:\s*[~\-]\s*(\d+))?/i;
+
+export const ALLOWED_IMAGE_PROTOCOLS = ['http', 'https', 'data', 'file', 'blob', 'asset', 'tauri', 'content'];
+
+/**
+ * \u5224\u65ad\u5b57\u7b26\u4e32\u662f\u5426\u4e3a\u53d7\u652f\u6301\u7684\u56fe\u7247 data URI\uff08\u4f8b\u5982 `data:image/png;base64,...`\uff09\u3002
+ */
+export function isDataImageUri(value) {
+  return typeof value === 'string' && DATA_IMAGE_URI_RE.test(value.trim());
+}
+
+/**
+ * \u628a Windows \u76d8\u7b26\u7edd\u5bf9\u8def\u5f84\u8f6c\u6362\u6210 `file:///` URI\uff0c\u907f\u514d `rehype-sanitize` \u628a `C:` \u8bef\u5224\u4e3a\u672a\u77e5\u534f\u8bae\u5e76\u79fb\u9664 `src`\u3002
+ */
+function windowsPathToFileUrl(value) {
+  const normalized = String(value || '').replace(/\\/g, '/');
+  return `file:///${encodeURI(normalized).replace(/#/g, '%23').replace(/\?/g, '%3F')}`;
+}
+
+/**
+ * \u5728 `rehype-sanitize` \u4e4b\u524d\u89c4\u6574 `<img>` \u7684\u672c\u5730\u7edd\u5bf9\u8def\u5f84\uff0c\u786e\u4fdd Windows \u76d8\u7b26\u8def\u5f84\u80fd\u5b89\u5168\u901a\u8fc7\u534f\u8bae\u767d\u540d\u5355\u68c0\u67e5\u3002
+ */
+export function rehypeNormalizeImageSrc() {
+  return (tree) => {
+    const visit = (node) => {
+      if (!node) return;
+      if (node.type === 'element' && node.tagName === 'img' && typeof node.properties?.src === 'string') {
+        const trimmed = node.properties.src.trim();
+        if (WINDOWS_DRIVE_PATH_RE.test(trimmed)) {
+          node.properties.src = windowsPathToFileUrl(trimmed);
+        }
+      }
+      if (Array.isArray(node.children)) {
+        for (const child of node.children) visit(child);
+      }
+    };
+    visit(tree);
+  };
+}
+
+/**
+ * \u4e0e react-markdown \u9ed8\u8ba4 `defaultUrlTransform` \u7b49\u4ef7\u7684\u57fa\u7840\u534f\u8bae\u68c0\u67e5\u3002
+ */
+function defaultSafeUrl(value) {
+  const colon = value.indexOf(':');
+  const questionMark = value.indexOf('?');
+  const numberSign = value.indexOf('#');
+  const slash = value.indexOf('/');
+  if (
+    colon === -1 ||
+    (slash !== -1 && colon > slash) ||
+    (questionMark !== -1 && colon > questionMark) ||
+    (numberSign !== -1 && colon > numberSign) ||
+    SAFE_MARKDOWN_PROTOCOL_RE.test(value.slice(0, colon))
+  ) {
+    return value;
+  }
+  return '';
+}
+
+/**
+ * \u4e3a `react-markdown` \u63d0\u4f9b\u5b89\u5168\u7684 URL \u8fc7\u6ee4\u51fd\u6570\uff1a
+ * \u5728\u4fdd\u7559\u9ed8\u8ba4\u94fe\u63a5\u5b89\u5168\u7b56\u7565\u7684\u540c\u65f6\uff0c\u5141\u8bb8 `<img src>` \u4f7f\u7528 Base64 `data:image/...` \u4e0e\u672c\u5730\u8d44\u6e90\u534f\u8bae\u3002
+ */
+export function markdownUrlTransform(url, key, node) {
+  const raw = String(url || '');
+  const trimmed = raw.trim();
+  if (key === 'src' && node?.tagName === 'img') {
+    if (isDataImageUri(trimmed)) return trimmed;
+    if (SAFE_IMAGE_PROTOCOL_RE.test(trimmed) || WINDOWS_DRIVE_PATH_RE.test(trimmed)) return trimmed;
+  }
+  return defaultSafeUrl(raw);
+}
 
 const MIME_BY_EXT = {
   avif: 'image/avif',
@@ -108,7 +184,13 @@ export function resolveMarkdownAssetPath(src, documentPath) {
   const normalizedSrc = fileUrlToPath(src);
   if (!normalizedSrc || isExternalSrc(normalizedSrc) || isAbsolutePath(normalizedSrc)) return normalizedSrc;
   if (!documentPath || documentPath.startsWith('content://') || /^[a-z][a-z\d+.-]*:\/\//i.test(documentPath)) return src;
-  return joinPath(dirname(documentPath), decodeURI(normalizedSrc));
+  let decodedSrc = normalizedSrc;
+  try {
+    decodedSrc = decodeURI(normalizedSrc);
+  } catch {
+    /* 保留无法解码的原始相对路径 */
+  }
+  return joinPath(dirname(documentPath), decodedSrc);
 }
 
 /**

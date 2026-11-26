@@ -9,7 +9,10 @@ import { completePastedInlinePair } from './milkdownLiveSyntax';
  * 单列、行数不足时返回 null；行尾缺列会补空单元格，首行缺表头时左上角留空。
  */
 export function tsvToMarkdownTable(text) {
-  const lines = String(text || '').replace(/\r\n?/g, '\n').split('\n').filter((line) => line.trim() !== '');
+  const lines = String(text || '')
+    .replace(/\r\n?/g, '\n')
+    .split('\n')
+    .filter((line) => line.trim() !== '');
   if (lines.length < 2) return null;
   const rows = lines.map((line) => line.split('\t').map((cell) => cell.trim()));
   if (rows.some((row) => row.length < 2)) return null;
@@ -35,7 +38,9 @@ export function tsvToMarkdownTable(text) {
  * 这样即使剪贴板没有 text/html 也能保留表格结构。
  */
 export function mixedTextToMarkdown(text) {
-  const lines = String(text || '').replace(/\r\n?/g, '\n').split('\n');
+  const lines = String(text || '')
+    .replace(/\r\n?/g, '\n')
+    .split('\n');
   const out = [];
   let block = [];
   let changed = false;
@@ -54,7 +59,10 @@ export function mixedTextToMarkdown(text) {
   };
   for (const line of lines) {
     if (line.includes('\t') && line.trim() !== '') block.push(line);
-    else { flush(); out.push(line); }
+    else {
+      flush();
+      out.push(line);
+    }
   }
   flush();
   return changed ? out.join('\n') : null;
@@ -73,55 +81,151 @@ const RICH_HTML = /<(?:h[1-6]|table|thead|tbody|ul|ol|pre|blockquote|strong|em)\
  */
 function insertHtml(view, html) {
   const dom = new window.DOMParser().parseFromString(html, 'text/html');
-  const slice = PMDOMParser.fromSchema(view.state.schema).parseSlice(dom.body, { preserveWhitespace: true });
+  const slice = PMDOMParser.fromSchema(view.state.schema).parseSlice(dom.body, {
+    preserveWhitespace: true,
+  });
   if (!slice || slice.size === 0) return false;
-  view.dispatch(view.state.tr.replaceSelection(slice).scrollIntoView()
-    .setMeta('paste', true).setMeta('uiEvent', 'paste'));
+  view.dispatch(
+    view.state.tr
+      .replaceSelection(slice)
+      .scrollIntoView()
+      .setMeta('paste', true)
+      .setMeta('uiEvent', 'paste'),
+  );
   return true;
 }
 
 function insertMarkdown(view, ctx, markdown) {
   const doc = ctx.get(parserCtx)(String(markdown).replace(/\r\n?/g, '\n'));
   if (!doc) return false;
-  view.dispatch(view.state.tr.replaceSelection(Slice.maxOpen(doc.content)).scrollIntoView()
-    .setMeta('paste', true).setMeta('uiEvent', 'paste'));
+  view.dispatch(
+    view.state.tr
+      .replaceSelection(Slice.maxOpen(doc.content))
+      .scrollIntoView()
+      .setMeta('paste', true)
+      .setMeta('uiEvent', 'paste'),
+  );
   return true;
+}
+
+/** 读取图片文件为 data URL。 */
+function readImageAsDataUrl(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(String(reader.result || ''));
+    reader.onerror = () => reject(reader.error);
+    reader.readAsDataURL(file);
+  });
+}
+
+/** 从 MIME 推断图片扩展名。 */
+function imageExtension(type) {
+  const subtype = String(type || '').split('/')[1] || 'png';
+  if (subtype === 'svg+xml') return 'svg';
+  if (subtype === 'jpeg') return 'jpg';
+  return subtype.replace(/[^a-z0-9]/gi, '') || 'png';
+}
+
+/** 把粘贴的图片写入默认目录，或退回 Base64 内嵌。 */
+async function resolvePastedImageSrc(file, index) {
+  const dataUrl = await readImageAsDataUrl(file);
+  const [{ default: useConfigStore }, { writeBinaryFile }, { getImageHostRule }] = await Promise.all([
+    import('@store/useConfigStore'),
+    import('@utils/tauriApi'),
+    import('@/services/settingsDocuments'),
+  ]);
+  const { imageDefaultDir = '' } = useConfigStore.getState();
+  const base64 = dataUrl.split(',')[1] || '';
+  const name = `image-${Date.now()}-${index}.${imageExtension(file.type)}`;
+  const dir = String(imageDefaultDir).trim();
+  const isEndpoint = /^https?:\/\//i.test(dir) || /:[0-9]+(?:\/|$)/.test(dir);
+  const rule = getImageHostRule();
+  if (rule) {
+    try {
+      const { invoke } = await import('@tauri-apps/api/core');
+      const uploaded = await invoke('upload_image', {
+        rule,
+        filename: name,
+        mime: file.type || 'image/png',
+        contentBase64: base64,
+      });
+      if (uploaded) return uploaded;
+    } catch (error) {
+      console.warn('[paste] Image host upload failed, falling back:', error);
+    }
+  }
+  if (!dir || isEndpoint || !base64) return dataUrl;
+  const target = `${dir.replace(/[\\/]+$/, '')}/${name}`;
+  await writeBinaryFile(target, base64);
+  return target.replaceAll('\\', '/');
+}
+
+async function insertPastedImages(view, ctx, files) {
+  const markdown = [];
+  for (let index = 0; index < files.length; index++) {
+    const file = files[index];
+    try {
+      const src = await resolvePastedImageSrc(file, index);
+      if (src) markdown.push(`![${file.name || ''}](<${src}>)`);
+    } catch (error) {
+      console.warn('[paste] Failed to store pasted image:', error);
+    }
+  }
+  if (markdown.length) insertMarkdown(view, ctx, markdown.join('\n\n'));
 }
 
 // Source copied from a code editor often includes highlighted HTML. Prefer
 // Markdown in that case; rendered rich text (chat/markdown previews) is parsed
 // from HTML so headings, tables and code blocks keep their structure.
-export const createMarkdownPastePlugin = (ctx) => new Plugin({
-  props: {
-    handlePaste(view, event) {
-      if (!view.editable || view.state.selection.$from.parent.type.spec.code) return false;
-      const data = event.clipboardData;
-      const text = data?.getData('text/plain');
-      if (!text) return false;
-      const html = data.getData('text/html') || '';
-      // 普通文本粘贴也要完成空标记对；富文本和 Markdown 结构保留原解析路径。
-      if (!looksLikeMarkdown(text) && !RICH_HTML.test(html)
-        && completePastedInlinePair(view, text)) return true;
-      // 表格软件/网页表格复制出的纯文本是 TSV，优先转成 GFM 表格。
-      const table = tsvToMarkdownTable(text);
-      if (table && insertMarkdown(view, ctx, table)) return true;
-      let mode;
-      try { mode = JSON.parse(data.getData('vscode-editor-data') || '{}').mode; } catch { /* Optional source metadata. */ }
-      // 非 Markdown 来源（如 VS Code 的 plaintext）也可能复制出 **...** 文本，
-      // 只要文本本身带 Markdown 结构就继续解析，不能直接放弃。
-      if (mode && mode !== 'markdown' && !looksLikeMarkdown(text)) return false;
-      if (mode === 'markdown' || looksLikeMarkdown(text)) {
-        return insertMarkdown(view, ctx, text);
-      }
-      // 渲染后的富文本（DeepSeek/网页复制）：text/plain 已失去语法，改用 HTML 解析，
-      // 保留标题、表格、列表和代码块。
-      if (RICH_HTML.test(html) && !/data-pm-slice\s*=/i.test(html) && insertHtml(view, html)) return true;
-      // 没有可用的 HTML 时，退回混合文本处理：连续制表符行转表格，其余保留。
-      const mixed = mixedTextToMarkdown(text);
-      if (mixed) return insertMarkdown(view, ctx, mixed);
-      return false;
+export const createMarkdownPastePlugin = (ctx) =>
+  new Plugin({
+    props: {
+      handlePaste(view, event) {
+        if (!view.editable || view.state.selection.$from.parent.type.spec.code) return false;
+        const data = event.clipboardData;
+        const imageFiles = Array.from(data?.files || []).filter((file) =>
+          file.type.startsWith('image/'),
+        );
+        if (imageFiles.length) {
+          event.preventDefault();
+          void insertPastedImages(view, ctx, imageFiles);
+          return true;
+        }
+        const text = data?.getData('text/plain');
+        if (!text) return false;
+        const html = data.getData('text/html') || '';
+        // 普通文本粘贴也要完成空标记对；富文本和 Markdown 结构保留原解析路径。
+        if (
+          !looksLikeMarkdown(text) &&
+          !RICH_HTML.test(html) &&
+          completePastedInlinePair(view, text)
+        )
+          return true;
+        // 表格软件/网页表格复制出的纯文本是 TSV，优先转成 GFM 表格。
+        const table = tsvToMarkdownTable(text);
+        if (table && insertMarkdown(view, ctx, table)) return true;
+        let mode;
+        try {
+          mode = JSON.parse(data.getData('vscode-editor-data') || '{}').mode;
+        } catch {
+          /* Optional source metadata. */
+        }
+        // 非 Markdown 来源（如 VS Code 的 plaintext）也可能复制出 **...** 文本，
+        // 只要文本本身带 Markdown 结构就继续解析，不能直接放弃。
+        if (mode && mode !== 'markdown' && !looksLikeMarkdown(text)) return false;
+        if (mode === 'markdown' || looksLikeMarkdown(text)) {
+          return insertMarkdown(view, ctx, text);
+        }
+        // 渲染后的富文本（DeepSeek/网页复制）：text/plain 已失去语法，改用 HTML 解析，
+        // 保留标题、表格、列表和代码块。
+        if (RICH_HTML.test(html) && !/data-pm-slice\s*=/i.test(html) && insertHtml(view, html))
+          return true;
+        // 没有可用的 HTML 时，退回混合文本处理：连续制表符行转表格，其余保留。
+        const mixed = mixedTextToMarkdown(text);
+        if (mixed) return insertMarkdown(view, ctx, mixed);
+        return false;
+      },
     },
-  },
-});
+  });
 
 export const milkdownMarkdownPaste = $prose(createMarkdownPastePlugin);

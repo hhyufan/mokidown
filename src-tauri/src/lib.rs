@@ -265,6 +265,11 @@ fn atomic_write(target: &Path, bytes: &[u8]) -> Result<(), String> {
             )
         })?;
     let write_result = (|| -> Result<(), String> {
+        #[cfg(unix)]
+        if let Ok(metadata) = target.metadata() {
+            file.set_permissions(metadata.permissions())
+                .map_err(|error| error.to_string())?;
+        }
         file.write_all(bytes)
             .map_err(|error| format!("Failed to write recovery file: {error}"))?;
         file.sync_all()
@@ -286,6 +291,117 @@ fn atomic_write(target: &Path, bytes: &[u8]) -> Result<(), String> {
     })();
 
     write_result.map_err(|error| format!("{error}; recovery copy: {}", temp.display()))
+}
+
+#[derive(Clone, Copy, Deserialize)]
+#[serde(rename_all = "camelCase")]
+enum SettingsDocumentKind {
+    ImageHost,
+    LanguagePlugins,
+    ServicePlugins,
+    LocalSettings,
+}
+
+#[derive(Serialize)]
+struct SettingsDocument {
+    path: PathBuf,
+    content: String,
+}
+
+fn read_settings_document(path: &Path) -> Result<Option<String>, String> {
+    let metadata = match fs::symlink_metadata(path) {
+        Ok(metadata) => metadata,
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(None),
+        Err(error) => return Err(format!("{}: {error}", path.display())),
+    };
+    if !metadata.is_file() || metadata.file_type().is_symlink() {
+        return Err(format!("Invalid settings document: {}", path.display()));
+    }
+    text_file::read(path)
+        .map(|text| Some(text.content))
+        .map_err(|error| format!("{}: {}", path.display(), error.message))
+}
+
+fn load_or_create_settings_document(
+    root: &Path,
+    previous_roots: &[PathBuf],
+    filename: &str,
+    seed: &str,
+) -> Result<SettingsDocument, String> {
+    static INIT: Mutex<()> = Mutex::new(());
+    let _guard = INIT.lock().map_err(|error| error.to_string())?;
+    let path = root.join(filename);
+    if let Some(content) = read_settings_document(&path)? {
+        return Ok(SettingsDocument { path, content });
+    }
+    let mut content = None;
+    for previous in previous_roots
+        .iter()
+        .filter(|previous| previous.as_path() != root)
+    {
+        content = read_settings_document(&previous.join(filename))?;
+        if content.is_some() {
+            break;
+        }
+    }
+    let content = content.unwrap_or_else(|| seed.to_owned());
+    let mut directory = fs::DirBuilder::new();
+    directory.recursive(true);
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::DirBuilderExt;
+        directory.mode(0o700);
+    }
+    directory
+        .create(root)
+        .map_err(|error| format!("{}: {error}", root.display()))?;
+    atomic_write(&path, content.as_bytes())
+        .map_err(|error| format!("{}: {error}", path.display()))?;
+    Ok(SettingsDocument { path, content })
+}
+
+#[tauri::command]
+async fn open_settings_document(
+    app: tauri::AppHandle,
+    kind: SettingsDocumentKind,
+    seed: String,
+    directory: Option<PathBuf>,
+) -> Result<SettingsDocument, String> {
+    let filename = match kind {
+        SettingsDocumentKind::ImageHost => "image-host.jsonc",
+        SettingsDocumentKind::LanguagePlugins => "language-plugins.jsonc",
+        SettingsDocumentKind::ServicePlugins => "service-plugin-sources.jsonc",
+        SettingsDocumentKind::LocalSettings => "local-settings.jsonc",
+    };
+    let resolver = app.path();
+    let config_root = resolver.app_config_dir();
+    #[cfg(windows)]
+    let (default_root, mut previous_roots) = (
+        resolver.app_local_data_dir(),
+        config_root
+            .ok()
+            .map(|path| path.join("editor-settings"))
+            .into_iter()
+            .collect::<Vec<_>>(),
+    );
+    #[cfg(not(windows))]
+    let (default_root, mut previous_roots) = (config_root, Vec::new());
+    let root = match directory {
+        Some(directory) if directory.is_absolute() && directory.is_dir() => {
+            if let Ok(default) = default_root {
+                previous_roots.insert(0, default.join("editor-settings"));
+            }
+            directory
+        }
+        Some(_) => return Err("Invalid settings directory".into()),
+        None => default_root.map_err(|error| error.to_string())?,
+    }
+    .join("editor-settings");
+    tauri::async_runtime::spawn_blocking(move || {
+        load_or_create_settings_document(&root, &previous_roots, filename, &seed)
+    })
+    .await
+    .map_err(|error| error.to_string())?
 }
 
 /// 读取文本文件，并返回解码后的内容与基础编辑器元数据。
@@ -400,11 +516,198 @@ async fn read_binary_file(path: String) -> Result<BinaryFileResult, String> {
     })
 }
 
+/// 按本地规则把图片上传到图床，返回最终 URL。
+fn upload_image_blocking(
+    rule: serde_json::Value,
+    filename: String,
+    mime: String,
+    content_base64: String,
+) -> Result<String, String> {
+    let url = rule
+        .get("url")
+        .and_then(|value| value.as_str())
+        .ok_or_else(|| "image rule is missing url".to_string())?;
+    let method = rule
+        .get("method")
+        .and_then(|value| value.as_str())
+        .unwrap_or("POST");
+    let file_field = rule
+        .get("fileField")
+        .and_then(|value| value.as_str())
+        .unwrap_or("file");
+    let response_path = rule
+        .get("responsePath")
+        .and_then(|value| value.as_str())
+        .unwrap_or("data.url");
+    let url = url.replace("{filename}", &filename);
+    let bytes = general_purpose::STANDARD
+        .decode(content_base64.as_bytes())
+        .map_err(|e| format!("Invalid image base64: {e}"))?;
+    let client = reqwest::blocking::Client::builder()
+        .timeout(std::time::Duration::from_secs(30))
+        .build()
+        .map_err(|e| e.to_string())?;
+    let mut request = client.request(
+        reqwest::Method::from_bytes(method.as_bytes()).map_err(|e| e.to_string())?,
+        url.as_str(),
+    );
+    if let Some(headers) = rule.get("headers").and_then(|value| value.as_object()) {
+        for (key, value) in headers {
+            if let Some(value) = value.as_str() {
+                request = request.header(key.as_str(), value);
+            }
+        }
+    }
+    let body_mode = rule
+        .get("body")
+        .and_then(|value| value.as_str())
+        .unwrap_or("multipart");
+    let safe_name = filename.replace(['"', '\r', '\n'], "");
+    let response = match body_mode {
+        "json-base64" => {
+            let data_uri = format!("data:{mime};base64,{content_base64}");
+            let body = serde_json::json!({ file_field: data_uri });
+            request.json(&body).send()
+        }
+        "raw-binary" => request
+            .header(reqwest::header::CONTENT_TYPE, mime.as_str())
+            .body(bytes)
+            .send(),
+        _ => {
+            let stamp = std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .map(|value| value.as_millis())
+                .unwrap_or(0);
+            let boundary = format!("----mokidown{stamp}");
+            let mut body = Vec::new();
+            body.extend_from_slice(format!("--{boundary}\r\n").as_bytes());
+            body.extend_from_slice(
+                format!(
+                    "Content-Disposition: form-data; name=\"{file_field}\"; filename=\"{safe_name}\"\r\n"
+                )
+                .as_bytes(),
+            );
+            body.extend_from_slice(format!("Content-Type: {mime}\r\n\r\n").as_bytes());
+            body.extend_from_slice(&bytes);
+            body.extend_from_slice(format!("\r\n--{boundary}--\r\n").as_bytes());
+            request
+                .header(
+                    reqwest::header::CONTENT_TYPE,
+                    format!("multipart/form-data; boundary={boundary}"),
+                )
+                .body(body)
+                .send()
+        }
+    }
+    .map_err(|e| format!("Image upload failed: {e}"))?;
+    let status = response.status();
+    let text = response
+        .text()
+        .map_err(|e| format!("Image upload response failed: {e}"))?;
+    if !status.is_success() {
+        return Err(format!("Image upload failed: {status} {text}"));
+    }
+    let json: serde_json::Value = serde_json::from_str(&text)
+        .map_err(|e| format!("Image upload response is not JSON: {e}"))?;
+    let value = json_path(&json, response_path)
+        .ok_or_else(|| format!("Image upload response has no {response_path}: {text}"))?;
+    value
+        .as_str()
+        .map(str::to_owned)
+        .ok_or_else(|| format!("Image upload response {response_path} is not a string"))
+}
+
+fn json_path<'a>(value: &'a serde_json::Value, path: &str) -> Option<&'a serde_json::Value> {
+    let mut current = value;
+    for segment in path.split('.') {
+        let mut name = segment;
+        let mut index = None;
+        if let Some(open) = segment.find('[') {
+            if segment.ends_with(']') {
+                name = &segment[..open];
+                index = segment[open + 1..segment.len() - 1].parse::<usize>().ok();
+            }
+        }
+        if !name.is_empty() {
+            current = current.get(name)?;
+        }
+        if let Some(index) = index {
+            current = current.get(index)?;
+        }
+    }
+    Some(current)
+}
+
+/// 按本地图床规则上传图片。
+#[tauri::command]
+async fn upload_image(
+    rule: serde_json::Value,
+    filename: String,
+    mime: String,
+    content_base64: String,
+) -> Result<String, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        upload_image_blocking(rule, filename, mime, content_base64)
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
+/// 将 base64 二进制内容写入目标路径，父目录不存在时自动创建。
+#[tauri::command]
+async fn write_binary_file(path: String, content_base64: String) -> Result<(), String> {
+    let bytes = general_purpose::STANDARD
+        .decode(content_base64)
+        .map_err(|e| format!("Invalid base64 content: {}", e))?;
+    if let Some(parent) = Path::new(&path).parent() {
+        fs::create_dir_all(parent).map_err(|e| format!("Failed to create directory: {}", e))?;
+    }
+    fs::write(&path, bytes).map_err(|e| format!("Failed to write binary file: {}", e))
+}
+
 /// 将原始文本内容写入目标路径，
 /// 如果父目录不存在则自动创建。
 #[tauri::command]
 async fn write_file_content(path: String, content: String) -> Result<(), String> {
     atomic_write(Path::new(&path), content.as_bytes())
+}
+
+fn encode_file_content(content: &str, target_encoding: &str) -> Result<(Vec<u8>, String), String> {
+    let encoding_obj = Encoding::for_label(target_encoding.as_bytes()).unwrap_or(UTF_8);
+    let target_upper = target_encoding.to_ascii_uppercase();
+    let code_page = target_upper
+        .strip_prefix("CP")
+        .and_then(|value| value.parse::<u32>().ok());
+    let bytes = match target_upper.as_str() {
+        "UTF-8-BOM" => [text_file::UTF8_BOM, content.as_bytes()].concat(),
+        "UTF-16LE" => text_file::encode_utf16(content, true),
+        "UTF-16BE" => text_file::encode_utf16(&content, false),
+        _ if code_page.is_some() => {
+            #[cfg(windows)]
+            {
+                text_file::encode_code_page(&content, code_page.unwrap())?
+            }
+            #[cfg(not(windows))]
+            {
+                return Err(format!("Unsupported encoding: {target_encoding}"));
+            }
+        }
+        _ => {
+            let (bytes, _, had_errors) = encoding_obj.encode(content);
+            if had_errors {
+                return Err(format!("Text cannot be represented in {target_encoding}"));
+            }
+            bytes.into_owned()
+        }
+    };
+    let encoding = if target_upper == "UTF-8-BOM" || code_page.is_some() {
+        target_upper
+    } else if encoding_obj.name() == "gb18030" {
+        "GB18030".to_owned()
+    } else {
+        encoding_obj.name().to_owned()
+    };
+    Ok((bytes, encoding))
 }
 
 /// 按指定编码保存编辑器内容，
@@ -443,33 +746,7 @@ async fn save_file(
     }
 
     let target_encoding = encoding.as_deref().unwrap_or("UTF-8");
-    let encoding_obj = Encoding::for_label(target_encoding.as_bytes()).unwrap_or(UTF_8);
-    let target_upper = target_encoding.to_ascii_uppercase();
-    let code_page = target_upper
-        .strip_prefix("CP")
-        .and_then(|value| value.parse::<u32>().ok());
-    let encoded_bytes = match target_upper.as_str() {
-        "UTF-8-BOM" => [text_file::UTF8_BOM, content.as_bytes()].concat(),
-        "UTF-16LE" => text_file::encode_utf16(&content, true),
-        "UTF-16BE" => text_file::encode_utf16(&content, false),
-        _ if code_page.is_some() => {
-            #[cfg(windows)]
-            {
-                text_file::encode_code_page(&content, code_page.unwrap())?
-            }
-            #[cfg(not(windows))]
-            {
-                return Err(format!("Unsupported encoding: {target_encoding}"));
-            }
-        }
-        _ => {
-            let (bytes, _, had_errors) = encoding_obj.encode(&content);
-            if had_errors {
-                return Err(format!("Text cannot be represented in {target_encoding}"));
-            }
-            bytes.into_owned()
-        }
-    };
+    let (encoded_bytes, saved_encoding) = encode_file_content(&content, target_encoding)?;
 
     match atomic_write(path, &encoded_bytes) {
         Ok(_) => {
@@ -485,16 +762,7 @@ async fn save_file(
                 content: None,
                 file_path: Some(file_path),
                 file_name: Some(file_name),
-                encoding: Some(
-                    if target_upper == "UTF-8-BOM" || code_page.is_some() {
-                        &target_upper
-                    } else if encoding_obj.name() == "gb18030" {
-                        "GB18030"
-                    } else {
-                        encoding_obj.name()
-                    }
-                    .to_string(),
-                ),
+                encoding: Some(saved_encoding),
                 line_ending: Some(detect_line_ending(&content)),
             })
         }
@@ -1877,6 +2145,8 @@ pub fn run() {
             #[cfg(desktop)]
             workspace_git::git_workspace_diff,
             #[cfg(desktop)]
+            workspace_git::git_workspace_apply,
+            #[cfg(desktop)]
             workspace_git::git_workspace_switch,
             #[cfg(desktop)]
             workspace_git::git_compare_branches,
@@ -1889,10 +2159,13 @@ pub fn run() {
             runtime_logs::record_runtime_log,
             runtime_logs::clear_runtime_logs,
             read_file_content,
+            open_settings_document,
             read_file_head,
             check_file_text_head,
             read_clipboard_for_paste,
             read_binary_file,
+            write_binary_file,
+            upload_image,
             write_file_content,
             save_file,
             write_recovery_snapshot,
@@ -2179,6 +2452,33 @@ mod tests {
         // 新打开文件的起始记录仍然强制保留。
         assert!(capture_history_in(dir, "first\nchanged\n", true).unwrap());
         assert_eq!(list_history_timestamps(dir).unwrap().len(), 3);
+    }
+
+    #[test]
+    fn settings_documents_migrate_into_local_storage_without_overwriting_edits() {
+        let temp = tempfile::tempdir().unwrap();
+        let old = temp.path().join("roaming");
+        let local = temp.path().join("local");
+        fs::create_dir_all(&old).unwrap();
+        let filename = "language-plugins.jsonc";
+        let original = "{\n  // existing manifest\n  \"manifests\": []\n}\n";
+        fs::write(old.join(filename), original).unwrap();
+
+        let migrated =
+            load_or_create_settings_document(&local, std::slice::from_ref(&old), filename, "{}")
+                .unwrap();
+        assert_eq!(migrated.path, local.join(filename));
+        assert_eq!(migrated.content, original);
+        atomic_write(&migrated.path, b"{\"manifests\": []}").unwrap();
+        let reopened =
+            load_or_create_settings_document(&local, std::slice::from_ref(&old), filename, "{}")
+                .unwrap();
+        assert_eq!(reopened.content, "{\"manifests\": []}");
+        assert_eq!(fs::read_to_string(old.join(filename)).unwrap(), original);
+        let fresh =
+            load_or_create_settings_document(&local, &[old], "service-plugin-sources.jsonc", "{}")
+                .unwrap();
+        assert_eq!(fresh.content, "{}");
     }
 
     #[test]

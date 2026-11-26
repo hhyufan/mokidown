@@ -128,3 +128,8 @@ coverage/
 .playwright/
 .tools/
 .cache-*.log
+
+# local image host uploads (scripts/image-host-server.mjs)
+image-host-uploads/
+
+editor-settings/

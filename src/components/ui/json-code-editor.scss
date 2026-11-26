@@ -1,0 +1,14 @@
+.json-code-editor {
+  width: 100%;
+  min-height: 120px;
+  overflow: hidden;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: transparent;
+
+  .monaco-editor,
+  .monaco-editor .margin,
+  .monaco-editor-background {
+    background: transparent !important;
+  }
+}
