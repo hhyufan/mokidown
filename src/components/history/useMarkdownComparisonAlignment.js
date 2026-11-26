@@ -1,4 +1,5 @@
 import { useLayoutEffect, useRef } from 'react';
+import { comparisonLineReaders } from './comparisonLineReaders';
 
 const anchorSelector = '[data-history-anchor]';
 
@@ -59,31 +60,40 @@ export function useMarkdownComparisonAlignment(ref, visibleRows, onAligned) {
       const measurements = rows.map((row, i) => {
         const heights = boxes.map((pane) => Math.max(0, pane[i + 1].top - pane[i].bottom));
         const changed = row.hasAttribute('data-changed');
-        const controls = changed
-          ? [...row.querySelectorAll('.history-markdown-diff__revert-actions')]
-          : [];
+        const controls = [...row.querySelectorAll('[data-history-line]')];
+        const offsets = [0, 0];
+        const actions = controls.map((control) => {
+          const side = control.parentElement.dataset.direction === 'right' ? 0 : 1;
+          const anchorTop = boxes[side][i].bottom;
+          const lineTop = comparisonLineReaders.get(editors[side])?.(Number(control.dataset.historyLine));
+          const position = lineTop == null ? offsets[side] : Math.max(0, lineTop - anchorTop);
+          offsets[side] = position + control.offsetHeight;
+          return { control, position };
+        });
         const minimum = row.hasAttribute('data-fold') ? 24 : changed ? 26 : 0;
         const height = Math.max(
           minimum,
           ...heights,
-          ...controls.map((control) => control.offsetHeight),
+          ...offsets,
         );
         const boundary = boxes[0][i + 1].height - (parseFloat(anchors[0][i + 1].style.height) || 0);
         const measurement = {
           top,
           height: Math.max(0, height + boundary),
           gaps: heights.map((size) => height - size),
+          actions,
         };
         top += measurement.height;
         return measurement;
       });
 
       for (const [i, row] of rows.entries()) {
-        const { top, height, gaps } = measurements[i];
+        const { top, height, gaps, actions } = measurements[i];
         for (const [side, gap] of gaps.entries()) setPixels(anchors[side][i + 1], 'height', gap);
         if (!row.style.top) row.style.top = '0px';
         setPixels(row, 'top', top);
         setPixels(row, 'height', height);
+        for (const { control, position } of actions) setPixels(control, 'top', position);
         if (row.dataset.positioned === undefined) row.dataset.positioned = '';
       }
       if (!root.hasAttribute('data-aligned')) root.setAttribute('data-aligned', '');

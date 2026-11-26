@@ -1,5 +1,7 @@
 import { Decoration, DecorationSet } from '@milkdown/kit/prose/view';
 import { PluginKey } from '@milkdown/kit/prose/state';
+import { EditorView as CodeMirrorView } from '@codemirror/view';
+import { comparisonLineReaders } from '../history/comparisonLineReaders';
 
 export const comparisonLayoutKey = new PluginKey('moki-comparison-layout');
 
@@ -20,12 +22,76 @@ function visitBlocks(doc, layout, visit) {
       if ((source.list || listTypes.has(kind)) && source.list !== kind) matches = false;
       index++;
       nextBlank = source.end + 2;
-      visit(node, position, source.start, source.end);
+      visit(node, position, source.start, source.end, source.lineSpans);
     } else {
       matches = false;
     }
   });
   return matches && index === layout.blocks.length;
+}
+
+export function bindComparisonLineReader(view, getLayout) {
+  let lastLayout;
+  let lastDoc;
+  const lines = new Map();
+  comparisonLineReaders.set(view.dom, (line) => {
+    const layout = getLayout();
+    if (!layout) return undefined;
+    if (layout !== lastLayout || view.state.doc !== lastDoc) {
+      lastLayout = layout;
+      lastDoc = view.state.doc;
+      lines.clear();
+      visitBlocks(lastDoc, layout, (node, pos, start, end, spans = []) => {
+        const add = (number, read) => {
+          if (!lines.has(number)) lines.set(number, read);
+        };
+        for (let line = start; line <= end; line++) {
+          add(line, () => view.nodeDOM(pos)?.getBoundingClientRect()?.top);
+        }
+        const candidates = [{ node, pos }];
+        node.descendants((child, offset) => {
+          if (child.isBlock) candidates.push({ node: child, pos: pos + offset + 1 });
+        });
+        let index = 0;
+        const assigned = new Set();
+        for (const span of spans) {
+          const found = candidates.findIndex(
+            ({ node }, i) => i >= index && node.type.name === span.kind,
+          );
+          if (found < 0) continue;
+          index = found + 1;
+          const entry = candidates[found];
+          const positions = [entry.pos + 1];
+          entry.node.forEach((child, offset) => {
+            if (child.type.name === 'hardbreak') positions.push(entry.pos + offset + 1 + child.nodeSize);
+          });
+          for (let line = span.start; line <= span.end; line++) {
+            if (assigned.has(line)) continue;
+            assigned.add(line);
+            lines.set(line, () => {
+              const dom = view.nodeDOM(entry.pos);
+              if (span.kind === 'code_block') {
+                const cmRoot = dom?.matches?.('.cm-editor') ? dom : dom?.querySelector?.('.cm-editor');
+                const cm = cmRoot && CodeMirrorView.findFromDOM(cmRoot);
+                // The fence shares the first rendered code line.
+                if (cm && cm.state.doc.lines)
+                  return cm.documentTop + cm.lineBlockAt(
+                    cm.state.doc.line(Math.min(cm.state.doc.lines, Math.max(1, line - span.start))).from,
+                  ).top;
+              }
+              if (entry.node.inlineContent && !entry.node.isAtom) {
+                const position = positions[Math.min(line - span.start, positions.length - 1)];
+                return view.coordsAtPos(position, 1).top;
+              }
+              return dom?.getBoundingClientRect()?.top;
+            });
+          }
+        }
+      });
+    }
+    return lines.get(line)?.();
+  });
+  return () => comparisonLineReaders.delete(view.dom);
 }
 
 export function mapComparisonDecorations(decorations, tr) {

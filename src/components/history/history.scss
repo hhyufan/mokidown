@@ -425,7 +425,7 @@ body.moki-has-background .history-diff {
 
   .history-markdown-diff__fold,
   .history-markdown-diff__fold-action,
-  .history-markdown-diff__revert-actions {
+  .history-markdown-diff__revert {
     pointer-events: auto;
   }
 
@@ -433,6 +433,16 @@ body.moki-has-background .history-diff {
   .history-markdown-diff__revert-actions {
     position: relative;
     z-index: 2;
+  }
+
+  .history-markdown-diff__revert-actions {
+    width: var(--history-diff-action-size);
+    padding: 0;
+  }
+
+  .history-markdown-diff__revert {
+    position: absolute;
+    inset-inline-start: 0;
   }
 }
 

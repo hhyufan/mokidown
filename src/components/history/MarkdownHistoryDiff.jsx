@@ -272,6 +272,9 @@ export default function MarkdownHistoryDiff({
                           <button
                             type="button"
                             className="history-markdown-diff__revert"
+                            data-history-line={direction === 'right'
+                              ? change.originalStartLineNumber
+                              : change.modifiedStartLineNumber}
                             disabled={busy || !ready}
                             aria-label={label}
                             onClick={() => onRevert(change)}

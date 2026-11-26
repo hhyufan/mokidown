@@ -1,6 +1,24 @@
 import { markdownBlockKey, parseMarkdownBlocks } from '../editor/markdownSections';
 import { historyAddition } from '../../utils/historyChanges';
 
+const renderedLineKinds = {
+  paragraph: 'paragraph',
+  heading: 'heading',
+  code: 'code_block',
+  html: 'html_block',
+  math: 'math_block',
+  tableCell: 'table_cell',
+  thematicBreak: 'hr',
+};
+
+function renderedLineSpans(block) {
+  const kind = renderedLineKinds[block.type];
+  if (kind && block.position) {
+    return [{ kind, start: block.position.start.line, end: block.position.end.line }];
+  }
+  return block.children?.flatMap(renderedLineSpans) ?? [];
+}
+
 export function parseDocument(source) {
   const lines = source.split(/\r\n|\r|\n/);
   const blocks = parseMarkdownBlocks(source);
@@ -11,6 +29,7 @@ export function parseDocument(source) {
       end: block.position.end.line,
       empty: block.type === 'paragraph' && !block.children.length,
       list: block.type === 'list' ? (block.ordered ? 'ordered_list' : 'bullet_list') : null,
+      lineSpans: renderedLineSpans(block),
     }));
   const blankLines = lines.map((line) => !line.trim());
   for (const { position } of blocks) {

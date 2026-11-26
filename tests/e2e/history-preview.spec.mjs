@@ -1,5 +1,41 @@
 import { expect, test } from '@playwright/test';
 
+test('rendered history aligns separate revert arrows with list items in one Markdown block', async ({ page }) => {
+  test.setTimeout(60000);
+  await page.goto('/');
+  await expect(page.locator('.editor-content__welcome')).toBeVisible({ timeout: 30000 });
+  await page.evaluate(async () => {
+    const { default: editors } = await import('/src/store/useEditorStore.js');
+    const { default: history } = await import('/src/store/useHistoryStore.js');
+    const middle = 'An unchanged list item with enough text to wrap. '.repeat(6);
+    editors.getState().openFile({
+      path: '/list-alignment.md',
+      name: 'list-alignment.md',
+      content: `- First new item\n- ${middle}\n- Third new item`,
+    });
+    history.getState().setDiff({
+      tabId: editors.getState().activeTabId,
+      timestamp: 1,
+      content: `- First old item\n- ${middle}\n- Third old item`,
+    });
+  });
+  const preview = page.locator('.history-markdown-draft');
+  const original = preview.locator('.history-markdown-draft__pane[data-side="original"]');
+  const first = preview.locator('[data-direction="right"] [data-history-line="1"]');
+  const third = preview.locator('[data-direction="right"] [data-history-line="3"]');
+  await expect(preview).toHaveAttribute('data-aligned', '');
+  await expect(first).toBeVisible();
+  await expect(third).toBeVisible();
+  const firstItem = await original.getByText('First old item').boundingBox();
+  const thirdItem = await original.getByText('Third old item').boundingBox();
+  const [firstArrow, thirdArrow] = await Promise.all([first.boundingBox(), third.boundingBox()]);
+  expect(Math.abs(firstArrow.y - firstItem.y)).toBeLessThan(12);
+  expect(Math.abs(thirdArrow.y - thirdItem.y)).toBeLessThan(12);
+  expect(thirdArrow.y - firstArrow.y).toBeGreaterThan(48);
+  await third.click();
+  await expect(preview.locator('[data-side="modified"]').getByText('Third old item')).toBeVisible();
+});
+
 test('source comparison localizes both arrows and reverts added lines independently', async ({
   page,
 }) => {
