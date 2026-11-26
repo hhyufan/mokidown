@@ -332,6 +332,15 @@
   display: flex;
   justify-content: center;
   position: relative;
+
+  @media (min-width: 769px) {
+    height: calc(
+      var(--sidebar-tabs-height, 60px) + var(--sidebar-toolbar-height, 44px) -
+        var(--document-tabbar-height, 44px)
+    );
+    flex-shrink: 0;
+    padding-block: 0;
+  }
 }
 
 .settings-page .settings-nav {

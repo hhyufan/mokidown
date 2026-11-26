@@ -7,6 +7,9 @@
 @use './background-popup' as background-popup;
 
 .app {
+  --document-tabbar-height: 44px;
+  --sidebar-tabs-height: 60px;
+  --sidebar-toolbar-height: 44px;
   display: flex;
   width: 100%;
   height: 100%;

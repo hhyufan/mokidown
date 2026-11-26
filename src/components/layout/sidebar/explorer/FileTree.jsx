@@ -34,10 +34,6 @@ import ExplorerMatchName from './ExplorerMatchName';
 import { ensureDirectoryRange, getIndexedFile, isMovedExplorerEntry } from '@/services/workspaceFiles';
 import './file-tree.scss';
 
-function FileRowTooltip({ defer, children, ...props }) {
-  return defer ? children : <Tooltip {...props}>{children}</Tooltip>;
-}
-
 /**
  * 根据面包屑索引重建可跳转的目录路径。
  *
@@ -461,6 +457,7 @@ function FileTree() {
               role="listitem"
               tabIndex={0}
               data-path={file.path}
+              data-moki-tooltip={deferDetails || renamingPath === file.path ? undefined : file.name}
               data-reader-path={renamingPath !== file.path ? file.path : undefined}
               data-reader-directory={file.is_dir ? 'true' : undefined}
               data-drop-directory={file.is_dir ? file.path : undefined}
@@ -493,31 +490,29 @@ function FileTree() {
                   autoFocus
                 />
               ) : (
-                <FileRowTooltip defer={deferDetails} title={file.name} placement="right" mouseEnterDelay={0.5}>
-                  <span
-                    className="file-tree__item-name"
-                    // 双击名字进入重命名，与资源管理器一致；不用额外按钮占位。
-                    onDoubleClick={(e) => { startRenaming(file, e, index); }}
-                  >
-                    <ExplorerMatchName name={file.name} search={search} />
-                    {(() => {
-                      if (deferDetails || file.is_dir) return null;
-                      const extension = (file.name.split('.').pop() || '').toLowerCase();
-                      const normalize = (value) => String(value || '').replace(/\\/g, '/');
-                      const badge = fileBadges.find((entry) => {
-                        if ((entry.extensions || []).includes(extension)) return true;
-                        return (entry.paths || []).some((candidate) => {
-                          const left = normalize(candidate);
-                          const right = normalize(file.path);
-                          return left === right || right.endsWith('/' + left) || left.endsWith('/' + right);
-                        });
+                <span
+                  className="file-tree__item-name"
+                  // 双击名字进入重命名，与资源管理器一致；不用额外按钮占位。
+                  onDoubleClick={(e) => { startRenaming(file, e, index); }}
+                >
+                  <ExplorerMatchName name={file.name} search={search} />
+                  {(() => {
+                    if (deferDetails || file.is_dir) return null;
+                    const extension = (file.name.split('.').pop() || '').toLowerCase();
+                    const normalize = (value) => String(value || '').replace(/\\/g, '/');
+                    const badge = fileBadges.find((entry) => {
+                      if ((entry.extensions || []).includes(extension)) return true;
+                      return (entry.paths || []).some((candidate) => {
+                        const left = normalize(candidate);
+                        const right = normalize(file.path);
+                        return left === right || right.endsWith('/' + left) || left.endsWith('/' + right);
                       });
-                      return badge
-                        ? <Tooltip title={badge.title || ''} mouseEnterDelay={0.3}><span className="file-tree__item-badge"  dangerouslySetInnerHTML={{ __html: badge.svg }} /></Tooltip>
-                        : null;
-                    })()}
-                  </span>
-                </FileRowTooltip>
+                    });
+                    return badge
+                      ? <Tooltip title={badge.title || ''} mouseEnterDelay={0.3}><span className="file-tree__item-badge"  dangerouslySetInnerHTML={{ __html: badge.svg }} /></Tooltip>
+                      : null;
+                  })()}
+                </span>
               )}
 
               {renamingPath !== file.path && <ExplorerDeleteButton file={file} defer={deferDetails} onClick={(event) => deletion.request(file, event)} />}

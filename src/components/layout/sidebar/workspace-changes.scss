@@ -1,13 +1,6 @@
 .workspace-changes {
   min-height: 0;
 
-  // 与项目 / 最近面板一致：它们的标题行右侧有 28px 的 ToolbarButton，
-  // 标题实际高度是 8 + 28 + 8。这里没有按钮，显式撑到同一高度，
-  // 否则下面的导航栏会比另外两个面板高一截。
-  .sidebar__toolbar {
-    min-height: 44px;
-  }
-
   // 与文件面板一致：工具栏、导航栏、搜索栏紧贴，各自用 padding 控制高度。
   gap: 0;
 

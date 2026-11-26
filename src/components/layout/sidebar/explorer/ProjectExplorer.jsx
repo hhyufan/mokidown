@@ -1,5 +1,4 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
-import { Tooltip } from 'antd';
 import { useTranslation } from 'react-i18next';
 import useFileStore from '@store/useFileStore';
 import useEditorStore from '@store/useEditorStore';
@@ -336,7 +335,7 @@ export default function ProjectExplorer() {
           && (node ? !node.loading && node.error === '' && node.total === 0 : state === 'empty');
         const name = <span className="project-tree__name"><ExplorerMatchName name={file.name} search={search} /></span>;
         return <div key={file.path} style={{ position: 'absolute', top: style.top, left: 0, width: '100%' }}>
-          <Tooltip title={file.path} placement="right" mouseEnterDelay={0.6} disabled={deferDetails}><div
+          <div
           role="treeitem"
           tabIndex={0}
           aria-label={file.name}
@@ -346,6 +345,7 @@ export default function ProjectExplorer() {
           aria-expanded={file.is_dir ? expanded : undefined}
           aria-busy={node?.loading || undefined}
           data-path={file.path}
+          data-moki-tooltip={deferDetails ? undefined : file.path}
           data-reader-path={row.parent ? file.path : undefined}
           data-reader-directory={file.is_dir ? 'true' : undefined}
           data-drop-directory={file.is_dir ? file.path : undefined}
@@ -375,7 +375,7 @@ export default function ProjectExplorer() {
           <span className="project-tree__icon"><ExplorerEntryIcon file={file} expanded={expanded && !empty} defer={deferDetails} /></span>
           {name}
           {row.parent && <ExplorerDeleteButton file={file} defer={deferDetails} onClick={requestDeletion} />}
-        </div></Tooltip></div>;
+        </div></div>;
       }}
     />}
     </div>

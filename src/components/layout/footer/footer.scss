@@ -249,6 +249,24 @@
   flex-shrink: 0;
 }
 
+.footer--workspace {
+  display: grid;
+  grid-template-columns: clamp(64px, 28%, 320px) minmax(0, 1fr) clamp(64px, 28%, 320px);
+  flex-shrink: 0;
+
+  .footer__right {
+    width: 100%;
+    justify-content: safe flex-end;
+    overflow-x: auto;
+    scrollbar-width: none;
+
+    > * {
+      flex-shrink: 0;
+      white-space: nowrap;
+    }
+  }
+}
+
 @media (max-width: 768px) {
   .footer {
     min-height: 44px;
@@ -263,6 +281,10 @@
 
   .footer__left {
     gap: 8px;
+  }
+
+  .footer--workspace {
+    grid-template-columns: 85px minmax(0, 1fr);
   }
 
   .footer__toggle-sidebar,

@@ -280,7 +280,7 @@ function Footer() {
 
   return (
     <footer
-      className="footer"
+      className="footer footer--workspace"
       onMouseDown={(event) => {
         if (!isWindowDragExcluded(event.target)) beginWindowDrag(event);
       }}

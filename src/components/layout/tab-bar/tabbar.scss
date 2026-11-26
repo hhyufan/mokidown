@@ -4,7 +4,7 @@
  */
 
 .tabbar {
-  height: 44px;
+  height: var(--document-tabbar-height, 44px);
   display: flex;
   align-items: flex-end;
   background: var(--sidebar);

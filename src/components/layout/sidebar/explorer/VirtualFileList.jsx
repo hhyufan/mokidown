@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { flushSync } from 'react-dom';
 import { FAST_FILE_SCROLL_SPEED, FILE_ROW_HEIGHT, FILE_SCROLL_IDLE_MS, fileWindow } from '@utils/virtualFileWindow';
+import SidebarFileTooltips from '../SidebarFileTooltips';
 import './virtual-file-list.scss';
 import CurrentFileIndicator from './CurrentFileIndicator';
 
@@ -255,6 +256,7 @@ export default function VirtualFileList({ count, renderRow, onRangeChange, isRow
           </div>
         )}
       </div>
+      <SidebarFileTooltips listRef={element} />
     </div>
   );
 }

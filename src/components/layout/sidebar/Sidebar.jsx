@@ -19,6 +19,7 @@ import ExplorerModes from './explorer/ExplorerModes';
 import OutlineView from './outline/OutlineView';
 import SidebarResizer from './SidebarResizer';
 import SidebarTabs from './SidebarTabs';
+import SidebarFileTooltips from './SidebarFileTooltips';
 import KnowledgeTree from '@components/editor/KnowledgeTree';
 import { useKnowledgeTreesState } from '@hooks/useKnowledgeTrees';
 import { useOpenTreeEditor } from '@hooks/useOpenTreeEditor';
@@ -314,6 +315,7 @@ function RecentToolbar() {
 
 function RecentList() {
   const { t } = useTranslation();
+  const listRef = useRef(null);
   const userId = GUEST_USER_SCOPE;
   const recentEntries = useFileStore((s) => s.recentFiles);
 
@@ -339,54 +341,54 @@ function RecentList() {
       {sortedFiles.length === 0 ? (
         <MokiStatusEmpty title={t('empty.recent.title')} hint={t('empty.recent.hint')} compact />
       ) : (
-        <div className="sidebar__recent-list">
+        <div className="sidebar__recent-list" ref={listRef}>
           {sortedFiles.map((f) => {
             const isBookmarked = useFileStore.getState().isBookmarked(f.path);
 
-            const titleText = f.path;
             return (
-              <Tooltip key={f.path} title={titleText} placement="right" mouseEnterDelay={0.5}>
-                <div
-                  className={cn(
-                    'sidebar__recent-item',
-                    isBookmarked && 'sidebar__recent-item--bookmarked',
-                  )}
-                  data-reader-path={f.path}
-                  data-reader-name={f.name}
-                  onClick={() => openFileFromPath(f.path, f.name)}
-                >
-                  <span className="sidebar__recent-icon">
-                    <FileTypeIcon extension={f.ext} fileName={f.name} />
-                  </span>
-                  <span className="sidebar__recent-name">{f.name}</span>
-                  {isBookmarked && (
-                    <Tooltip title={t('tabbar.bookmark')} placement="top" mouseEnterDelay={0.3}>
-                      <span className="sidebar__recent-bookmark">
-                        <svg
-                          viewBox="0 0 24 24"
-                          fill="currentColor"
-                          stroke="currentColor"
-                          strokeWidth="2"
-                          width="12"
-                          height="12"
-                        >
-                          <path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z" />
-                        </svg>
-                      </span>
-                    </Tooltip>
-                  )}
-                  <Tooltip title={t('sidebar.recent.remove')} placement="top" mouseEnterDelay={0.3}>
-                    <span className="sidebar__recent-del" onClick={(e) => handleRemove(e, f)}>
-                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                        <line x1="18" y1="6" x2="6" y2="18" />
-                        <line x1="6" y1="6" x2="18" y2="18" />
+              <div
+                key={f.path}
+                className={cn(
+                  'sidebar__recent-item',
+                  isBookmarked && 'sidebar__recent-item--bookmarked',
+                )}
+                data-moki-tooltip={f.path}
+                data-reader-path={f.path}
+                data-reader-name={f.name}
+                onClick={() => openFileFromPath(f.path, f.name)}
+              >
+                <span className="sidebar__recent-icon">
+                  <FileTypeIcon extension={f.ext} fileName={f.name} />
+                </span>
+                <span className="sidebar__recent-name">{f.name}</span>
+                {isBookmarked && (
+                  <Tooltip title={t('tabbar.bookmark')} placement="top" mouseEnterDelay={0.3}>
+                    <span className="sidebar__recent-bookmark">
+                      <svg
+                        viewBox="0 0 24 24"
+                        fill="currentColor"
+                        stroke="currentColor"
+                        strokeWidth="2"
+                        width="12"
+                        height="12"
+                      >
+                        <path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z" />
                       </svg>
                     </span>
                   </Tooltip>
-                </div>
-              </Tooltip>
+                )}
+                <Tooltip title={t('sidebar.recent.remove')} placement="top" mouseEnterDelay={0.3}>
+                  <span className="sidebar__recent-del" onClick={(e) => handleRemove(e, f)}>
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                      <line x1="18" y1="6" x2="6" y2="18" />
+                      <line x1="6" y1="6" x2="18" y2="18" />
+                    </svg>
+                  </span>
+                </Tooltip>
+              </div>
             );
           })}
+          <SidebarFileTooltips listRef={listRef} />
         </div>
       )}
     </div>

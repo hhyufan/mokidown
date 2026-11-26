@@ -14,6 +14,9 @@ export default function MilkdownTooltips({
   nativeOnly = false,
   targetSelector,
   labelKey,
+  placement = 'top',
+  getAnchorRect,
+  mouseEnterDelay = 300,
 }) {
   const { t } = useTranslation();
   const id = useId();
@@ -65,14 +68,14 @@ export default function MilkdownTooltips({
       timer = setTimeout(
         () => {
           if (!element.isConnected) return;
-          const box = element.getBoundingClientRect();
+          const box = getAnchorRect?.(element, root) ?? element.getBoundingClientRect();
           setTip({
             element,
             title,
             rect: { left: box.left, top: box.top, width: box.width, height: box.height },
           });
         },
-        event.type === 'focusin' ? 0 : 300,
+        event.type === 'focusin' ? 0 : mouseEnterDelay,
       );
     };
     const leave = (event) => {
@@ -131,7 +134,7 @@ export default function MilkdownTooltips({
       document.removeEventListener('scroll', hide, true);
       window.removeEventListener('resize', hide);
     };
-  }, [rootRef, readOnly, nativeOnly, targetSelector, labelKey, t]);
+  }, [rootRef, readOnly, nativeOnly, targetSelector, labelKey, getAnchorRect, mouseEnterDelay, t]);
   useEffect(() => {
     const element = tip?.element;
     if (!element) return undefined;
@@ -148,7 +151,8 @@ export default function MilkdownTooltips({
       id={id}
       open
       title={labelKey ? t(labelKey) : tip.title}
-      placement="top"
+      placement={placement}
+      getPopupContainer={() => document.body}
       autoAdjustOverflow
       trigger={[]}
       destroyOnHidden
