@@ -1146,7 +1146,7 @@
   "settings.editor.indentUseTabs": "Tabs",
   "htmlPreview.localPreview": "Local preview",
   "htmlPreview.hotReload": "Live reload",
-  "settings.general.languageZh": "Chinese",
+  "settings.general.languageZh": "简体中文",
   "workspaceDiff.revertChanges": "Revert changes",
   "workspaceDiff.localBranches": "Local branches",
   "workspaceDiff.markdownOnlySetting": "Only Markdown changes",

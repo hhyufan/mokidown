@@ -588,19 +588,6 @@
   gap: 8px;
 }
 
-.setting-font-size {
-  width: 180px;
-
-  > .ant-input-number {
-    flex: 1;
-    min-width: 0;
-  }
-
-  .ant-input-number-input {
-    min-width: 0;
-  }
-}
-
 .setting-background__slider {
   display: flex;
   align-items: center;
@@ -878,7 +865,7 @@ html[data-theme='dark'] .settings-about__mascot {
   align-items: flex-start;
   gap: 22px;
   padding: 20px;
-  background: var(--surface);
+  background: color-mix(in srgb, var(--surface) 78%, transparent);
 }
 
 /* 左栏：人物竖版画布 + 角色独白。人物贴底，底部一圈柔光，避免"插图塞在空框里" */
@@ -1171,8 +1158,8 @@ html[data-theme='dark'] .settings-about__portrait > .moki-sprite {
       > .ant-input,
       > .ant-input-affix-wrapper,
       > .ant-input-number,
-      > .setting-font-size,
-      > .ant-select {
+      > .setting-font-size-input,
+      > .ant-select:not(.settings-auto-width-select) {
         width: 100% !important;
         min-width: 0;
       }
@@ -1435,4 +1422,54 @@ html[data-theme='dark'] .settings-about__portrait > .moki-sprite {
   border-radius: 2px;
   background: #b9d6ff;
   color: inherit;
+}
+
+/* 设置页控件与整体玻璃背景一致：按钮/输入/选择器半透明。 */
+.settings-page {
+  /* :where 降低这条通用规则的优先级，让下面的内层 input 透明规则能够生效。 */
+  :where(
+    :is(
+      .ant-btn:not(.ant-btn-text):not(.ant-btn-link):not(.ant-btn-primary),
+      .ant-input,
+      .ant-input-affix-wrapper,
+      .ant-input-number,
+      .ant-select .ant-select-selector,
+      .ant-picker
+    )
+  ) {
+    background: color-mix(in srgb, var(--surface) 68%, transparent) !important;
+  }
+
+  :where(:is(.ant-btn:not(.ant-btn-text):not(.ant-btn-link):not(.ant-btn-primary))):hover {
+    background: color-mix(in srgb, var(--surface) 82%, transparent) !important;
+  }
+}
+
+/* 带前后缀的输入框只保留外层玻璃底，内层 input 透明，避免大圈套小圈。 */
+.settings-page .ant-input-affix-wrapper .ant-input,
+.settings-page .ant-input-affix-wrapper input {
+  background: transparent !important;
+  background-color: transparent !important;
+  background-image: none !important;
+  box-shadow: none !important;
+  border: 0 !important;
+}
+
+/* 路径输入框按内容自适应宽度，过长时限制在设置行内，避免挤压左侧说明。 */
+.settings-path-input {
+  width: auto;
+  min-width: 240px;
+  max-width: min(100%, 460px);
+  field-sizing: content;
+}
+
+.settings-path-input .ant-input {
+  max-width: 100%;
+  field-sizing: content;
+}
+
+@supports not (field-sizing: content) {
+  .settings-path-input {
+    width: min(100%, 340px);
+  }
 }

@@ -1146,7 +1146,7 @@
   "history.expandHiddenLines_other": "展开 {{count}} 行未更改内容",
   "htmlPreview.localPreview": "本地预览",
   "htmlPreview.hotReload": "热更新",
-  "settings.general.languageZh": "中文",
+  "settings.general.languageZh": "简体中文",
   "workspaceDiff.revertChanges": "撤销更改",
   "workspaceDiff.localBranches": "本地分支",
   "workspaceDiff.markdownOnlySetting": "只显示 Markdown 变动",

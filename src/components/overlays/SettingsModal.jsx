@@ -24,8 +24,6 @@ import {
   SettingOutlined,
   CloseOutlined,
   DownloadOutlined,
-  PlusOutlined,
-  MinusOutlined,
   InfoCircleOutlined,
   GithubOutlined,
   StarFilled,
@@ -128,6 +126,25 @@ const NAV_ICONS = {
 
 const NAV_KEYS = ['general', 'appearance', 'editor', 'renderer', 'shortcuts', 'languages', 'about'];
 
+const SETTINGS_VIEW_STORAGE_KEY = 'mokidown-settings-view';
+
+function readSettingsView() {
+  try {
+    return JSON.parse(localStorage.getItem(SETTINGS_VIEW_STORAGE_KEY) || 'null');
+  } catch {
+    return null;
+  }
+}
+
+function storeSettingsView(patch) {
+  try {
+    const current = readSettingsView() || {};
+    localStorage.setItem(SETTINGS_VIEW_STORAGE_KEY, JSON.stringify({ ...current, ...patch }));
+  } catch {
+    // 忽略隐私模式或存储配额错误。
+  }
+}
+
 const SEARCH_SECTIONS = [
   ['settings.general.', 'general'],
   ['settings.snapshot.', 'general'],
@@ -166,12 +183,30 @@ function sectionForSettingKey(key) {
 
 function SettingsPage({ side = false }) {
   const { t, i18n } = useTranslation();
-  const [activeNav, setActiveNav] = useState('general');
+  const [activeNav, setActiveNav] = useState(() => {
+    const saved = readSettingsView();
+    return NAV_KEYS.includes(saved?.nav) ? saved.nav : 'general';
+  });
   const [direction, setDirection] = useState('right');
-  const [searching, setSearching] = useState(false);
-  const [query, setQuery] = useState('');
-  const [matchIndex, setMatchIndex] = useState(0);
+  const [searching, setSearching] = useState(() => Boolean(readSettingsView()?.searching));
+  const [query, setQuery] = useState(() => readSettingsView()?.query || '');
+  const [matchIndex, setMatchIndex] = useState(() => Number(readSettingsView()?.matchIndex) || 0);
   const contentRef = useRef(null);
+
+  useEffect(() => {
+    storeSettingsView({ searching, query, matchIndex });
+  }, [searching, query, matchIndex]);
+
+  useEffect(() => () => window.clearTimeout(clearSearchTimer.current), []);
+
+  useEffect(() => {
+    const saved = readSettingsView();
+    if (!saved?.scrollTop) return undefined;
+    const frame = requestAnimationFrame(() => {
+      if (contentRef.current) contentRef.current.scrollTop = saved.scrollTop;
+    });
+    return () => cancelAnimationFrame(frame);
+  }, []);
   const clearSearchTimer = useRef(0);
   const closeSearch = () => {
     setSearching(false);
@@ -184,7 +219,7 @@ function SettingsPage({ side = false }) {
     window.clearTimeout(clearSearchTimer.current);
     setSearching(true);
   };
-  const activeNavRef = useRef('general');
+  const activeNavRef = useRef(activeNav);
   const activateNav = useCallback((key) => {
     if (key === activeNavRef.current) return;
     const index = NAV_KEYS.indexOf(key);
@@ -195,6 +230,7 @@ function SettingsPage({ side = false }) {
         : 'right',
     );
     activeNavRef.current = key;
+    storeSettingsView({ nav: key, scrollTop: contentRef.current?.scrollTop ?? 0 });
     const update = () => setActiveNav(key);
     if (
       typeof document.startViewTransition === 'function' &&
@@ -224,6 +260,16 @@ function SettingsPage({ side = false }) {
       }
     } catch (error) {
       console.warn('[settings] Failed to pick settings directory:', error);
+    }
+  };
+  const pickWorkspaceDirectory = async () => {
+    try {
+      const selected = await open({ directory: true, multiple: false });
+      if (typeof selected === 'string' && selected) {
+        handleChange('workspacePath', selected);
+      }
+    } catch (error) {
+      console.warn('[settings] Failed to pick workspace directory:', error);
     }
   };
   const pickImageFolder = async () => {
@@ -475,7 +521,16 @@ function SettingsPage({ side = false }) {
         </div>
 
         <div className="settings-modal__body">
-          <div className="settings-modal__content" ref={contentRef}>
+          <div
+            className="settings-modal__content"
+            ref={contentRef}
+            onScroll={(event) =>
+              storeSettingsView({
+                nav: activeNavRef.current,
+                scrollTop: event.currentTarget.scrollTop,
+              })
+            }
+          >
             <div className="settings-modal__pane" key={activeNav} data-direction={direction}>
               {activeNav === 'general' && (
                 <div className="settings-section">
@@ -497,7 +552,7 @@ function SettingsPage({ side = false }) {
                   >
                     <Input
                       key={config.settingsDocumentDirectory}
-                      style={{ width: '100%' }}
+                      className="settings-path-input"
                       defaultValue={config.settingsDocumentDirectory}
                       placeholder={t('settings.documents.directoryPlaceholder')}
                       onPressEnter={(event) => event.currentTarget.blur()}
@@ -524,8 +579,7 @@ function SettingsPage({ side = false }) {
                     label={t('settings.general.language')}
                     desc={t('settings.general.languageDesc')}
                   >
-                    <Select
-                      style={{ width: 160 }}
+                    <AutoWidthSelect
                       value={config.language}
                       onChange={(v) => handleChange('language', v)}
                       options={[
@@ -539,10 +593,21 @@ function SettingsPage({ side = false }) {
                     desc={t('settings.general.workspacePathDesc')}
                   >
                     <Input
-                      style={{ width: 260 }}
+                      className="settings-path-input"
                       value={config.workspacePath}
                       onChange={(e) => handleChange('workspacePath', e.target.value)}
                       placeholder="/path/to/workspace"
+                      suffix={
+                        <Tooltip title={t('settings.editor.chooseFolder')} placement="top">
+                          <Button
+                            type="text"
+                            size="small"
+                            icon={<FolderOpenOutlined />}
+                            aria-label={t('settings.editor.chooseFolder')}
+                            onClick={() => void pickWorkspaceDirectory()}
+                          />
+                        </Tooltip>
+                      }
                     />
                   </SettingRow>
 
@@ -555,6 +620,7 @@ function SettingsPage({ side = false }) {
                       >
                         <Input
                           key={config.gitExecutablePath}
+                          className="settings-path-input"
                           aria-label={t('workspaceDiff.gitPath')}
                           defaultValue={config.gitExecutablePath}
                           placeholder={t('workspaceDiff.autoDetect')}
@@ -582,9 +648,8 @@ function SettingsPage({ side = false }) {
                     label={t('settings.general.associatedOpenMode')}
                     desc={t('settings.general.associatedOpenModeDesc')}
                   >
-                    <Select
+                    <AutoWidthSelect
                       aria-label={t('settings.general.associatedOpenMode')}
-                      style={{ width: 200 }}
                       value={config.associatedOpenMode}
                       onChange={(value) => handleChange('associatedOpenMode', value)}
                       options={[
@@ -598,9 +663,8 @@ function SettingsPage({ side = false }) {
                       label={t('settings.general.externalFileDrag')}
                       desc={t('settings.general.externalFileDragDesc')}
                     >
-                      <Select
+                      <AutoWidthSelect
                         aria-label={t('settings.general.externalFileDrag')}
-                        style={{ width: 200 }}
                         value={config.externalFileDrag}
                         onChange={(value) => handleChange('externalFileDrag', value)}
                         options={[
@@ -648,8 +712,7 @@ function SettingsPage({ side = false }) {
                     label={t('settings.editor.fontFamily')}
                     desc={t('settings.editor.fontFamilyDesc')}
                   >
-                    <Select
-                      style={{ width: 200 }}
+                    <AutoWidthSelect
                       value={config.fontFamily}
                       onChange={(v) => handleChange('fontFamily', v)}
                       options={[
@@ -685,8 +748,7 @@ function SettingsPage({ side = false }) {
                           { value: 'tab', label: t('settings.editor.indentUseTabs') },
                         ]}
                       />
-                      <Select
-                        style={{ width: 90 }}
+                      <AutoWidthSelect
                         value={config.tabSize}
                         onChange={(v) => handleChange('tabSize', Number(v))}
                         options={[
@@ -720,8 +782,7 @@ function SettingsPage({ side = false }) {
                     label={t('settings.editor.indentRainbowStyle')}
                     desc={t('settings.editor.indentRainbowStyleDesc')}
                   >
-                    <Select
-                      style={{ width: 140 }}
+                    <AutoWidthSelect
                       value={config.indentRainbowStyle || 'surface'}
                       onChange={(v) => handleChange('indentRainbowStyle', v)}
                       disabled={config.indentRainbowEnabled === false}
@@ -1002,36 +1063,51 @@ function SettingsPage({ side = false }) {
  * @param {object} props 组件属性。
  * @param {string} props.label 字号设置名称。
  */
-function FontSizeControl({ label, value, onChange, disabled = false }) {
-  const { t } = useTranslation();
+const selectLabelText = (label) => {
+  if (label == null || typeof label === 'boolean') return '';
+  if (typeof label === 'string' || typeof label === 'number') return String(label);
+  if (Array.isArray(label)) return label.map(selectLabelText).join('');
+  if (label.props) return selectLabelText(label.props.children);
+  return '';
+};
+
+const selectTextWidth = (text) =>
+  [...String(text)].reduce(
+    (sum, char) => sum + (/[\u3000-\u9fff\uff00-\uffef]/.test(char) ? 14 : 8),
+    0,
+  );
+
+/** 下拉宽度按最长候选项计算，中英文自适应，避免省略号截断。 */
+function AutoWidthSelect({ options = [], style, className, ...props }) {
+  const width = Math.max(
+    56,
+    ...options.map((option) => selectTextWidth(selectLabelText(option?.label)) + 48),
+  );
   return (
-    <Space.Compact className="setting-font-size">
-      <Tooltip title={t('settings.fontSize.decrease', { label })}>
-        <Button
-          disabled={disabled}
-          aria-label={t('settings.fontSize.decrease', { label })}
-          icon={<MinusOutlined />}
-          onClick={() => onChange(Math.max(10, (value || 14) - 1))}
-        />
-      </Tooltip>
-      <InputNumber
-        aria-label={label}
-        min={10}
-        max={24}
-        step={1}
-        disabled={disabled}
-        value={value}
-        onChange={onChange}
-      />
-      <Tooltip title={t('settings.fontSize.increase', { label })}>
-        <Button
-          disabled={disabled}
-          aria-label={t('settings.fontSize.increase', { label })}
-          icon={<PlusOutlined />}
-          onClick={() => onChange(Math.min(24, (value || 14) + 1))}
-        />
-      </Tooltip>
-    </Space.Compact>
+    <Select
+      {...props}
+      className={`settings-auto-width-select${className ? ` ${className}` : ''}`}
+      options={options}
+      popupMatchSelectWidth={false}
+      style={{ width, maxWidth: '100%', ...style }}
+    />
+  );
+}
+
+function FontSizeControl({ label, value, onChange, disabled = false }) {
+  const digits = String(value ?? '').length;
+  return (
+    <InputNumber
+      className="setting-font-size-input"
+      aria-label={label}
+      min={10}
+      max={24}
+      step={1}
+      disabled={disabled}
+      value={value}
+      onChange={onChange}
+      style={{ width: Math.max(58, 36 + digits * 12) }}
+    />
   );
 }
 

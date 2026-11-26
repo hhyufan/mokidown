@@ -44,6 +44,7 @@ vi.mock('@utils/backgroundImage', async (original) => ({
 }));
 beforeEach(() => {
   i18n.changeLanguage('zh');
+  localStorage.removeItem('mokidown-settings-view');
   useConfigStore.setState({ fontSize: 14, previewFontSize: 14, previewZoomSync: false });
   useConfigStore.setState({
     backgroundImage: '',
@@ -161,7 +162,7 @@ it('opens the search panel to the right of the search button', async () => {
   expect(container.querySelector('.settings-nav')).toHaveAttribute('data-searching', 'true');
 });
 
-it('adjusts both font sizes with compact controls without deprecated InputNumber addons', async () => {
+it('adjusts both font sizes with compact number inputs', async () => {
   const errors = vi.spyOn(console, 'error').mockImplementation(() => {});
   await act(async () =>
     render(
@@ -171,17 +172,17 @@ it('adjusts both font sizes with compact controls without deprecated InputNumber
     ),
   );
   fireEvent.click(screen.getByRole('button', { name: '渲染器' }));
-  expect(screen.getByRole('spinbutton', { name: '预览字号' })).toHaveValue('14');
-  fireEvent.click(screen.getByRole('button', { name: '增大预览字号' }));
+  const preview = screen.getByRole('spinbutton', { name: '预览字号' });
+  expect(preview).toHaveValue('14');
+  fireEvent.change(preview, { target: { value: '15' } });
   expect(useConfigStore.getState().previewFontSize).toBe(15);
   act(() => useConfigStore.setState({ previewZoomSync: true }));
-  expect(screen.getByRole('button', { name: '增大预览字号' })).toBeDisabled();
   expect(screen.getByRole('spinbutton', { name: '预览字号' })).toBeDisabled();
   fireEvent.click(screen.getByRole('button', { name: '编辑器' }));
-  fireEvent.click(screen.getByRole('button', { name: '减小编辑区字号' }));
+  const editor = screen.getByRole('spinbutton', { name: '编辑区字号' });
+  fireEvent.change(editor, { target: { value: '13' } });
   expect(useConfigStore.getState().fontSize).toBe(13);
-  act(() => useConfigStore.setState({ fontSize: 24 }));
-  fireEvent.click(screen.getByRole('button', { name: '增大编辑区字号' }));
+  fireEvent.change(editor, { target: { value: '24' } });
   expect(useConfigStore.getState().fontSize).toBe(24);
   expect(errors.mock.calls.flat().join(' ')).not.toMatch(
     /addonAfter|addonBefore|findDOMNode|Maximum update depth/,

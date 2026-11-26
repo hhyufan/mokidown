@@ -77,6 +77,12 @@ export function restoreEditorSession() {
       useEditorStore
         .getState()
         .restoreSessionTabs(tabs.filter(Boolean), savedAtBoot.activeTabId, initialTabs);
+      if (savedAtBoot.settingsOpen) {
+        useEditorStore.getState().openSettingsTab();
+        if (!savedAtBoot.settingsActive && savedAtBoot.activeTabId) {
+          useEditorStore.getState().setActiveTab(savedAtBoot.activeTabId);
+        }
+      }
     })().finally(() => {
       restored = true;
     });
@@ -106,6 +112,8 @@ export function flushEditorSession() {
       externalFileId,
     })),
     views: snapshotDocumentViewStates(files.map((tab) => tab.id)),
+    settingsOpen: tabs.some((tab) => tab.builtin === 'settings'),
+    settingsActive: tabs.some((tab) => tab.builtin === 'settings' && tab.id === activeTabId),
   };
   try {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(snapshot));
