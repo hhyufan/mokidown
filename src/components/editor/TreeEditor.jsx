@@ -14,7 +14,9 @@ import { getBuffer, setBuffer } from '@utils/editorBuffer';
 import { editTreeSource, flattenTree, parseTreeText } from '@utils/mgtree';
 import { useEditorContextMenu } from '@hooks/useEditorContextMenu';
 import EditorContextMenu from './EditorContextMenu';
-import { MENU_MOD } from '@utils/contextMenuShortcuts';
+import { useHotkeys } from '@hooks/useHotkeys';
+import { formatKeybinding } from '@utils/keybinding';
+import { editingShortcutOf } from '@utils/basicEditingShortcuts';
 import TreeView, { InlineTreeTitle, TreeNodeRow, TreeControls } from './TreeView';
 import TreeNodeEditor from './TreeNodeEditor';
 import TreeJumpEditor from './TreeJumpEditor';
@@ -28,6 +30,7 @@ function readExpanded(storageKey) {
 }
 
 export default function TreeEditor({ className = '', onAutoSave, onSourceChange, tabId: documentId }) {
+  const { keybindingOf } = useHotkeys();
   const { t } = useTranslation();
   const tabId = useEditorStore((s) => documentId ?? s.activeTabId);
   const tab = useEditorStore((s) => s.tabs.find((item) => item.id === tabId));
@@ -126,15 +129,16 @@ export default function TreeEditor({ className = '', onAutoSave, onSourceChange,
   const handleContextMenu = (event, node = null) => {
     if (event.target.closest('input, textarea, [contenteditable="true"]')) return;
     const item = (key, run, extra = {}) => ({ key, label: t(`tree.${key}`), run, ...extra });
+    const binding = (id) => ({ keybinding: keybindingOf(id), shortcut: formatKeybinding(keybindingOf(id)) });
     const items = node ? [
-      { key: 'copy', label: t('editor.menu.copy'), shortcut: `${MENU_MOD}+C`, run: () => navigator.clipboard.writeText(node.originalText) },
+      { key: 'copy', label: t('editor.menu.copy'), ...editingShortcutOf('copy'), run: () => navigator.clipboard.writeText(node.originalText) },
       { key: 's1', separator: true },
-      item('editNode', () => startEdit(node), { shortcut: 'F2' }),
-      item('addChild', () => addNode(node), { shortcut: 'Insert' }),
+      item('editNode', () => startEdit(node), binding('treeEdit')),
+      item('addChild', () => addNode(node), binding('treeAdd')),
       { key: 's2', separator: true },
-      item('deleteNode', () => deleteNode(node), { danger: true, shortcut: 'Delete' }),
+      item('deleteNode', () => deleteNode(node), { ...binding('treeDelete'), danger: true }),
     ] : [
-      item('addRoot', () => addNode(null), { shortcut: 'Insert' }),
+      item('addRoot', () => addNode(null), binding('treeAdd')),
       { key: 's1', separator: true },
       item('expandAll', () => updateExpanded(flat.filter((node) => node.children.length).map((node) => node.key))),
       item('collapseAll', () => updateExpanded([])),
@@ -207,7 +211,7 @@ export default function TreeEditor({ className = '', onAutoSave, onSourceChange,
           </div>
         )}
       </div>
-      <div className="moki-tree__hint">{t('tree.hint', { shortcut: `${MENU_MOD}+E` })}</div>
+      <div className="moki-tree__hint">{t('tree.hint', { shortcut: formatKeybinding(keybindingOf('markdownInlineCode')) })}</div>
       {showTop && <Tooltip title={t('tree.backToTop')}><button className="moki-tree__top" type="button" aria-label={t('tree.backToTop')}
         onClick={() => scrollRef.current?.scrollTo({ top: 0, behavior: 'smooth' })}><VerticalAlignTopOutlined /></button></Tooltip>}
     </section>

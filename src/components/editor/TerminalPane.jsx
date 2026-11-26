@@ -8,6 +8,8 @@ import useThemeStore from '@store/useThemeStore';
 import useEditorStore from '@store/useEditorStore';
 import { openExternal } from '@utils/tauriApi';
 import { openEditorLink } from '@utils/editorLinks';
+import { matchesHotkey } from '@hooks/useHotkeys';
+import { isImeComposing } from '@utils/keyboard';
 import '@xterm/xterm/css/xterm.css';
 
 const ansi = {
@@ -334,16 +336,16 @@ export default function TerminalPane({ active, directory }) {
       void write(current);
     });
     term.attachCustomKeyEventHandler((event) => {
-      if (event.type !== 'keydown' || !(event.ctrlKey || event.metaKey) || event.altKey)
-        return true;
-      const key = event.key.toLowerCase();
-      if (key === 'c' && (event.shiftKey || term.hasSelection())) {
+      if (event.type !== 'keydown' || isImeComposing(event)) return true;
+      const action = matchesHotkey(event, 'terminalCopy', 'terminalPaste');
+      const copySelection = term.hasSelection() && matchesHotkey(event, 'editCopy');
+      if (action === 'terminalCopy' || copySelection) {
         event.preventDefault();
         if (term.hasSelection())
           void navigator.clipboard?.writeText(term.getSelection()).catch(() => {});
         return false;
       }
-      if (key === 'v' && event.shiftKey && navigator.clipboard) {
+      if (action === 'terminalPaste' && navigator.clipboard) {
         event.preventDefault();
         void navigator.clipboard.readText().then(
           (text) => term.paste(text),

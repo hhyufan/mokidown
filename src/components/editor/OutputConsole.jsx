@@ -8,6 +8,9 @@ import useFileStore from '@store/useFileStore';
 import useScriptStore, { isScriptRunning } from '@store/useScriptStore';
 import { getScriptLanguage, scriptRunner } from '@/services/scriptRunner';
 import { isImeComposing } from '@utils/keyboard';
+import { isCapturingShortcut } from '@/configs/hotkeys';
+import { useHotkeys } from '@hooks/useHotkeys';
+import { formatKeybinding } from '@utils/keybinding';
 import { consoleAvailable, outputToolsAvailable, terminalSupported } from '@utils/consoleSupport';
 import { lazyWithRetry } from '@utils/lazyWithRetry';
 import useProblemsStore, { selectFileProblems } from '@store/useProblemsStore';
@@ -40,6 +43,7 @@ function Icon({ type }) {
 
 export default function OutputConsole() {
   const { t } = useTranslation();
+  const { matchAction, keybindingOf } = useHotkeys();
   const STATUS = { idle: t('console.status.idle'), preparing: t('console.status.preparing'), running: t('console.status.running'), stopping: t('console.status.stopping'), stopped: t('console.status.stopped'), success: t('console.status.success'), error: t('console.status.error') };
   const RUNTIME_HINTS = { csharp: t('console.runtimeHint.csharp'), java: t('console.runtimeHint.java'), kotlin: t('console.runtimeHint.kotlin'), rust: t('console.runtimeHint.rust') };
   const state = useScriptStore();
@@ -115,15 +119,16 @@ export default function OutputConsole() {
   }, [state.runId]);
   useEffect(() => {
     const shortcut = (event) => {
-      if (!(event.ctrlKey || event.metaKey) || event.altKey || isImeComposing(event)) return;
-      if (!event.shiftKey && event.key.toLowerCase() === 'j') {
+      if (isCapturingShortcut() || isImeComposing(event)) return;
+      const action = matchAction(event, 'app')?.id;
+      if (action === 'toggleConsole') {
         event.preventDefault(); event.stopPropagation(); const current = useScriptStore.getState();
         // 没有代码编辑器或语言不受支持时，快捷键不产生任何效果，避免在
         // 后续切换到支持的文件时突然弹出控制台。
         const editor = useEditorStore.getState();
         const activeTab = editor.tabRenderList.find((tab) => tab.id === editor.activeTabId);
         if (consoleAvailable(editor.viewMode, activeTab)) current.setOpen(!current.open);
-      } else if (event.shiftKey && event.key.toLowerCase() === 'm') {
+      } else if (action === 'showProblems') {
         event.preventDefault(); event.stopPropagation();
         const editor = useEditorStore.getState();
         const activeTab = editor.tabRenderList.find((tab) => tab.id === editor.activeTabId);
@@ -132,7 +137,7 @@ export default function OutputConsole() {
     };
     window.addEventListener('keydown', shortcut, true);
     return () => window.removeEventListener('keydown', shortcut, true);
-  }, []);
+  }, [matchAction]);
   // 控制台不再常驻编辑器底部：关闭时整块面板（含折叠工具条）都隐藏，
   // 需要时通过标签栏按钮或 Ctrl+J / Ctrl+Shift+M 呼出。组件保持挂载，
   // 以便快捷键和问题文档清理逻辑在收起状态下继续生效。
@@ -215,10 +220,10 @@ export default function OutputConsole() {
             <button className={settingsOpen ? 'is-active' : ''} onClick={() => setSettingsOpen(!settingsOpen)}
               aria-expanded={settingsOpen} aria-label={t('console.runtime')}><Icon type="runtime" /></button>
           </Tooltip>
-          <Tooltip title={t('console.runCurrentHint')} placement="top" mouseEnterDelay={0.3}>
+          <Tooltip title={[t('console.runCurrent'), formatKeybinding(keybindingOf('runScript'))].filter(Boolean).join(' · ')} placement="top" mouseEnterDelay={0.3}>
             <button aria-label={t('console.runCurrent')} disabled={running || !canRun} onClick={() => scriptRunner.runCurrent()}><Icon type="run" /></button>
           </Tooltip>
-          <Tooltip title={t('console.stopCurrentHint')} placement="top" mouseEnterDelay={0.3}>
+          <Tooltip title={[t('console.stopCurrent'), formatKeybinding(keybindingOf('stopScript'))].filter(Boolean).join(' · ')} placement="top" mouseEnterDelay={0.3}>
             <button aria-label={t('console.stopCurrent')} disabled={!running || state.status === 'stopping'} onClick={() => scriptRunner.stop()}><Icon type="stop" /></button>
           </Tooltip>
           <Tooltip title={copied ? t('console.copied') : t('console.copy')} placement="top" mouseEnterDelay={0.3}>

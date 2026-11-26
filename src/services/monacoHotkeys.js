@@ -21,6 +21,9 @@ const MONACO_ACTION_IDS = {
   toggleLineComment: 'editor.action.commentLine',
   toggleBlockComment: 'editor.action.blockComment',
   commandPalette: 'editor.action.quickCommand',
+  findInEditor: 'actions.find',
+  replaceInEditor: 'editor.action.startFindReplaceAction',
+  changeAllOccurrences: 'editor.action.changeAll',
 };
 
 /** 上一次注册产生的可释放对象。 */
@@ -55,12 +58,17 @@ export function configureMonacoHotkeys(monaco, hotkeys, options = {}) {
 
   for (const action of HOTKEY_ACTIONS) {
     const keybinding = toMonacoKeybinding(monaco, hotkeys[action.id]);
-    if (keybinding === null) continue;
-
     if (action.scope === 'editor') {
       const monacoActionId = MONACO_ACTION_IDS[action.id];
       if (!monacoActionId) continue;
       try {
+        if (hotkeys[action.id] !== action.defaultKeybinding) {
+          disposables.push(monaco.editor.addKeybindingRule({
+            keybinding: 0,
+            command: `-${monacoActionId}`,
+          }));
+        }
+        if (keybinding === null) continue;
         disposables.push(monaco.editor.addEditorAction({
           id: `${monacoActionId}.moki`,
           label: labels[action.id] ?? action.id,
@@ -74,6 +82,7 @@ export function configureMonacoHotkeys(monaco, hotkeys, options = {}) {
       continue;
     }
 
+    if (keybinding === null || action.scope !== 'app') continue;
     const handler = appHandlers[action.id];
     if (typeof handler !== 'function') continue;
     // `addCommand` 只注册命令本身，按键要通过 `addKeybindingRule` 绑定。

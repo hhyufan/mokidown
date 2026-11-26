@@ -6,6 +6,7 @@ import { liftListItem } from '@milkdown/kit/prose/schema-list';
 import { EditorView as CodeMirrorView } from '@codemirror/view';
 import { $prose } from '@milkdown/kit/utils';
 import { isImeComposing } from '@utils/keyboard';
+import { matchesHotkey } from '@hooks/useHotkeys';
 import { liftInlineMath, inlineMathSlot } from './milkdownMathPreview';
 
 const enclosedBlocks = new Set(['code_block', 'table', 'math_block', 'table_source_block', 'math_source_block', 'html_block', 'hr']);
@@ -172,7 +173,7 @@ function removeHorizontalRule(view, backward) {
 // Capture at the wrapper because CodeMirror owns its keyboard events and the
 // normal ProseMirror keymap does not see them.
 export function handleMilkdownBlockKeyDown(view, event) {
-  if (!view.editable || view.composing || isImeComposing(event) || event.altKey) return false;
+  if (!view.editable || view.composing || isImeComposing(event)) return false;
   const target = event.target instanceof Element ? event.target : null;
   if (!target || target.closest('input, textarea, button, select, .md-code-execution-mount')) return false;
   if ((event.ctrlKey || event.metaKey) && view.dom?.contains(target)) {
@@ -185,7 +186,9 @@ export function handleMilkdownBlockKeyDown(view, event) {
       return true;
     }
   }
-  if (!['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Enter', 'Home', 'End', 'Backspace', 'Delete'].includes(event.key)) return false;
+  const exitBlock = matchesHotkey(event, 'markdownExitBlock', 'markdownExitBlockAbove');
+  if (!exitBlock && (event.altKey ||
+    !['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Enter', 'Home', 'End', 'Backspace', 'Delete'].includes(event.key))) return false;
   
   // Check if cursor is inside a formula - if so, handle it with the math plugin
   if (event.key === 'Enter' && !event.ctrlKey && !event.metaKey && !event.shiftKey && !target.closest('.cm-editor')) {
@@ -277,14 +280,14 @@ export function handleMilkdownBlockKeyDown(view, event) {
   const cmDOM = target.closest('.cm-editor');
   let block;
   let direction;
-  const modifiedEnter = event.key === 'Enter' && (event.ctrlKey || event.metaKey);
+  const exitDirection = exitBlock === 'markdownExitBlockAbove' ? -1 : 1;
   if (cmDOM) {
     const cm = CodeMirrorView.findFromDOM(cmDOM);
     if (!cm || !cm.state.selection.main.empty) return false;
     const codeDOM = cmDOM.closest('.milkdown-code-block');
     block = enclosingBlock(view.state.doc.resolve(view.posAtDOM(codeDOM, 0)));
     if (!block) return false;
-    if (modifiedEnter) direction = event.shiftKey ? -1 : 1;
+    if (exitBlock) direction = exitDirection;
     else {
       if (event.ctrlKey || event.metaKey || event.shiftKey) return false;
       const { head } = cm.state.selection.main;
@@ -304,7 +307,7 @@ export function handleMilkdownBlockKeyDown(view, event) {
     block = selection instanceof NodeSelection && enclosedBlocks.has(selection.node.type.name)
       ? { pos: selection.from, node: selection.node } : enclosingBlock(selection.$from);
     if (!block || (!selection.empty && !(selection instanceof NodeSelection))) return false;
-    if (modifiedEnter) direction = event.shiftKey ? -1 : 1;
+    if (exitBlock) direction = exitDirection;
     else {
       if (event.ctrlKey || event.metaKey || event.shiftKey) return false;
       if (selection instanceof NodeSelection) {

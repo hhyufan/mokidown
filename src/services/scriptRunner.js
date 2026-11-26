@@ -4,6 +4,7 @@ import i18n from '@/i18n';
 import useEditorStore from '@store/useEditorStore';
 import useScriptStore, { isScriptRunning } from '@store/useScriptStore';
 import { isImeComposing } from '@utils/keyboard';
+import { matchesHotkey } from '@hooks/useHotkeys';
 import useCodeBlockRunStore, { isBlockRunning } from '@store/useCodeBlockRunStore';
 
 const BLOCK_LANGUAGES = {
@@ -145,11 +146,13 @@ export const scriptRunner = {
 };
 
 export function handleScriptShortcut(event) {
-  if (event.key !== 'F5' || isImeComposing(event)) return false;
+  if (isImeComposing(event)) return false;
+  const action = matchesHotkey(event, 'runScript', 'stopScript');
+  if (!action) return false;
   event.preventDefault();
   event.stopPropagation();
   if (!event.repeat) {
-    if (event.shiftKey) scriptRunner.stop();
+    if (action === 'stopScript') scriptRunner.stop();
     else scriptRunner.runCurrent();
   }
   return true;

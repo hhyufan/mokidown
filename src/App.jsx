@@ -68,6 +68,7 @@ import Footer from '@layout/footer/Footer';
 import OutputConsole from '@components/editor/OutputConsole';
 import { handleScriptShortcut } from '@/services/scriptRunner';
 import { useHotkeys } from '@hooks/useHotkeys';
+import { handleEditingShortcut, runTextFieldShortcut } from '@utils/basicEditingShortcuts';
 import { HOTKEY_COMMAND_EVENT } from '@utils/hotkeyCommands';
 import { isCapturingShortcut } from '@/configs/hotkeys';
 import ExternalFileConflictNotice from '@components/overlays/ExternalFileConflictNotice';
@@ -537,7 +538,13 @@ function App({ skipCliArgs = false }) {
       const handlers = {
         save: saveCurrentFile,
         openFile: openFileDialog,
-        search: () => setSearchOpen(true),
+        search: () => {
+          const input = document.querySelector('.search-dropdown--open input[role="combobox"]');
+          if (input) {
+            input.focus();
+            input.select();
+          } else setSearchOpen(true);
+        },
         openSettings,
         toggleSidebar,
         togglePreview: toggleEditPreview,
@@ -587,11 +594,17 @@ function App({ skipCliArgs = false }) {
       // 「设置 → 快捷键」正在录入键位时挂起全局快捷键，避免改绑 Ctrl+S 时真的保存。
       if (isCapturingShortcut()) return;
 
+      const input = e.target?.closest?.('input, textarea');
+      if (input && !input.closest('.monaco-editor, .milkdown-editor, .xterm, .moki-tree__rich-input') &&
+        handleEditingShortcut(e, (action, custom) => runTextFieldShortcut(input, action, custom))) return;
       if (e.target?.closest?.('.integrated-terminal .xterm')) return;
       if (handleScriptShortcut(e)) return;
 
       const action = matchHotkey(e, 'app');
       if (!action) return;
+      if (action.id === 'toggleSidebar' && matchHotkey(e, 'milkdown')?.id === 'markdownBold' &&
+        e.target?.closest?.('.milkdown-editor') &&
+        !e.target.closest('.cm-editor, input, textarea, select, button')) return;
       // F11 长按会连续触发，全屏切换只响应第一次。
       if (action.id === 'toggleFullscreen' && e.repeat) {
         e.preventDefault();

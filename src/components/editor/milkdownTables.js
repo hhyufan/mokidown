@@ -7,6 +7,7 @@ import { MAX_TABLE_ROWS, MAX_TABLE_COLUMNS, tableDimensions } from './tableDimen
 import { createElement } from 'react';
 import { createRoot } from 'react-dom/client';
 import TablePicker from './TablePicker';
+import { matchesHotkey } from '@hooks/useHotkeys';
 
 /**
  * 鼠标离开表格后延迟收起工具的时长。
@@ -133,7 +134,7 @@ export function handleTableKeyDown(view, event) {
   const context = editingTableContext(view.state);
   if (!context) return false;
   const { selection } = view.state;
-  if (event.key === 'Tab' && !event.shiftKey && !event.ctrlKey && !event.metaKey && !event.altKey
+  if (matchesHotkey(event, 'markdownNextCellOrIndent')
     && selection.empty && context.bottom === context.map.height && context.right === context.map.width) {
     if (!editTable(view.state, view.dispatch, 'addRowAfter')) return false;
     const next = editingTableContext(view.state);

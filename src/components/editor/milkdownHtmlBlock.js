@@ -1,6 +1,7 @@
 import { $nodeSchema, $view } from '@milkdown/kit/utils';
 import { NodeSelection } from '@milkdown/kit/prose/state';
 import i18n from '@/i18n';
+import { matchesHotkey } from '@hooks/useHotkeys';
 
 export function sanitizeMilkdownHtml(value) {
   const template = document.createElement('template');
@@ -72,7 +73,7 @@ export const htmlBlockView = $view(htmlBlockSchema.node, () => (initialNode, vie
   panel.addEventListener('focusout', (event) => { if (!panel.contains(event.relatedTarget)) finish(); });
   input.addEventListener('keydown', (event) => {
     if (event.isComposing || event.keyCode === 229) return;
-    if (event.key === 'Escape' || (event.key === 'Enter' && (event.ctrlKey || event.metaKey))) {
+    if (event.key === 'Escape' || matchesHotkey(event, 'markdownExitBlock', 'markdownExitBlockAbove')) {
       event.preventDefault(); finish();
       const pos = getPos();
       if (typeof pos === 'number') view.dispatch(view.state.tr.setSelection(NodeSelection.create(view.state.doc, pos)));

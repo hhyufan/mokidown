@@ -23,7 +23,8 @@ const MODIFIER_CODES = new Set([
 ]);
 
 /** 不允许被用户占用的组合：一旦占用会让输入框无法复制粘贴。 */
-const RESERVED_KEYBINDINGS = new Set(['Ctrl+KeyC', 'Ctrl+KeyV', 'Ctrl+KeyX', 'Ctrl+KeyA']);
+const RESERVED_KEYBINDINGS = new Set(['Ctrl+KeyC', 'Ctrl+KeyV', 'Ctrl+KeyX', 'Ctrl+KeyA',
+  'Meta+KeyC', 'Meta+KeyV', 'Meta+KeyX', 'Meta+KeyA']);
 
 /**
  * 已知由浏览器 / WebView / 操作系统接管的组合。
@@ -90,14 +91,16 @@ export function isModifierCode(code) {
  * @returns {string} 归一化键位；只按了修饰键或无法识别时返回空串。
  */
 export function keybindingFromEvent(event) {
-  if (!event || !event.code) return '';
-  if (isModifierCode(event.code)) return '';
+  const code = event?.code ||
+    (/^(?:F\d{1,2}|Arrow\w+|Enter|Escape|Tab|Home|End|Insert|Delete|PageUp|PageDown)$/.test(event?.key)
+      ? event.key : '');
+  if (!code || isModifierCode(code)) return '';
   const parts = [];
   if (event.ctrlKey) parts.push('Ctrl');
   if (event.altKey) parts.push('Alt');
   if (event.shiftKey) parts.push('Shift');
   if (event.metaKey) parts.push('Meta');
-  parts.push(event.code);
+  parts.push(code);
   return parts.join('+');
 }
 
@@ -139,7 +142,7 @@ export function parseKeybinding(keybinding) {
  */
 export function hasModifier(keybinding) {
   const { modifiers } = parseKeybinding(keybinding);
-  return modifiers.includes('Ctrl') || modifiers.includes('Meta');
+  return modifiers.includes('Ctrl') || modifiers.includes('Meta') || modifiers.includes('Alt');
 }
 
 /**
@@ -149,16 +152,17 @@ export function hasModifier(keybinding) {
  * @returns {{ok: boolean, reason?: string, warning?: string}} 校验结果。
  *   `reason` 为拒绝原因码；`warning` 为“可以保存但需提醒”的原因码。
  */
-export function validateKeybinding(keybinding) {
+export function validateKeybinding(keybinding, { allowReserved = false, allowPlain = false } = {}) {
   if (typeof keybinding !== 'string' || keybinding === '') {
     return { ok: false, reason: 'empty' };
   }
   const { code } = parseKeybinding(keybinding);
   if (!code) return { ok: false, reason: 'empty' };
   if (isModifierCode(code)) return { ok: false, reason: 'modifierOnly' };
-  if (RESERVED_KEYBINDINGS.has(keybinding)) return { ok: false, reason: 'reserved' };
+  if (!allowReserved && RESERVED_KEYBINDINGS.has(keybinding)) return { ok: false, reason: 'reserved' };
   // 没有修饰键时只允许功能键区，否则会抢走普通打字。
-  if (!hasModifier(keybinding) && !/^F\d{1,2}$/.test(code)) {
+  const navigation = allowPlain && /^(?:Arrow\w+|Tab|Enter|Home|End|Insert|Delete|Escape|PageUp|PageDown)$/.test(code);
+  if (!hasModifier(keybinding) && !/^F\d{1,2}$/.test(code) && !navigation) {
     return { ok: false, reason: 'needsModifier' };
   }
   // 系统 / 浏览器可能抢先处理：允许保存，但必须如实提示而不是假装没问题。

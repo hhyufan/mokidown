@@ -37,7 +37,7 @@ import './shortcut-input.scss';
  * @param {{tone: string, message: string}} [props.notice] 状态与说明。
  * @param {boolean} [props.disabled] 是否禁用。
  */
-function ShortcutInput({ value, onChange, onReset, isDefault = false, notice, disabled = false }) {
+function ShortcutInput({ value, onChange, onReset, isDefault = false, notice, disabled = false, validationOptions }) {
   const { t } = useTranslation();
   const [capturing, setCapturing] = useState(false);
   const [hint, setHint] = useState('');
@@ -72,11 +72,12 @@ function ShortcutInput({ value, onChange, onReset, isDefault = false, notice, di
     event.preventDefault();
     event.stopPropagation();
 
-    if (event.key === 'Escape') {
+    const unmodified = !event.ctrlKey && !event.altKey && !event.metaKey && !event.shiftKey;
+    if (event.key === 'Escape' && unmodified) {
       stopCapture();
       return;
     }
-    if (event.key === 'Backspace' || event.key === 'Delete') {
+    if (event.key === 'Backspace' || (event.key === 'Delete' && unmodified)) {
       onChange('');
       stopCapture();
       return;
@@ -88,7 +89,7 @@ function ShortcutInput({ value, onChange, onReset, isDefault = false, notice, di
     }
 
     const keybinding = keybindingFromEvent(event);
-    const validation = validateKeybinding(keybinding);
+    const validation = validateKeybinding(keybinding, validationOptions);
     if (!validation.ok) {
       const reasons = {
         empty: 'keepPressing',
@@ -101,7 +102,7 @@ function ShortcutInput({ value, onChange, onReset, isDefault = false, notice, di
     }
     onChange(keybinding);
     stopCapture();
-  }, [onChange, stopCapture, t]);
+  }, [onChange, stopCapture, t, validationOptions]);
 
   // 捕获中点击别处即取消，避免控件停留在“等待按键”状态却无人察觉。
   useEffect(() => {

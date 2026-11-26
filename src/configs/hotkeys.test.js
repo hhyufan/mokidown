@@ -11,7 +11,7 @@ it('ships defaults that are all acceptable and conflict-free', () => {
   for (const action of HOTKEY_ACTIONS) {
     // 空默认表示未绑定，属于合法配置。
     if (!action.defaultKeybinding) continue;
-    const result = validateKeybinding(action.defaultKeybinding);
+    const result = validateKeybinding(action.defaultKeybinding, action);
     // `warning` 表示该组合可能被系统/浏览器接管（无法探测），默认值允许带警告，
     // 但不能是不可用（ok: false）。
     expect({ id: action.id, ok: result.ok }).toEqual({ id: action.id, ok: true });
@@ -19,12 +19,13 @@ it('ships defaults that are all acceptable and conflict-free', () => {
   expect(findHotkeyConflicts(DEFAULT_HOTKEYS).size).toBe(0);
 });
 
-it('keeps no default on a combination the system is known to reserve', () => {
+it('keeps system warnings limited to the existing script and terminal bindings', () => {
   // Ctrl+Shift+I 是开发者工具的常见组合，默认值必须避开它，
   // 否则用户一打开设置就会看到一条无法消除的警告。
   for (const action of HOTKEY_ACTIONS) {
-    expect({ id: action.id, warning: validateKeybinding(action.defaultKeybinding).warning })
-      .toEqual({ id: action.id, warning: undefined });
+    const retained = { F5: 'browserReload', 'Ctrl+Shift+KeyC': 'browserDevtools' };
+    expect({ id: action.id, warning: validateKeybinding(action.defaultKeybinding, action).warning })
+      .toEqual({ id: action.id, warning: retained[action.defaultKeybinding] });
   }
 });
 

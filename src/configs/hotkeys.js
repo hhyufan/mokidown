@@ -9,7 +9,69 @@
  * - `editor`：Monaco 编辑器动作，通过编辑器的 addCommand 注册。
  */
 
-/** @typedef {'app'|'editor'} HotkeyScope */
+/** @typedef {'app'|'editor'|'basic'|'milkdown'|'explorer'|'project'|'explorerSearch'|'search'|'terminal'|'tree'} HotkeyScope */
+
+const primary = typeof navigator !== 'undefined' && /Mac|iPod|iPhone|iPad/.test(navigator.platform)
+  ? 'Meta'
+  : 'Ctrl';
+const mod = (key, modifier = '') => primary === 'Meta'
+  ? [modifier, primary, key].filter(Boolean).join('+')
+  : [primary, modifier, key].filter(Boolean).join('+');
+
+const scopedActions = [
+  ['runScript', 'app', 'run', 'F5', 'console.run'],
+  ['stopScript', 'app', 'run', 'Shift+F5', 'console.stop'],
+  ['toggleConsole', 'app', 'run', `${primary}+KeyJ`],
+  ['showProblems', 'app', 'run', primary === 'Meta' ? 'Shift+Meta+KeyM' : 'Ctrl+Shift+KeyM'],
+  ['explorerBack', 'explorer', 'explorer', 'Alt+ArrowLeft', 'sidebar.explorer.back'],
+  ['explorerForward', 'explorer', 'explorer', 'Alt+ArrowRight', 'sidebar.explorer.forward'],
+  ['explorerParent', 'explorer', 'explorer', 'Alt+ArrowUp', 'sidebar.explorer.up'],
+  ['projectOpenSelected', 'project', 'explorer', 'Alt+ArrowRight', 'sidebar.project.openSelected'],
+  ['projectParent', 'project', 'explorer', 'Alt+ArrowUp'],
+  ['searchFiles', 'search', 'search', 'Alt+Digit1', 'search.fileTab'],
+  ['searchContent', 'search', 'search', 'Alt+Digit2', 'search.contentTab'],
+  ['editMarkdownLink', 'milkdown', 'markdown', `${primary}+KeyK`, 'media.editLink'],
+  ['markdownBold', 'milkdown', 'markdown', mod('KeyB'), 'toolbar.bold'],
+  ['markdownItalic', 'milkdown', 'markdown', mod('KeyI'), 'toolbar.italic'],
+  ['markdownInlineCode', 'milkdown', 'markdown', mod('KeyE')],
+  ['markdownStrikethrough', 'milkdown', 'markdown', mod('KeyX', 'Alt'), 'toolbar.strikethrough'],
+  ['markdownQuote', 'milkdown', 'markdown', mod('KeyB', 'Shift'), 'toolbar.blockquote'],
+  ['markdownCodeBlock', 'milkdown', 'markdown', mod('KeyC', 'Alt'), 'toolbar.code'],
+  ['markdownParagraph', 'milkdown', 'markdown', mod('Digit0', 'Alt')],
+  ...Array.from({ length: 6 }, (_, i) => [
+    `markdownHeading${i + 1}`, 'milkdown', 'markdown', mod(`Digit${i + 1}`, 'Alt'),
+  ]),
+  ['markdownOrderedList', 'milkdown', 'markdown', mod('Digit7', 'Alt')],
+  ['markdownBulletList', 'milkdown', 'markdown', mod('Digit8', 'Alt')],
+  ['terminalCopy', 'terminal', 'terminal', primary === 'Meta' ? 'Shift+Meta+KeyC' : 'Ctrl+Shift+KeyC', 'editor.menu.copy'],
+  ['terminalPaste', 'terminal', 'terminal', primary === 'Meta' ? 'Shift+Meta+KeyV' : 'Ctrl+Shift+KeyV', 'editor.menu.paste'],
+  ['findInEditor', 'editor', 'editor', `${primary}+KeyF`, 'editor.menu.find'],
+  ['replaceInEditor', 'editor', 'editor', primary === 'Meta' ? 'Alt+Meta+KeyF' : 'Ctrl+KeyH', 'editor.menu.replace'],
+  ['changeAllOccurrences', 'editor', 'editor', `${primary}+F2`, 'editor.menu.changeAllOccurrences'],
+  ['editCut', 'basic', 'editing', mod('KeyX'), 'editor.menu.cut'],
+  ['editCopy', 'basic', 'editing', mod('KeyC'), 'editor.menu.copy'],
+  ['editPaste', 'basic', 'editing', mod('KeyV'), 'editor.menu.paste'],
+  ['editSelectAll', 'basic', 'editing', mod('KeyA'), 'editor.menu.selectAll'],
+  ['editUndo', 'basic', 'editing', mod('KeyZ'), 'editor.menu.undo'],
+  ['editRedo', 'basic', 'editing', mod('KeyY'), 'editor.menu.redo', [mod('KeyZ', 'Shift')]],
+  ['markdownLineBreak', 'milkdown', 'markdown', 'Shift+Enter'],
+  ['markdownNextCellOrIndent', 'milkdown', 'markdown', 'Tab', undefined, [mod('BracketRight')]],
+  ['markdownPrevCellOrOutdent', 'milkdown', 'markdown', 'Shift+Tab', undefined, [mod('BracketLeft')]],
+  ['markdownExitBlock', 'milkdown', 'markdown', mod('Enter')],
+  ['markdownExitBlockAbove', 'milkdown', 'markdown', mod('Enter', 'Shift')],
+  ['explorerMatchNext', 'explorerSearch', 'explorer', 'Enter', 'sidebar.project.nextMatch', ['ArrowDown']],
+  ['explorerMatchPrevious', 'explorerSearch', 'explorer', 'Shift+Enter', 'sidebar.project.previousMatch', ['ArrowUp']],
+  ['searchNextResult', 'search', 'search', 'ArrowDown'],
+  ['searchPreviousResult', 'search', 'search', 'ArrowUp'],
+  ['searchFirstResult', 'search', 'search', 'Ctrl+Home'],
+  ['searchLastResult', 'search', 'search', 'Ctrl+End'],
+  ['searchOpen', 'search', 'search', 'Enter'],
+  ['treeEdit', 'tree', 'tree', 'F2', 'tree.editNode'],
+  ['treeAdd', 'tree', 'tree', 'Insert'],
+  ['treeDelete', 'tree', 'tree', 'Delete', 'tree.deleteNode'],
+  ['treeSave', 'tree', 'tree', 'Enter'],
+  ['treeCancel', 'tree', 'tree', 'Escape'],
+];
 
 /**
  * @typedef {object} HotkeyAction
@@ -128,6 +190,11 @@ export const HOTKEY_ACTIONS = [
     defaultKeybinding: '',
     essential: true,
   },
+  ...scopedActions.map(([id, scope, group, defaultKeybinding, label, aliases]) => ({
+    id, scope, group, defaultKeybinding, aliases, label: label ?? `settings.shortcuts.action.${id}`,
+    allowPlain: /^(?:Shift\+)?(?:Arrow\w+|Tab|Enter|Home|End|Insert|Delete|Escape)$/.test(defaultKeybinding),
+    allowReserved: scope === 'basic',
+  })),
 ];
 
 /** 按 id 索引的动作表。 */
@@ -139,7 +206,26 @@ export const DEFAULT_HOTKEYS = Object.freeze(
 );
 
 /** 设置界面中分组的展示顺序。 */
-export const HOTKEY_GROUP_ORDER = ['file', 'navigation', 'tabs', 'window', 'editor'];
+export const HOTKEY_GROUP_ORDER = ['file', 'navigation', 'tabs', 'window', 'run', 'editor',
+  'editing', 'markdown', 'explorer', 'search', 'terminal', 'tree'];
+
+function hotkeysOverlap(first, second, keybinding) {
+  if (!first || !second || first.scope === second.scope) return true;
+  if ([first.id, second.id].includes('toggleSidebar') &&
+    [first.id, second.id].includes('markdownBold') && keybinding === 'Ctrl+KeyB') return false;
+  if ([first.scope, second.scope].includes('terminal'))
+    return [first.id, second.id].some((id) => id === 'toggleConsole' || id === 'showProblems');
+  return [first.scope, second.scope].some((scope) => scope === 'app' || scope === 'basic');
+}
+
+export function conflictingHotkey(hotkeys, actionId, keybinding) {
+  const action = HOTKEY_ACTION_MAP.get(actionId);
+  return HOTKEY_ACTIONS.find((other) =>
+    other.id !== actionId && (hotkeys[other.id] === keybinding ||
+      (hotkeys[other.id] === other.defaultKeybinding && other.aliases?.includes(keybinding))) &&
+    hotkeysOverlap(action, other, keybinding)
+  )?.id;
+}
 
 /**
  * 合并用户配置与默认值，补齐缺失或无效的条目。
@@ -177,7 +263,11 @@ export function findHotkeyConflicts(hotkeys) {
     list.push(actionId);
     byKeybinding.set(keybinding, list);
   }
-  return new Map([...byKeybinding].filter(([, ids]) => ids.length > 1));
+  return new Map([...byKeybinding].flatMap(([keybinding, ids]) => {
+    const overlapping = ids.filter((id) => ids.some((other) => other !== id &&
+      hotkeysOverlap(HOTKEY_ACTION_MAP.get(id), HOTKEY_ACTION_MAP.get(other), keybinding)));
+    return overlapping.length ? [[keybinding, overlapping]] : [];
+  }));
 }
 
 /**

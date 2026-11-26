@@ -7,9 +7,11 @@
  */
 import { useCallback, useMemo } from 'react';
 import useConfigStore from '@store/useConfigStore';
-import { HOTKEY_ACTIONS, resolveHotkeys } from '@/configs/hotkeys';
+import { HOTKEY_ACTIONS, HOTKEY_ACTION_MAP, resolveHotkeys } from '@/configs/hotkeys';
 import { matchesKeybinding } from '@utils/keybinding';
 
+let lastStored;
+let resolved;
 /**
  * 读取完整的键位表（用户配置 + 默认值补齐）。
  *
@@ -18,9 +20,32 @@ import { matchesKeybinding } from '@utils/keybinding';
  * @returns {Record<string, string>} 动作标识到归一化键位的映射。
  */
 export function getResolvedHotkeys() {
-  return resolveHotkeys(useConfigStore.getState().hotkeys);
+  const stored = useConfigStore.getState().hotkeys;
+  if (stored !== lastStored || !resolved) {
+    lastStored = stored;
+    resolved = resolveHotkeys(stored);
+  }
+  return resolved;
 }
 
+export function matchesHotkey(event, ...actionIds) {
+  const hotkeys = getResolvedHotkeys();
+  return actionIds.find((id) => matchesAction(event, HOTKEY_ACTION_MAP.get(id), hotkeys[id]));
+}
+
+function matchesAction(event, action, binding) {
+  return matchesKeybinding(event, binding) ||
+    (binding === action.defaultKeybinding && action.aliases?.some((key) => matchesKeybinding(event, key)));
+}
+
+export function replacedHotkey(event, ...ids) {
+  const stored = useConfigStore.getState().hotkeys;
+  return ids.some((id) => {
+    const action = HOTKEY_ACTION_MAP.get(id);
+    return typeof stored[id] === 'string' && stored[id] !== action.defaultKeybinding &&
+      matchesAction(event, action, action.defaultKeybinding);
+  });
+}
 /**
  * 订阅快捷键配置。
  *
@@ -39,7 +64,7 @@ export function useHotkeys() {
    */
   const matchAction = useCallback((event, scope) => HOTKEY_ACTIONS.find((action) => {
     if (scope && action.scope !== scope) return false;
-    return matchesKeybinding(event, hotkeys[action.id]);
+    return matchesAction(event, action, hotkeys[action.id]);
   }), [hotkeys]);
 
   /**

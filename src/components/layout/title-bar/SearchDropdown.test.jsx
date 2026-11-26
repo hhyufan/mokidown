@@ -44,7 +44,7 @@ it('opens an anchored list without a modal, wraps keyboard navigation and opens 
 it('supports content mode shortcut and requests a durable exact line/column jump', async () => {
   render(<Harness />);
   const input = screen.getByRole('combobox', { name: '搜索' }); fireEvent.focus(input);
-  fireEvent.keyDown(input, { key: '2', altKey: true });
+  fireEvent.keyDown(input, { key: '2', code: 'Digit2', altKey: true });
   fireEvent.change(input, { target: { value: 'needle' } });
   fireEvent.keyDown(input, { key: 'Enter' });
   await waitFor(() => expect(useProblemsStore.getState().pendingJump).toMatchObject({ tabId: 'C:/project/a.kt', range: { start: { line: 1, character: 8 }, end: { line: 1, character: 14 } } }));

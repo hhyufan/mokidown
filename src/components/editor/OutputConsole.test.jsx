@@ -80,7 +80,7 @@ describe('output console', () => {
     expect(screen.queryByLabelText('输出控制台')).toBeNull();
     expect(useScriptStore.getState().status).toBe('running');
     expect(scriptRunner.stop).not.toHaveBeenCalled();
-    fireEvent.keyDown(window, { key: 'J', ctrlKey: true });
+    fireEvent.keyDown(window, { key: 'J', code: 'KeyJ', ctrlKey: true });
     expect(screen.getByLabelText('输出控制台')).toBeTruthy();
   });
   it('stays hidden without a code editor or a supported language, ignoring summon shortcuts', () => {
@@ -95,13 +95,13 @@ describe('output console', () => {
     });
     render(<OutputConsole />);
     expect(screen.queryByLabelText('输出控制台')).toBeNull();
-    fireEvent.keyDown(window, { key: 'J', ctrlKey: true });
-    fireEvent.keyDown(window, { key: 'M', ctrlKey: true, shiftKey: true });
+    fireEvent.keyDown(window, { key: 'J', code: 'KeyJ', ctrlKey: true });
+    fireEvent.keyDown(window, { key: 'M', code: 'KeyM', ctrlKey: true, shiftKey: true });
     expect(useScriptStore.getState().open).toBe(false);
     expect(screen.queryByLabelText('输出控制台')).toBeNull();
     // 切回受支持的文件后，快捷键可以正常呼出面板。
     act(() => useEditorStore.setState({ activeTabId: 'a', viewMode: 'edit' }));
-    fireEvent.keyDown(window, { key: 'J', ctrlKey: true });
+    fireEvent.keyDown(window, { key: 'J', code: 'KeyJ', ctrlKey: true });
     expect(screen.getByLabelText('输出控制台')).toBeTruthy();
     // 预览模式下的树编辑器 / Milkdown 独占场景没有代码编辑器，面板同样隐藏。
     act(() => useEditorStore.setState({
@@ -139,7 +139,7 @@ describe('output console', () => {
     // 收起时不再保留折叠工具条，整个面板（含标签）都隐藏。
     expect(screen.queryByLabelText('输出控制台')).toBeNull();
     expect(screen.queryByRole('tab', { name: /问题/ })).toBeNull();
-    fireEvent.keyDown(window, { key: 'M', ctrlKey: true, shiftKey: true });
+    fireEvent.keyDown(window, { key: 'M', code: 'KeyM', ctrlKey: true, shiftKey: true });
     expect(screen.getByRole('tabpanel', { name: /问题/ })).toBeTruthy();
   });
   it('gives the output area to the runtime settings panel while it is open', () => {

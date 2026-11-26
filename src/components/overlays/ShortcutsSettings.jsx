@@ -17,15 +17,15 @@
  */
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Button, Empty } from 'antd';
+import { Button, Empty, Input } from 'antd';
 import useConfigStore from '@store/useConfigStore';
 import {
   HOTKEY_ACTIONS,
   HOTKEY_GROUP_ORDER,
-  findHotkeyConflicts,
+  conflictingHotkey,
   resolveHotkeys,
 } from '@/configs/hotkeys';
-import { validateKeybinding } from '@utils/keybinding';
+import { formatKeybinding, validateKeybinding } from '@utils/keybinding';
 import { probeHotkeyAvailability } from '@utils/hotkeyProbe';
 import ShortcutInput from './ShortcutInput';
 import './shortcuts-settings.scss';
@@ -47,7 +47,7 @@ function ShortcutsSettings({ SettingGroup, SettingRow, probe = probeHotkeyAvaila
   const resetHotkeys = useConfigStore((state) => state.resetHotkeys);
 
   const hotkeys = useMemo(() => resolveHotkeys(stored), [stored]);
-  const conflicts = useMemo(() => findHotkeyConflicts(hotkeys), [hotkeys]);
+  const [query, setQuery] = useState('');
   // 阻止保存时的即时反馈：值没有变化，store 的冲突态不会体现出来，必须单独记。
   const [refusals, setRefusals] = useState({});
   // 每个动作最近一次的原生探测结论，决定快捷键显示绿/黄/红。
@@ -141,11 +141,11 @@ function ShortcutsSettings({ SettingGroup, SettingRow, probe = probeHotkeyAvaila
       return { tone: 'unknown', message: t('settings.shortcuts.unbound'), key: `${action.id}:unbound` };
     }
 
-    const others = conflicts.get(keybinding)?.filter((id) => id !== action.id) ?? [];
-    if (others.length > 0) {
+    const clash = conflictingHotkey(hotkeys, action.id, keybinding);
+    if (clash) {
       return {
         tone: 'error',
-        message: t('settings.shortcuts.conflictInline', { action: actionName(others[0]) }),
+        message: t('settings.shortcuts.conflictInline', { action: actionName(clash) }),
         key: `${action.id}:conflict:${keybinding}`,
       };
     }
@@ -166,7 +166,7 @@ function ShortcutsSettings({ SettingGroup, SettingRow, probe = probeHotkeyAvaila
     // 还没探测出结论时立刻按中性处理，颜色类必须始终存在：否则探测完成前这些
     // 快捷键会继承默认黑色，同一面板里有的绿有的黑，看起来像坏了。
     return { tone: 'unknown', message: t('settings.shortcuts.tip'), key: `${action.id}:plain:${keybinding}` };
-  }, [actionName, availability, conflicts, hotkeys, refusals, t, warningMessage]);
+  }, [actionName, availability, hotkeys, refusals, t, warningMessage]);
 
   /**
    * 写入一个键位，并异步用原生探测确认真实占用情况。
@@ -199,7 +199,8 @@ function ShortcutsSettings({ SettingGroup, SettingRow, probe = probeHotkeyAvaila
       delete next[actionId];
       return next;
     });
-    if (keybinding === '' || keybinding === previous) return;
+    if (keybinding === '' || keybinding === previous ||
+      HOTKEY_ACTIONS.find((action) => action.id === actionId)?.defaultKeybinding === keybinding) return;
 
     probe(keybinding).then((outcome) => {
       // 用户可能已经换了别的绑定，此时旧的探测结论不再适用。
@@ -220,12 +221,16 @@ function ShortcutsSettings({ SettingGroup, SettingRow, probe = probeHotkeyAvaila
     (action) => hotkeys[action.id] === action.defaultKeybinding,
   );
 
+  const normalizedQuery = query.trim().toLocaleLowerCase();
+  const matchesQuery = (label, keybindings) => [t(label), ...keybindings.map((key) => formatKeybinding(key))]
+    .some((value) => value.toLocaleLowerCase().includes(normalizedQuery));
   const groups = HOTKEY_GROUP_ORDER
     .map((group) => ({
       group,
-      actions: HOTKEY_ACTIONS.filter((action) => action.group === group),
+      actions: HOTKEY_ACTIONS.filter((action) =>
+        action.group === group && matchesQuery(action.label, [hotkeys[action.id]])),
     }))
-    .filter((entry) => entry.actions.length > 0);
+    .filter(({ actions }) => actions.length);
 
   return (
     <div className="settings-section shortcuts-settings">
@@ -243,6 +248,14 @@ function ShortcutsSettings({ SettingGroup, SettingRow, probe = probeHotkeyAvaila
           {t('settings.shortcuts.resetAll')}
         </Button>
       </div>
+      <Input
+        className="shortcuts-settings__search"
+        allowClear
+        value={query}
+        onChange={(event) => setQuery(event.target.value)}
+        placeholder={t('settings.shortcuts.filter')}
+        aria-label={t('settings.shortcuts.filter')}
+      />
 
       {groups.length === 0 && <Empty description={t('settings.shortcuts.empty')} />}
 
@@ -254,6 +267,7 @@ function ShortcutsSettings({ SettingGroup, SettingRow, probe = probeHotkeyAvaila
             return (
               <SettingRow key={action.id} label={t(action.label)}>
                 <ShortcutInput
+                  validationOptions={action}
                   value={hotkeys[action.id]}
                   isDefault={hotkeys[action.id] === action.defaultKeybinding}
                   notice={status}

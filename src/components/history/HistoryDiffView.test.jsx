@@ -138,7 +138,7 @@ it('keeps the Git revert in the draft until apply and writes the selected Git la
   fireEvent.click(revert);
   expect(apply).toBeEnabled();
   expect(mock.invoke).not.toHaveBeenCalled();
-  fireEvent.keyDown(document.body, { key: 'z', ctrlKey: true });
+  fireEvent.keyDown(document.body, { key: 'z', code: 'KeyZ', ctrlKey: true });
   expect(apply).toBeDisabled();
   fireEvent.click(revert);
   fireEvent.click(apply);

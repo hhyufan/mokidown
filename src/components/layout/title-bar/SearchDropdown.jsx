@@ -10,6 +10,8 @@ import { useFileManager } from '@hooks/useFileManager';
 import useEditorStore from '@store/useEditorStore';
 import { jumpToProblem } from '@/services/problemNavigation';
 import { isImeComposing } from '@utils/keyboard';
+import { useHotkeys } from '@hooks/useHotkeys';
+import { formatKeybinding } from '@utils/keybinding';
 import { relativeSearchPath, searchPathKey, textSearchRange } from '@utils/searchMatching';
 import './search-dropdown.scss';
 
@@ -20,6 +22,7 @@ function Highlight({ text = '', query, caseSensitive }) {
 
 export default function SearchDropdown({ open, onOpen, onClose }) {
   const { t } = useTranslation();
+  const { matchAction, keybindingOf } = useHotkeys();
   const [query, setQuery] = useState('');
   const [mode, setMode] = useState('files');
   const [scope, setScope] = useState('project');
@@ -47,14 +50,8 @@ export default function SearchDropdown({ open, onOpen, onClose }) {
       if (event.target instanceof Element && event.target.closest('.ant-select-dropdown, .ant-dropdown, .ant-picker-dropdown')) return;
       onClose();
     };
-    const shortcut = (event) => {
-      if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'p' && !isImeComposing(event)) {
-        event.preventDefault(); inputRef.current?.focus(); inputRef.current?.select();
-      }
-    };
     document.addEventListener('pointerdown', outside);
-    document.addEventListener('keydown', shortcut);
-    return () => { document.removeEventListener('pointerdown', outside); document.removeEventListener('keydown', shortcut); };
+    return () => document.removeEventListener('pointerdown', outside);
   }, [open, onClose]);
   useEffect(() => { setSelectedIndex(0); setOpenError(''); }, [query, mode, scope, caseSensitive, includeExcluded]);
   useEffect(() => { listRef.current?.querySelector(`[data-index="${selected}"]`)?.scrollIntoView?.({ block: 'nearest' }); }, [selected]);
@@ -83,15 +80,19 @@ export default function SearchDropdown({ open, onOpen, onClose }) {
   };
   const keyDown = (event) => {
     if (isImeComposing(event)) return;
+    const action = matchAction(event, 'search')?.id;
     if (event.key === 'Escape') { event.preventDefault(); event.stopPropagation(); closeWithFocus(); }
-    else if (event.altKey && ['1', '2'].includes(event.key)) { event.preventDefault(); setMode(event.key === '1' ? 'files' : 'content'); }
-    else if (['ArrowDown', 'ArrowUp', 'Home', 'End'].includes(event.key) && (event.key.startsWith('Arrow') || event.ctrlKey)) {
+    else if (action === 'searchFiles' || action === 'searchContent') {
+      event.preventDefault(); setMode(action === 'searchFiles' ? 'files' : 'content');
+    } else if (action === 'searchOpen' && open) {
+      event.preventDefault(); select(results[selected]);
+    } else if (action && action !== 'searchOpen') {
       event.preventDefault();
       if (!open) { onOpen(); return; }
       if (!results.length) return;
-      setSelectedIndex(event.key === 'Home' ? 0 : event.key === 'End' ? results.length - 1
-        : (selected + (event.key === 'ArrowDown' ? 1 : -1) + results.length) % results.length);
-    } else if (event.key === 'Enter' && open) { event.preventDefault(); select(results[selected]); }
+      setSelectedIndex(action === 'searchFirstResult' ? 0 : action === 'searchLastResult' ? results.length - 1
+        : (selected + (action === 'searchNextResult' ? 1 : -1) + results.length) % results.length);
+    }
   };
 
   return <div className={`titlebar__search search-dropdown${open ? ' search-dropdown--open' : ''}`} ref={rootRef}>
@@ -101,7 +102,8 @@ export default function SearchDropdown({ open, onOpen, onClose }) {
       placeholder={mode === 'content' ? t('search.contentPlaceholder') : t('topbar.search.placeholder')}
       value={query} onChange={(event) => { setQuery(event.target.value); onOpen(); }} onFocus={onOpen} onKeyDown={keyDown} />
     {query ? <Tooltip title={t('search.clear')}><button className="search-dropdown__clear" type="button" aria-label={t('search.clear')}
-      onClick={() => { setQuery(''); inputRef.current?.focus(); }}><CloseOutlined /></button></Tooltip> : <kbd className="search-dropdown__shortcut">Ctrl + P</kbd>}
+      onClick={() => { setQuery(''); inputRef.current?.focus(); }}><CloseOutlined /></button></Tooltip>
+      : keybindingOf('search') && <kbd className="search-dropdown__shortcut">{formatKeybinding(keybindingOf('search'))}</kbd>}
     {open && <div className="search-dropdown__panel" onKeyDown={(event) => { if (event.key === 'Escape') { event.stopPropagation(); closeWithFocus(); } }}>
       <div className="search-dropdown__toolbar">
         <div className="search-dropdown__modes" role="tablist" aria-label={t('search.mode')}>

@@ -73,7 +73,7 @@ describe('script execution', () => {
   it('reserves F5 and Shift+F5, without consuming IME keys or repeated runs', () => {
     const run = vi.spyOn(scriptRunner, 'runCurrent').mockResolvedValue();
     const stop = vi.spyOn(scriptRunner, 'stop').mockResolvedValue();
-    const event = { key: 'F5', preventDefault: vi.fn(), stopPropagation: vi.fn() };
+    const event = { key: 'F5', code: 'F5', preventDefault: vi.fn(), stopPropagation: vi.fn() };
     expect(handleScriptShortcut({ ...event, isComposing: true })).toBe(false);
     expect(run).not.toHaveBeenCalled();
     expect(handleScriptShortcut(event)).toBe(true);

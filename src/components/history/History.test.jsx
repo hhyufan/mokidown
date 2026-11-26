@@ -496,7 +496,7 @@ it('undoes draft edits and closes without applying the remaining draft', async (
   await waitFor(() => expect(mock.models).toHaveLength(2));
   act(() => mock.models[1].setValue('draft'));
   act(() => mock.models[1].setValue('another draft'));
-  fireEvent.keyDown(document.body, { key: 'z', ctrlKey: true });
+  fireEvent.keyDown(document.body, { key: 'z', code: 'KeyZ', ctrlKey: true });
   expect(mock.models[1].getValue()).toBe('draft');
   expect(screen.getByRole('button', { name: '应用修改' })).toBeEnabled();
   fireEvent.click(screen.getByRole('button', { name: '关闭对比' }));

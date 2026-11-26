@@ -9,6 +9,9 @@ import { keymap } from '@milkdown/kit/prose/keymap';
 import { history, undo, redo } from '@milkdown/kit/prose/history';
 import { inputRules } from '@milkdown/kit/prose/inputrules';
 import { isImeComposing } from '@utils/keyboard';
+import { matchesHotkey } from '@hooks/useHotkeys';
+import { handleEditingShortcut } from '@utils/basicEditingShortcuts';
+import { readMenuClipboardText } from '@utils/menuClipboard';
 
 const schema = new Schema({
   nodes: { doc: { content: 'inline*' }, text: { group: 'inline' } },
@@ -64,17 +67,34 @@ export default function TreeNodeEditor({ source, size, onSave, onCancel }) {
     const view = new EditorView(host.current, {
       state: EditorState.create({
         doc: titleDocument(source),
-        plugins: [inputRules({ rules: [inlineCode] }), history(), keymap({
-          'Mod-e': toggleInlineCode, 'Mod-z': undo, 'Mod-Shift-z': redo, 'Mod-y': redo,
-        }), keymap(baseKeymap)],
+        plugins: [inputRules({ rules: [inlineCode] }), history(), keymap(baseKeymap)],
       }),
       attributes: { class: 'moki-tree__title moki-tree__rich-input', role: 'textbox', 'aria-label': label, 'aria-multiline': 'false', 'data-placeholder': hint },
       handleKeyDown: (editor, event) => {
         event.stopPropagation();
         if (isImeComposing(event) || editor.composing) return false;
-        if (event.key === 'Enter' && suppressEnter) return true;
-        if (event.key === 'Enter') { finish(); return true; }
-        if (event.key === 'Escape') { finish(true); return true; }
+        if (matchesHotkey(event, 'treeSave')) { if (!suppressEnter) finish(); return true; }
+        if (matchesHotkey(event, 'treeCancel')) { finish(true); return true; }
+        if (matchesHotkey(event, 'markdownInlineCode')) return toggleInlineCode(editor.state, editor.dispatch);
+        if (handleEditingShortcut(event, (action, custom) => {
+          if (action === 'undo' || action === 'redo') {
+            (action === 'undo' ? undo : redo)(editor.state, editor.dispatch);
+          } else {
+            if (!custom) return false;
+            if (action === 'paste') {
+              const { doc, selection } = editor.state;
+              void readMenuClipboardText().then((text) => {
+                if (text && !editor.isDestroyed && editor.state.doc === doc &&
+                  editor.state.selection.eq(selection)) {
+                  editor.dispatch(editor.state.tr.insertText(text.replace(/[\r\n]+/g, ' ')));
+                }
+              }).catch(() => {});
+            } else {
+              editor.dom.ownerDocument.execCommand(action);
+            }
+          }
+          return true;
+        })) return true;
         return false;
       },
       handlePaste: (editor, event) => {
@@ -87,7 +107,7 @@ export default function TreeNodeEditor({ source, size, onSave, onCancel }) {
         keydown: (editor, event) => {
           // Safari suppresses its first post-composition keydown before custom
           // keymaps run. Escape must still cancel this node's editing session.
-          if (event.key !== 'Escape' || editor.composing || isImeComposing(event)) return false;
+          if (!matchesHotkey(event, 'treeCancel') || editor.composing || isImeComposing(event)) return false;
           event.preventDefault(); event.stopPropagation(); finish(true); return true;
         },
         blur: (editor) => {

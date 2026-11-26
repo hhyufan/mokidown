@@ -5,6 +5,8 @@ import { useTranslation } from 'react-i18next';
 import useFileStore from '@store/useFileStore';
 import { useFileManager } from '@hooks/useFileManager';
 import { parentDirectory } from '@utils/explorerPaths';
+import { useHotkeys } from '@hooks/useHotkeys';
+import { isCapturingShortcut } from '@/configs/hotkeys';
 import TreeExpansionIcon from '@components/ui/TreeExpansionIcon';
 import './explorer-navigation.scss';
 
@@ -27,6 +29,7 @@ export function ExplorerIcon({ name }) {
 
 export default function ExplorerNavigation({ search, project = false, busy = false, onParent, onOpenSelected, canOpenSelected, onExpandSelected, onCollapseAll, canExpandSelected, canCollapseAll = true }) {
   const { t } = useTranslation();
+  const { matchAction, keybindingOf } = useHotkeys();
   const currentDir = useFileStore((state) => state.currentDir);
   const historyIndex = useFileStore((state) => state.historyIndex);
   const history = useFileStore((state) => state.dirHistory);
@@ -46,30 +49,30 @@ export default function ExplorerNavigation({ search, project = false, busy = fal
     const explorer = toolbar?.closest('.file-tree');
     if (!explorer) return;
     const handleShortcut = (event) => {
-      if (event.defaultPrevented || event.isComposing || !event.altKey ||
-          event.ctrlKey || event.metaKey || event.shiftKey ||
-          !['ArrowLeft', 'ArrowRight', 'ArrowUp'].includes(event.key) ||
+      if (event.defaultPrevented || event.isComposing || isCapturingShortcut() ||
           event.target.closest('input, textarea, select, [contenteditable="true"]')) return;
-      const button = toolbar.querySelector(`button[aria-keyshortcuts="Alt+${event.key}"]:enabled`);
+      const action = matchAction(event, project ? 'project' : 'explorer');
+      if (!action) return;
+      const button = toolbar.querySelector(`button[data-hotkey="${action.id}"]:enabled`);
       if (!button) return;
       event.preventDefault();
       button.click();
     };
     explorer.addEventListener('keydown', handleShortcut);
     return () => explorer.removeEventListener('keydown', handleShortcut);
-  }, []);
+  }, [matchAction, project]);
   useEffect(() => { if (search.open) input.current?.focus(); }, [search.open]);
   const button = (label, icon, onClick, disabled = false, extra = {}) => <Tooltip title={label} placement="bottom" mouseEnterDelay={0.3}>
-    <button type="button" className={`file-tree__nav-btn${extra.className || ''}`} aria-label={label} disabled={disabled} onClick={onClick} aria-pressed={extra.pressed} aria-expanded={extra.expanded} aria-keyshortcuts={extra.shortcut}>{icon}</button>
+    <button type="button" className={`file-tree__nav-btn${extra.className || ''}`} aria-label={label} disabled={disabled} onClick={onClick} aria-pressed={extra.pressed} aria-expanded={extra.expanded} data-hotkey={extra.hotkey} aria-keyshortcuts={keybindingOf(extra.hotkey).replace('Ctrl+', 'Control+').replace(/(Key|Digit)([A-Z0-9])$/, '$2') || undefined}>{icon}</button>
   </Tooltip>;
   return <>
     <div ref={navigation} className={`file-tree__nav${project ? ' file-tree__nav--project' : ''}`}>
       {!project && <>
-        {button(t('sidebar.explorer.back'), <ExplorerIcon name="back" />, () => navigateHistory(-1), historyIndex <= 0, { shortcut: 'Alt+ArrowLeft' })}
-        {button(t('sidebar.explorer.forward'), <ExplorerIcon name="forward" />, () => navigateHistory(1), historyIndex >= history.length - 1, { shortcut: 'Alt+ArrowRight' })}
+        {button(t('sidebar.explorer.back'), <ExplorerIcon name="back" />, () => navigateHistory(-1), historyIndex <= 0, { hotkey: 'explorerBack' })}
+        {button(t('sidebar.explorer.forward'), <ExplorerIcon name="forward" />, () => navigateHistory(1), historyIndex >= history.length - 1, { hotkey: 'explorerForward' })}
       </>}
-      {button(t('sidebar.explorer.up'), <ExplorerIcon name="up" />, () => onParent ? onParent(parent) : loadDirectory(parent), !parent || busy, { shortcut: 'Alt+ArrowUp' })}
-      {project && button(t('sidebar.project.openSelected'), <ExplorerIcon name="next" />, onOpenSelected, !canOpenSelected, { shortcut: 'Alt+ArrowRight' })}
+      {button(t('sidebar.explorer.up'), <ExplorerIcon name="up" />, () => onParent ? onParent(parent) : loadDirectory(parent), !parent || busy, { hotkey: project ? 'projectParent' : 'explorerParent' })}
+      {project && button(t('sidebar.project.openSelected'), <ExplorerIcon name="next" />, onOpenSelected, !canOpenSelected, { hotkey: 'projectOpenSelected' })}
       {project && button(t('sidebar.project.search'), <ExplorerIcon name="search" />, search.toggle, false, { pressed: search.open, expanded: search.open })}
       <div className="file-tree__nav-sep" />
       {button(t('sidebar.explorer.refresh'), <ExplorerIcon name="refresh" />, () => loadDirectory(currentDir))}
@@ -88,11 +91,10 @@ export default function ExplorerNavigation({ search, project = false, busy = fal
           <input ref={input} aria-label={t('sidebar.project.search')} placeholder={t('sidebar.project.searchPlaceholder')} value={search.query}
             onChange={(event) => search.setQuery(event.target.value)} onKeyDown={(event) => {
               if (event.nativeEvent.isComposing || event.keyCode === 229) return;
-              if (event.key === 'Enter') { event.preventDefault(); search.move(event.shiftKey ? -1 : 1); }
-              if (['ArrowUp', 'ArrowDown'].includes(event.key) && search.results.length && !search.loading &&
-                  !event.altKey && !event.ctrlKey && !event.metaKey && !event.shiftKey) {
+              const action = matchAction(event, 'explorerSearch');
+              if (action && (event.key === 'Enter' || (search.results.length && !search.loading))) {
                 event.preventDefault();
-                search.move(event.key === 'ArrowUp' ? -1 : 1);
+                search.move(action.id === 'explorerMatchPrevious' ? -1 : 1);
               }
               if (event.key === 'Escape') { event.stopPropagation(); search.toggle(); }
             }} />

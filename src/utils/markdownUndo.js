@@ -1,3 +1,5 @@
+import { matchesHotkey } from '@hooks/useHotkeys';
+
 // Native stacks keep their selections and edit groups while an editor is
 // mounted. This journal supplies the groups left behind when modes change.
 const histories = new Map();
@@ -64,10 +66,7 @@ export function renameMarkdownUndo(from, to) {
 }
 
 export function markdownUndoDirection(event) {
-  if (event.defaultPrevented || event.isComposing || event.keyCode === 229 ||
-      event.altKey || event.ctrlKey === event.metaKey) return 0;
-  const key = event.key.toLowerCase();
-  if (key === 'z') return event.shiftKey ? 1 : -1;
-  if (key === 'y' && !event.shiftKey) return 1;
-  return 0;
+  if (event.defaultPrevented || event.isComposing || event.keyCode === 229) return 0;
+  const action = matchesHotkey(event, 'editUndo', 'editRedo');
+  return action === 'editUndo' ? -1 : action === 'editRedo' ? 1 : 0;
 }

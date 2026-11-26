@@ -22,9 +22,22 @@ test('the shortcut panel lists every registered action with its current binding'
   // 预览切换必须显示 Ctrl+Shift+/，并且面板按分组呈现。
   const previewRow = page.locator('.setting-row', { hasText: '切换编辑 / 预览' }).first();
   await expect(previewRow.locator('kbd')).toHaveText('Ctrl+Shift+/');
-  await expect(page.locator('h3', { hasText: '文件' })).toBeVisible();
-  await expect(page.locator('h3', { hasText: '编辑器' })).toBeVisible();
-  expect(await page.locator('.shortcut-input__field').count()).toBe(11);
+  await expect(page.getByRole('heading', { name: '文件', exact: true })).toBeVisible();
+  await expect(page.getByRole('heading', { name: '编辑器', exact: true })).toBeVisible();
+  const actions = await page.evaluate(() => Object.keys(window.trial.hotkeys()).length);
+  await expect(page.locator('.shortcut-input__field')).toHaveCount(actions);
+  await page.getByRole('textbox', { name: '搜索命令或按键' }).fill('Alt+2');
+  await expect(page.locator('.shortcut-input__field')).toHaveCount(1);
+});
+
+test('basic editing shortcuts can be reassigned and restored', async ({ page }) => {
+  await openPanel(page);
+  const field = await startCapture(page, '全选');
+  await page.keyboard.press('Control+Alt+KeyA');
+  await expect(field.locator('kbd')).toHaveText('Ctrl+Alt+A');
+  expect(await page.evaluate(() => window.trial.hotkeys().editSelectAll)).toBe('Ctrl+Alt+KeyA');
+  await field.locator('.shortcut-input__reset').click();
+  await expect(field.locator('kbd')).toHaveText('Ctrl+A');
 });
 
 test('clicking a binding and pressing keys records the physical key', async ({ page }) => {
@@ -173,8 +186,8 @@ test('hovering the reset control shows only its own tooltip, kept inside the pan
   await openPanel(page);
   const row = page.locator('.setting-row', { hasText: '切换侧边栏' }).first();
   await row.locator('.shortcut-input__field').click();
-  await page.keyboard.press('Control+Shift+KeyZ');
-  await expect(row.locator('.shortcut-input__kbd')).toHaveText('Ctrl+Shift+Z');
+  await page.keyboard.press('Control+Shift+KeyL');
+  await expect(row.locator('.shortcut-input__kbd')).toHaveText('Ctrl+Shift+L');
 
   // 重置按钮是录入框的子元素，悬停它时外层 tooltip 必须让位，否则两个会同时挂着。
   await row.locator('.shortcut-input__reset').hover();
@@ -265,8 +278,8 @@ test('the reset control lives inside the field and is absent at the default valu
   // 改成非默认值后出现，且必须位于录入框内部（而不是框外旁边）。
   // 特意用较长的组合，覆盖“长键位 + 按钮”这个最容易挤在一起的边界。
   await field.click();
-  await page.keyboard.press('Control+Shift+KeyZ');
-  await expect(field.locator('kbd')).toHaveText('Ctrl+Shift+Z');
+  await page.keyboard.press('Control+Shift+KeyL');
+  await expect(field.locator('kbd')).toHaveText('Ctrl+Shift+L');
   const reset = row.locator('.shortcut-input__reset');
   await expect(reset).toBeVisible();
   expect(await reset.evaluate((el) => el.closest('.shortcut-input__field') !== null)).toBe(true);

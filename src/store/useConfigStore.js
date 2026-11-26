@@ -6,7 +6,7 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import { readInitialLanguage } from '@/i18n/language';
-import { DEFAULT_HOTKEYS, findHotkeyConflicts, resolveHotkeys } from '@/configs/hotkeys';
+import { DEFAULT_HOTKEYS, HOTKEY_ACTION_MAP, conflictingHotkey, resolveHotkeys } from '@/configs/hotkeys';
 import { validateKeybinding } from '@utils/keybinding';
 import { normalizeMarkdownPairSettings } from '@utils/markdownPairs';
 
@@ -124,7 +124,7 @@ const useConfigStore = create(
             return state;
           }
           if (keybinding !== '') {
-            const validation = validateKeybinding(keybinding);
+            const validation = validateKeybinding(keybinding, HOTKEY_ACTION_MAP.get(actionId));
             if (!validation.ok) {
               result = { ok: false, reason: validation.reason };
               return state;
@@ -132,8 +132,7 @@ const useConfigStore = create(
           }
           const next = { ...current, [actionId]: keybinding };
           if (keybinding !== '') {
-            const conflicts = findHotkeyConflicts(next);
-            const clash = conflicts.get(keybinding)?.find((id) => id !== actionId);
+            const clash = conflictingHotkey(next, actionId, keybinding);
             if (clash) {
               result = { ok: false, reason: 'conflict', conflictWith: clash };
               return state;
