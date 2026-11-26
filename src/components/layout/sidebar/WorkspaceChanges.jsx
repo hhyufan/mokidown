@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Dropdown, Popover, Tooltip } from 'antd';
 import {
@@ -13,6 +13,7 @@ import { invoke } from '@tauri-apps/api/core';
 import useConfigStore from '@store/useConfigStore';
 import useEditorStore from '@store/useEditorStore';
 import useHistoryStore from '@store/useHistoryStore';
+import useNotificationStore from '@store/useNotificationStore';
 import { useFileManager } from '@hooks/useFileManager';
 import FileTypeIcon from '@components/ui/FileTypeIcon';
 import MarkdownIcon from '@components/ui/MarkdownIcon';
@@ -181,10 +182,14 @@ export default function WorkspaceChanges({ directory }) {
   const [status, setStatus] = useState(
     () => statusCache.get(statusKey(directory, gitPath)) ?? null,
   );
-  const [error, setError] = useState('');
   const [query, setQuery] = useState('');
   const [busy, setBusy] = useState(false);
   const [selectedChange, setSelectedChange] = useState('');
+  const activeTabId = useEditorStore((state) => state.activeTabId);
+  const activeDiff = useHistoryStore((state) => state.diff);
+  const listRef = useRef(null);
+  const indicatorRef = useRef(null);
+  const previousIndicator = useRef(null);
   const [collapsedLayers, setCollapsedLayers] = useState({});
   const [comparing, setComparing] = useState(false);
   // 面板内临时状态：初始跟随设置，按钮只改这一份。
@@ -199,6 +204,75 @@ export default function WorkspaceChanges({ directory }) {
     status?.directory === directory && status?.gitPath === gitPath ? status : null;
   const repository = currentStatus?.result?.repository;
   const root = repository?.root;
+  // 与文件树的 CurrentFileIndicator 同一套动画：
+  // 出现时 scaleY(0)→1 + 淡入，切换行时平移，取消选中时 scaleY→0 淡出。
+  useLayoutEffect(() => {
+    const marker = indicatorRef.current;
+    const list = listRef.current;
+    if (!marker) return;
+    const row = list?.querySelector('.workspace-changes__file[data-selected="true"]');
+    const reduced = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
+    const easing = 'cubic-bezier(0.2, 0.75, 0.25, 1)';
+    const animations = marker.getAnimations?.() ?? [];
+    animations.forEach((animation) => animation.cancel());
+    if (!marker.animate) {
+      marker.style.opacity = '0';
+      return;
+    }
+    const old = previousIndicator.current;
+    if (!list || !row) {
+      previousIndicator.current = null;
+      if (!old || reduced) {
+        marker.style.opacity = '0';
+        return;
+      }
+      marker.animate(
+        [
+          { transform: `translateY(${old.top}px) scaleY(1)`, opacity: 1 },
+          { transform: `translateY(${old.top}px) scaleY(0)`, opacity: 0 },
+        ],
+        { duration: 170, easing: 'cubic-bezier(0.4, 0, 1, 1)', fill: 'both' },
+      );
+      return;
+    }
+    const listRect = list.getBoundingClientRect();
+    const rowRect = row.getBoundingClientRect();
+    const top = rowRect.top - listRect.top + list.scrollTop + (rowRect.height - 14) / 2;
+    previousIndicator.current = { top };
+    if (reduced) {
+      marker.style.transform = `translateY(${top}px) scaleY(1)`;
+      marker.style.opacity = '1';
+      return;
+    }
+    if (!old) {
+      marker.animate(
+        [
+          { transform: `translateY(${top}px) scaleY(0)`, opacity: 0 },
+          { transform: `translateY(${top}px) scaleY(1)`, opacity: 1 },
+        ],
+        { duration: 190, easing, fill: 'both' },
+      );
+    } else if (old.top !== top) {
+      marker.animate(
+        [
+          { transform: `translateY(${old.top}px) scaleY(1)`, opacity: 1 },
+          { transform: `translateY(${top}px) scaleY(1)`, opacity: 1 },
+        ],
+        { duration: 210, easing, fill: 'both' },
+      );
+    } else {
+      marker.style.transform = `translateY(${top}px) scaleY(1)`;
+      marker.style.opacity = '1';
+    }
+  }, [selectedChange, repository, collapsedLayers, busy, markdownOnly, query]);
+
+  // 选中态由当前激活的对比标签推导：切到普通标签时取消高亮，
+  // 切到任意 git 修改的对比标签时自动定位到对应行。
+  useEffect(() => {
+    const gitEdit =
+      activeDiff && activeDiff.tabId === activeTabId ? activeDiff.external?.gitEdit : null;
+    setSelectedChange(gitEdit?.layer && gitEdit?.path ? `${gitEdit.layer}:${gitEdit.path}` : '');
+  }, [activeDiff, activeTabId]);
 
   useEffect(() => {
     const key = statusKey(directory, gitPath);
@@ -280,12 +354,30 @@ export default function WorkspaceChanges({ directory }) {
     return cancelComparison;
   }, [cancelComparison, directory, gitPath]);
 
-  const describeError = (failure) => {
-    const code = failure?.kind ?? failure?.message ?? String(failure);
-    return errors.has(code) ? t(`workspaceDiff.errors.${code}`) : code || t('editor.loadFailed');
-  };
+  const describeError = useCallback(
+    (failure) => {
+      const code = failure?.kind ?? failure?.message ?? String(failure);
+      return errors.has(code) ? t(`workspaceDiff.errors.${code}`) : code || t('editor.loadFailed');
+    },
+    [t],
+  );
+  const notify = useNotificationStore((state) => state.notify);
+  const reportError = useCallback(
+    (failure) => {
+      notify('error', t('notification.error'), describeError(failure));
+    },
+    [describeError, notify, t],
+  );
+  const notifiedErrorRef = useRef('');
+  useEffect(() => {
+    const failure = currentStatus?.error;
+    if (!failure) return;
+    const message = describeError(failure);
+    if (message === notifiedErrorRef.current) return;
+    notifiedErrorRef.current = message;
+    notify('error', t('notification.error'), message);
+  }, [currentStatus?.error, describeError, notify, t]);
   const update = () => {
-    setError('');
     setRefresh((value) => value + 1);
   };
 
@@ -301,14 +393,13 @@ export default function WorkspaceChanges({ directory }) {
         .getState()
         .tabs.some((tab) => tab.modified && tab.path && normalized(tab.path).startsWith(rootPath))
     ) {
-      setError(describeError('saveBeforeSwitch'));
+      reportError('saveBeforeSwitch');
       return false;
     }
     switchInProgress.current = true;
     cancelComparison();
     setComparing(false);
     setBusy(true);
-    setError('');
     try {
       await invoke('git_workspace_switch', { directory: repository.root, gitPath, name, create });
       const diff = useHistoryStore.getState().diff;
@@ -317,7 +408,7 @@ export default function WorkspaceChanges({ directory }) {
       update();
       return true;
     } catch (failure) {
-      setError(describeError(failure));
+      reportError(failure);
       return false;
     } finally {
       switchInProgress.current = false;
@@ -334,7 +425,6 @@ export default function WorkspaceChanges({ directory }) {
       activeTab?.builtin === 'diff'
         ? (useHistoryStore.getState().diff?.sourceTabId ?? state.activeTabId)
         : state.activeTabId;
-    setError('');
     setComparing(true);
     try {
       const { original, external, label } = await read();
@@ -342,7 +432,7 @@ export default function WorkspaceChanges({ directory }) {
         useHistoryStore.getState().openFileComparison(tabId, original, external, label);
       }
     } catch (failure) {
-      if (request === comparisonRequest.current) setError(describeError(failure));
+      if (request === comparisonRequest.current) reportError(failure);
     } finally {
       if (request === comparisonRequest.current) setComparing(false);
     }
@@ -350,7 +440,6 @@ export default function WorkspaceChanges({ directory }) {
 
   const compareChange = (change) => {
     const { root: repositoryRoot } = repository;
-    setSelectedChange(`${change.layer}:${change.path}`);
     void runComparison(async () => {
       const originalPath = change.oldPath || change.path;
       const { original, modified } = await invoke('git_workspace_diff', {
@@ -366,7 +455,12 @@ export default function WorkspaceChanges({ directory }) {
         external: {
           repository: repositoryRoot,
           modified,
-          gitEdit: { gitPath, path: change.path, layer: change.layer, expectedMissing: change.code === 'D' },
+          gitEdit: {
+            gitPath,
+            path: change.path,
+            layer: change.layer,
+            expectedMissing: change.code === 'D',
+          },
           onGitApplied: update,
           originalPath: filePath(repositoryRoot, originalPath),
           modifiedPath: filePath(repositoryRoot, change.path),
@@ -545,11 +639,6 @@ export default function WorkspaceChanges({ directory }) {
           </div>
         </div>
       </div>
-      {(error || currentStatus?.error) && (
-        <div className="workspace-changes__error" role="alert">
-          {error || describeError(currentStatus.error)}
-        </div>
-      )}
       {repository ? (
         <>
           <div className="workspace-changes__controls">
@@ -561,7 +650,8 @@ export default function WorkspaceChanges({ directory }) {
               </span>
             </Tooltip>
           </div>
-          <div className="workspace-changes__list" aria-busy={busy || comparing}>
+          <div className="workspace-changes__list" ref={listRef} aria-busy={busy || comparing}>
+            <span ref={indicatorRef} className="workspace-changes__indicator" aria-hidden="true" />
             {(() => {
               const staged = list.filter((change) => change.layer === 'index');
               const unstaged = list.filter((change) => change.layer === 'worktree');

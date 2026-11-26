@@ -31,6 +31,21 @@
     min-width: 0;
   }
 
+  &__indicator {
+    position: absolute;
+    z-index: 1;
+    left: 8px;
+    top: 0;
+    width: 2px;
+    height: 14px;
+    border-radius: 1px;
+    background: var(--accent);
+    opacity: 0;
+    pointer-events: none;
+    transform-origin: center;
+    will-change: transform, opacity;
+  }
+
   &__nav {
     // 复用项目导航栏样式；只补一个原生 disabled 状态。
     .file-tree__nav-btn:disabled {
@@ -215,6 +230,7 @@
   }
 
   &__list {
+    position: relative;
     min-height: 0;
     overflow: auto;
     // 行自带 16px 内边距，容器只留上下呼吸空间。
@@ -308,6 +324,7 @@
   }
 
   &__file {
+    position: relative;
     gap: 0;
     border-radius: 6px;
     &:hover {
