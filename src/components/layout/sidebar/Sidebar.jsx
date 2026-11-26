@@ -530,7 +530,7 @@ function Sidebar({ onOpenSettings }) {
     { id: 'outline', label: t('sidebar.tab.outline'), visible: isMarkdown },
     { id: 'knowledge', label: t('knowledgeTree.title'), visible: knowledgeVisible },
     { id: 'recent', label: t('sidebar.tab.recent'), visible: true },
-    ...(gitVisible ? [{ id: 'changes', label: t('workspaceDiff.tab'), visible: true }] : []),
+    { id: 'changes', label: t('workspaceDiff.tab'), visible: gitVisible },
   ];
 
   // 主题切换优先使用 View Transition API 做径向过渡；若运行环境不支持，
@@ -567,6 +567,7 @@ function Sidebar({ onOpenSettings }) {
   return (
     <aside
       className={cn('sidebar', !sidebarVisible && 'sidebar--hidden')}
+      inert={!sidebarVisible ? '' : undefined}
       style={{
         '--sidebar-width': `${sidebarWidth}px`,
         '--sidebar-min-width': `${sidebarMinWidth}px`,

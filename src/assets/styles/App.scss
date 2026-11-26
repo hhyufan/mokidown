@@ -102,6 +102,19 @@
     border: 0;
     background: rgba(0, 0, 0, 0.16);
     backdrop-filter: blur(1px);
+    opacity: 0;
+    visibility: hidden;
+    pointer-events: none;
+
+    &[data-open] {
+      opacity: 1;
+      visibility: visible;
+      pointer-events: auto;
+    }
+
+    @media (prefers-reduced-motion: no-preference) {
+      transition: opacity 180ms ease, visibility 180ms;
+    }
   }
 
   .app--mobile .drag-overlay {

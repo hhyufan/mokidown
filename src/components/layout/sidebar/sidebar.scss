@@ -6,6 +6,7 @@
  */
 
 .sidebar {
+  --sidebar-drawer-easing: cubic-bezier(0.2, 0.8, 0.2, 1);
   --sidebar-actual-width: max(
     var(--sidebar-min-width, 220px),
     min(
@@ -24,14 +25,22 @@
   display: flex;
   flex-direction: column;
   transition:
-    margin-left 0.25s ease,
-    opacity 0.25s ease;
+    width 240ms var(--sidebar-drawer-easing),
+    min-width 240ms var(--sidebar-drawer-easing),
+    margin-left 240ms var(--sidebar-drawer-easing),
+    opacity 180ms ease;
   z-index: 10;
 
   &--hidden {
     margin-left: calc(-1 * var(--sidebar-actual-width));
     opacity: 0;
     pointer-events: none;
+  }
+
+  &:has(> .sidebar__resizer[data-resizing]) {
+    width: var(--sidebar-drag-width, var(--sidebar-actual-width));
+    min-width: var(--sidebar-drag-width, var(--sidebar-actual-width));
+    transition: none;
   }
 }
 
@@ -70,13 +79,9 @@
 
 .sidebar__tabs,
 .sidebar__tabs-measure {
-  display: flex;
-  overflow-x: auto;
-  scrollbar-width: none;
   margin: 8px 12px 10px;
   min-height: calc(var(--sidebar-tabs-height, 60px) - 18px);
   flex-shrink: 0;
-  padding: 5px;
   position: relative;
   border: 0;
   border-radius: 8px;
@@ -85,6 +90,21 @@
   // 浅色主题是柔和灰色，深色主题是半透明白色调，都会跟随当前主题切换。
   background: var(--hover);
   box-shadow: none;
+}
+
+.sidebar__tabs {
+  overflow: clip;
+}
+
+.sidebar__tabs-measure,
+.sidebar__tabs-scroll {
+  display: flex;
+  padding: 5px;
+}
+
+.sidebar__tabs-scroll {
+  overflow-x: auto;
+  scrollbar-width: none;
 }
 
 .sidebar__size-probe {
@@ -167,10 +187,21 @@
 }
 
 .sidebar__tab-slot {
-  flex: 1 1 0;
-  min-width: max-content;
+  flex: 1 0 var(--sidebar-tab-width, 0px);
+  min-width: 0;
+  overflow: clip;
+  transition:
+    flex-basis 240ms var(--sidebar-drawer-easing),
+    flex-grow 240ms var(--sidebar-drawer-easing),
+    opacity 180ms ease,
+    transform 240ms var(--sidebar-drawer-easing);
+
   &--hidden {
-    display: none;
+    flex-basis: 0;
+    flex-grow: 0;
+    opacity: 0;
+    pointer-events: none;
+    transform: translateX(-6px);
   }
 }
 
@@ -196,6 +227,7 @@
   top: 5px;
   left: 5px;
   bottom: 5px;
+  transform-origin: left center;
   border-radius: 6px;
   // 使用 surface 颜色为激活态标签提供类似面板的填充效果。
   // 在深色主题下，--surface 是标准面板色，因此滑块会比轨道略亮，
@@ -225,12 +257,6 @@
     opacity: 1;
   }
 }
-@media (prefers-reduced-motion: reduce) {
-  .sidebar__content--enter {
-    animation: none;
-  }
-}
-
 .sidebar__view {
   flex: 1;
   min-height: 0;
@@ -591,8 +617,9 @@
     box-shadow: 18px 0 48px rgba(0, 0, 0, 0.26);
     transform: translateX(0);
     transition:
-      transform 0.22s ease,
-      opacity 0.22s ease;
+      width 240ms var(--sidebar-drawer-easing),
+      transform 240ms var(--sidebar-drawer-easing),
+      opacity 180ms ease;
     padding-top: env(safe-area-inset-top);
     padding-right: 0;
     border-right: 1px solid var(--border);
@@ -646,6 +673,16 @@
   .sidebar__footer-btn {
     width: 34px;
     height: 34px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .sidebar,
+  .sidebar__tab-slot {
+    transition: none;
+  }
+  .sidebar__content--enter {
+    animation: none;
   }
 }
 

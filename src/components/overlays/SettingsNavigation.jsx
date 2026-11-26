@@ -6,7 +6,7 @@ import { ExplorerIcon } from '@components/layout/sidebar/explorer/ExplorerNaviga
 import SearchHighlight from '@components/ui/SearchHighlight';
 
 /**
- * 设置导航：一排圆形图标按钮，当前项用圆形底色高亮，不再使用胶囊/滑动标签。
+ * 设置导航。指示块在圆形图标按钮之间滑动。
  *
  * @param {object} props 组件属性。
  * @returns {JSX.Element} 设置导航。
@@ -31,6 +31,8 @@ export default function SettingsNavigation({
   const inputRef = useRef(null);
   const searchButton = useRef(null);
   const wasSearching = useRef(false);
+  const selected = items.findIndex(({ key }) => key === active) + 1;
+  const indicator = searching ? 0 : selected;
 
   useEffect(() => {
     if (searching) inputRef.current?.focus();
@@ -46,9 +48,11 @@ export default function SettingsNavigation({
     >
       <div
         className="settings-nav__buttons"
+        style={{ '--settings-nav-slot-count': items.length + 1, '--settings-nav-slot-index': indicator }}
         inert={searching ? '' : undefined}
         aria-hidden={searching || undefined}
       >
+        <span className="settings-nav__indicator" aria-hidden="true" />
         <Tooltip title={t('settings.search')} placement="bottom" mouseEnterDelay={0.35}>
           <button
             ref={searchButton}
@@ -56,6 +60,7 @@ export default function SettingsNavigation({
             className="settings-nav__button settings-nav__button--search"
             aria-label={t('settings.search')}
             aria-expanded={searching}
+            data-highlighted={indicator === 0}
             onClick={onSearch}
           >
             <SearchOutlined />
@@ -68,6 +73,7 @@ export default function SettingsNavigation({
               className="settings-nav__button"
               aria-label={label}
               aria-pressed={key === active}
+              data-highlighted={!searching && active === key}
               onClick={() => onSelect(key)}
             >
               {icon}

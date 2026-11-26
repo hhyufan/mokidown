@@ -990,10 +990,13 @@ function App({ skipCliArgs = false }) {
         )}
       >
         <Sidebar onOpenSettings={openSettings} />
-        {isMobileLayout && sidebarVisible && (
+        {isMobileLayout && (
           <button
             className="app__sidebar-backdrop"
             type="button"
+            data-open={sidebarVisible || undefined}
+            aria-hidden={!sidebarVisible || undefined}
+            tabIndex={sidebarVisible ? 0 : -1}
             aria-label={t('topbar.toggleSidebar')}
             onClick={() => setSidebarVisible(false)}
           />

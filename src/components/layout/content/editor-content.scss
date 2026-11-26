@@ -315,3 +315,20 @@
     display: none;
   }
 }
+
+@keyframes editor-content-fade-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .editor-content__history-diff:not([hidden]) > .history-diff[data-ready='true'],
+  .editor-content__editable-preview:not([data-inactive])
+    > .md-preview--milkdown:not([data-milkdown-starting]) {
+    animation: editor-content-fade-in 220ms ease-out backwards;
+  }
+}

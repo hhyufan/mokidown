@@ -1,5 +1,4 @@
 import FolderOpenIcon from '@components/ui/FolderOpenIcon';
-import { flushSync } from 'react-dom';
 import {
   useCallback,
   useEffect,
@@ -231,13 +230,7 @@ function SettingsPage({ side = false }) {
     );
     activeNavRef.current = key;
     storeSettingsView({ nav: key, scrollTop: contentRef.current?.scrollTop ?? 0 });
-    const update = () => setActiveNav(key);
-    if (
-      typeof document.startViewTransition === 'function' &&
-      !window.matchMedia('(prefers-reduced-motion: reduce)').matches
-    ) {
-      document.startViewTransition(() => flushSync(update));
-    } else update();
+    setActiveNav(key);
   }, []);
   const switchNav = (key) => {
     closeSearch();

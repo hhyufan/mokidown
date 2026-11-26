@@ -63,10 +63,12 @@ export default function SidebarResizer() {
       onPointerDown={(event) => {
         if (event.button !== 0 || drag.current) return;
         event.preventDefault();
-        event.currentTarget.dataset.resizing = 'true';
-        event.currentTarget.setPointerCapture(event.pointerId);
-        const sidebar = event.currentTarget.parentElement;
+        const handle = event.currentTarget;
+        const sidebar = handle.parentElement;
         const width = sidebar.getBoundingClientRect().width;
+        sidebar.style.setProperty('--sidebar-drag-width', `${width}px`);
+        handle.dataset.resizing = 'true';
+        handle.setPointerCapture(event.pointerId);
         drag.current = {
           pointerId: event.pointerId,
           x: event.clientX,

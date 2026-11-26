@@ -158,6 +158,16 @@ body.moki-has-background :is(.moki-external-file-conflict-root, .moki-recovery-r
 .conflict-dialog__monaco {
   height: min(56vh, 620px);
   min-height: 320px;
+
+  &[data-pending] {
+    visibility: hidden;
+  }
+
+  @media (prefers-reduced-motion: no-preference) {
+    &:not([data-pending]) {
+      animation: editor-content-fade-in 220ms ease-out backwards;
+    }
+  }
 }
 
 .conflict-dialog__diff {
