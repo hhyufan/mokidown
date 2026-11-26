@@ -24,16 +24,21 @@ export function milkdownFoldPositions(doc, source) {
 export function createMilkdownFoldBridge(documentId, source, serialize) {
   let previousPositions = new Map();
   let initialDoc;
+  let initialRegions;
+  let initialPositions;
   return {
     initialFolds(doc) {
-      initialDoc = doc;
       const saved = getDocumentViewState(documentId, 'monaco');
-      const regions = saved?.contributionsState?.[foldingId]?.collapsedRegions || [];
-      const lines = new Map(regions.filter((region) => region.isCollapsed !== false)
+      const regions = saved?.contributionsState?.[foldingId]?.collapsedRegions;
+      if (doc === initialDoc && regions === initialRegions) return initialPositions;
+      initialDoc = doc;
+      initialRegions = regions;
+      const lines = new Map((regions || []).filter((region) => region.isCollapsed !== false)
         .map((region) => [region.startLineNumber, region.endLineNumber]));
-      previousPositions = milkdownFoldPositions(doc, source);
-      return new Set([...previousPositions]
+      previousPositions = lines.size ? milkdownFoldPositions(doc, source) : new Map();
+      initialPositions = new Set([...previousPositions]
         .filter(([, anchor]) => anchor.end != null && lines.get(anchor.start) === anchor.end).map(([pos]) => pos));
+      return initialPositions;
     },
     onFoldsChanged(state, folded, previousFolded) {
       const positions = milkdownFoldPositions(state.doc, state.doc.eq(initialDoc) ? source : serialize(state));

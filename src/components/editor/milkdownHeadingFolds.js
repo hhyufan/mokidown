@@ -11,7 +11,20 @@ const key = new PluginKey('moki-markdown-folds');
 const isList = (node) => node.type.name === 'ordered_list' || node.type.name === 'bullet_list';
 
 export function restoreMilkdownFolds(view, positions) {
+  const folded = key.getState(view.state)?.folded;
+  if (folded?.size === positions.size && [...positions].every((position) => folded.has(position)))
+    return;
   view.dispatch(view.state.tr.setMeta(key, { restore: positions }).setMeta('addToHistory', false));
+}
+
+export function revealMilkdownOutlineTarget(view, position) {
+  const state = key.getState(view.state);
+  if (!state) return;
+  const hiding = state.ranges.filter(({ from, to }) => position >= from && position < to);
+  if (!hiding.length) return;
+  const remaining = new Set(state.folded);
+  for (const range of hiding) remaining.delete(range.owner);
+  restoreMilkdownFolds(view, remaining);
 }
 
 function ellipsis(doc) {
@@ -76,16 +89,16 @@ function build(doc, candidates) {
         Decoration.widget(labelStart + labelSize, (view) => ellipsis(view.dom.ownerDocument),
           { side: 1, marks: [], key: 'fold-ellipsis', ignoreForCoords: true, ignoreSelection: true }),
       );
-      if (collapsed && isHeading) ranges.push({ from: end, to: sectionEnd });
+      if (collapsed && isHeading) ranges.push({ from: end, to: sectionEnd, owner: start });
       if (collapsed && isItem) node.forEach((child, offset) => {
-        if (isList(child)) ranges.push({ from: start + 1 + offset, to: start + 1 + offset + child.nodeSize });
+        if (isList(child)) ranges.push({ from: start + 1 + offset, to: start + 1 + offset + child.nodeSize, owner: start });
       });
     } else {
       decorations.push(foldWidget(start, 'code', 0), Decoration.node(start, end, {
         class: collapsed ? 'moki-folded-block' : '',
         'data-md-collapsed': String(collapsed), 'data-fold-language': node.attrs.language || '',
       }));
-      if (collapsed) ranges.push({ from: start, to: end, code: true });
+      if (collapsed) ranges.push({ from: start, to: end, code: true, owner: start });
     }
   });
   return { folded, ranges, decorations: DecorationSet.create(doc, decorations) };

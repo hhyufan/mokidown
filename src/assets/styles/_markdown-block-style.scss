@@ -1,0 +1,139 @@
+@mixin headings {
+  --md-heading-marker-gap: 6px;
+  --md-hash: #f56c6c;
+  --md-notebook: url("data:image/svg+xml,%3Csvg width='48' height='48' viewBox='0 0 48 48' fill='none' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M10 6C10 4.89543 10.8954 4 12 4H40C41.1046 4 42 4.89543 42 6V42C42 43.1046 41.1046 44 40 44H12C10.8954 44 10 43.1046 10 42V6Z' stroke='%23000' stroke-width='4' stroke-linejoin='round'/%3E%3Cpath d='M34 6V42' stroke='%23000' stroke-width='4' stroke-linecap='round'/%3E%3Cpath d='M6 14H14' stroke='%23000' stroke-width='4' stroke-linecap='round'/%3E%3Cpath d='M6 24H14' stroke='%23000' stroke-width='4' stroke-linecap='round'/%3E%3Cpath d='M6 34H14' stroke='%23000' stroke-width='4' stroke-linecap='round'/%3E%3Cpath d='M27 4H39' stroke='%23000' stroke-width='4' stroke-linecap='round'/%3E%3Cpath d='M27 44H39' stroke='%23000' stroke-width='4' stroke-linecap='round'/%3E%3C/svg%3E");
+
+  h1,
+  h2,
+  h3,
+  h4,
+  h5,
+  h6 {
+    margin-top: 1.4em;
+    margin-bottom: 0.6em;
+    font-weight: 600;
+    line-height: 1.5;
+    color: var(--text);
+  }
+
+  // vitality：标题不带下边框；h1 居中并前置笔记本图标，h2 前置红色 #。
+  h1 {
+    font-size: 2.1em;
+    text-align: center;
+
+    &::before {
+      content: '';
+      display: inline-block;
+      width: 0.85em;
+      height: 0.7em;
+      margin-right: 8px;
+      vertical-align: -0.02em;
+      background-color: currentColor;
+      -webkit-mask: var(--md-notebook) no-repeat center / contain;
+      mask: var(--md-notebook) no-repeat center / contain;
+    }
+  }
+
+  h2 {
+    font-size: 1.55em;
+
+    &::before {
+      content: '#';
+      margin-inline-end: var(--md-heading-marker-gap);
+      color: var(--md-hash);
+    }
+  }
+
+  h3 {
+    font-size: 1.3em;
+  }
+  h4 {
+    font-size: 1.12em;
+  }
+  h5,
+  h6 {
+    font-size: 1em;
+    color: var(--text-sec);
+  }
+}
+
+@mixin list-markers {
+  // vitality：列表标记取主蓝；有序列表改用 lower-roman。
+  ul li::marker,
+  ol li::marker {
+    color: var(--accent);
+    font-weight: 600;
+  }
+
+  ol {
+    list-style-type: lower-roman;
+  }
+
+  ul > li {
+    list-style-type: disc;
+  }
+
+  :is(ul, ol) ul > li:not(.task-list-item, [data-item-type='task']) {
+    list-style-type: circle;
+  }
+}
+
+@mixin task-checkbox {
+  .md-preview__task-checkbox {
+    --task-checkbox-fill: color-mix(in srgb, var(--surface) 58%, transparent);
+    appearance: none;
+    font: inherit;
+    inline-size: 14px;
+    block-size: 14px;
+    margin: 0;
+    padding: 0;
+    border: 1.5px solid var(--border);
+    border-radius: 3px;
+    background-color: var(--surface);
+    box-shadow: inset 0 0 0 14px var(--task-checkbox-fill);
+    box-sizing: border-box;
+    overflow: visible;
+
+    &:enabled {
+      cursor: pointer;
+    }
+    &:focus-visible {
+      outline: 2px solid var(--accent);
+      outline-offset: 2px;
+    }
+
+    &::before,
+    &::after {
+      content: '';
+      position: absolute;
+      inset: 0;
+      pointer-events: none;
+      clip-path: inset(0 100% 0 0);
+      @media (prefers-reduced-motion: no-preference) {
+        transition: clip-path 180ms ease-in-out;
+      }
+    }
+
+    &::before {
+      background: center / 10px 10px no-repeat
+        url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 12'%3E%3Cpath d='M2 6.2 4.6 8.8 10 3.4' fill='none' stroke='%23fff' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+    }
+
+    &::after {
+      background: center / 8px 2px no-repeat linear-gradient(white, white);
+    }
+
+    &:is(
+      [data-task-filled],
+      :not([data-task-symbol]):is([aria-checked='true'], [aria-checked='mixed'])
+    ) {
+      --task-checkbox-fill: color-mix(in srgb, var(--accent) 56%, transparent);
+      border-color: color-mix(in srgb, var(--accent) 78%, transparent);
+    }
+
+    &:is([data-task-symbol='true'], :not([data-task-symbol])[aria-checked='true'])::before,
+    &:is([data-task-symbol='mixed'], :not([data-task-symbol])[aria-checked='mixed'])::after {
+      clip-path: inset(0);
+    }
+  }
+}

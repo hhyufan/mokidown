@@ -147,7 +147,7 @@ export function bindMarkdownScroll(editor, preview) {
 
   const sync = () => {
     frame = 0;
-    if (preview.querySelector('.knowledge-tree-target')) return;
+    if (preview.querySelector('.markdown-jump-target')) return;
     anchors ||= measure();
     const ends = anchors.at(-1);
     if (!ends[0] || !ends[1]) return;

@@ -165,6 +165,7 @@
   "sidebar.outline.noFile": "未打开文件。",
   "sidebar.outline.empty": "未找到标题。",
   "sidebar.outline.notAvailable": "此文件类型无可用大纲。",
+  "sidebar.outline.listItem": "列表项",
   "sidebar.recent.title": "最近文件",
   "sidebar.recent.empty": "没有最近文件。",
   "sidebar.recent.deleteAll": "全部删除",

@@ -91,6 +91,8 @@ import MarkdownCodePre from './MarkdownCodePre';
 import { rehypeCodeBlockIndexes } from '@utils/markdownCodeBlocks';
 import { findCodeBlock } from '@utils/knowledgeTree';
 import { useCodeBlockNavigation } from '@hooks/useCodeBlockNavigation';
+import { useMarkdownJumpFeedback } from '@hooks/useMarkdownJumpFeedback';
+import { findOutlineDomTarget, outlineHighlightTarget } from './outlineNavigation';
 import './markdown-preview.scss';
 import { observePreviewBlockSelection } from './previewBlockSelection';
 import { observeTaskListStrikes } from './taskListStrike';
@@ -109,21 +111,6 @@ function slugify(text) {
     .replace(/\s+/g, '-')
     .replace(/-+/g, '-')
     .trim();
-}
-
-/**
- * 在预览容器内查找以指定文本开头的列表项。
- *
- * @param {HTMLElement} container 预览容器根节点。
- * @param {string} text 需要匹配的列表项文本前缀。
- * @returns {HTMLElement|null} 命中的列表项元素。
- */
-function findListElement(container, text) {
-  const candidates = container.querySelectorAll('li');
-  for (const el of candidates) {
-    if (el.textContent.trim().startsWith(text.trim())) return el;
-  }
-  return null;
 }
 
 const LANG_DISPLAY = {
@@ -248,7 +235,7 @@ const CodeBlock = memo(function CodeBlock({ children, className, ...props }) {
  * @returns {Function} 供 React Markdown 使用的标题渲染函数。
  */
 function makeHeading(tag, foldControl) {
-  return function Heading({ children, node: _node, ...props }) {
+  return function Heading({ children, node, ...props }) {
     const labelId = useId();
     const text = typeof children === 'string'
       ? children
@@ -257,8 +244,9 @@ function makeHeading(tag, foldControl) {
         : '';
     const id = slugify(text);
     const control = foldControl(props['data-md-heading']);
-    if (!control) return createElement(tag, { id, ...props }, children);
-    return createElement(tag, { id, ...props, className: `${props.className || ''} moki-foldable-heading`, 'aria-labelledby': labelId },
+    const attributes = { id, ...props, 'data-outline-line': node?.position?.start?.line };
+    if (!control) return createElement(tag, attributes, children);
+    return createElement(tag, { ...attributes, className: `${props.className || ''} moki-foldable-heading`, 'aria-labelledby': labelId },
       control, <span className="md-preview__fold-heading-label" id={labelId}>{children}</span>);
   };
 }
@@ -428,6 +416,7 @@ const MarkdownPreview = forwardRef(function MarkdownPreview({ className, foldedR
     }));
   }, []);
   const jumpToCode = useCodeBlockNavigation(activeTabId, resolveCodeTarget, !isAnalyzing && content === processedContent, beforeCodeJump);
+  const showOutlineJump = useMarkdownJumpFeedback(visible ? activeTabId : null);
   useDocumentScrollState(containerRef, activeTabId, 'preview', visible && !isAnalyzing && content === processedContent);
 
   // Prism 的代码块配色随应用样式表一起打包（见 `@styles/prism-theme.scss`），
@@ -548,23 +537,23 @@ const MarkdownPreview = forwardRef(function MarkdownPreview({ className, foldedR
   }, [content, scheduleHighlight, cancelHighlightJob]);
 
   useEffect(() => {
-    const handler = (e) => {
-      const { text, type } = e.detail ?? {};
-      const container = containerRef.current;
-      if (!container || !text) return;
-
-      let target = null;
-      if (type === 'heading') {
-        target = container.querySelector(`#${CSS.escape(slugify(text))}`);
-      } else {
-        target = findListElement(container, text);
-      }
-      target?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    if (!visible) return undefined;
+    const handler = (event) => {
+      const detail = event.detail ?? {};
+      if (detail.tabId && detail.tabId !== activeTabId) return;
+      let target;
+      const resolveTarget = () => {
+        if (!target?.isConnected) {
+          target = outlineHighlightTarget(findOutlineDomTarget(containerRef.current, detail));
+        }
+        return target;
+      };
+      showOutlineJump(resolveTarget, { waitForLayout: true });
     };
 
     window.addEventListener('outline:jump', handler);
     return () => window.removeEventListener('outline:jump', handler);
-  }, []);
+  }, [activeTabId, showOutlineJump, visible]);
 
   /**
    * 处理 Markdown 普通链接点击。
@@ -624,7 +613,11 @@ const MarkdownPreview = forwardRef(function MarkdownPreview({ className, foldedR
         {children}
       </div>
     ),
-    li: ({ node: _node, children, ...props }) => <li {...props}>{foldControl(props['data-md-item'])}{children}</li>,
+    li: ({ node, children, ...props }) => (
+      <li {...props} data-outline-line={node?.position?.start?.line}>
+        {foldControl(props['data-md-item'])}{children}
+      </li>
+    ),
     code: CodeBlock,
     pre: (props) => <MarkdownCodePre {...props} onTreeJump={jumpToCode} documentId={activeTabId} filePath={documentPath} fileName={activeTab?.name || 'Markdown'} />,
     h1: makeHeading('h1', foldControl),

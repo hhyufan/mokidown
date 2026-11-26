@@ -3,8 +3,9 @@ import remarkParse from 'remark-parse';
 import remarkGfm from 'remark-gfm';
 import remarkMath from 'remark-math';
 import remarkMarkdownHtml from '@utils/remarkMarkdownHtml';
+import remarkTaskListSpacing from '@utils/remarkTaskListSpacing';
 
-const parser = unified().use(remarkParse).use(remarkGfm).use(remarkMath);
+const parser = unified().use(remarkParse).use(remarkGfm).use(remarkTaskListSpacing).use(remarkMath);
 const previewParser = parser().use(remarkMarkdownHtml);
 
 export function parseMarkdownBlocks(source) {
@@ -20,7 +21,7 @@ export function markdownBlockKey(blocks) {
 // 以同类节点的文档顺序连接 Markdown 行号和 ProseMirror 位置，不依赖标题文本唯一。
 export function markdownFoldAnchors(source) {
   const anchors = [];
-  const blocks = parser.parse(source).children;
+  const blocks = parseMarkdownBlocks(source);
   const ranges = collectFoldingRanges(blocks, source.split('\n').length + 1);
   const ends = new Map(ranges.map(({ kind, start, end }) => [`${kind}:${start}`, end]));
   const visit = (nodes) => {

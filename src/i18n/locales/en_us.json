@@ -165,6 +165,7 @@
   "sidebar.outline.noFile": "No file open.",
   "sidebar.outline.empty": "No headings found.",
   "sidebar.outline.notAvailable": "No outline available for this file type.",
+  "sidebar.outline.listItem": "List item",
   "sidebar.recent.title": "Recent",
   "sidebar.recent.empty": "No recent files.",
   "sidebar.recent.deleteAll": "Delete all",

@@ -1,116 +1,137 @@
-// HTML 标题的闭合标签最多向下找这么多行；超出就当作只有开始标签，
-// 避免一个未闭合的 `<h1>` 把后面整篇正文都吞进标题里。
-const HTML_HEADING_LOOKAHEAD = 10;
+import { parseMarkdownBlocks } from '../components/editor/markdownSections';
+import { collectTasks } from './taskListTree';
+
+const htmlHeading = /^\s*<h([1-6])(?:\s[^>]*)?>(.*)$/i;
+const htmlLookahead = 10;
+const normalizeLabel = (text) => text.replace(/\s+/g, ' ').trim();
+
+function labelOf(node) {
+  if (node.type === 'html') return '';
+  if (node.type === 'image' || node.type === 'imageReference') return node.alt || '';
+  if (node.type === 'text') {
+    // Keep the visible label of reference links whose definition is missing.
+    return node.value.replace(/\[([^\]]+)\]\[[^\]]*\]/g, '$1');
+  }
+  return node.children?.map(labelOf).join('') ?? node.value ?? ' ';
+}
 
 export function extractItems(content) {
   if (!content) return [];
-  const lines = content.split('\n');
   const items = [];
-  let inCodeBlock = false;
   let currentHeadingLevel = 0;
+  const blocks = parseMarkdownBlocks(content);
+  const tasks = new Map(
+    collectTasks(
+      { children: blocks },
+      (node) => node.children || [],
+      (node) =>
+        node.type === 'listItem' && typeof node.checked === 'boolean'
+          ? { node, checked: node.checked }
+          : null,
+    ).map(({ node, state }) => [node, state]),
+  );
 
-  // 剥离行内标记，只留下渲染后真正可见的文字。
-  //
-  // 链接必须只保留文字：`[功能文档](docs/x.md)` → `功能文档`。
-  // 若把 URL 留在文本里，大纲显示的内容就与实际渲染出的文本对不上，
-  // 点击时按文本匹配不到目标，回退到编辑器节点查找（列表项尤其常见）。
-  const plain = (value) => value
-    .replace(/!?\[([^\]]*)\]\([^)]*\)/g, '$1')   // 行内链接 / 图片
-    .replace(/\[([^\]]*)\]\[[^\]]*\]/g, '$1')    // 引用式链接
-    .replace(/<[^>]*>/g, '')                     // HTML 标签
-    .replace(/[*_`~[\]]/g, '')                   // 残留的 Markdown 标记
-    .trim();
+  function addHeading(level, text, line, indent) {
+    if (!text) return;
+    currentHeadingLevel = level;
+    items.push({ type: 'heading', level, text, line, ...(indent > 0 ? { indent } : {}) });
+  }
 
-  for (let i = 0; i < lines.length; i++) {
-    const line = lines[i];
-    if (line.trimStart().startsWith('```')) {
-      inCodeBlock = !inCodeBlock;
-      continue;
-    }
-    if (inCodeBlock) continue;
-
-    // Markdown 标题。
-    const hm = line.match(/^(#{1,6})\s+(.+)/);
-    if (hm) {
-      currentHeadingLevel = hm[1].length;
-      items.push({
-        type: 'heading',
-        level: currentHeadingLevel,
-        text: plain(hm[2]),
-        line: i + 1,
-      });
-      continue;
-    }
-
-    // HTML 标题：`<h1>标题</h1>`。允许属性，允许内容里再嵌行内标签；
-    // 开始标签单独占一行时，向下找到闭合标签（有上限，避免把正文整段吞掉）。
-    const hh = line.match(/^\s*<h([1-6])(?:\s[^>]*)?>([\s\S]*)$/i);
-    if (hh) {
-      const level = Number(hh[1]);
-      const startLine = i;
-      const closer = new RegExp(`</h${level}>`, 'i');
-      let raw = hh[2];
-      let endLine = i;
-      if (!closer.test(raw)) {
-        // 只有找到闭合标签才向下扩展；否则只认本行，免得把后文吞成标题。
-        let collected = raw;
-        for (let j = i + 1; j < lines.length && j - i <= HTML_HEADING_LOOKAHEAD; j++) {
-          collected += `\n${lines[j]}`;
-          if (closer.test(lines[j])) { raw = collected; endLine = j; break; }
+  function visitHtml(node, indent, start) {
+    const lines = node.value.split(/\r\n|\n|\r/);
+    for (let i = 0; i < lines.length; i++) {
+      const match = htmlHeading.exec(lines[i]);
+      if (!match) continue;
+      const level = Number(match[1]);
+      const closing = new RegExp(`</h${level}>`, 'i');
+      const line = start + i;
+      let text = match[2];
+      let end = i;
+      if (!closing.test(text)) {
+        let pending = text;
+        for (let j = i + 1; j < lines.length && j - i <= htmlLookahead; j++) {
+          pending += `\n${lines[j]}`;
+          if (closing.test(pending)) {
+            text = pending;
+            end = j;
+            break;
+          }
         }
       }
-      const text = plain(raw.replace(closer, '')).replace(/\s+/g, ' ');
-      i = endLine;
-      if (text) {
-        currentHeadingLevel = level;
-        items.push({ type: 'heading', level, text, line: startLine + 1 });
+      addHeading(level, normalizeLabel(text.replace(/<[^>]*>/g, '')), line, indent);
+      // An unclosed heading can make the parser consume the rest of the block as HTML.
+      if (!closing.test(text) && end === i && i + 1 < lines.length) {
+        visit(parseMarkdownBlocks(lines.slice(i + 1).join('\n')), indent, line);
+        return;
       }
-      continue;
-    }
-
-    // 有序列表：支持 `1.` 与 `1)` 两种前缀。
-    const om = line.match(/^(\s*)(\d+)[.)]\s+(.+)/);
-    if (om) {
-      items.push({
-        type: 'list-ordered',
-        indent: Math.floor(om[1].length / 2),
-        order: Number(om[2]),
-        text: plain(om[3]),
-        line: i + 1,
-        parentLevel: currentHeadingLevel,
-      });
-      continue;
-    }
-
-    // 无序列表：支持 `-`、`*`、`+` 三种前缀。
-    const um = line.match(/^(\s*)[-*+]\s+(.+)/);
-    if (um) {
-      items.push({
-        type: 'list-unordered',
-        indent: Math.floor(um[1].length / 2),
-        text: plain(um[2]),
-        line: i + 1,
-        parentLevel: currentHeadingLevel,
-      });
+      i = end;
     }
   }
+
+  function visit(nodes, indent, offset) {
+    for (const node of nodes) {
+      const line = node.position.start.line + offset;
+      if (node.type === 'heading') {
+        addHeading(node.depth, normalizeLabel(labelOf(node)), line, indent);
+      } else if (node.type === 'list') {
+        node.children.forEach((item, index) => {
+          const label = item.children[0];
+          const text = label?.type === 'paragraph' ? normalizeLabel(labelOf(label)) : '';
+          const entry = {
+            type: node.ordered ? 'list-ordered' : 'list-unordered',
+            indent,
+            ...(node.ordered ? { order: (node.start ?? 1) + index } : {}),
+            ...(typeof item.checked === 'boolean'
+              ? { checked: item.checked, taskState: tasks.get(item) ?? String(item.checked) }
+              : {}),
+            text,
+            line: item.position.start.line + offset,
+            parentLevel: currentHeadingLevel,
+          };
+          items.push(entry);
+          const section = currentHeadingLevel;
+          const firstChild = items.length;
+          visit(item.children, indent + 1, offset);
+          currentHeadingLevel = section;
+          if (items.length > firstChild) entry.endLine = item.position.end.line + offset;
+          else if (!text && entry.taskState == null) items.pop();
+        });
+      } else if (node.type === 'html') {
+        visitHtml(node, indent, line);
+      } else if (node.type === 'blockquote' || node.type === 'footnoteDefinition') {
+        const section = currentHeadingLevel;
+        visit(node.children, indent + 1, offset);
+        currentHeadingLevel = section;
+      }
+    }
+  }
+  visit(blocks, 0, 0);
   return items;
 }
 
-// Each heading is pushed/popped once. Long lists no longer scan backwards
+// Each top-level heading is pushed/popped once. Long lists no longer scan backwards
 // through every preceding list item to find their collapsed ancestors.
 export function outlineRows(items, collapsed) {
   const ancestors = [];
+  const lists = [];
   return items.map((item, index) => {
-    if (item.type === 'heading') {
+    const section = item.type === 'heading' && !item.indent;
+    if (section) {
       while (ancestors.length && ancestors.at(-1).level >= item.level) ancestors.pop();
     }
-    const hidden = ancestors.some((heading) => collapsed[heading.index]);
+    while (lists.length && item.line > lists.at(-1).endLine) lists.pop();
+    const hidden =
+      ancestors.some((heading) => collapsed[heading.index]) ||
+      lists.some((list) => collapsed[list.index]);
     const next = items[index + 1];
-    const canCollapse = item.type === 'heading' && Boolean(next)
-      && (next.type !== 'heading' || next.level > item.level);
-    if (item.type === 'heading') ancestors.push({ level: item.level, index });
-    return { item, index, hidden, canCollapse };
+    const canCollapse =
+      item.endLine != null ||
+      (section &&
+        Boolean(next) &&
+        (next.type !== 'heading' || next.indent > 0 || next.level > item.level));
+    const parent = lists.at(-1)?.index ?? ancestors.at(-1)?.index;
+    if (section) ancestors.push({ level: item.level, index });
+    if (item.endLine != null) lists.push({ index, endLine: item.endLine });
+    return { item, index, parent, hidden, canCollapse };
   });
 }
-
