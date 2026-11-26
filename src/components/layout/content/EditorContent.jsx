@@ -6,6 +6,7 @@
  */
 import {
   Component,
+  lazy,
   Suspense,
   useCallback,
   useEffect,
@@ -31,6 +32,7 @@ import { useResponsiveLayout } from '@hooks/useResponsiveLayout';
 import usePreviewFrame from '@hooks/usePreviewFrame';
 import { startContentTransition } from '@hooks/useContentTransition';
 import { lazyWithRetry } from '@utils/lazyWithRetry';
+import { MilkdownEditor, loadHistoryDiffView } from '@utils/editorRendererBoot';
 import { registerEditorPaneTransition } from '@utils/editorPaneTransition';
 import { externalLink, openEditorLink } from '@utils/editorLinks';
 import { createAppHotkeyHandlers } from '@utils/hotkeyCommands';
@@ -45,12 +47,9 @@ import WelcomeScreen from '@components/moki/WelcomeScreen';
 
 // Markdown 相关渲染器保持在懒加载边界之后，确保非 Markdown 文件仍然走
 // 轻量的 Monaco 路径；纯预览模式使用可编辑的所见即所得，分栏预览则只读。
-const MilkdownMarkdownEditor = lazyWithRetry(
-  () => import('@components/editor/MilkdownMarkdownEditor'),
-);
 const MarkdownPreview = lazyWithRetry(() => import('@components/editor/MarkdownPreview'));
 const TreeEditor = lazyWithRetry(() => import('@components/editor/TreeEditor'));
-const HistoryDiffView = lazyWithRetry(() => import('@components/history/HistoryDiffView'));
+const HistoryDiffView = lazy(loadHistoryDiffView);
 const HtmlFilePreview = lazyWithRetry(() => import('@components/editor/HtmlFilePreview'));
 const SettingsPage = lazyWithRetry(() => import('@components/overlays/SettingsModal'));
 import WebPageView from '@components/editor/WebPageView';
@@ -849,7 +848,7 @@ function EditorContent() {
                       <RendererReady tabId={tab.id} onReady={markEditorReady} />
                     </>
                   ) : (
-                    <MilkdownMarkdownEditor
+                    <MilkdownEditor
                       ref={active ? milkdownRef : null}
                       tabId={tab.id}
                       active={active}

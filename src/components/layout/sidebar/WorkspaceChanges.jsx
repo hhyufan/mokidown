@@ -24,6 +24,7 @@ import ChevronIcon from '@components/ui/ChevronIcon';
 import { fileName, filePath } from '@utils/gitHistory';
 import { textSearchRange } from '@utils/searchMatching';
 import { openEditorLink } from '@utils/editorLinks';
+import { isMarkdownPath, prepareComparisonRenderer } from '@utils/editorRendererBoot';
 import {
   onDirectoryChanged,
   onFileChanged,
@@ -440,8 +441,9 @@ export default function WorkspaceChanges({ directory }) {
 
   const compareChange = (change) => {
     const { root: repositoryRoot } = repository;
+    const originalPath = change.oldPath || change.path;
+    prepareComparisonRenderer([originalPath, change.path].every(isMarkdownPath));
     void runComparison(async () => {
-      const originalPath = change.oldPath || change.path;
       const { original, modified } = await invoke('git_workspace_diff', {
         directory: repositoryRoot,
         gitPath,

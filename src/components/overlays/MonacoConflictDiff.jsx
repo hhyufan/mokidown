@@ -2,7 +2,8 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import * as monaco from 'monaco-editor';
 import '@/monaco-worker';
 import { getFileLanguage } from '@utils/fileLanguage';
-import { initMonacoShiki, isMonacoShikiReady, getMonacoThemeName } from '@utils/monacoShiki';
+import { getMonacoThemeName } from '@utils/monacoShiki';
+import { prepareMonacoRuntime } from '@utils/monacoRuntimeBoot';
 import { installIndentRainbow } from '@utils/monacoIndentRainbow';
 
 function countLines(content = '') {
@@ -47,7 +48,6 @@ export default function MonacoConflictDiff({
   const rainbowDisposersRef = useRef([]);
   const originalModelRef = useRef(null);
   const modifiedModelRef = useRef(null);
-  const [highlighterReady, setHighlighterReady] = useState(isMonacoShikiReady());
   const [editorReady, setEditorReady] = useState(false);
   const [paneWidths, setPaneWidths] = useState({ left: 0, right: 0 });
 
@@ -76,9 +76,12 @@ export default function MonacoConflictDiff({
   useEffect(() => {
     if (!containerRef.current) return undefined;
     let disposed = false;
+    let revealFrame = 0;
     // StrictMode replays mount effects. Do not start worker diffs for that
     // immediately disposed instance, whose models would vanish mid-request.
-    const frame = requestAnimationFrame(() => {
+    const prepare = async () => {
+      await prepareMonacoRuntime();
+      if (disposed || !containerRef.current) return;
       const {
         original,
         modified,
@@ -90,8 +93,10 @@ export default function MonacoConflictDiff({
         monacoFontFamily,
         lineHeight,
       } = latestRef.current;
+      const themeName = getMonacoThemeName(theme === 'dark');
+      monaco.editor.setTheme(themeName);
       const diffEditor = monaco.editor.createDiffEditor(containerRef.current, {
-        theme: getMonacoThemeName(theme === 'dark'),
+        theme: themeName,
         automaticLayout: true,
         readOnly: true,
         originalEditable: false,
@@ -148,18 +153,21 @@ export default function MonacoConflictDiff({
       ];
       originalModelRef.current = originalModel;
       modifiedModelRef.current = modifiedModel;
-      setEditorReady(true);
-
-      initMonacoShiki().then(() => {
-        if (disposed) return;
-        setHighlighterReady(true);
-        monaco.editor.setTheme(getMonacoThemeName(latestRef.current.theme === 'dark'));
+      await diffEditor.waitForDiff();
+      if (disposed) return;
+      revealFrame = requestAnimationFrame(() => {
+        diffEditor.getOriginalEditor().render(true);
+        diffEditor.getModifiedEditor().render(true);
+        setEditorReady(true);
       });
+    };
+    void prepare().catch((error) => {
+      if (!disposed) console.error('[Monaco] Could not open conflict comparison:', error);
     });
 
     return () => {
       disposed = true;
-      cancelAnimationFrame(frame);
+      cancelAnimationFrame(revealFrame);
       for (const dispose of rainbowDisposersRef.current) dispose();
       rainbowDisposersRef.current = [];
       diffEditorRef.current?.dispose();
@@ -244,13 +252,8 @@ export default function MonacoConflictDiff({
   }, [lineNumbersMinChars, tabSize, fontSize, monacoFontFamily, lineHeight]);
 
   useEffect(() => {
-    const themeName = getMonacoThemeName(theme === 'dark');
-    if (highlighterReady) {
-      monaco.editor.setTheme(themeName);
-      return;
-    }
-    monaco.editor.setTheme(theme === 'dark' ? 'vs-dark' : 'vs');
-  }, [theme, highlighterReady]);
+    if (editorReady) monaco.editor.setTheme(getMonacoThemeName(theme === 'dark'));
+  }, [editorReady, theme]);
 
   const labelStyle =
     paneWidths.left && paneWidths.right
@@ -267,7 +270,12 @@ export default function MonacoConflictDiff({
           {remoteLabel}
         </div>
       </div>
-      <div ref={containerRef} className="conflict-dialog__monaco" />
+      <div
+        ref={containerRef}
+        className="conflict-dialog__monaco"
+        data-pending={!editorReady || undefined}
+        aria-busy={!editorReady}
+      />
     </div>
   );
 }

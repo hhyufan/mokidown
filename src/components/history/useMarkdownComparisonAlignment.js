@@ -1,5 +1,6 @@
 import { useLayoutEffect, useRef } from 'react';
 import { comparisonLineReaders } from './comparisonLineReaders';
+import { hasPendingMilkdownCodeBlocks } from '@components/editor/milkdownViewport';
 
 const anchorSelector = '[data-history-anchor]';
 
@@ -8,11 +9,12 @@ function setPixels(element, property, value) {
     element.style[property] = `${value}px`;
 }
 
-export function useMarkdownComparisonAlignment(ref, visibleRows, onAligned) {
+export function useMarkdownComparisonAlignment(ref, visibleRows, onAligned, enabled) {
   const alignRows = useRef(null);
   const onAlignedRef = useRef(onAligned);
   onAlignedRef.current = onAligned;
   useLayoutEffect(() => {
+    if (!enabled) return undefined;
     const root = ref.current;
     if (!root) return undefined;
     const layout = root.querySelector('.history-markdown-draft__layout');
@@ -96,7 +98,13 @@ export function useMarkdownComparisonAlignment(ref, visibleRows, onAligned) {
         for (const { control, position } of actions) setPixels(control, 'top', position);
         if (row.dataset.positioned === undefined) row.dataset.positioned = '';
       }
-      if (!root.hasAttribute('data-aligned')) root.setAttribute('data-aligned', '');
+      if (!root.hasAttribute('data-aligned')) {
+        if (hasPendingMilkdownCodeBlocks(root)) {
+          schedule();
+          return;
+        }
+        root.setAttribute('data-aligned', '');
+      }
       onAlignedRef.current?.();
     };
 
@@ -133,7 +141,7 @@ export function useMarkdownComparisonAlignment(ref, visibleRows, onAligned) {
       alignRows.current = null;
       if (frame) cancelAnimationFrame(frame);
     };
-  }, [ref]);
+  }, [enabled, ref]);
 
   useLayoutEffect(() => {
     alignRows.current?.();

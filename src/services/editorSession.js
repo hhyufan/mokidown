@@ -2,6 +2,7 @@ import useEditorStore from '@store/useEditorStore';
 import useConfigStore from '@store/useConfigStore';
 
 import { readFileContent, startFileWatching, isSafUri } from '@utils/tauriApi';
+import { isMarkdownPath, loadMilkdownEditor } from '@utils/editorRendererBoot';
 import { rememberDiskBaseline } from './localFileGuard';
 import {
   restoreDocumentViewStates,
@@ -62,7 +63,11 @@ export function restoreEditorSession() {
       if (useConfigStore.getState().restoreLastSession === false) return;
       if (!savedAtBoot) return;
       restoreDocumentViewStates(savedAtBoot.views);
-      const initialTabs = useEditorStore.getState().tabs;
+      const { tabs: initialTabs, viewMode } = useEditorStore.getState();
+      const active = savedAtBoot.tabs.find((tab) => tab?.id === savedAtBoot.activeTabId);
+      if (!savedAtBoot.settingsActive && viewMode === 'preview' && isMarkdownPath(active?.name)) {
+        void loadMilkdownEditor().catch(() => {});
+      }
       const tabs = new Array(savedAtBoot.tabs.length);
       // Bound native reads; Promise.all preserves order through indexed results.
       let next = 0;

@@ -1,3 +1,5 @@
+import { prepareMonacoHighlighting } from './monacoShikiAssets';
+
 /**
  * Prepare every Monaco runtime dependency before an editor instance exists.
  *
@@ -14,6 +16,8 @@
  * @returns {Promise<void>} 准备完成后的 Promise。
  */
 export function prepareMonacoRuntime() {
+  // Start fetching and parsing TextMate assets while Monaco loads in production.
+  if (import.meta.env.PROD) void prepareMonacoHighlighting().catch(() => {});
   // Keep this import dynamic so Monaco stays outside the entry chunk.
   return import('./monacoShiki').then(({ initMonacoShiki }) => initMonacoShiki());
 }

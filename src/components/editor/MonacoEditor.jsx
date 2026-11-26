@@ -20,6 +20,7 @@ import { IUndoRedoService } from 'monaco-editor/esm/vs/platform/undoRedo/common/
 import '@/monaco-worker';
 import useEditorStore from '@store/useEditorStore';
 import useConfigStore from '@store/useConfigStore';
+import { markdownJumpDuration } from '@hooks/useMarkdownJumpFeedback';
 import useLspStore from '@store/useLspStore';
 import { attachMonacoLsp } from '@/services/monacoLsp';
 import { languageSuggestionOptions } from '@/services/monacoLanguageServices';
@@ -61,10 +62,13 @@ import { computeRanges } from 'monaco-editor/esm/vs/editor/contrib/folding/brows
 import { conf as markdownLanguage } from 'monaco-editor/esm/vs/basic-languages/markdown/markdown.js';
 
 const nativeUndoGroups = new WeakMap();
+const markdownFoldingCache = new WeakMap();
 const markdownFoldingProvider = monaco.languages.registerFoldingRangeProvider('markdown', {
   provideFoldingRanges(model) {
-    const source = model.getValue();
-    const ranges = markdownFoldingRanges(source);
+    const version = model.getVersionId();
+    const cached = markdownFoldingCache.get(model);
+    if (cached?.version === version) return cached.ranges;
+    const ranges = markdownFoldingRanges(model.getValue());
     const existing = computeRanges(model, false, markdownLanguage.folding.markers);
     for (let index = 0; index < existing.length; index++) {
       ranges.push({
@@ -72,6 +76,7 @@ const markdownFoldingProvider = monaco.languages.registerFoldingRangeProvider('m
         end: existing.getEndLineNumber(index),
       });
     }
+    markdownFoldingCache.set(model, { version, ranges });
     return ranges;
   },
 });
@@ -635,22 +640,41 @@ const MonacoEditorComponent = forwardRef(function MonacoEditorComponent(
         console.error('[mokidown/highlight] Monaco highlight bootstrap rejected:', error);
       });
 
+    let jumpDecoration = null;
+    let jumpDecorTimer = null;
+    const showJumpLine = (line, className, duration) => {
+      clearTimeout(jumpDecorTimer);
+      jumpDecoration?.clear();
+      jumpDecoration = editor.createDecorationsCollection([
+        {
+          range: new monaco.Range(line, 1, line, 1),
+          options: { isWholeLine: true, className },
+        },
+      ]);
+      jumpDecorTimer = setTimeout(() => {
+        jumpDecoration?.clear();
+        jumpDecoration = null;
+      }, duration);
+    };
+
     /**
      * 响应大纲跳转事件，将编辑器视口定位到目标行。
      *
      * @param {CustomEvent} e 包含目标行号的跳转事件。
      */
     const handleOutlineJump = (e) => {
-      const { line } = e.detail ?? {};
-      if (!line || !currentTabIdRef.current) return;
-      editor.revealLineInCenter(line);
+      const { line, tabId } = e.detail ?? {};
+      if (!currentTabIdRef.current || (tabId && tabId !== currentTabIdRef.current)) return;
+      const model = editor.getModel();
+      if (!model || !Number.isInteger(line) || line < 1 || line > model.getLineCount()) return;
       editor.setPosition({ lineNumber: line, column: 1 });
+      editor.getContribution('editor.contrib.folding')?.revealCursor?.();
+      editor.revealLineInCenter(line);
       editor.focus();
+      showJumpLine(line, 'outline-jump-highlight', markdownJumpDuration);
     };
     window.addEventListener('outline:jump', handleOutlineJump);
 
-    let jumpDecoration = null;
-    let jumpDecorTimer = null;
     /**
      * 响应搜索结果跳转事件，并短暂高亮目标行。
      *
@@ -664,32 +688,13 @@ const MonacoEditorComponent = forwardRef(function MonacoEditorComponent(
       editor.setPosition({ lineNumber: line, column: 1 });
       editor.focus();
 
-      if (jumpDecorTimer) clearTimeout(jumpDecorTimer);
       // 这里刻意不释放组合事件监听：一旦释放，局部的 `isComposing` 就会永远停留在
       // 释放瞬间的值，此后自动保存要么彻底不再触发，要么在输入法组合中途触发。
       if (autoSaveTimer !== null) {
         clearTimeout(autoSaveTimer);
         autoSaveTimer = null;
       }
-      if (jumpDecoration) {
-        jumpDecoration.clear();
-        jumpDecoration = null;
-      }
-
-      jumpDecoration = editor.createDecorationsCollection([
-        {
-          range: new monaco.Range(line, 1, line, 1),
-          options: {
-            isWholeLine: true,
-            className: 'search-jump-highlight',
-          },
-        },
-      ]);
-
-      jumpDecorTimer = setTimeout(() => {
-        jumpDecoration?.clear();
-        jumpDecoration = null;
-      }, 1800);
+      showJumpLine(line, 'search-jump-highlight', 1800);
     };
     window.addEventListener('editor:jump-to-line', handleSearchJump);
 

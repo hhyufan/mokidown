@@ -1,11 +1,7 @@
 import { Suspense, useRef, useState } from 'react';
 import FloatingToolbar from '@components/editor/FloatingToolbar';
 import { applyMarkdownToolbarAction } from '@components/editor/applyMarkdownToolbarAction';
-import { lazyWithRetry } from '@utils/lazyWithRetry';
-
-const MilkdownMarkdownEditor = lazyWithRetry(
-  () => import('@components/editor/MilkdownMarkdownEditor'),
-);
+import { MilkdownEditor } from '@utils/editorRendererBoot';
 
 export default function MarkdownComparisonEditor({
   tabId,
@@ -32,7 +28,7 @@ export default function MarkdownComparisonEditor({
         inert={!readOnly && busy ? '' : undefined}
       >
         <Suspense fallback={null}>
-          <MilkdownMarkdownEditor
+          <MilkdownEditor
             ref={editorRef}
             className="editor-content__preview editor-content__editor--milkdown history-markdown-draft__editor"
             readOnly={readOnly}

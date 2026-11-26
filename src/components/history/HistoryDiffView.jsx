@@ -38,6 +38,7 @@ import MarkdownHistoryDiff, {
   HISTORY_FOLD_MINIMUM,
 } from './MarkdownHistoryDiff';
 import { useMarkdownHistoryComparison } from './useMarkdownHistoryComparison';
+import { prepareMonacoRuntime } from '@utils/monacoRuntimeBoot';
 import './history.scss';
 
 function formatTime(timestamp) {
@@ -146,15 +147,20 @@ function MonacoHistoryDiff({
     let revealed = false;
     let diffInitialized = false;
     const listeners = [];
-    Promise.all([import('monaco-editor'), import('@utils/monacoShiki')])
-      .then(async ([monaco, { initMonacoShiki, getMonacoThemeName }]) => {
-        if (cancelled) return;
-        await initMonacoShiki();
+    Promise.all([
+      import('monaco-editor'),
+      import('@utils/monacoShiki'),
+      import('@/monaco-worker'),
+      prepareMonacoRuntime(),
+    ])
+      .then(async ([monaco, { getMonacoThemeName }]) => {
         if (cancelled || !containerRef.current) return;
         runtimeRef.current = { monaco, getMonacoThemeName };
         const props = latestRef.current;
+        const theme = getMonacoThemeName(props.theme === 'dark');
+        monaco.editor.setTheme(theme);
         const diff = monaco.editor.createDiffEditor(containerRef.current, {
-          theme: getMonacoThemeName(props.theme === 'dark'),
+          theme,
           automaticLayout: true,
           readOnly: props.busy,
           originalEditable: false,
@@ -1104,7 +1110,7 @@ export default function HistoryDiffView() {
           {`${t('editor.loadFailed')} ${preview.error}`}
         </div>
       )}
-      {rendered && preview?.layout && (
+      {rendered && (preview?.layout || (!showEmpty && !preview?.error)) && (
         <div className="history-diff__surface editor-scroll-frame" hidden={showEmpty}>
           <MarkdownHistoryDiff
             key={`${comparisonId}:${diff.timestamp}`}
@@ -1113,7 +1119,7 @@ export default function HistoryDiffView() {
             modifiedPath={external?.modifiedPath}
             original={diff.content}
             draftContent={modified}
-            comparison={preview.layout}
+            comparison={preview?.layout}
             previewBoundsRef={comparisonBoundsRef}
             hidden={showEmpty}
             foldState={markdownFolds}
@@ -1133,7 +1139,7 @@ export default function HistoryDiffView() {
           {!showEmpty && <ScrollEdgeShadows selector=".history-markdown-diff" />}
         </div>
       )}
-      {!rendered && (
+      {!rendered && (!noChanges || draft != null) && (
         <MonacoHistoryDiff
           key={`${comparisonId}:${diff.timestamp}`}
           original={diff.content}

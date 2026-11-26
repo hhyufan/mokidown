@@ -8,6 +8,7 @@ export const HISTORY_FOLD_CONTEXT = 1;
 export const HISTORY_FOLD_MINIMUM = 2;
 const MARKDOWN_FOLD_MINIMUM = 4;
 const comparisonSides = ['original', 'modified'];
+const EMPTY_COMPARISON = { rows: [], originalBlocks: [], modifiedBlocks: [] };
 
 const lineCount = (row) => row.lastModified - row.firstModified + 1;
 
@@ -151,16 +152,16 @@ export default function MarkdownHistoryDiff({
   const { t } = useTranslation();
   const scrollRef = useRef(null);
   const previousFolds = useRef(null);
-  const { rows, originalBlocks, modifiedBlocks } = comparison;
+  const { rows, originalBlocks, modifiedBlocks } = comparison ?? EMPTY_COMPARISON;
   const { visible, collapsedCount, expandedCount, collapsedRanges } = useMemo(
     () => foldRows(rows, foldState, previousFolds.current),
     [rows, foldState],
   );
   useLayoutEffect(() => {
-    previousFolds.current = { foldState, collapsedRanges };
-  }, [foldState, collapsedRanges]);
+    if (comparison) previousFolds.current = { foldState, collapsedRanges };
+  }, [comparison, foldState, collapsedRanges]);
   useEffect(() => () => onAlignedChange?.(false), [onAlignedChange]);
-  useMarkdownComparisonAlignment(scrollRef, visible, () => onAlignedChange?.(true));
+  useMarkdownComparisonAlignment(scrollRef, visible, () => onAlignedChange?.(true), Boolean(comparison));
   useEffect(() => {
     onFoldSummary({ collapsedCount, expandedCount });
   }, [collapsedCount, expandedCount, onFoldSummary]);
@@ -296,7 +297,7 @@ export default function MarkdownHistoryDiff({
         <MarkdownComparisonEditor
           tabId={tabId}
           content={original}
-          layout={originalLayout}
+          layout={comparison ? originalLayout : null}
           previewBoundsRef={previewBoundsRef}
           filePath={originalPath}
           readOnly
@@ -307,7 +308,7 @@ export default function MarkdownHistoryDiff({
           content={draftContent}
           filePath={modifiedPath}
           readOnly={!onDraftChange}
-          layout={ready ? modifiedLayout : null}
+          layout={comparison && ready ? modifiedLayout : null}
           previewBoundsRef={previewBoundsRef}
           onDraftChange={onDraftChange}
           boundsRef={scrollRef}

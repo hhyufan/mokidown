@@ -5,7 +5,8 @@ import { HistoryOutlined, ReloadOutlined } from '@ant-design/icons';
 import ChevronIcon from '@components/ui/ChevronIcon';
 import MokiStatusEmpty from '@components/moki/MokiStatusEmpty';
 import useEditorStore from '@store/useEditorStore';
-import useHistoryStore from '@store/useHistoryStore';
+import useHistoryStore, { isMarkdownComparison } from '@store/useHistoryStore';
+import { prepareComparisonRenderer } from '@utils/editorRendererBoot';
 import { reportRuntimeLog } from '@/services/runtimeLogs';
 import { historyList, historyRead, onHistoryChanged } from '@utils/tauriApi';
 import { formatHistoryTime, formatHistoryBytes } from '@utils/historyFormat';
@@ -105,6 +106,7 @@ export default function Timeline() {
 
   const openDiff = async (timestamp) => {
     if (!tab?.path) return;
+    prepareComparisonRenderer(isMarkdownComparison(tab, { tabId: activeTabId }));
     try {
       const content = await historyRead(tab.path, timestamp);
       if (useEditorStore.getState().activeTabId !== activeTabId) return;

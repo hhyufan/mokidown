@@ -40,6 +40,7 @@ import { invoke } from '@utils/tauriInvoke';
 import { saveExistingFile } from '@/services/localFileOperations';
 import i18n from '@/i18n';
 import { untitledFileName } from '@utils/untitledFileName';
+import { isMarkdownPath, loadMilkdownEditor } from '@utils/editorRendererBoot';
 import { decodeTextBytes, MAX_TEXT_BYTES, TextFileError } from '@utils/textFilePolicy';
 
 // Marketing-site demo builds (VITE_WEB_DEMO=1) may pick files through the
@@ -596,6 +597,12 @@ export function useFileManager() {
 
       // external 标签打开；首次保存再走另存为并把本地路径登记到服务端。
 
+      if (
+        useEditorStore.getState().viewMode === 'preview' &&
+        isMarkdownPath(fileName)
+      ) {
+        void loadMilkdownEditor().catch(() => {});
+      }
       try {
         const result = await readFileContent(filePath);
         if (result.success) {

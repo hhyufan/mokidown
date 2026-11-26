@@ -1,18 +1,48 @@
 import { useEffect, useRef, useState } from 'react';
 
+const MAX_CACHED_COMPARISONS = 2;
+const MAX_CACHED_SOURCE_LENGTH = 500_000;
+
 export function useMarkdownHistoryComparison(original, modified, enabled, includeIdentical) {
   const [result, setResult] = useState(null);
   const clientRef = useRef(null);
+  const completed = useRef([]);
+  const cached = enabled
+    ? completed.current.find((entry) => entry.original === original && entry.modified === modified)
+    : null;
 
   useEffect(() => {
     if (!enabled) return undefined;
     let worker;
     let watchdog = 0;
     let inlineCompare = null;
+    let loadingInline = false;
     let active = null;
     let requested = null;
     let hasResult = false;
+    let disposed = false;
+    const publish = (modified, data) => {
+      const entry = {
+        original,
+        modified,
+        identical: data.identical,
+        layout: data.rows ? data : null,
+      };
+      if (entry.layout && original.length + modified.length <= MAX_CACHED_SOURCE_LENGTH) {
+        completed.current = [
+          entry,
+          ...completed.current.filter(
+            (item) => item.original !== original || item.modified !== modified,
+          ),
+        ].slice(0, MAX_CACHED_COMPARISONS);
+      }
+      setResult((previous) => {
+        if (entry.layout || previous?.original !== original) return entry;
+        return { ...entry, layout: previous.layout };
+      });
+    };
     const fail = (error) => {
+      if (disposed) return;
       worker?.terminate();
       worker = null;
       inlineCompare = null;
@@ -25,12 +55,19 @@ export function useMarkdownHistoryComparison(original, modified, enabled, includ
       }));
     };
     const openInline = () => {
+      if (loadingInline) return;
+      loadingInline = true;
       import('./markdownHistoryComparison')
         .then(({ createMarkdownHistoryComparison }) => {
+          if (disposed) return;
           inlineCompare = createMarkdownHistoryComparison(original);
+          loadingInline = false;
           run();
         })
-        .catch(fail);
+        .catch((error) => {
+          loadingInline = false;
+          fail(error);
+        });
     };
     const open = () => {
       if (import.meta.env.DEV || typeof Worker === 'undefined') {
@@ -46,19 +83,14 @@ export function useMarkdownHistoryComparison(original, modified, enabled, includ
         if (hasResult) return;
         worker?.terminate();
         worker = null;
+        active = null;
         openInline();
       }, 1500);
       worker.onmessage = ({ data }) => {
         clearTimeout(watchdog);
         if (active && requested === active) {
           hasResult = true;
-          const modified = active.modified;
-          setResult((previous) => ({
-            original,
-            modified,
-            identical: data.identical,
-            layout: data.rows ? data : previous?.original === original ? previous.layout : null,
-          }));
+          publish(active.modified, data);
           requested = null;
         }
         active = null;
@@ -72,7 +104,7 @@ export function useMarkdownHistoryComparison(original, modified, enabled, includ
       worker.postMessage({ original });
     };
     const run = () => {
-      if (active || !requested) return;
+      if (disposed || active || !requested) return;
       if (!worker && !inlineCompare) {
         open();
         return;
@@ -82,13 +114,7 @@ export function useMarkdownHistoryComparison(original, modified, enabled, includ
           active = requested;
           const data = inlineCompare(active.modified);
           hasResult = true;
-          const modified = active.modified;
-          setResult((previous) => ({
-            original,
-            modified,
-            identical: data.identical,
-            layout: data.rows ? data : previous?.original === original ? previous.layout : null,
-          }));
+          publish(active.modified, data);
           active = null;
           requested = null;
           run();
@@ -105,11 +131,21 @@ export function useMarkdownHistoryComparison(original, modified, enabled, includ
       }
     };
     clientRef.current = (content, compareIdentical) => {
+      const previous = completed.current.find(
+        (entry) => entry.original === original && entry.modified === content,
+      );
+      if (previous) {
+        requested = null;
+        setResult(previous);
+        return;
+      }
       requested =
         content === original && !compareIdentical && !hasResult ? null : { modified: content };
       run();
     };
     return () => {
+      disposed = true;
+      clearTimeout(watchdog);
       if (worker) {
         worker.onmessage = null;
         worker.onerror = null;
@@ -124,5 +160,5 @@ export function useMarkdownHistoryComparison(original, modified, enabled, includ
     if (enabled) clientRef.current?.(modified, includeIdentical);
   }, [enabled, original, modified, includeIdentical]);
 
-  return enabled && result?.original === original ? result : null;
+  return cached ?? (enabled && result?.original === original ? result : null);
 }

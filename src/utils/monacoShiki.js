@@ -23,44 +23,10 @@
 import * as monaco from 'monaco-editor';
 import { registerMgtreeLanguage, treeTokenRules } from './mgtreeLanguage';
 import { disableBundledLanguageServices } from './monacoBuiltinServices';
+import { DARK_THEME_NAME, LIGHT_THEME_NAME, prepareMonacoHighlighting } from './monacoShikiAssets';
 
 /** Theme identifiers referenced by `MonacoEditor` and persisted UI state. */
-export const LIGHT_THEME_NAME = 'one-light';
-export const DARK_THEME_NAME = 'one-dark-pro';
-
-/**
- * Shiki 语法包列表。
- *
- * 仅覆盖编辑器里会出现的语言，避免初始化时加载无关语法定义。Monaco 没有注册
- * 的语言（例如 vue / svelte / toml）由 `shikiToMonaco` 自动跳过，因此不在此列。
- */
-const SHIKI_LANGS = [
-  'markdown',
-  'javascript',
-  'typescript',
-  'json',
-  'html',
-  'css',
-  'scss',
-  'python',
-  'java',
-  'c',
-  'cpp',
-  'csharp',
-  'go',
-  'rust',
-  'ruby',
-  'php',
-  'shell',
-  'yaml',
-  'xml',
-  'sql',
-  'lua',
-  'kotlin',
-  'swift',
-  'powershell',
-  'ini',
-];
+export { DARK_THEME_NAME, LIGHT_THEME_NAME };
 
 // Monaco keeps Shiki's patched methods across Vite module replacement. Keep its
 // readiness and single initialization task on the same instance as those methods.
@@ -175,13 +141,8 @@ export function initMonacoShiki() {
     try {
       registerMgtreeLanguage(monaco);
 
-      const [{ createHighlighter }, { shikiToMonaco, textmateThemeToMonacoTheme }] =
-        await Promise.all([import('shiki'), import('@shikijs/monaco')]);
-
-      const highlighter = await createHighlighter({
-        themes: [DARK_THEME_NAME, LIGHT_THEME_NAME],
-        langs: SHIKI_LANGS,
-      });
+      const { highlighter, adapter } = await prepareMonacoHighlighting();
+      const { shikiToMonaco, textmateThemeToMonacoTheme } = adapter;
 
       // Patch a private, writable API first. A partial bootstrap failure must not
       // leave Monaco's public create/setTheme methods calling an unloaded theme.

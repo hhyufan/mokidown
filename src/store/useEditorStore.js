@@ -20,6 +20,7 @@ import { transitionEditorPane } from '@utils/editorPaneTransition';
 import { untitledFileName } from '@utils/untitledFileName';
 import { parsePreviewAddress, samePreview } from '@utils/previewAddress';
 import useHistoryStore, { isMarkdownComparison } from './useHistoryStore';
+import { isMarkdownPath, loadMilkdownEditor } from '@utils/editorRendererBoot';
 
 let untitledCounter = 1;
 const pluginDocsTabId = 'mokidown:plugin-docs';
@@ -717,7 +718,11 @@ const useEditorStore = create(
 
       /** ?????????? */
       setViewMode: (mode, meta = {}) => {
-        const from = get().activeTabId;
+        const { activeTabId: from, tabs, viewMode: previousMode } = get();
+        if (mode === 'preview' && previousMode !== mode) {
+          const tab = tabs.find(({ id }) => id === from);
+          if (!tab?.builtin && isMarkdownPath(tab?.name)) void loadMilkdownEditor().catch(() => {});
+        }
         const apply = () => {
           const { activeTabId, viewMode } = get();
           if (meta.animate && activeTabId !== from) return false;

@@ -12,6 +12,7 @@ import { fileName, filePath, githubFileHistoryUrl } from '@utils/gitHistory';
 import { formatHistoryTime } from '@utils/historyFormat';
 import { isAndroidRuntime } from '@utils/platform';
 import { openEditorLink } from '@utils/editorLinks';
+import { isMarkdownPath, prepareComparisonRenderer } from '@utils/editorRendererBoot';
 import './history.scss';
 
 export default function GitFileTimeline() {
@@ -97,6 +98,7 @@ export default function GitFileTimeline() {
   }, [cancelPending, load]);
 
   const openRevision = async (revision) => {
+    prepareComparisonRenderer([revision.previousPath, revision.path].every(isMarkdownPath));
     const id = ++comparisonRequest.current;
     setSelected({ file, hash: revision.hash });
     try {

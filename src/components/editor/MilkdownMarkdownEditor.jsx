@@ -21,10 +21,14 @@ import { createPortal } from 'react-dom';
 import { useShallow } from 'zustand/react/shallow';
 import MarkdownTreeBlock from './MarkdownTreeBlock';
 import { useCodeBlockNavigation } from '@hooks/useCodeBlockNavigation';
+import { useMarkdownJumpFeedback } from '@hooks/useMarkdownJumpFeedback';
 import { normalizeCodeLanguage } from '@utils/knowledgeTree';
-import { createMilkdownHeadingFoldsPlugin, restoreMilkdownFolds } from './milkdownHeadingFolds';
+import { createMilkdownHeadingFoldsPlugin, restoreMilkdownFolds, revealMilkdownOutlineTarget } from './milkdownHeadingFolds';
 import { jumpToFootnote } from '@utils/footnoteParser';
-import { createMilkdownFoldBridge } from './milkdownFoldBridge';
+import { createMilkdownFoldBridge, milkdownFoldPositions } from './milkdownFoldBridge';
+import { findOutlineDomTarget } from './outlineNavigation';
+import { highlightOutlinePosition, milkdownOutlineHighlight } from './milkdownOutlineHighlight';
+import { hasPendingMilkdownCodeBlocks } from './milkdownViewport';
 import {
   bindComparisonLineReader,
   comparisonDecorations,
@@ -35,6 +39,7 @@ import { reportReactError } from '@/services/runtimeLogs';
 import { Milkdown, MilkdownProvider, useEditor } from '@milkdown/react';
 import {
   Editor,
+  EditorViewReady,
   commandsCtx,
   defaultValueCtx,
   editorViewCtx,
@@ -73,7 +78,6 @@ import {
 } from '@milkdown/kit/preset/gfm';
 import { history } from '@milkdown/kit/plugin/history';
 import { clipboard } from '@milkdown/kit/plugin/clipboard';
-import { listener, listenerCtx } from '@milkdown/kit/plugin/listener';
 import { codeBlockComponent, codeBlockConfig } from '@milkdown/kit/component/code-block';
 import { milkdownCodeIndent } from './milkdownCodeIndent';
 import {
@@ -90,7 +94,6 @@ import { toggleMark } from '@milkdown/kit/prose/commands';
 import { closeHistory, isHistoryTransaction, redo, undo } from '@milkdown/kit/prose/history';
 import { InputRule } from '@milkdown/kit/prose/inputrules';
 import { AllSelection, NodeSelection, Plugin, TextSelection } from '@milkdown/kit/prose/state';
-import { findChildren } from '@milkdown/kit/prose';
 import {
   HighlightStyle,
   LanguageDescription,
@@ -1539,54 +1542,6 @@ function enhanceCodeBlocks(container, { readOnly, mermaidRoots }) {
 }
 
 /**
- * 根据大纲项信息在 ProseMirror 文档中定位对应节点。
- *
- * @param {any} doc 当前 ProseMirror 文档。
- * @param {{line?: number, text?: string, type?: string}} outlineItem 大纲项信息。
- * @returns {any | null} 命中的节点与位置信息；未命中时返回 `null`。
- */
-function findNodeByOutlineItem(doc, { line, text, type }) {
-  const cleanText = String(text || '').trim();
-  // 注意 findChildren 是柯里化的：先传谓词拿到查询函数，再用 doc 调用。
-  // 之前写成 findChildren(doc, predicate)，等于把 doc 当谓词，拿到的是函数而非数组，
-  // 于是 .find 直接抛 TypeError（点大纲里的列表项必崩）。
-  const candidates = findChildren((node) => {
-    if (type === 'heading') return node.type.name === 'heading';
-    if (type === 'list-ordered' || type === 'list-unordered') return node.type.name === 'listItem';
-    return false;
-  })(doc);
-
-  if (line) {
-    const exactLine = candidates.find(({ node }) => node.attrs?.line === line);
-    if (exactLine) return exactLine;
-  }
-
-  if (!cleanText) return null;
-  return candidates.find(({ node }) => node.textContent.trim().startsWith(cleanText)) || null;
-}
-
-/**
- * 根据大纲项信息在只读 DOM 预览中定位对应元素。
- *
- * @param {Element | null} container 预览容器。
- * @param {{text?: string, type?: string}} outlineItem 大纲项信息。
- * @returns {Element | null} 命中的 DOM 元素。
- */
-function findDomByOutlineItem(container, { text, type }) {
-  if (!(container instanceof Element)) return null;
-  const cleanText = String(text || '').trim();
-  if (!cleanText) return null;
-
-  const selector = type === 'heading' ? 'h1, h2, h3, h4, h5, h6' : 'li';
-  const elements = container.querySelectorAll(selector);
-  for (const element of elements) {
-    if (element.textContent?.trim().startsWith(cleanText)) return element;
-  }
-
-  return null;
-}
-
-/**
  * 核心 Milkdown 实例。
  *
  * 负责挂载编辑器、向外暴露工具栏操作能力，并把编辑中的 Markdown
@@ -1626,8 +1581,10 @@ function MilkdownInner(
   const charTimerRef = useRef(null);
   const saveTimerRef = useRef(null);
   const publishedMarkdownRef = useRef(null);
+  const publishedDocumentRef = useRef(null);
   const mermaidRootsRef = useRef(new Map());
   const [treePreviews, setTreePreviews] = useState([]);
+  const [readyEditor, setReadyEditor] = useState(null);
   const [codeLanguageMenu, setCodeLanguageMenu] = useState(null);
   const closeCodeLanguageMenu = useCallback(() => setCodeLanguageMenu(null), []);
   useEffect(() => {
@@ -1744,7 +1701,10 @@ function MilkdownInner(
       )
         return;
       const state = ctx.get(editorViewCtx).state;
-      const markdown = ctx.get(serializerCtx)(persistentMilkdownDocument(state));
+      const doc = persistentMilkdownDocument(state);
+      if (publishedDocumentRef.current?.eq(doc)) return;
+      const markdown = ctx.get(serializerCtx)(doc);
+      publishedDocumentRef.current = doc;
       if (markdown === publishedMarkdownRef.current) return;
       publishedMarkdownRef.current = markdown;
       scheduleEditorSideEffects(markdown);
@@ -1759,6 +1719,7 @@ function MilkdownInner(
       publishEditorContent(ctx);
       const result = replayMilkdownHistory(ctx, view, activeTabId, direction);
       if (!result) return false;
+      publishedDocumentRef.current = persistentMilkdownDocument(view.state);
       publishedMarkdownRef.current = result.serialized;
       scheduleEditorSideEffects(result.text);
       setRenderTick((value) => value + 1);
@@ -1822,19 +1783,17 @@ function MilkdownInner(
               'aria-label': 'Markdown WYSIWYG editor',
             },
           }));
-          const listeners = ctx.get(listenerCtx).mounted((editorCtx) => {
-            const view = editorCtx.get(editorViewCtx);
-            const selection = !readOnly && initialEditingSelection(view.state);
-            if (selection) view.dispatch(view.state.tr.setSelection(selection));
-            // 在完整文档与 NodeView 挂载后显式恢复，不能只依赖插件初始化快照。
-            if (!isComparison) restoreMilkdownFolds(view, foldBridge.initialFolds(view.state.doc));
-            const state = view.state;
-            if (!readOnly)
-              publishedMarkdownRef.current = editorCtx.get(serializerCtx)(
-                persistentMilkdownDocument(state),
-              );
-          });
-          if (!isComparison) listeners.markdownUpdated(publishEditorContent);
+        })
+        .use((ctx) => async () => {
+          await ctx.wait(EditorViewReady);
+          const view = ctx.get(editorViewCtx);
+          const selection = !readOnly && initialEditingSelection(view.state);
+          if (selection) view.dispatch(view.state.tr.setSelection(selection));
+          if (foldBridge) restoreMilkdownFolds(view, foldBridge.initialFolds(view.state.doc));
+          if (!readOnly) {
+            publishedDocumentRef.current = persistentMilkdownDocument(view.state);
+            publishedMarkdownRef.current = content || '';
+          }
         })
         .use(markdownHtmlPlugin)
         .use(milkdownTableKeys)
@@ -1864,10 +1823,12 @@ function MilkdownInner(
         .use(milkdownMediaEditor)
         .use(milkdownMediaImageView)
         .use(codeBlockComponent)
-        .use(milkdownBlockSelection)
-        .use(listener);
+        .use(milkdownBlockSelection);
 
-      if (foldBridge) editor.use($prose(() => createMilkdownHeadingFoldsPlugin(foldBridge)));
+      if (foldBridge) {
+        editor.use($prose(() => createMilkdownHeadingFoldsPlugin(foldBridge)));
+        editor.use(milkdownOutlineHighlight);
+      }
       if (!readOnly && !isComparison) {
         editor.use(
           milkdownSharedHistory(activeTabId, () => {
@@ -1877,6 +1838,26 @@ function MilkdownInner(
           }),
         );
         editor.use(milkdownEditingScroll);
+        editor.use(
+          $prose(
+            (ctx) =>
+              new Plugin({
+                view: () => {
+                  let timer;
+                  return {
+                    update(view, previous) {
+                      if (view.state.doc === previous.doc) return;
+                      clearTimeout(timer);
+                      timer = setTimeout(() => publishEditorContent(ctx), 200);
+                    },
+                    destroy() {
+                      clearTimeout(timer);
+                    },
+                  };
+                },
+              }),
+          ),
+        );
       }
       if (!readOnly)
         editor
@@ -1925,9 +1906,24 @@ function MilkdownInner(
     [activeTabId, content, isComparison, readOnly, publishEditorContent],
   );
 
+  const viewportReady = !editorInfo.loading && readyEditor === editorRef.current;
   useLayoutEffect(() => {
-    if (!editorInfo.loading) onReady?.();
-  }, [editorInfo.loading, onReady]);
+    if (editorInfo.loading || (!isComparison && !active) || viewportReady) return undefined;
+    const root = wrapperRef.current;
+    let frame = 0;
+    const prepareViewport = () => {
+      if (!isComparison && root && hasPendingMilkdownCodeBlocks(root)) {
+        frame = requestAnimationFrame(prepareViewport);
+      } else {
+        setReadyEditor(editorRef.current);
+      }
+    };
+    prepareViewport();
+    return () => cancelAnimationFrame(frame);
+  }, [active, editorInfo.loading, isComparison, viewportReady]);
+  useLayoutEffect(() => {
+    if (viewportReady) onReady?.();
+  }, [onReady, viewportReady]);
 
   useLayoutEffect(() => {
     if (!isComparison || editorInfo.loading || syncedComparisonRef.current === comparisonSource)
@@ -1947,7 +1943,8 @@ function MilkdownInner(
         if (!tr.doc.eq(next)) tr.replaceWith(0, tr.doc.content.size, next.content);
         view.dispatch(tr);
       }
-      publishedMarkdownRef.current = ctx.get(serializerCtx)(persistentMilkdownDocument(view.state));
+      publishedDocumentRef.current = persistentMilkdownDocument(view.state);
+      publishedMarkdownRef.current = comparisonSource;
     });
   }, [comparisonSource, editorInfo.loading, isComparison]);
 
@@ -1985,6 +1982,8 @@ function MilkdownInner(
     resolveCodeTarget,
     active && !isComparison && !editorInfo.loading,
   );
+  const showOutlineJump = useMarkdownJumpFeedback(active && !isComparison ? activeTabId : null);
+  const outlineMap = useRef(null);
 
   useEffect(() => {
     if (isComparison || editorInfo.loading || readOnly) return undefined;
@@ -2296,40 +2295,49 @@ function MilkdownInner(
 
   useEffect(() => {
     if (isComparison || !active) return undefined;
-    const handler = (e) => {
-      const wrapper = wrapperRef.current;
-      const detail = e.detail ?? {};
-      const domTarget = findDomByOutlineItem(wrapper, detail);
-      if (domTarget) {
-        domTarget.scrollIntoView({ behavior: 'smooth', block: 'start' });
-        return;
+    const handler = (event) => {
+      const detail = event.detail ?? {};
+      if (detail.tabId && detail.tabId !== activeTabId) return;
+      const view = getMediaView();
+      if (!view) return;
+      const source = getBuffer(activeTabId, content || '');
+      const { doc } = view.state;
+      if (outlineMap.current?.doc !== doc || outlineMap.current.source !== source) {
+        const lines = new Map();
+        for (const [position, anchor] of milkdownFoldPositions(doc, source)) {
+          lines.set(`${anchor.kind}:${anchor.start}`, position);
+        }
+        outlineMap.current = { doc, source, lines };
       }
+      const kind = detail.type === 'heading' ? 'heading' : 'list_item';
+      const position = outlineMap.current.lines.get(`${kind}:${detail.line}`);
+      const jump = (pos) => {
+        const node = doc.nodeAt(pos);
+        if (!node || node.type.name !== kind) return false;
+        revealMilkdownOutlineTarget(view, pos);
+        const label = kind === 'list_item' && node.firstChild?.type.name === 'paragraph' ? pos + 1 : pos;
+        showOutlineJump(() => !view.isDestroyed && view.state.doc === doc ? view.nodeDOM(label) : null, {
+          highlight: () => highlightOutlinePosition(view, label),
+        });
+        return true;
+      };
+      if (position != null && jump(position)) return;
 
-      const editor = editorRef.current;
-      if (!editor) return;
-
-      editor.action((ctx) => {
-        const view = ctx.get(editorViewCtx);
-        const target = findNodeByOutlineItem(view.state.doc, detail);
-        if (!target) return;
-
-        const dom = view.nodeDOM(target.pos);
-        if (dom instanceof Element) {
-          dom.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      const target = findOutlineDomTarget(view.dom, detail);
+      if (!target) return;
+      const $point = doc.resolve(view.posAtDOM(target, 0));
+      for (let depth = $point.depth; depth > 0; depth--) {
+        if ($point.node(depth).type.name === kind && jump($point.before(depth))) {
           return;
         }
-
-        view.dispatch(
-          view.state.tr
-            .setSelection(NodeSelection.create(view.state.doc, target.pos))
-            .scrollIntoView(),
-        );
-      });
+      }
+      revealMilkdownOutlineTarget(view, $point.pos);
+      showOutlineJump(target);
     };
 
     window.addEventListener('outline:jump', handler);
     return () => window.removeEventListener('outline:jump', handler);
-  }, [active, isComparison]);
+  }, [active, activeTabId, content, getMediaView, isComparison, showOutlineJump]);
 
   useEffect(() => {
     if (readOnly || editorInfo.loading) return undefined;
@@ -2479,6 +2487,7 @@ function MilkdownInner(
         if (handled) event.stopPropagation();
       }}
       className={`md-preview md-preview--milkdown ${!readOnly && !isComparison ? 'md-preview--milkdown-stable-scroll' : ''} ${editorInfo.loading ? 'md-preview--stale' : ''} ${className || ''}`}
+      data-milkdown-starting={!isComparison && !viewportReady ? '' : undefined}
       style={{
         fontSize: `${fontSize || 14}px`,
         lineHeight: (lineHeight || 24) / (fontSize || 14),

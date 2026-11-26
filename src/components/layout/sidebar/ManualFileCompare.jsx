@@ -8,6 +8,7 @@ import { open } from '@tauri-apps/plugin-dialog';
 import { isAndroidRuntime } from '@utils/platform';
 import { readFileContent } from '@utils/tauriApi';
 import { decodeTextBytes, MAX_TEXT_BYTES } from '@utils/textFilePolicy';
+import { isMarkdownPath, prepareComparisonRenderer } from '@utils/editorRendererBoot';
 import useEditorStore from '@store/useEditorStore';
 import useHistoryStore from '@store/useHistoryStore';
 import FileTypeIcon from '@components/ui/FileTypeIcon';
@@ -51,6 +52,7 @@ export default function ManualFileCompare() {
   };
   const compare = async () => {
     const { left, right } = files;
+    prepareComparisonRenderer([left.path, right.path].every(isMarkdownPath));
     const tabId = useEditorStore.getState().activeTabId;
     setError('');
     setBusy(true);

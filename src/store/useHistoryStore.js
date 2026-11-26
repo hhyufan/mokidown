@@ -1,19 +1,18 @@
 import { create } from 'zustand';
 import useEditorStore from '@store/useEditorStore';
+import { isMarkdownPath, prepareComparisonRenderer } from '@utils/editorRendererBoot';
 
 let comparisonSequence = Date.now();
 
 export function isMarkdownComparison(tab, diff) {
   if (diff?.external) {
-    return [diff.external.originalPath, diff.external.modifiedPath].every((path) =>
-      /\.(?:md|markdown|mdx)$/i.test(path),
-    );
+    return [diff.external.originalPath, diff.external.modifiedPath].every(isMarkdownPath);
   }
   return Boolean(
     tab &&
     (diff?.sourceTabId ?? diff?.tabId) === tab.id &&
     (/^(?:md|markdown|mdx)$/i.test(tab.ext || '') ||
-      /\.(?:md|markdown|mdx)$/i.test(tab.name || tab.path || '')),
+      isMarkdownPath(tab.name || tab.path)),
   );
 }
 
@@ -24,9 +23,7 @@ function comparisonIdentity(sourceTabId, external) {
 
 function viewModeFor(external) {
   return external &&
-    [external.originalPath, external.modifiedPath].every((path) =>
-      /\.(?:md|markdown|mdx)$/i.test(path),
-    )
+    [external.originalPath, external.modifiedPath].every(isMarkdownPath)
     ? 'preview'
     : 'edit';
 }
@@ -44,7 +41,16 @@ const useHistoryStore = create((set, get) => ({
   historyWrite: null,
   viewMode: 'preview',
 
-  setDiff: (diff) => set({ diff, viewMode: diff?.external ? 'edit' : 'preview' }),
+  setDiff: (diff) => {
+    const viewMode = diff?.external ? 'edit' : 'preview';
+    if (diff) {
+      const source = useEditorStore.getState().tabs.find(
+        (tab) => tab.id === (diff.sourceTabId ?? diff.tabId),
+      );
+      prepareComparisonRenderer(viewMode === 'preview' && isMarkdownComparison(source, diff));
+    }
+    set({ diff, viewMode });
+  },
 
   openFileComparison: (tabId, content, external, label) => {
     const editor = useEditorStore.getState();
@@ -59,6 +65,8 @@ const useHistoryStore = create((set, get) => ({
       (item) => item.identity === identity && editor.tabs.some((tab) => tab.id === item.tabId),
     );
     const id = existing?.tabId ?? `diff:${crypto.randomUUID()}`;
+    const viewMode = viewModeFor(external);
+    prepareComparisonRenderer(viewMode === 'preview');
     editor.openComparisonTab({ id, name, sourceTabId });
     const comparison = {
       tabId: id,
@@ -72,7 +80,7 @@ const useHistoryStore = create((set, get) => ({
     set((state) => ({
       comparisons: { ...state.comparisons, [id]: comparison },
       diff: comparison,
-      viewMode: viewModeFor(external),
+      viewMode,
     }));
   },
 
@@ -95,8 +103,12 @@ const useHistoryStore = create((set, get) => ({
     });
   },
 
-  toggleViewMode: () =>
-    set((state) => ({ viewMode: state.viewMode === 'preview' ? 'edit' : 'preview' })),
+  toggleViewMode: () => {
+    const { diff, viewMode } = get();
+    const nextMode = viewMode === 'preview' ? 'edit' : 'preview';
+    if (diff) prepareComparisonRenderer(nextMode === 'preview');
+    set({ viewMode: nextMode });
+  },
 
   /** 关闭一处对比：丢弃记录并关掉它自己的标签页。 */
   clearDiff: (comparison) => {
