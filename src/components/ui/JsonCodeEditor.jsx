@@ -65,6 +65,7 @@ export default function JsonCodeEditor({
       folding: true,
       scrollBeyondLastLine: false,
       renderLineHighlight: 'none',
+      accessibilitySupport: 'off',
       overviewRulerLanes: 0,
       hideCursorInOverviewRuler: true,
       contextmenu: false,
