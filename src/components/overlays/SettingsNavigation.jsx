@@ -132,27 +132,27 @@ export default function SettingsNavigation({
             <CloseOutlined aria-hidden="true" />
           </button>
         </Tooltip>
-        {searching && results.length > 0 && (
-          <div className="settings-nav__results" role="listbox">
-            {results.slice(0, 8).map((item, index) => (
-              <button
-                key={item.key || `${item.section}-${index}`}
-                type="button"
-                role="option"
-                aria-selected={index === matchIndex}
-                className="settings-nav__result"
-                onMouseDown={(event) => event.preventDefault()}
-                onClick={() => onSelectResult?.(index)}
-              >
-                <span>
-                  <SearchHighlight text={item.label} query={query} />
-                </span>
-                <small>{t(`settings.nav.${item.section}`)}</small>
-              </button>
-            ))}
-          </div>
-        )}
       </div>
+      {searching && results.length > 0 && (
+        <div className="settings-nav__results" role="listbox">
+          {results.slice(0, 8).map((item, index) => (
+            <button
+              key={item.key || `${item.section}-${index}`}
+              type="button"
+              role="option"
+              aria-selected={index === matchIndex}
+              className="settings-nav__result"
+              onMouseDown={(event) => event.preventDefault()}
+              onClick={() => onSelectResult?.(index)}
+            >
+              <span>
+                <SearchHighlight text={item.label} query={query} />
+              </span>
+              <small>{t(`settings.nav.${item.section}`)}</small>
+            </button>
+          ))}
+        </div>
+      )}
     </nav>
   );
 }
