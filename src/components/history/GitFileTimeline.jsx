@@ -144,10 +144,6 @@ export default function GitFileTimeline() {
           <ChevronIcon className="timeline__chevron" />
         </button>
         <span className="timeline__label">{t('workspaceDiff.fileHistory')}</span>
-        <span className="timeline__count">
-          {data.revisions.length}
-          {data.hasMore ? '+' : ''}
-        </span>
         {online && (
           <Tooltip title={t('workspaceDiff.githubHistory')} placement="top">
             <button
@@ -162,6 +158,10 @@ export default function GitFileTimeline() {
             </button>
           </Tooltip>
         )}
+        <span className="timeline__count">
+          {data.revisions.length}
+          {data.hasMore ? '+' : ''}
+        </span>
         <Tooltip title={t('history.refresh')} placement="top">
           <button
             type="button"

@@ -40,7 +40,7 @@
   "workspaceDiff.mergeBase": "Common ancestor {{hash}}",
   "workspaceDiff.noMergeBase": "No common ancestor",
   "workspaceDiff.selectBranches": "Select two branches to compare.",
-  "workspaceDiff.fileHistory": "Git File History",
+  "workspaceDiff.fileHistory": "Git History",
   "workspaceDiff.githubHistory": "Open File History on GitHub",
   "workspaceDiff.moreHistory": "Load older commits",
   "workspaceDiff.noGitHistory": "No commits for this file yet.",

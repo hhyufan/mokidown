@@ -40,7 +40,7 @@
   "workspaceDiff.mergeBase": "共同祖先 {{hash}}",
   "workspaceDiff.noMergeBase": "没有共同祖先",
   "workspaceDiff.selectBranches": "选择两个要对比的分支。",
-  "workspaceDiff.fileHistory": "Git 文件历史",
+  "workspaceDiff.fileHistory": "GIT 历史",
   "workspaceDiff.githubHistory": "在 GitHub 打开此文件的历史",
   "workspaceDiff.moreHistory": "加载更早的提交",
   "workspaceDiff.noGitHistory": "此文件还没有提交记录。",
