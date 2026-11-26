@@ -49,9 +49,15 @@ export function attachWritingCaret(view) {
     const range = document.createRange();
     range.setStart(currentSelection.focusNode, currentSelection.focusOffset);
     const native = range.getBoundingClientRect();
-    // Ask for the left neighbour: a formula's preview bubble is a widget drawn at the very
-    // position its source starts at, and the default side reads the node after it.
-    const { left, top, bottom } = native.height > 0 ? native : view.coordsAtPos(selection.head, -1);
+    // At the start of a textblock (e.g. a newly created empty task item), side -1
+    // lands on leading absolute widgets such as the task checkbox or fold arrow.
+    // Otherwise prefer the left neighbour so inline formula preview bubbles (side 1)
+    // do not hijack the caret box.
+    const atStartWithoutMath =
+      selection.$head.parentOffset === 0 &&
+      !selection.$head.nodeAfter?.marks?.some((mark) => mark.type.name === 'math');
+    const { left, top, bottom } =
+      native.height > 0 ? native : view.coordsAtPos(selection.head, atStartWithoutMath ? 1 : -1);
     const box = pane.getBoundingClientRect();
     if (bottom <= box.top || top >= box.bottom || left < box.left - 1 || left > box.right) {
       hide();

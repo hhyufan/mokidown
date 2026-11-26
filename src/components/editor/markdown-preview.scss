@@ -4,10 +4,6 @@
 @use '../../assets/styles/inline-code' as inline;
 @use '../../assets/styles/fold-control' as fold;
 
-::highlight(moki-task-struck) {
-  color: color-mix(in srgb, var(--text) 55%, var(--moki-background-base));
-}
-
 // Resolve the gutter against the preview font size before headings inherit it.
 @property --md-fold-gutter {
   syntax: '<length>';
@@ -365,11 +361,17 @@
 
   ul,
   ol {
+    --task-checkbox-gutter: 1.7em;
+    --task-branch-indent: 1.45em;
     margin: 0.5em 0;
-    padding-left: 1.8em;
+    padding-inline-start: 2.9em;
     li {
       margin-bottom: 0.25em;
     }
+  }
+
+  :is(ul, ol) :is(ul, ol) {
+    padding-inline-start: calc(7px + var(--task-branch-indent));
   }
 
   // vitality：列表标记取主蓝；有序列表改用 lower-roman。
@@ -392,7 +394,6 @@
   }
 
   :is(li.task-list-item, li[data-item-type='task']) {
-    --task-checkbox-gutter: 1.2em;
     position: relative;
     list-style: none;
 
@@ -401,6 +402,14 @@
     }
     > p:last-of-type {
       margin-bottom: 0;
+    }
+
+    &:has(
+        > .md-preview__task-checkbox > [data-dimmed],
+        > p:first-of-type > .md-preview__task-checkbox > [data-dimmed]
+      )
+      > :is(p:first-of-type, .md-preview__task-label) {
+      color: color-mix(in srgb, var(--text) 55%, transparent);
     }
   }
 
@@ -432,7 +441,7 @@
     position: absolute;
     z-index: 1;
     inset-block-start: 0.5lh;
-    inset-inline-start: calc(-1 * var(--task-checkbox-gutter, 1.2em));
+    inset-inline-start: calc(-1 * var(--task-checkbox-gutter, 1.7em));
     transform: translateY(-50%);
     font: inherit;
     inline-size: 14px;
@@ -495,12 +504,11 @@
     :where(&) {
       display: grid;
     }
-    --task-branch-indent: 1.45em;
     --task-row-gap: 0.25em;
     align-content: start;
     row-gap: var(--task-row-gap);
     margin-inline-start: calc(7px - var(--task-checkbox-gutter));
-    padding-inline-start: var(--task-branch-indent);
+    padding-inline-start: calc(var(--task-branch-indent) + var(--task-checkbox-gutter));
 
     > li {
       position: relative;
@@ -510,7 +518,9 @@
       > .md-preview__fold,
       > p > .md-preview__fold {
         inset-inline-end: auto;
-        inset-inline-start: calc(0.5px - var(--task-branch-indent) - 0.5lh);
+        inset-inline-start: calc(
+          0.5px - var(--task-branch-indent) - var(--task-checkbox-gutter) - 0.5lh
+        );
         z-index: 2;
       }
 
@@ -518,7 +528,7 @@
       &::after {
         content: '';
         position: absolute;
-        inset-inline-start: calc(-1 * var(--task-branch-indent));
+        inset-inline-start: calc(-1 * (var(--task-branch-indent) + var(--task-checkbox-gutter)));
         inset-block-start: 0;
         pointer-events: none;
       }

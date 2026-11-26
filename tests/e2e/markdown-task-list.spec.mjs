@@ -232,13 +232,14 @@ for (const harness of ['milkdown-flow', 'preview']) {
   });
 }
 
-test('WYSIWYG only grays the glyphs reached by the strike while drawing and retracting', async ({ page }) => {
+test('WYSIWYG draws and retracts the task strike through the same path', async ({ page }) => {
   await page.goto(`/tests/milkdown-flow-harness.html?content=${encodeURIComponent('- [ ] before `code` after')}`);
   const strike = page.locator('.md-preview__task-strike');
   await expect(strike).toHaveAttribute('data-drawn', 'false');
   const result = await strike.evaluate(async (svg) => {
     const box = svg.parentElement;
-    const grayText = () => [...CSS.highlights.get('moki-task-struck')].map((range) => range.toString()).join('');
+    const text = svg.closest('p');
+    const color = () => getComputedStyle(text).color;
     const frame = () => new Promise((resolve) => requestAnimationFrame(resolve));
     const play = async () => {
       box.click();
@@ -246,31 +247,22 @@ test('WYSIWYG only grays the glyphs reached by the strike while drawing and retr
       await frame();
       const motion = svg.getAnimations()[0];
       const steps = motion?.effect.getKeyframes().map((keyframe) => keyframe.strokeDashoffset);
-      motion.pause();
-      motion.currentTime = 120;
-      await frame();
-      await frame();
-      const during = grayText();
-      motion.play();
+      const during = color();
       await motion?.finished;
-      await frame();
-      await frame();
-      return { steps, during, after: grayText() };
+      return { steps, during, after: color() };
     };
+    const normal = color();
     const forward = await play();
     const path = svg.firstElementChild;
     const reverse = await play();
-    return { forward, reverse, samePath: svg.firstElementChild === path };
+    return { normal, forward, reverse, samePath: svg.firstElementChild === path };
   });
   expect(result.forward.steps).toEqual(['1px', '0px']);
   expect(result.reverse.steps).toEqual(['0px', '1px']);
   expect(result.samePath).toBe(true);
-  expect(result.forward.after).toBe('before code after');
-  for (const partial of [result.forward.during, result.reverse.during]) {
-    expect(partial).toMatch(/^b/);
-    expect(partial).not.toContain('after');
-  }
-  expect(result.reverse.after).toBe('');
+  expect(result.forward.after).not.toBe(result.normal);
+  expect(result.reverse.during).toBe(result.forward.after);
+  expect(result.reverse.after).toBe(result.normal);
 });
 
 test('split preview recognizes no-break task markers and reflects the cascade setting', async ({ page }) => {
@@ -356,3 +348,67 @@ test('Enter lifts an empty nested task one level while retaining its checkbox an
   await expect(children).toHaveCount(2);
   await expect(boxes).toHaveCount(4);
 });
+
+for (const harness of ['milkdown-flow', 'preview']) {
+  test(`${harness} aligns task lists, sibling lists and nested code blocks on one left axis without shifting task boxes`, async ({ page }) => {
+    const content = [
+      '- [ ] Task body',
+      '  ```js',
+      '  const a = 1;',
+      '  ```',
+      '',
+      '* Bullet body',
+      '  ```js',
+      '  const b = 2;',
+      '  ```',
+      '',
+      '1. Ordered body',
+    ].join('\n');
+    await page.goto(`/tests/${harness}-harness.html?content=${encodeURIComponent(content)}`);
+    const root = page.locator('.md-preview');
+    await expect(root.getByRole('checkbox')).toHaveCount(1);
+    const metrics = await root.evaluate((el) => {
+      const box = el.querySelector('.md-preview__task-checkbox').getBoundingClientRect();
+      const [taskItem, bulletItem, orderedItem] = [...el.querySelectorAll('li')];
+      const textLeft = (li) => (li.querySelector(':scope > p, :scope > .md-preview__task-label') || li).getBoundingClientRect().left;
+      const codeLeft = (li) => li.querySelector('.milkdown-code-block, .md-runnable-code, pre').getBoundingClientRect().left;
+      const rootLeft = el.getBoundingClientRect().left + parseFloat(getComputedStyle(el).paddingLeft);
+      const em = parseFloat(getComputedStyle(el).fontSize);
+      return {
+        boxOffset: box.left - rootLeft,
+        expectedBoxOffset: 1.2 * em,
+        taskTextLeft: textLeft(taskItem),
+        taskCodeLeft: codeLeft(taskItem),
+        bulletTextLeft: textLeft(bulletItem),
+        bulletCodeLeft: codeLeft(bulletItem),
+        orderedTextLeft: textLeft(orderedItem),
+      };
+    });
+    expect(Math.abs(metrics.boxOffset - metrics.expectedBoxOffset)).toBeLessThan(1);
+    expect(Math.abs(metrics.taskCodeLeft - metrics.taskTextLeft)).toBeLessThan(1);
+    expect(Math.abs(metrics.bulletTextLeft - metrics.taskTextLeft)).toBeLessThan(1);
+    expect(Math.abs(metrics.bulletCodeLeft - metrics.taskTextLeft)).toBeLessThan(1);
+    expect(Math.abs(metrics.orderedTextLeft - metrics.taskTextLeft)).toBeLessThan(1);
+  });
+}
+
+test('completing a task list marker immediately places the writing caret at text start instead of on the checkbox', async ({ page }) => {
+  await page.goto('/tests/milkdown-flow-harness.html?content=');
+  const editor = page.locator('.milkdown-editor');
+  await expect(editor).toBeVisible();
+  await page.evaluate(() => window.trial.selectTextblock(0));
+  await page.keyboard.type('- [ ] ', { delay: 20 });
+  await expect(editor.getByRole('checkbox')).toHaveCount(1);
+  const caret = page.locator('.moki-writing-caret:not([hidden])');
+  await expect(caret).toBeVisible();
+  const geometry = await editor.evaluate((root) => {
+    const box = root.querySelector('.md-preview__task-checkbox').getBoundingClientRect();
+    const paragraph = root.querySelector('li p').getBoundingClientRect();
+    const drawn = document.querySelector('.moki-writing-caret').getBoundingClientRect();
+    return { boxRight: box.right, boxHeight: box.height, pLeft: paragraph.left, caretLeft: drawn.left, caretHeight: drawn.height };
+  });
+  expect(Math.abs(geometry.caretLeft - geometry.pLeft)).toBeLessThan(1);
+  expect(geometry.caretLeft).toBeGreaterThan(geometry.boxRight + 4);
+  expect(geometry.caretHeight).toBeGreaterThan(geometry.boxHeight + 2);
+});
+
