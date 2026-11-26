@@ -366,6 +366,8 @@ export default function WorkspaceChanges({ directory }) {
         external: {
           repository: repositoryRoot,
           modified,
+          gitEdit: { gitPath, path: change.path, layer: change.layer, expectedMissing: change.code === 'D' },
+          onGitApplied: update,
           originalPath: filePath(repositoryRoot, originalPath),
           modifiedPath: filePath(repositoryRoot, change.path),
           originalName: fileName(originalPath),

@@ -7,7 +7,8 @@ import useHistoryStore from '@store/useHistoryStore';
 import HistoryDiffView from './HistoryDiffView';
 
 globalThis.React = React;
-const mock = vi.hoisted(() => ({ execute: vi.fn(), save: vi.fn() }));
+const mock = vi.hoisted(() => ({ execute: vi.fn(), save: vi.fn(), invoke: vi.fn() }));
+vi.mock('@tauri-apps/api/core', () => ({ invoke: mock.invoke }));
 vi.mock('@utils/pluginBus', () => ({
   executePluginCommand: mock.execute,
   sendToPlugin: vi.fn(),
@@ -115,4 +116,34 @@ it('opens a standalone comparison without an editor tab or history restore actio
   fireEvent.click(screen.getByRole('button', { name: 'history.closeDiff' }));
   expect(useHistoryStore.getState().diff).toBeNull();
   expect(mock.save).not.toHaveBeenCalled();
+});
+
+it('keeps the Git revert in the draft until apply and writes the selected Git layer', async () => {
+  mock.invoke.mockResolvedValue(undefined);
+  useHistoryStore.getState().setDiff({
+    tabId: null,
+    timestamp: 3,
+    content: 'before',
+    external: {
+      modified: 'after',
+      modifiedName: 'note.txt',
+      modifiedPath: '/repo/note.txt',
+      repository: '/repo',
+      gitEdit: { gitPath: '', path: 'note.txt', layer: 'index', expectedMissing: false },
+    },
+  });
+  render(<HistoryDiffView />);
+  const revert = screen.getByRole('button', { name: 'workspaceDiff.revertChanges' });
+  const apply = screen.getByRole('button', { name: 'history.applyChanges' });
+  fireEvent.click(revert);
+  expect(apply).toBeEnabled();
+  expect(mock.invoke).not.toHaveBeenCalled();
+  fireEvent.keyDown(document.body, { key: 'z', ctrlKey: true });
+  expect(apply).toBeDisabled();
+  fireEvent.click(revert);
+  fireEvent.click(apply);
+  await waitFor(() => expect(useHistoryStore.getState().diff).toBeNull());
+  expect(mock.invoke).toHaveBeenCalledWith('git_workspace_apply', expect.objectContaining({
+    directory: '/repo', layer: 'index', expected: 'after', content: 'before',
+  }));
 });

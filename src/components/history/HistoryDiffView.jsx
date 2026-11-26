@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Button, Tooltip } from 'antd';
+import { invoke } from '@tauri-apps/api/core';
 import { CheckOutlined, CloseOutlined, HistoryOutlined } from '@ant-design/icons';
 import ScrollEdgeShadows from '@components/editor/ScrollEdgeShadows';
 import useHistoryStore, { isMarkdownComparison } from '@store/useHistoryStore';
@@ -20,6 +21,7 @@ import {
 } from '@utils/markdownUndo';
 import { sha256 } from '../../../shared/plugin-package.mjs';
 import { historyCapture, onFileChanged, readFileContent, writeFileContent } from '@utils/tauriApi';
+import { withFileOperation } from '@/services/localFileGuard';
 import { getFileLanguage } from '@utils/fileLanguage';
 import {
   hasSelectedHistoryChanges,
@@ -44,6 +46,11 @@ function formatTime(timestamp) {
 const normalizeLines = (text) => text.replace(/\r\n|\r/g, '\n');
 const NO_CHANGES = [];
 const defaultFoldState = () => ({ defaultExpanded: false, overrides: new Map() });
+
+function comparablePath(path) {
+  const normalized = String(path || '').replaceAll('\\', '/');
+  return /^(?:[a-z]:|\/\/)/i.test(normalized) ? normalized.toLowerCase() : normalized;
+}
 
 function hiddenLineCount(editor) {
   return editor
@@ -507,6 +514,8 @@ function MonacoHistoryDiff({
           className="history-diff__editor"
           ref={containerRef}
           data-ready={ready}
+          aria-busy={!ready}
+          inert={!ready ? '' : undefined}
           data-comparison-zoom="edit"
           hidden={noChanges}
         />
@@ -568,6 +577,8 @@ export default function HistoryDiffView() {
 
   const tab = tabs.find((item) => item.id === (diff?.sourceTabId ?? diff?.tabId)) || null;
   const external = diff?.external;
+  const gitEdit = external?.gitEdit;
+  const editable = !external || Boolean(gitEdit) || !external.repository;
   const comparisonId = external ? `external:${diff.timestamp}` : tab?.id;
   const pluginActions = diff?.pluginId && diff.actions?.length ? diff.actions : null;
   useEffect(() => {
@@ -597,7 +608,7 @@ export default function HistoryDiffView() {
     };
   }, [historyContent, external]);
   // 外部对比的右侧是工作区文件：磁盘变化后跟随刷新，避免一直显示打开时的快照。
-  const externalModifiedPath = external?.modifiedPath;
+  const externalModifiedPath = external && !external.repository ? external.modifiedPath : null;
   useEffect(() => {
     setLiveModified(null);
     if (!externalModifiedPath) return undefined;
@@ -631,7 +642,7 @@ export default function HistoryDiffView() {
     };
   }, [externalModifiedPath]);
   const current = external
-    ? (liveModified ?? external.modified)
+    ? (gitEdit ? external.modified : (liveModified ?? external.modified))
     : tab
       ? getBuffer(tab.id, tab.content || '')
       : '';
@@ -649,7 +660,7 @@ export default function HistoryDiffView() {
     [current, diff],
   );
   useEffect(() => {
-    if (!diff || external || busy) return undefined;
+    if (!diff || !editable || busy) return undefined;
     const onKeyDown = (event) => {
       const direction = markdownUndoDirection(event);
       if (!direction || useHistoryStore.getState().diff !== diff) return;
@@ -673,7 +684,7 @@ export default function HistoryDiffView() {
     };
     document.addEventListener('keydown', onKeyDown, true);
     return () => document.removeEventListener('keydown', onKeyDown, true);
-  }, [busy, current, diff, external]);
+  }, [busy, current, diff, editable]);
   const rendered = mode === 'preview' && isMarkdownComparison(tab, diff);
   const handleMonacoReady = useCallback(
     (value) => setMonacoReady(value ? { diff, rendered } : null),
@@ -791,14 +802,41 @@ export default function HistoryDiffView() {
   };
 
   const saveExternal = async (content) => {
-    if (busy || !external?.modifiedPath) return;
+    if (busy || !editable || !external?.modifiedPath || useHistoryStore.getState().diff !== diff) return;
     setPendingDiff(diff);
     setActionError('');
     try {
-      await writeFileContent(external.modifiedPath, content);
+      const path = external.modifiedPath;
+      if (gitEdit) {
+        const worktree = gitEdit.layer === 'worktree';
+        const findTarget = () => useEditorStore.getState().tabs.find((item) =>
+          !item.builtin && comparablePath(item.path) === comparablePath(path));
+        const apply = async () => {
+          if (worktree) {
+            const tab = findTarget();
+            if (tab) {
+              flushEditorBuffer(tab.id);
+              const latest = findTarget();
+              if (latest?.modified || (latest && getBuffer(latest.id, latest.content) !== latest.content))
+                throw new Error('saveBeforeGitApply');
+            }
+          }
+          return invoke('git_workspace_apply', {
+            ...gitEdit, directory: external.repository, expected: external.modified, content,
+          });
+        };
+        const saved = worktree ? await withFileOperation(findTarget()?.path || path, apply) : await apply();
+        external.onGitApplied?.();
+        if (worktree) void captureAppliedHistory(path, current, saved ?? content, undefined, (messageKey) => {
+          useNotificationStore.getState().notify('warning', t('history.title'), t(messageKey));
+        });
+      } else await writeFileContent(path, content);
       clearDiff(diff);
     } catch (error) {
-      if (useHistoryStore.getState().diff === diff) setActionError(String(error?.message || error));
+      if (useHistoryStore.getState().diff === diff) {
+        const detail = String(error?.message || error);
+        setActionError(gitEdit ? t(`workspaceDiff.errors.${detail}`, { defaultValue: detail }) : detail);
+      }
     } finally {
       setPendingDiff((pending) => (pending === diff ? null : pending));
     }
@@ -879,7 +917,7 @@ export default function HistoryDiffView() {
               />
             </span>
           </Tooltip>
-          {external && (
+          {external && editable && (
             <>
               <Tooltip title={t('history.applyChanges')} placement="top" mouseEnterDelay={0.3}>
                 <span className="history-diff__action">
@@ -907,7 +945,7 @@ export default function HistoryDiffView() {
                     aria-label={t('workspaceDiff.revertChanges')}
                     icon={<HistoryOutlined aria-hidden="true" />}
                     disabled={busy}
-                    onClick={() => void saveExternal(diff.content)}
+                    onClick={() => gitEdit ? updateDraft(diff.content) : void saveExternal(diff.content)}
                   />
                 </span>
               </Tooltip>
@@ -1035,8 +1073,8 @@ export default function HistoryDiffView() {
             foldState={markdownFolds}
             ready={currentDiff}
             busy={busy}
-            onRevert={revertPreviewChange}
-            onDraftChange={updateDraft}
+            onRevert={editable ? revertPreviewChange : undefined}
+            onDraftChange={editable ? updateDraft : undefined}
             onFoldSummary={setMarkdownFoldSummary}
             onAlignedChange={handleMarkdownAligned}
             onToggleFold={({ key }, expanded) => {
@@ -1061,7 +1099,7 @@ export default function HistoryDiffView() {
           lineHeight={lineHeight}
           tabSize={tabSize}
           arrowLabels={arrowLabels}
-          busy={busy}
+          busy={busy || !editable}
           noChanges={noChanges}
           initiallyExpanded={markdownFolds.defaultExpanded}
           onDraftChange={updateDraft}

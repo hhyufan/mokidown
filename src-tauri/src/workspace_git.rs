@@ -5,8 +5,10 @@ use std::{
     collections::HashSet,
     env,
     ffi::OsString,
+    fs,
+    io::Write,
     path::{Component, Path, PathBuf},
-    process::{Output, Stdio},
+    process::{Command, Output, Stdio},
 };
 
 #[derive(Clone, Copy, Deserialize, PartialEq, Serialize)]
@@ -91,6 +93,13 @@ where
     I: IntoIterator<Item = S>,
     S: AsRef<std::ffi::OsStr>,
 {
+    git_command(exe, root)
+        .args(args)
+        .output()
+        .map_err(|error| error.to_string())
+}
+
+fn git_command(exe: &Path, root: Option<&Path>) -> Command {
     let mut command = process::hidden(exe);
     command
         .stdin(Stdio::null())
@@ -118,9 +127,6 @@ where
         command.arg("-C").arg(root);
     }
     command
-        .args(args)
-        .output()
-        .map_err(|error| error.to_string())
 }
 
 fn stdout(result: Output) -> Result<Vec<u8>, String> {
@@ -249,14 +255,18 @@ fn parse_changes(list: &[u8]) -> Result<Vec<Change>, String> {
     Ok(changes)
 }
 
-fn blob(exe: &Path, root: &Path, spec: &str, optional: bool) -> Result<String, String> {
+fn blob_text(
+    exe: &Path,
+    root: &Path,
+    spec: &str,
+) -> Result<Option<text_file::TextDocument>, String> {
     let resolved = git(
         exe,
         Some(root),
         ["rev-parse", "--verify", "--end-of-options", spec],
     )?;
-    if optional && !resolved.status.success() {
-        return Ok(String::new());
+    if !resolved.status.success() {
+        return Ok(None);
     }
     let id = String::from_utf8(stdout(resolved)?).map_err(|error| error.to_string())?;
     let id = id.trim();
@@ -273,8 +283,16 @@ fn blob(exe: &Path, root: &Path, spec: &str, optional: bool) -> Result<String, S
     }
     let bytes = stdout(git(exe, Some(root), ["cat-file", "blob", id])?)?;
     text_file::decode(&bytes, false)
-        .map(|text| text.content)
+        .map(Some)
         .map_err(|error| error.kind.into())
+}
+
+fn blob(exe: &Path, root: &Path, spec: &str, optional: bool) -> Result<String, String> {
+    match blob_text(exe, root, spec)? {
+        Some(text) => Ok(text.content),
+        None if optional => Ok(String::new()),
+        None => Err("changeMissing".into()),
+    }
 }
 
 fn working_text(root: &Path, path: &str) -> Result<String, String> {
@@ -443,6 +461,215 @@ pub(crate) async fn git_workspace_diff(
             (Layer::Worktree, _) => working_text(&root, &path)?,
         };
         Ok(Comparison { original, modified })
+    })
+    .await
+}
+
+fn replacement_bytes(
+    content: &str,
+    text: Option<&text_file::TextDocument>,
+) -> Result<Vec<u8>, String> {
+    let line_ending = text.map(|text| crate::detect_line_ending(&text.content));
+    let content = match line_ending.as_deref() {
+        Some("CRLF") => content
+            .replace("\r\n", "\n")
+            .replace('\r', "\n")
+            .replace('\n', "\r\n"),
+        Some("CR") => content.replace("\r\n", "\r").replace('\n', "\r"),
+        _ => content.replace("\r\n", "\n").replace('\r', "\n"),
+    };
+    let (bytes, _) = crate::encode_file_content(
+        &content,
+        text.map_or("UTF-8", |text| text.encoding.as_str()),
+    )?;
+    if bytes.len() as u64 > text_file::MAX_TEXT_BYTES {
+        return Err("comparisonTooLarge".into());
+    }
+    Ok(bytes)
+}
+
+fn apply_worktree_text(
+    exe: &Path,
+    root: &Path,
+    path: &str,
+    expected: &str,
+    expected_missing: bool,
+    content: &str,
+) -> Result<String, String> {
+    let target = root.join(path);
+    let parent = target.parent().ok_or("invalidGitPath")?;
+    let existing_parent = parent
+        .ancestors()
+        .find(|parent| parent.exists())
+        .ok_or("invalidGitPath")?;
+    let canonical = |path: &Path| path.canonicalize().map_err(|error| error.to_string());
+    if !canonical(existing_parent)?.starts_with(canonical(root)?) {
+        return Err("invalidGitPath".into());
+    }
+    let current = match fs::symlink_metadata(&target) {
+        Ok(metadata) if metadata.is_file() && !metadata.file_type().is_symlink() => {
+            Some(text_file::read(&target).map_err(|error| error.kind.to_owned())?)
+        }
+        Ok(_) => return Err("unsupportedEdit".into()),
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => None,
+        Err(error) => return Err(error.to_string()),
+    };
+    if current.is_none() != expected_missing
+        || current.as_ref().map_or("", |text| text.content.as_str()) != expected
+    {
+        return Err("staleComparison".into());
+    }
+    let fallback = if current.is_none() {
+        blob_text(exe, root, &format!(":0:{path}"))?
+    } else {
+        None
+    };
+    let bytes = replacement_bytes(content, current.as_ref().or(fallback.as_ref()))?;
+    let written = text_file::decode(&bytes, false).map_err(|error| error.kind.to_owned())?;
+    crate::atomic_write(&target, &bytes)?;
+    Ok(written.content)
+}
+
+struct IndexLock(Option<PathBuf>);
+
+impl Drop for IndexLock {
+    fn drop(&mut self) {
+        if let Some(path) = &self.0 {
+            let _ = fs::remove_file(path);
+        }
+    }
+}
+
+fn apply_index_text(
+    exe: &Path,
+    root: &Path,
+    path: &str,
+    expected: &str,
+    expected_missing: bool,
+    content: &str,
+) -> Result<(), String> {
+    let index = stdout(git(
+        exe,
+        Some(root),
+        ["rev-parse", "--path-format=absolute", "--git-path", "index"],
+    )?)?;
+    let index = String::from_utf8(index).map_err(|_| "invalidGitPath")?;
+    let index = Path::new(index.trim_end_matches(['\r', '\n']));
+    let mut lock_path = index.as_os_str().to_owned();
+    lock_path.push(".lock");
+    let lock_path = PathBuf::from(lock_path);
+    let mut lock_file = fs::OpenOptions::new()
+        .write(true)
+        .create_new(true)
+        .open(&lock_path)
+        .map_err(|error| error.to_string())?;
+    let mut lock = IndexLock(Some(lock_path.clone()));
+    let result = (|| -> Result<(), String> {
+        let current = blob_text(exe, root, &format!(":0:{path}"))?;
+        if current.is_none() != expected_missing
+            || current.as_ref().map_or("", |text| text.content.as_str()) != expected
+        {
+            return Err("staleComparison".into());
+        }
+        let staged = stdout(git(
+            exe,
+            Some(root),
+            ["ls-files", "--stage", "-z", "--", path],
+        )?)?;
+        let tree_entry = if current.is_none() && staged.is_empty() {
+            stdout(git(exe, Some(root), ["ls-tree", "-z", "HEAD", "--", path])?)?
+        } else {
+            staged
+        };
+        let mode = tree_entry
+            .split(|byte| *byte == b' ')
+            .next()
+            .unwrap_or_default();
+        let mode = match mode {
+            b"100644" => "100644",
+            b"100755" => "100755",
+            _ => return Err("unsupportedEdit".into()),
+        };
+        let fallback = if current.is_none() {
+            blob_text(exe, root, &format!("HEAD:{path}"))?
+        } else {
+            None
+        };
+        let bytes = replacement_bytes(content, current.as_ref().or(fallback.as_ref()))?;
+        let folder = tempfile::tempdir_in(index.parent().ok_or("invalidGitPath")?)
+            .map_err(|error| error.to_string())?;
+        let alternate_index = folder.path().join("index");
+        let input = folder.path().join("content");
+        fs::copy(index, &alternate_index).map_err(|error| error.to_string())?;
+        fs::write(&input, bytes).map_err(|error| error.to_string())?;
+        let object = stdout(git(
+            exe,
+            Some(root),
+            [
+                OsString::from("hash-object"),
+                "-w".into(),
+                "--no-filters".into(),
+                "--".into(),
+                input.into_os_string(),
+            ],
+        )?)?;
+        let object = String::from_utf8(object).map_err(|_| "invalidGitObject")?;
+        let entry = format!("{mode},{},{path}", object.trim());
+        stdout(
+            git_command(exe, Some(root))
+                .env("GIT_INDEX_FILE", &alternate_index)
+                .args(["update-index", "--add", "--cacheinfo", &entry])
+                .output()
+                .map_err(|error| error.to_string())?,
+        )?;
+        let mut updated = fs::File::open(alternate_index).map_err(|error| error.to_string())?;
+        std::io::copy(&mut updated, &mut lock_file).map_err(|error| error.to_string())?;
+        lock_file
+            .flush()
+            .and_then(|_| lock_file.sync_all())
+            .map_err(|error| error.to_string())
+    })();
+    drop(lock_file);
+    result?;
+    crate::replace_existing_file(&lock_path, index)?;
+    lock.0 = None;
+    Ok(())
+}
+
+#[tauri::command]
+pub(crate) async fn git_workspace_apply(
+    directory: String,
+    git_path: String,
+    path: String,
+    layer: Layer,
+    expected: String,
+    expected_missing: bool,
+    content: String,
+) -> Result<String, String> {
+    background(move || {
+        if !Path::new(&path)
+            .components()
+            .all(|part| matches!(part, Component::Normal(_)))
+        {
+            return Err("invalidGitPath".into());
+        }
+        let exe = executable(&git_path)?;
+        let root = repository_root(&exe, &directory)?;
+        let exists = changes(&exe, &root)?
+            .into_iter()
+            .any(|change| change.path == path && change.layer == layer);
+        if !exists {
+            return Err("staleComparison".into());
+        }
+        match layer {
+            Layer::Index => {
+                apply_index_text(&exe, &root, &path, &expected, expected_missing, &content)
+                    .map(|_| content)
+            }
+            Layer::Worktree => {
+                apply_worktree_text(&exe, &root, &path, &expected, expected_missing, &content)
+            }
+        }
     })
     .await
 }
@@ -894,6 +1121,28 @@ mod tests {
         assert_eq!(working.original.trim_end(), "staged");
         assert_eq!(working.modified.trim_end(), "working");
 
+        let apply = |layer, expected: String, content: &str| {
+            tauri::async_runtime::block_on(git_workspace_apply(
+                root.to_string_lossy().into_owned(),
+                exe.to_string_lossy().into_owned(),
+                "a note.md".into(),
+                layer,
+                expected,
+                false,
+                content.into(),
+            ))
+        };
+        apply(Layer::Index, staged.modified, "index edit\n").unwrap();
+        assert_eq!(compare(Layer::Index).modified.trim_end(), "index edit");
+        assert_eq!(std::fs::read_to_string(&file).unwrap(), "working\n");
+        assert_eq!(
+            apply(Layer::Index, "staged\n".into(), "unsafe overwrite").unwrap_err(),
+            "staleComparison"
+        );
+        apply(Layer::Worktree, working.modified, "working edit\n").unwrap();
+        assert_eq!(compare(Layer::Index).modified.trim_end(), "index edit");
+        assert_eq!(std::fs::read_to_string(&file).unwrap(), "working edit\n");
+
         let switch = |name: &str, create| {
             tauri::async_runtime::block_on(git_workspace_switch(
                 root.to_string_lossy().into_owned(),
@@ -911,7 +1160,7 @@ mod tests {
             b"review/notes\n"
         );
         switch(initial_branch.trim(), false);
-        assert_eq!(std::fs::read_to_string(file).unwrap(), "working\n");
+        assert_eq!(std::fs::read_to_string(file).unwrap(), "working edit\n");
     }
 
     #[test]
