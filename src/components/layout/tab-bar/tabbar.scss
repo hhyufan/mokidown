@@ -243,6 +243,44 @@
   flex-shrink: 0;
 }
 
+.tabbar__tab[data-settings-tab] .tabbar__tab-icon {
+  position: relative;
+  color: var(--settings-tab-accent, #8463c7);
+
+  &::after {
+    position: absolute;
+    inset-inline: 2px;
+    bottom: -4px;
+    height: 2px;
+    border-radius: 2px;
+    background: currentColor;
+    content: '';
+  }
+}
+
+html[data-theme='dark'] .tabbar__tab[data-settings-tab] {
+  --settings-tab-accent: #b39aef;
+}
+
+/* 配置文件标签页复用设置标签页的底部信息条。 */
+.tabbar__tab[data-settings-document] .tabbar__tab-icon {
+  position: relative;
+
+  &::after {
+    position: absolute;
+    inset-inline: 2px;
+    bottom: -4px;
+    height: 2px;
+    border-radius: 2px;
+    background: var(--settings-tab-accent, #8463c7);
+    content: '';
+  }
+}
+
+html[data-theme='dark'] .tabbar__tab[data-settings-document] {
+  --settings-tab-accent: #b39aef;
+}
+
 .tabbar__tab-close {
   width: 18px;
   height: 18px;

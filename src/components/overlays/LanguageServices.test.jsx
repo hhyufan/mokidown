@@ -10,26 +10,52 @@ globalThis.React = React;
 vi.mock('@tauri-apps/api/core', () => ({ invoke: vi.fn() }));
 vi.mock('@tauri-apps/api/event', () => ({ listen: vi.fn(async () => vi.fn()) }));
 vi.mock('@utils/tauriApi', () => ({ openExternal: vi.fn() }));
+vi.mock('@components/ui/JsonCodeEditor', () => ({
+  default: ({ value, onChange }) => (
+    <textarea
+      aria-label="manifest json"
+      value={value}
+      onChange={(event) => onChange?.(event.target.value)}
+    />
+  ),
+}));
 afterEach(cleanup);
 beforeEach(async () => {
   await i18n.changeLanguage('en');
   window.__TAURI_INTERNALS__ = {};
-  useLspStore.setState({ enabled: true, installed: [], catalog: [], sources: [], preferred: {}, operations: {}, statuses: {}, loading: false, loadError: '' });
-  invoke.mockReset(); invoke.mockResolvedValue([]);
+  useLspStore.setState({
+    enabled: true,
+    installed: [],
+    catalog: [],
+    sources: [],
+    preferred: {},
+    operations: {},
+    statuses: {},
+    loading: false,
+    loadError: '',
+  });
+  invoke.mockReset();
+  invoke.mockResolvedValue([]);
 });
 it('shows a searchable plugin list and an empty search result', async () => {
   render(<LanguageServices />);
   expect(screen.getByText('JavaScript & TypeScript')).toBeInTheDocument();
-  fireEvent.change(screen.getByLabelText('Search languages, services or publishers'), { target: { value: 'rust' } });
+  fireEvent.change(screen.getByLabelText('Search languages, services or publishers'), {
+    target: { value: 'rust' },
+  });
   expect(screen.getByText('Rust · rust-analyzer')).toBeInTheDocument();
   expect(screen.queryByText('JavaScript & TypeScript')).not.toBeInTheDocument();
-  fireEvent.change(screen.getByLabelText('Search languages, services or publishers'), { target: { value: 'no-such-plugin-782' } });
+  fireEvent.change(screen.getByLabelText('Search languages, services or publishers'), {
+    target: { value: 'no-such-plugin-782' },
+  });
   expect(screen.getByText('No matching language services')).toBeInTheDocument();
   await waitFor(() => expect(useLspStore.getState().loading).toBe(false));
 });
 it('renders brand language icons and an equal split for JavaScript & TypeScript', async () => {
   render(<LanguageServices />);
-  await waitFor(() => expect(document.querySelector('svg[class="@Python"]')).toBeTruthy(), { timeout: 8000 });
+  await waitFor(() => expect(document.querySelector('svg[class="@Python"]')).toBeTruthy(), {
+    timeout: 8000,
+  });
   expect(document.querySelector('svg[class="@Rust"]')).toBeTruthy();
   // JS 与 TS 各占一半、等大并排（官方 devicon 图标），JS 居左、TS 居右。
   const combo = document.querySelector('.language-services__icon--combo');
@@ -40,10 +66,14 @@ it('renders brand language icons and an equal split for JavaScript & TypeScript'
   expect(jsIcon.getAttribute('width')).toBe(tsIcon.getAttribute('width'));
   expect(jsIcon.getAttribute('height')).toBe(tsIcon.getAttribute('height'));
   // 无映射的自定义插件仍回退到字母徽标。
-  act(() => useLspStore.getState().addManifest({
-    id: 'custom.abc', name: 'ABC Server', languages: ['abc'],
-    install: { kind: 'npm', packages: ['abc-server'], executable: 'abc-server' },
-  }));
+  act(() =>
+    useLspStore.getState().addManifest({
+      id: 'custom.abc',
+      name: 'ABC Server',
+      languages: ['abc'],
+      install: { kind: 'npm', packages: ['abc-server'], executable: 'abc-server' },
+    }),
+  );
   expect(screen.getByText('AB')).toBeInTheDocument();
 });
 it('downloads a selected service, exposes its details, disables it and uninstalls it', async () => {

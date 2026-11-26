@@ -1,5 +1,7 @@
 import useEditorStore from '@store/useEditorStore';
 import { getBuffer, flushEditorBuffer } from '@utils/editorBuffer';
+import i18n from '@/i18n';
+import { prepareSettingsDocumentSave } from './settingsDocuments';
 import { readFileContent, saveFile } from '@utils/tauriApi';
 import {
   classifyFileVersions,
@@ -136,11 +138,15 @@ export function saveExistingFile(
       return { success: false, externalReloaded: true };
     }
     const content = replacement ?? editorContent;
+    let publishSettings;
+    try { publishSettings = prepareSettingsDocumentSave(path, content); }
+    catch (error) { return { success: false, message: i18n.t(error.message, { defaultValue: error.message }) }; }
     const result =
       outcome === 'converged' || content === diskContent
         ? { success: true, converged: true, file_path: path }
         : await saveFile(path, content, encoding || tab.encoding, { operationHeld: true });
     if (result?.success) {
+      publishSettings?.();
       rememberDiskBaseline(path, content);
       const current = useEditorStore
         .getState()

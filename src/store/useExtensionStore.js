@@ -13,6 +13,7 @@ const installations = new Map();
 const useExtensionStore = create(persist((set, get) => ({
   installed: [], catalog: [], error: '',
   catalogUrl: '',
+  externalConfigLoaded: false,
   pendingUpdates: [],
   updateState: null,
   runtimeErrors: {},
@@ -162,7 +163,7 @@ const useExtensionStore = create(persist((set, get) => ({
   },
 }), {
   name: 'mokidown-service-extensions',
-  partialize: ({ installed, catalogUrl }) => ({ installed, catalogUrl }),
+  partialize: ({ installed, catalogUrl, externalConfigLoaded }) => ({ installed, ...(!externalConfigLoaded && { catalogUrl }) }),
   merge: (persisted, current) => ({ ...current, ...persisted, installed: (persisted?.installed || []).map((entry) => entry.development ? { ...entry, enabled: false } : entry), catalogUrl: persisted?.catalogUrl?.includes('/hhyufan/mokidown/main/plugins/catalog.json') ? '' : persisted?.catalogUrl || '' }),
 }));
 

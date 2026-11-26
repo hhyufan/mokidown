@@ -9,6 +9,7 @@ import { invoke } from '@utils/tauriInvoke';
 import { listen } from '@tauri-apps/api/event';
 import { getCurrentWindow } from '@tauri-apps/api/window';
 import { rememberDiskBaseline, withFileOperation } from '@/services/localFileGuard';
+import { settingsDocumentKind } from '@/services/settingsDocumentPaths';
 import { contentSearchResults, fileSearchScore } from '@utils/searchMatching';
 import { decodeTextBytes, encodeTextBytes, MAX_TEXT_BYTES, TextFileError } from './textFilePolicy';
 import {
@@ -67,13 +68,14 @@ export const appWindow = new Proxy(
       const win = resolveAppWindow();
       if (!win) {
         if (prop === 'then') return undefined;
-        if (typeof prop === 'string' && /^on[A-Z]/.test(prop)) return () => Promise.resolve(() => {});
+        if (typeof prop === 'string' && /^on[A-Z]/.test(prop))
+          return () => Promise.resolve(() => {});
         return () => Promise.resolve();
       }
       const value = win[prop];
       return typeof value === 'function' ? value.bind(win) : value;
     },
-  }
+  },
 );
 
 // 透出 URI 辅助方法，避免调用方为了兼容移动端同时依赖两个模块。
@@ -144,16 +146,28 @@ const blockedTextFiles = new Set();
 
 function textReadFailure(error, path) {
   const kind = error?.kind || 'unreadable';
-  const key = kind === 'binary' ? 'notification.binaryFileMessage'
-    : kind === 'too-large' ? 'notification.tooLargeMessage'
-      : kind === 'invalid-encoding' ? 'notification.invalidEncodingMessage' : 'notification.unreadableFileMessage';
-  return { success: false, blockedReason: kind, message: i18n.t(key, { name: path.split(/[\\/]/).pop() }) };
+  const key =
+    kind === 'binary'
+      ? 'notification.binaryFileMessage'
+      : kind === 'too-large'
+        ? 'notification.tooLargeMessage'
+        : kind === 'invalid-encoding'
+          ? 'notification.invalidEncodingMessage'
+          : 'notification.unreadableFileMessage';
+  return {
+    success: false,
+    blockedReason: kind,
+    message: i18n.t(key, { name: path.split(/[\\/]/).pop() }),
+  };
 }
 
 export async function readFileContent(path) {
   let result;
-  try { result = await readTextFile(path); }
-  catch (error) { result = textReadFailure(error, path); }
+  try {
+    result = await readTextFile(path);
+  } catch (error) {
+    result = textReadFailure(error, path);
+  }
   if (!result) result = textReadFailure(new TextFileError('unreadable'), path);
   if (result.success) blockedTextFiles.delete(path);
   else if (result.blockedReason) blockedTextFiles.add(path);
@@ -207,6 +221,11 @@ async function readTextFile(path) {
 /**
  * 按路径写入纯文本内容，不返回保存元信息。
  */
+export async function writeBinaryFile(path, contentBase64) {
+  if (!window.__TAURI_INTERNALS__) throw new Error('Binary write is unavailable');
+  return invoke('write_binary_file', { path, contentBase64 });
+}
+
 export async function writeFileContent(path, content) {
   if (isSafUri(path)) {
     await safWriteFileText(path, content);
@@ -223,7 +242,10 @@ export function saveFile(filePath, content, encoding, { operationHeld = false } 
     const result = await writeEncodedFile(filePath, content, encoding);
     // Publish the exact written snapshot before releasing the watcher/save queue.
     // Do not pair it with metadata read later: another writer may already exist.
-    if (result?.success) { rememberDiskBaseline(filePath, content); blockedTextFiles.delete(filePath); }
+    if (result?.success) {
+      rememberDiskBaseline(filePath, content);
+      blockedTextFiles.delete(filePath);
+    }
     return result;
   };
   return operationHeld ? write() : withFileOperation(filePath, write);
@@ -284,10 +306,13 @@ export async function historyRead(filePath, timestamp) {
 
 /** 记录快照；打开/回滚传 force，回滚附带 restoredFrom，普通记录仍去重。 */
 export async function historyCapture(filePath, content, { force = false, restoredFrom } = {}) {
+  if (settingsDocumentKind(filePath)) return false;
   if (webDemo && isWebPath(filePath)) return true;
   if (blockedTextFiles.has(filePath)) return false;
   return invoke('history_capture', {
-    filePath, content, force,
+    filePath,
+    content,
+    force,
     ...(restoredFrom != null ? { restoredFrom } : {}),
   });
 }
@@ -326,7 +351,8 @@ export async function exportDiagnostics(destination) {
  * 判断指定路径是否存在。
  */
 export async function checkFileExists(path) {
-  if (webDemo && isWebPath(path)) return webFiles.has(normalizeWebPath(path)) || webDirs.has(normalizeWebPath(path));
+  if (webDemo && isWebPath(path))
+    return webFiles.has(normalizeWebPath(path)) || webDirs.has(normalizeWebPath(path));
   if (isSafUri(path)) {
     // 对 `content://` 做纯存在性判断时，最稳妥的方式是直接 `stat` 一次；
     // 当前调用点传入的都是完整子 URI，因此无需额外父目录上下文。
@@ -350,7 +376,8 @@ export async function readFileHead(path, limit = 8192) {
   if (webDemo && isWebPath(path)) {
     const record = webFiles.get(normalizeWebPath(path));
     if (!record) throw new TextFileError('missing');
-    if (record.handle) return new Uint8Array(await (await record.handle.getFile()).slice(0, limit).arrayBuffer());
+    if (record.handle)
+      return new Uint8Array(await (await record.handle.getFile()).slice(0, limit).arrayBuffer());
     return new TextEncoder().encode(record.content || '').slice(0, limit);
   }
   const bytes = await invoke('read_file_head', { path, limit });
@@ -366,7 +393,13 @@ export async function getFileInfo(path) {
   if (webDemo && isWebPath(path)) {
     const record = webFiles.get(normalizeWebPath(path));
     if (!record) throw new Error('File is no longer available');
-    const file = record.handle ? await record.handle.getFile() : { name: path.split('/').pop(), size: new TextEncoder().encode(record.content || '').length, lastModified: 0 };
+    const file = record.handle
+      ? await record.handle.getFile()
+      : {
+          name: path.split('/').pop(),
+          size: new TextEncoder().encode(record.content || '').length,
+          lastModified: 0,
+        };
     return {
       path,
       name: file.name,
@@ -396,7 +429,14 @@ export async function getDirectoryContents(dirPath) {
 }
 
 export function openDirectoryIndex(id, dirPath, sortBy, sortOrder, scope) {
-  return invoke('open_directory_index', { id, dirPath, sortBy, sortOrder, generation: Number(id.slice('directory-'.length)), ...(scope ? { scope } : {}) });
+  return invoke('open_directory_index', {
+    id,
+    dirPath,
+    sortBy,
+    sortOrder,
+    generation: Number(id.slice('directory-'.length)),
+    ...(scope ? { scope } : {}),
+  });
 }
 
 export function readDirectoryPage(id, offset, limit, scope) {
@@ -404,7 +444,11 @@ export function readDirectoryPage(id, offset, limit, scope) {
 }
 
 export function closeDirectoryIndex(id, scope) {
-  return invoke('close_directory_index', { id, generation: Number(id.slice('directory-'.length)), ...(scope ? { scope } : {}) });
+  return invoke('close_directory_index', {
+    id,
+    generation: Number(id.slice('directory-'.length)),
+    ...(scope ? { scope } : {}),
+  });
 }
 
 /**
@@ -418,7 +462,7 @@ export async function renameFile(oldPath, newPath) {
       // 若调用方传入的是完整路径，只提取最终展示名交给 SAF。
       const newName = isSafUri(newPath)
         ? safDisplayName(newPath)
-        : (newPath.split(/[\\/]/).pop() || newPath);
+        : newPath.split(/[\\/]/).pop() || newPath;
       const resultUri = await safRenameUriTo(oldPath, newName);
       return {
         success: true,
@@ -479,7 +523,14 @@ export async function locateDirectoryEntry(id, path, scope) {
   return invoke('locate_directory_entry', { id, path, ...(scope ? { scope } : {}) });
 }
 
-export async function searchFiles(dirPath, query, searchContent = false, maxResults = 100, taskId, options = {}) {
+export async function searchFiles(
+  dirPath,
+  query,
+  searchContent = false,
+  maxResults = 100,
+  taskId,
+  options = {},
+) {
   if (webDemo && isWebPath(dirPath)) {
     return { results: [], truncated: false, skippedFiles: 0 };
   }
@@ -490,47 +541,89 @@ export async function searchFiles(dirPath, query, searchContent = false, maxResu
     try {
       const q = (query || '').trim();
       if (!q) return response;
-      const pending = [{ path: dirPath, relative: '' }], seen = new Set();
+      const pending = [{ path: dirPath, relative: '' }],
+        seen = new Set();
       while (pending.length && !state.cancelled) {
         const folder = pending.pop();
         if (seen.has(folder.path)) continue;
         seen.add(folder.path);
         let children;
-        try { children = await safListFolder(folder.path); }
-        catch (error) { if (folder.path === dirPath) throw error; response.skippedFiles++; continue; }
+        try {
+          children = await safListFolder(folder.path);
+        } catch (error) {
+          if (folder.path === dirPath) throw error;
+          response.skippedFiles++;
+          continue;
+        }
         for (const child of children) {
           if (state.cancelled) break;
           const relative = folder.relative + child.name;
           if (child.is_dir) {
-            if (options.includeExcluded || !(child.name.startsWith('.') || ['node_modules', 'target', 'dist', 'build', 'vendor', '__pycache__'].includes(child.name.toLowerCase()))) {
+            if (
+              options.includeExcluded ||
+              !(
+                child.name.startsWith('.') ||
+                ['node_modules', 'target', 'dist', 'build', 'vendor', '__pycache__'].includes(
+                  child.name.toLowerCase(),
+                )
+              )
+            ) {
               pending.push({ path: child.path, relative: relative + '/' });
             }
           } else if (searchContent) {
             try {
-              if ((await safStatUri(child.path))?.size > 5 * 1024 * 1024) { response.skippedFiles++; continue; }
+              if ((await safStatUri(child.path))?.size > 5 * 1024 * 1024) {
+                response.skippedFiles++;
+                continue;
+              }
               const { content: text } = await safReadFileText(child.path);
-              if (text.includes('\0')) { response.skippedFiles++; continue; }
-              response.results.push(...contentSearchResults({ id: child.path, ...child }, text, q, options.caseSensitive, maxResults + 1 - response.results.length));
-              if (response.results.length > maxResults) { response.results.length = maxResults; response.truncated = true; return response; }
-            } catch (_) { response.skippedFiles++; }
+              if (text.includes('\0')) {
+                response.skippedFiles++;
+                continue;
+              }
+              response.results.push(
+                ...contentSearchResults(
+                  { id: child.path, ...child },
+                  text,
+                  q,
+                  options.caseSensitive,
+                  maxResults + 1 - response.results.length,
+                ),
+              );
+              if (response.results.length > maxResults) {
+                response.results.length = maxResults;
+                response.truncated = true;
+                return response;
+              }
+            } catch (_) {
+              response.skippedFiles++;
+            }
           } else {
             const score = fileSearchScore(child.name, relative, q, options.caseSensitive);
             if (score === null) continue;
             response.results.push({ name: child.name, path: child.path, is_dir: false, score });
             response.results.sort((a, b) => a.score - b.score || a.path.localeCompare(b.path));
-            if (response.results.length > maxResults) { response.results.pop(); response.truncated = true; }
+            if (response.results.length > maxResults) {
+              response.results.pop();
+              response.truncated = true;
+            }
           }
         }
       }
       return response;
-    } finally { safSearchTasks.delete(taskId); }
+    } finally {
+      safSearchTasks.delete(taskId);
+    }
   }
   return invoke('search_files', { dirPath, query, searchContent, maxResults, taskId, options });
 }
 
 export async function cancelSearch(taskId) {
   const safTask = safSearchTasks.get(taskId);
-  if (safTask) { safTask.cancelled = true; return true; }
+  if (safTask) {
+    safTask.cancelled = true;
+    return true;
+  }
   if (!taskId || !window.__TAURI_INTERNALS__) return false;
   return invoke('cancel_search', { taskId });
 }
@@ -675,9 +768,8 @@ export function checkHotkeyAvailable(keybinding) {
   if (typeof window === 'undefined' || !window.__TAURI_INTERNALS__) {
     return Promise.resolve({ status: 'unsupported', platform: 'web' });
   }
-  return invoke('check_hotkey_available', { keybinding })
-    .catch((error) => {
-      console.warn('[tauriApi] check_hotkey_available failed:', error);
-      return { status: 'unsupported', platform: 'unknown' };
-    });
+  return invoke('check_hotkey_available', { keybinding }).catch((error) => {
+    console.warn('[tauriApi] check_hotkey_available failed:', error);
+    return { status: 'unsupported', platform: 'unknown' };
+  });
 }

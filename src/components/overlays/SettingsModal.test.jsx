@@ -3,6 +3,7 @@ import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import useConfigStore from '@store/useConfigStore';
 import useThemeStore from '@store/useThemeStore';
+import useEditorStore from '@store/useEditorStore';
 import { open } from '@tauri-apps/plugin-dialog';
 import { readFile } from '@tauri-apps/plugin-fs';
 import {
@@ -15,7 +16,13 @@ import i18n from '@/i18n';
 import { normalizeMarkdownPairs } from '@utils/markdownPairs';
 
 globalThis.React = React;
+vi.mock('@components/ui/JsonCodeEditor', () => ({ default: () => null }));
 const { default: SettingsModal } = await import('./SettingsModal');
+const managedFiles = vi.hoisted(() => ({ load: vi.fn(), open: vi.fn() }));
+vi.mock('@/services/settingsDocuments', () => ({ loadSettingsDocument: managedFiles.load }));
+vi.mock('@hooks/useFileManager', () => ({
+  useFileManager: () => ({ openFileFromPath: managedFiles.open }),
+}));
 vi.mock('@hooks/useResponsiveLayout', () => ({
   useResponsiveLayout: () => ({ isMobileLayout: false, isPortrait: false }),
 }));
@@ -79,6 +86,81 @@ it('chooses whether associated Markdown files open in the project editor or a si
   expect(useConfigStore.getState().associatedOpenMode).toBe('reader');
 });
 
+it('searches across sections and switches back to the selected category', async () => {
+  const previous = useEditorStore.getState();
+  const doc = { id: 'settings-test-doc', name: 'note.md' };
+  useEditorStore.setState({ tabs: [doc], tabRenderList: [doc], activeTabId: doc.id });
+  try {
+    const { container } = await act(async () => render(<SettingsModal />));
+    expect(screen.queryByRole('textbox', { name: '搜索设置' })).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: '搜索设置' }));
+    const search = screen.getByRole('textbox', { name: '搜索设置' });
+    expect(search).toHaveFocus();
+    expect(screen.queryByRole('button', { name: '渲染器' })).toBeNull();
+    fireEvent.change(search, { target: { value: '预览字号' } });
+    expect(
+      container.querySelector('.setting-row__label[data-settings-highlight]'),
+    ).toHaveTextContent('预览字号');
+    expect(search).toHaveFocus();
+    expect(document.querySelector('.settings-page__results')).toBeNull();
+    fireEvent.keyDown(search, { key: 'Escape' });
+    expect(screen.queryByRole('textbox', { name: '搜索设置' })).toBeNull();
+    expect(screen.getByRole('button', { name: '渲染器' })).toHaveAttribute('aria-pressed', 'true');
+    expect(screen.queryByRole('button', { name: '在侧边打开设置' })).toBeNull();
+  } finally {
+    useEditorStore.setState(previous);
+  }
+});
+
+it('navigates matches in place using the previous and next buttons and keyboard', async () => {
+  const { container } = await act(async () => render(<SettingsModal />));
+  fireEvent.click(screen.getByRole('button', { name: '搜索设置' }));
+  const search = screen.getByRole('textbox', { name: '搜索设置' });
+  const highlight = () => container.querySelector('[data-settings-highlight]');
+  fireEvent.change(search, { target: { value: '预览' } });
+  const first = highlight()?.textContent;
+  expect(first).toBeTruthy();
+  expect(screen.getByRole('status')).toHaveTextContent(/^1\/\d+$/);
+  const next = screen.getByRole('button', { name: '下一个匹配项' });
+  const previous = screen.getByRole('button', { name: '上一个匹配项' });
+  fireEvent.click(next);
+  expect(highlight()?.textContent).not.toBe(first);
+  expect(screen.getByRole('status')).toHaveTextContent(/^2\//);
+  fireEvent.click(previous);
+  expect(highlight()?.textContent).toBe(first);
+  fireEvent.keyDown(search, { key: 'Enter', shiftKey: true });
+  expect(screen.getByRole('status')).not.toHaveTextContent(/^1\//);
+  fireEvent.keyDown(search, { key: 'Enter' });
+  expect(highlight()?.textContent).toBe(first);
+  fireEvent.change(search, { target: { value: 'nothing-matches-this' } });
+  expect(highlight()).toBeNull();
+  expect(next).toBeDisabled();
+});
+
+it('switches the selected category with round icon buttons', async () => {
+  const { container } = await act(async () => render(<SettingsModal />));
+  const renderer = screen.getByRole('button', { name: '渲染器' });
+  const appearance = screen.getByRole('button', { name: '外观' });
+  fireEvent.click(renderer);
+  expect(renderer).toHaveAttribute('aria-pressed', 'true');
+  expect(appearance).toHaveAttribute('aria-pressed', 'false');
+  fireEvent.click(appearance);
+  expect(appearance).toHaveAttribute('aria-pressed', 'true');
+  expect(renderer).toHaveAttribute('aria-pressed', 'false');
+  expect(container.querySelector('.settings-nav')).toBeTruthy();
+  expect(container.querySelector('.settings-capsule')).toBeNull();
+});
+
+it('opens the search panel to the right of the search button', async () => {
+  const { container } = await act(async () => render(<SettingsModal />));
+  const searchButton = screen.getByRole('button', { name: '搜索设置' });
+  fireEvent.click(searchButton);
+  expect(screen.getByRole('textbox', { name: '搜索设置' })).toHaveFocus();
+  expect(searchButton).toBeInTheDocument();
+  expect(container.querySelector('.settings-nav__search')).toBeTruthy();
+  expect(container.querySelector('.settings-nav')).toHaveAttribute('data-searching', 'true');
+});
+
 it('adjusts both font sizes with compact controls without deprecated InputNumber addons', async () => {
   const errors = vi.spyOn(console, 'error').mockImplementation(() => {});
   await act(async () =>
@@ -88,14 +170,14 @@ it('adjusts both font sizes with compact controls without deprecated InputNumber
       </React.StrictMode>,
     ),
   );
-  fireEvent.click(screen.getByText('渲染器'));
+  fireEvent.click(screen.getByRole('button', { name: '渲染器' }));
   expect(screen.getByRole('spinbutton', { name: '预览字号' })).toHaveValue('14');
   fireEvent.click(screen.getByRole('button', { name: '增大预览字号' }));
   expect(useConfigStore.getState().previewFontSize).toBe(15);
   act(() => useConfigStore.setState({ previewZoomSync: true }));
   expect(screen.getByRole('button', { name: '增大预览字号' })).toBeDisabled();
   expect(screen.getByRole('spinbutton', { name: '预览字号' })).toBeDisabled();
-  fireEvent.click(screen.getByText('编辑器'));
+  fireEvent.click(screen.getByRole('button', { name: '编辑器' }));
   fireEvent.click(screen.getByRole('button', { name: '减小编辑区字号' }));
   expect(useConfigStore.getState().fontSize).toBe(13);
   act(() => useConfigStore.setState({ fontSize: 24 }));
@@ -112,7 +194,7 @@ it('shows named Markdown syntax options and changes each smart pair independentl
   useConfigStore.setState({ markdownSmartPairs: pairs, markdownSmartPairsEnabled: true });
   try {
     await act(async () => render(<SettingsModal open onClose={vi.fn()} />));
-    fireEvent.click(screen.getByText('渲染器'));
+    fireEvent.click(screen.getByRole('button', { name: '渲染器' }));
     expect(screen.getByRole('list', { name: 'Markdown 智能配对' })).toBeInTheDocument();
     const backtick = screen.getByRole('checkbox', { name: '行内代码与代码块' });
     const parentheses = screen.getByRole('checkbox', { name: '圆括号' });
@@ -127,7 +209,9 @@ it('shows named Markdown syntax options and changes each smart pair independentl
     fireEvent.click(backtick);
     expect(backtick).not.toBeChecked();
     expect(parentheses).toBeChecked();
-    expect(useConfigStore.getState().markdownSmartPairs).toEqual(pairs.filter((pair) => pair !== '`'));
+    expect(useConfigStore.getState().markdownSmartPairs).toEqual(
+      pairs.filter((pair) => pair !== '`'),
+    );
     fireEvent.click(master);
     expect(master).not.toBeChecked();
     expect(parentheses).toBeDisabled();
@@ -143,7 +227,7 @@ it('shows named Markdown syntax options and changes each smart pair independentl
 it('enables task cascade by default and persists the editor switch', async () => {
   expect(useConfigStore.getInitialState().markdownTaskCascade).toBe(true);
   await act(async () => render(<SettingsModal open onClose={vi.fn()} />));
-  fireEvent.click(screen.getByText('渲染器'));
+  fireEvent.click(screen.getByRole('button', { name: '渲染器' }));
   const toggle = screen.getByRole('switch', { name: '任务列表级联' });
   expect(toggle).toBeChecked();
   fireEvent.click(toggle);
@@ -156,7 +240,7 @@ it('enables task cascade by default and persists the editor switch', async () =>
 it('enables Markdown folding by default and updates the editor setting', async () => {
   expect(useConfigStore.getInitialState().markdownFolding).toBe(true);
   await act(async () => render(<SettingsModal open onClose={vi.fn()} />));
-  fireEvent.click(screen.getByText('渲染器'));
+  fireEvent.click(screen.getByRole('button', { name: '渲染器' }));
   const toggle = screen.getByRole('switch', { name: 'Markdown 展开与折叠' });
   expect(toggle).toBeChecked();
   fireEvent.click(toggle);
@@ -171,7 +255,7 @@ it('imports a native image, persists its reference, previews theme-specific opac
   open.mockResolvedValue('C:\\pictures\\background.png');
   readFile.mockResolvedValue(new Uint8Array([1, 2, 3]));
   await act(async () => render(<SettingsModal open onClose={vi.fn()} />));
-  fireEvent.click(screen.getByText('外观'));
+  fireEvent.click(screen.getByRole('button', { name: '外观' }));
   fireEvent.click(screen.getByRole('button', { name: '选择图片' }));
   await waitFor(() => expect(useConfigStore.getState().backgroundImage).toBe('new-image'));
   expect(readFile).toHaveBeenCalledWith('C:\\pictures\\background.png');
@@ -211,7 +295,7 @@ it('keeps the previous background if an image cannot be decoded', async () => {
   readFile.mockResolvedValue(new Uint8Array([0]));
   validateBackgroundImage.mockRejectedValueOnce(new Error('Invalid image'));
   await act(async () => render(<SettingsModal open onClose={vi.fn()} />));
-  fireEvent.click(screen.getByText('外观'));
+  fireEvent.click(screen.getByRole('button', { name: '外观' }));
   fireEvent.click(screen.getByRole('button', { name: '选择图片' }));
   await waitFor(() => expect(validateBackgroundImage).toHaveBeenCalled());
   await waitFor(() =>
@@ -225,7 +309,7 @@ it('keeps the previous background if an image cannot be decoded', async () => {
 it('uses one switch to control whether the character shows', async () => {
   useConfigStore.setState({ mokiDisplay: 'welcome' });
   await act(async () => render(<SettingsModal open onClose={vi.fn()} />));
-  fireEvent.click(screen.getByText('外观'));
+  fireEvent.click(screen.getByRole('button', { name: '外观' }));
   const toggle = screen.getByRole('switch', { name: '人物显示' });
   expect(screen.queryByRole('slider', { name: '人物大小' })).not.toBeInTheDocument();
   expect(screen.queryByText('欢迎页与写作伙伴')).not.toBeInTheDocument();
@@ -239,7 +323,7 @@ it('uses one switch to control whether the character shows', async () => {
 it('falls back to compact theme cards when the character is off', async () => {
   useConfigStore.setState({ mokiDisplay: 'hidden' });
   await act(async () => render(<SettingsModal open onClose={vi.fn()} />));
-  fireEvent.click(screen.getByText('外观'));
+  fireEvent.click(screen.getByRole('button', { name: '外观' }));
   // 关闭人物后不再渲染大画布，回到更名前的紧凑卡片形态（两列横卡 + 右侧勾选）。
   expect(document.querySelector('.moki-theme-card--preview')).not.toBeInTheDocument();
   expect(document.querySelector('.moki-theme-cards--compact')).toBeInTheDocument();
@@ -248,4 +332,13 @@ it('falls back to compact theme cards when the character is off', async () => {
   expect(useThemeStore.getState().theme).toBe('dark');
   fireEvent.click(screen.getByText('晴笺 · 浅色'));
   expect(useThemeStore.getState().theme).toBe('light');
+});
+
+it('switches tab behavior between spaces and tabs', async () => {
+  await act(async () => render(<SettingsModal open onClose={vi.fn()} />));
+  fireEvent.click(screen.getByRole('button', { name: '编辑器' }));
+  fireEvent.click(screen.getByText('制表符'));
+  expect(useConfigStore.getState().insertSpaces).toBe(false);
+  fireEvent.click(screen.getByText('空格'));
+  expect(useConfigStore.getState().insertSpaces).toBe(true);
 });

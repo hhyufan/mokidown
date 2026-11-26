@@ -13,6 +13,9 @@ import { normalizeMarkdownPairSettings } from '@utils/markdownPairs';
 const DEVICE_LOCAL_CONFIG_KEYS = new Set([
   'workspacePath',
   'gitExecutablePath',
+  'settingsDocumentDirectory',
+  'imageDefaultDir',
+  'imageUploadRule',
   'htmlPreviewPort',
   'htmlPreviewLiveReload',
   'associatedOpenMode',
@@ -74,6 +77,9 @@ const useConfigStore = create(
       autoSave: true,
       workspacePath: '',
       gitExecutablePath: '',
+      settingsDocumentDirectory: '',
+      imageDefaultDir: '',
+      imageUploadRule: '',
       // 变动列表默认只显示 Markdown；面板上的按钮是临时状态。
       gitChangesMarkdownOnly: true,
       associatedOpenMode: 'editor',

@@ -7,6 +7,7 @@
 import { useRef, useCallback, useMemo, useState, useLayoutEffect, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Tooltip } from 'antd';
+import { SettingOutlined } from '@ant-design/icons';
 import useEditorStore from '@store/useEditorStore';
 import useConfigStore from '@store/useConfigStore';
 
@@ -22,6 +23,7 @@ import { formatKeybinding } from '@utils/keybinding';
 import EditorContextMenu from '@components/editor/EditorContextMenu';
 
 import { moveDiskBaseline } from '@/services/localFileGuard';
+import { settingsDocumentKind } from '@/services/settingsDocumentPaths';
 import {
   beginReaderTabDetachWatch,
   buildDragPreview,
@@ -266,7 +268,7 @@ function TabBar({ onRequestCloseTab, onRequestCloseTabs }) {
    * @param {MouseEvent} e 双击事件对象。
    */
   const startRename = useCallback((tab, e) => {
-    if (tab.builtin) return;
+    if (tab.builtin || settingsDocumentKind(tab.path)) return;
     e?.stopPropagation();
     setRenamingTabId(tab.id);
     setRenameValue(tab.name);
@@ -301,6 +303,15 @@ function TabBar({ onRequestCloseTab, onRequestCloseTabs }) {
       event,
       [
         ...creation,
+        ...(tab.builtin === 'settings' && tabs.some((entry) => !entry.builtin)
+          ? [
+              {
+                key: 'settings-split',
+                label: t('settings.openToSide'),
+                run: () => useEditorStore.getState().openSettingsTab({ split: true }),
+              },
+            ]
+          : []),
         close('close', [tab], 'closeTab'),
         close(
           'closeOthers',
@@ -409,6 +420,8 @@ function TabBar({ onRequestCloseTab, onRequestCloseTabs }) {
                 data-tab-id={tab.id}
                 data-web-tab={tab.builtin === 'web' || undefined}
                 data-diff-tab={tab.builtin === 'diff' || undefined}
+                data-settings-tab={tab.builtin === 'settings' || undefined}
+                data-settings-document={settingsDocumentKind(tab.path) || undefined}
                 draggable={false}
                 className={cn(
                   'tabbar__tab',
@@ -426,6 +439,8 @@ function TabBar({ onRequestCloseTab, onRequestCloseTabs }) {
                 <span className="tabbar__tab-icon">
                   {tab.builtin === 'web' ? (
                     <WebTabIcon tab={tab} />
+                  ) : tab.builtin === 'settings' ? (
+                    <SettingOutlined aria-hidden="true" />
                   ) : (
                     <FileTypeIcon extension={tab.ext} fileName={tab.name} size={16} />
                   )}
@@ -437,7 +452,7 @@ function TabBar({ onRequestCloseTab, onRequestCloseTabs }) {
                     style={isRenaming ? { visibility: 'hidden' } : undefined}
                     onDoubleClick={(e) => startRename(tab, e)}
                   >
-                    {tab.name}
+                    {tab.builtin === 'settings' ? t('settings.title') : tab.name}
                   </span>
                   {isRenaming && (
                     <input

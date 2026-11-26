@@ -71,6 +71,12 @@
   }
 }
 
+.editor-content__settings-split {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
 .editor-content__workspace--split {
   .editor-content__primary-surface,
   .editor-content__builtin-html,

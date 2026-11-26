@@ -23,6 +23,7 @@ import useHistoryStore, { isMarkdownComparison } from './useHistoryStore';
 
 let untitledCounter = 1;
 const pluginDocsTabId = 'mokidown:plugin-docs';
+export const SETTINGS_TAB_ID = 'mokidown:settings';
 
 /**
  * 编辑器主 store。
@@ -59,6 +60,8 @@ const useEditorStore = create(
       activeTabId: null,
       // 右侧分屏打开的网页地址；null 表示没有网页分屏。
       webSplitUrl: null,
+      settingsSplit: false,
+      settingsReturnTabId: null,
       // 每当代码层主动替换标签内容时递增。
       // MonacoEditor 订阅这个版本号刷新 model，避免直接订阅内容对象引发
       // 过于频繁的快照比较与 React `getSnapshot` 警告。
@@ -186,6 +189,23 @@ const useEditorStore = create(
           activeTabId: id,
         });
       },
+
+      openSettingsTab: ({ split = false } = {}) => {
+        const { tabs, tabRenderList, activeTabId, settingsReturnTabId } = get();
+        const tab = { id: SETTINGS_TAB_ID, name: 'Settings', builtin: 'settings', modified: false };
+        const existing = tabs.some(({ id }) => id === tab.id);
+        const activeDocument = tabs.find((entry) => entry.id === activeTabId && !entry.builtin);
+        const otherDocument = activeDocument || tabs.find((entry) => entry.id === settingsReturnTabId && !entry.builtin)
+          || tabs.findLast((entry) => !entry.builtin);
+        if (activeTabId) flushEditorBuffer(activeTabId);
+        set({
+          ...(existing ? {} : { tabs: [...tabs, tab], tabRenderList: [...tabRenderList, toTabMeta(tab)] }),
+          activeTabId: split && otherDocument ? otherDocument.id : tab.id,
+          settingsReturnTabId: otherDocument?.id ?? null,
+          settingsSplit: Boolean(split && otherDocument),
+        });
+      },
+      closeSettingsSplit: () => set({ settingsSplit: false }),
 
       openPluginDocs: (name) => {
         const { tabs, tabRenderList, activeTabId } = get();
@@ -536,6 +556,7 @@ const useEditorStore = create(
           activeTabId: requested.has(activeTabId) ? (remaining.at(-1)?.id ?? null) : activeTabId,
           externalFileConflicts: conflicts,
           ...(closedWebTab && !remainingWebTab ? { webSplitUrl: null } : {}),
+          ...(requested.has(SETTINGS_TAB_ID) ? { settingsSplit: false, settingsReturnTabId: null } : {}),
         });
       },
 

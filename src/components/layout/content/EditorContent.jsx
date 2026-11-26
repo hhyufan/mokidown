@@ -52,6 +52,7 @@ const MarkdownPreview = lazyWithRetry(() => import('@components/editor/MarkdownP
 const TreeEditor = lazyWithRetry(() => import('@components/editor/TreeEditor'));
 const HistoryDiffView = lazyWithRetry(() => import('@components/history/HistoryDiffView'));
 const HtmlFilePreview = lazyWithRetry(() => import('@components/editor/HtmlFilePreview'));
+const SettingsPage = lazyWithRetry(() => import('@components/overlays/SettingsModal'));
 import WebPageView from '@components/editor/WebPageView';
 
 function PluginDocsPage({ title }) {
@@ -320,6 +321,9 @@ function EditorContent() {
   const isHtml = !activeTabMeta?.builtin && /^(html?|xhtml)$/i.test(activeTabMeta?.ext || '');
   const isWebPage = activeTabMeta?.builtin === 'web';
   const isPluginDocs = activeTabMeta?.builtin === 'pluginDocs';
+  const isSettings = activeTabMeta?.builtin === 'settings';
+  const settingsSplit = useEditorStore((state) => state.settingsSplit);
+  const isSettingsSplit = Boolean(settingsSplit && activeTabMeta && !activeTabMeta.builtin);
   const webTabs = useMemo(
     () => new Map(tabs.filter((tab) => tab.builtin === 'web').map((tab) => [tab.id, tab])),
     [tabs],
@@ -332,7 +336,7 @@ function EditorContent() {
     if (isWebPage) visitedWebTabs.current.add(activeTabId);
   }, [webTabs, activeTabId, isWebPage]);
   const hasPreview = isMarkdown || isTree || isHtml;
-  const splitRequested = viewMode === 'split' && hasPreview;
+  const splitRequested = viewMode === 'split' && hasPreview && !isSettingsSplit;
   const [splitPreviewMounted, setSplitPreviewMounted] = useState(false);
   const [htmlPreviewMounted, setHtmlPreviewMounted] = useState(false);
   const [htmlPreviewTab, setHtmlPreviewTab] = useState(null);
@@ -343,9 +347,9 @@ function EditorContent() {
   const lastSingleMode = useRef('edit');
   // 网页分屏：右侧直接展示链接，不依赖 Markdown 预览的就绪状态。
   const webSplitUrl = useEditorStore((state) => state.webSplitUrl);
-  const isWebSplit = Boolean(webSplitUrl);
+  const isWebSplit = Boolean(webSplitUrl) && !isSettings && !isSettingsSplit;
   // Leave the current pane full size until the split preview has real content.
-  const isSplit = isWebSplit || (splitRequested && (!isMarkdown || markdownPreviewReady));
+  const isSplit = isSettingsSplit || isWebSplit || (splitRequested && (!isMarkdown || markdownPreviewReady));
   const showMilkdown =
     isMarkdown &&
     (viewMode === 'preview' ||
@@ -627,7 +631,7 @@ function EditorContent() {
     return bindMarkdownScroll(splitEditor, preview);
   }, [activeTabId, isMarkdown, isSplit, previewSyncHandle, splitEditor]);
   const showHistoryDiff = Boolean(historyDiff && historyDiff.tabId === activeTabId);
-  const showWorkspace = !showHistoryDiff && (isWebSplit || (activeTabMeta && !isPluginDocs));
+  const showWorkspace = !showHistoryDiff && !isSettings && (isWebSplit || (activeTabMeta && !isPluginDocs));
   const showMonaco = Boolean(
     showWorkspace &&
     activeTabMeta &&
@@ -640,7 +644,7 @@ function EditorContent() {
     showWorkspace && (showMilkdown || (viewMode === 'preview' && isTree)),
   );
   const showHtmlPreview = Boolean(
-    showWorkspace && isHtml && viewMode !== 'edit' && !(isWebSplit && viewMode === 'split'),
+    showWorkspace && isHtml && viewMode !== 'edit' && !(isWebSplit && viewMode === 'split') && !isSettingsSplit,
   );
   const showSplitTree = Boolean(showWorkspace && splitRequested && isTree && !isWebSplit);
   const [monacoMounted, setMonacoMounted] = useState(false);
@@ -773,7 +777,9 @@ function EditorContent() {
       )}
       {!showHistoryDiff &&
         !showWorkspace &&
-        (isPluginDocs ? (
+        (isSettings ? (
+          <Suspense fallback={<PreviewFallback />}><SettingsPage /></Suspense>
+        ) : isPluginDocs ? (
           <PluginDocsPage title={activeTabMeta.name} />
         ) : (
           <div className="editor-content__welcome">
@@ -956,7 +962,7 @@ function EditorContent() {
                 </RendererErrorBoundary>
               </div>
             )}
-            {isWebSplit && (
+            {(isWebSplit || isSettingsSplit) && (
               <div className="editor-content__split-surfaces">
                 <div
                   className="editor-content__split-divider"
@@ -988,7 +994,11 @@ function EditorContent() {
                   }}
                   onPointerDown={handleDividerPointerDown}
                 />
-                <WebPageView
+                {isSettingsSplit ? (
+                  <div className="editor-content__preview editor-content__preview--half editor-content__settings-split">
+                    <Suspense fallback={<PreviewFallback />}><SettingsPage side /></Suspense>
+                  </div>
+                ) : <WebPageView
                   key={webSplitUrl}
                   className="editor-content__preview editor-content__preview--half"
                   url={webSplitUrl}
@@ -996,7 +1006,7 @@ function EditorContent() {
                   onMove={(url) => useEditorStore.getState().openWebTab(url, { fromSplit: true })}
                   onNavigate={(url) => useEditorStore.getState().openWebSplit(url)}
                   onClose={() => useEditorStore.getState().closeWebSplit()}
-                />
+                />}
               </div>
             )}
             <FloatingRunButton />

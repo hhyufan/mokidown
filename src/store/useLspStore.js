@@ -26,6 +26,7 @@ async function events() {
 }
 export function availablePlugins(state) {
   const plugins = new Map(bundledCatalog.map((plugin) => [plugin.id, plugin]));
+  for (const { manifest } of state.remoteCatalog || []) plugins.set(manifest.id, manifest);
   for (const plugin of state.catalog) plugins.set(plugin.id, plugin);
   for (const plugin of state.installed) if (!plugins.has(plugin.manifest.id)) plugins.set(plugin.manifest.id, plugin.manifest);
   return [...plugins.values()];
@@ -47,7 +48,7 @@ export function validatePluginManifest(manifest) {
   return { version: 'latest', publisher: 'Community', description: '', args: [], extensions: {}, ...manifest };
 }
 const useLspStore = create(persist((set, get) => ({
-  enabled: true, catalog: [], sources: [], preferred: {}, installed: [], operations: {}, statuses: {}, revision: 0,
+  enabled: true, catalog: [], sources: [], remoteCatalog: [], externalConfigLoaded: false, preferred: {}, installed: [], operations: {}, statuses: {}, revision: 0,
   loading: false, loadError: '',
   // 可选的 GitHub 加速前缀（如 https://ghfast.top/）。国内直连 releases 会重定向到
   // 时常不可达的 CDN 主机，这里让用户自备镜像；留空即直连。
@@ -77,7 +78,9 @@ const useLspStore = create(persist((set, get) => ({
   addCatalog: async (url) => {
     if (isWebDemo()) { notifyWebDemo(i18n.t('webDemo.languageServices')); return; }
     const catalog = (await invoke('fetch_language_catalog', { url })).map(validatePluginManifest);
-    set((state) => ({ catalog: [...new Map([...state.catalog, ...catalog].map((manifest) => [manifest.id, manifest])).values()], sources: [...new Set([...state.sources, url])] }));
+    set((state) => state.externalConfigLoaded ? ({
+      remoteCatalog: [...state.remoteCatalog.filter((entry) => entry.source !== url), ...catalog.map((manifest) => ({ source: url, manifest }))],
+    }) : ({ catalog: [...new Map([...state.catalog, ...catalog].map((manifest) => [manifest.id, manifest])).values()], sources: [...new Set([...state.sources, url])] }));
   },
   addManifest: (manifest) => {
     manifest = validatePluginManifest(manifest);
@@ -150,6 +153,6 @@ const useLspStore = create(persist((set, get) => ({
         statuses: { ...state.statuses, [id]: { status: 'idle', message: '' } }, revision: state.revision + 1 }));
     } catch (error) { set((state) => ({ operations: { ...state.operations, [id]: { phase: 'error', text: String(error?.message || error) } }, revision: state.revision + 1 })); }
   },
-}), { name: 'mokidown-language-plugins', partialize: ({ enabled, catalog, sources, preferred, githubAccelerator }) => ({ enabled, catalog, sources, preferred, githubAccelerator }) }));
+}), { name: 'mokidown-language-plugins', partialize: ({ enabled, catalog, sources, externalConfigLoaded, preferred, githubAccelerator }) => ({ enabled, ...(!externalConfigLoaded && { catalog, sources }), preferred, githubAccelerator }) }));
 export default useLspStore;
 if (import.meta.hot) import.meta.hot.dispose(() => { subscription?.then((stop) => stop()); });

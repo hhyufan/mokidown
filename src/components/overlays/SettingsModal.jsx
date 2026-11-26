@@ -1,8 +1,13 @@
-import { useState, useEffect } from 'react';
-import { flushSync } from 'react-dom';
 import {
-  Modal,
-  Menu,
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useRef,
+  useState,
+  createContext,
+  useContext,
+} from 'react';
+import {
   Switch,
   Segmented,
   Select,
@@ -16,25 +21,25 @@ import {
 import { useResponsiveLayout } from '@hooks/useResponsiveLayout';
 import {
   SettingOutlined,
-  BgColorsOutlined,
-  EditOutlined,
+  CloseOutlined,
   DownloadOutlined,
   PlusOutlined,
   MinusOutlined,
-  ExportOutlined,
-  ImportOutlined,
   InfoCircleOutlined,
   GithubOutlined,
   StarFilled,
   AppstoreOutlined,
   ThunderboltOutlined,
+  FolderOpenOutlined,
+  CodeOutlined,
+  SkinOutlined,
+  GlobalOutlined,
 } from '@ant-design/icons';
 import AppMark from '@components/ui/AppMark';
-import MarkdownIcon from '@components/ui/MarkdownIcon';
+import SearchHighlight from '@components/ui/SearchHighlight';
 import { REPO_URL, INSTALLER_URL } from '@/configs/repository';
 import { resolveInstallerUrl } from '@utils/installerDownload';
-import { open, save } from '@tauri-apps/plugin-dialog';
-import { readTextFile, writeTextFile } from '@tauri-apps/plugin-fs';
+import { open } from '@tauri-apps/plugin-dialog';
 import { getVersion } from '@tauri-apps/api/app';
 import { openExternal } from '@utils/tauriApi';
 import { openEditorLink } from '@utils/editorLinks';
@@ -45,26 +50,47 @@ import { isWebDemo } from '@utils/webDemo';
 import { isAndroidRuntime } from '@utils/platform';
 import useUpdateStore from '@store/useUpdateStore';
 import useConfigStore from '@store/useConfigStore';
+import useEditorStore from '@store/useEditorStore';
+import { useFileManager } from '@hooks/useFileManager';
+import { loadSettingsDocument } from '@/services/settingsDocuments';
+import { settingsDocumentKind } from '@/services/settingsDocumentPaths';
 
 import useNotificationStore from '@store/useNotificationStore';
 
-import {
-  applySettingsSnapshot,
-  buildSettingsExportPayload,
-  parseSettingsImportPayload,
-} from '@utils/settingsSnapshot';
 import './settings-modal.scss';
 import LanguageServices from './LanguageServices';
 import BackgroundSettings from './BackgroundSettings';
 import MokiSettings from '@components/moki/MokiSettings';
 import ShortcutsSettings from './ShortcutsSettings';
 import MokiSprite from '@components/moki/MokiSprite';
+import SettingsNavigation from './SettingsNavigation';
+
+function PaletteIcon() {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.8"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+    >
+      <path d="M12 3a9 9 0 1 0 0 18h1.2a2.3 2.3 0 0 0 0-4.6h-.7a2.2 2.2 0 0 1 0-4.4h3.3A5.2 5.2 0 0 0 21 6.8 3.8 3.8 0 0 0 17.2 3H12Z" />
+      <circle cx="7.5" cy="10.5" r="1.1" fill="currentColor" stroke="none" />
+      <circle cx="9.4" cy="6.9" r="1.1" fill="currentColor" stroke="none" />
+      <circle cx="13.6" cy="5.8" r="1.1" fill="currentColor" stroke="none" />
+    </svg>
+  );
+}
+
+const SettingsSearchContext = createContext('');
 
 const NAV_ICONS = {
   general: <SettingOutlined />,
-  appearance: <BgColorsOutlined />,
-  editor: <EditOutlined />,
-  renderer: <MarkdownIcon />,
+  appearance: <SkinOutlined />,
+  editor: <CodeOutlined />,
+  renderer: <PaletteIcon />,
   shortcuts: <ThunderboltOutlined />,
   languages: <AppstoreOutlined />,
 
@@ -73,21 +99,103 @@ const NAV_ICONS = {
 
 const NAV_KEYS = ['general', 'appearance', 'editor', 'renderer', 'shortcuts', 'languages', 'about'];
 
-function SettingsModal({ open: openProp, onClose }) {
+const SEARCH_SECTIONS = [
+  ['settings.general.', 'general'],
+  ['settings.snapshot.', 'general'],
+  ['moki.', 'appearance'],
+  ['settings.background.', 'appearance'],
+  ['settings.appearance.', 'renderer'],
+  ['settings.editor.', 'editor'],
+  ['settings.documents.', 'languages'],
+  ['settings.about.', 'about'],
+];
+
+function sectionForSettingKey(key) {
+  if (key.startsWith('settings.editor.markdown')) return 'renderer';
+  if (key === 'settings.general.externalFileDrag') return 'general';
+  if (key === 'web.openLinksInEditor') return 'renderer';
+  if (
+    key === 'htmlPreview.liveReload' ||
+    key === 'htmlPreview.port' ||
+    key === 'htmlPreview.title'
+  ) {
+    return 'renderer';
+  }
+  if (key === 'languageServices.search') return 'languages';
+  if (
+    key === 'workspaceDiff.gitSettings' ||
+    key === 'workspaceDiff.gitPath' ||
+    key === 'workspaceDiff.markdownOnlySetting'
+  ) {
+    return 'general';
+  }
+  for (const [prefix, section] of SEARCH_SECTIONS) {
+    if (key.startsWith(prefix)) return section;
+  }
+  return null;
+}
+
+function SettingsPage({ side = false }) {
   const { t, i18n } = useTranslation();
   const [activeNav, setActiveNav] = useState('general');
-  const switchNav = (key) => {
-    if (!key || key === activeNav) return;
-    if (typeof document.startViewTransition !== 'function') {
-      setActiveNav(key);
-      return;
-    }
-    document.startViewTransition(() => flushSync(() => setActiveNav(key)));
+  const [direction, setDirection] = useState('right');
+  const [searching, setSearching] = useState(false);
+  const [query, setQuery] = useState('');
+  const [matchIndex, setMatchIndex] = useState(0);
+  const contentRef = useRef(null);
+  const closeSearch = () => {
+    setSearching(false);
+    setQuery('');
+    setMatchIndex(0);
   };
-  const [settingsBusy, setSettingsBusy] = useState(false);
+  const activateNav = useCallback(
+    (key) => {
+      if (key !== activeNav) {
+        const index = NAV_KEYS.indexOf(key);
+        setDirection(
+          index !== 0 && (index === NAV_KEYS.length - 1 || index < NAV_KEYS.indexOf(activeNav))
+            ? 'left'
+            : 'right',
+        );
+        setActiveNav(key);
+      }
+    },
+    [activeNav],
+  );
+  const switchNav = (key) => {
+    closeSearch();
+    if (contentRef.current) contentRef.current.scrollTop = 0;
+    activateNav(key);
+  };
+  const { openFileFromPath } = useFileManager();
 
   const [appVersion, setAppVersion] = useState('');
   const [installerUrl, setInstallerUrl] = useState(INSTALLER_URL);
+  const pickSettingsDirectory = async () => {
+    try {
+      const selected = await open({
+        title: t('settings.documents.chooseDirectory'),
+        directory: true,
+        multiple: false,
+      });
+      if (typeof selected === 'string' && selected) {
+        handleChange('settingsDocumentDirectory', selected);
+      }
+    } catch (error) {
+      console.warn('[settings] Failed to pick settings directory:', error);
+    }
+  };
+  const pickImageFolder = async () => {
+    try {
+      const selected = await open({ directory: true, multiple: false });
+      if (typeof selected === 'string' && selected) {
+        setImageDirDraft(selected);
+        handleChange('imageDefaultDir', selected);
+      }
+    } catch (error) {
+      console.warn('[settings] Failed to pick image folder:', error);
+    }
+  };
   // The browser demo has no native shell. Resolve the newest installer link
   // (Aliyun manifest first, GitHub manifest as fallback) before the click so
   // the anchor can open the direct download without a popup blocker.
@@ -104,13 +212,15 @@ function SettingsModal({ open: openProp, onClose }) {
     };
   }, []);
   const config = useConfigStore();
+  const [imageDirDraft, setImageDirDraft] = useState(() => config.imageDefaultDir || '');
+  useEffect(() => {
+    setImageDirDraft(config.imageDefaultDir || '');
+  }, [config.imageDefaultDir]);
   const updateStage = useUpdateStore((s) => s.stage);
 
   const notify = useNotificationStore((s) => s.notify);
   const { isMobileLayout, isPortrait } = useResponsiveLayout();
-  // 手机竖屏下把设置面板当作全屏抽屉处理，给内部双栏布局留出纵向堆叠空间；
-  // 横屏移动端横向空间更充足，因此仍保留左右并排布局。
-  const fullScreen = isMobileLayout && isPortrait;
+  const compact = side || (isMobileLayout && isPortrait);
 
   // 从 Tauri 运行时读取应用版本号，避免在前端硬编码版本字符串。
   useEffect(() => {
@@ -144,10 +254,32 @@ function SettingsModal({ open: openProp, onClose }) {
    * @param {string} key 配置键名。
    * @param {unknown} value 目标配置值。
    */
+  async function openSettingsFile(kind) {
+    try {
+      const { path, name } = await loadSettingsDocument(kind);
+      if (!path) return;
+      await openFileFromPath(path, name);
+    } catch (error) {
+      const message = error?.message || String(error);
+      notify('error', t('settings.title'), t(message, { defaultValue: message }));
+    }
+  }
+
+  /** 图床地址或本地端口时才显示图床规则入口。 */
+  function isImageHostEndpoint(value) {
+    const text = String(value || '').trim();
+    return /^https?:\/\//i.test(text) || /:[0-9]+(?:\/|$)/.test(text);
+  }
+
   function handleChange(key, value) {
     config.setConfig(key, value);
     if (key === 'language') {
       i18n.changeLanguage(value === 'zh' ? 'zh' : 'en');
+    }
+    if (key === 'settingsDocumentDirectory') {
+      // 目录变了，旧的配置文件标签不再指向当前目录，关闭后按新目录重新打开。
+      const tabs = useEditorStore.getState().tabs.filter((tab) => settingsDocumentKind(tab.path));
+      if (tabs.length) useEditorStore.getState().closeTabs(tabs.map((tab) => tab.id));
     }
   }
 
@@ -156,127 +288,195 @@ function SettingsModal({ open: openProp, onClose }) {
    *
    * @returns {Promise<void>} 导出结束后重置忙碌状态。
    */
-  async function handleExportJson() {
-    setSettingsBusy(true);
-    try {
-      const path = await save({
-        defaultPath: 'mokidown-settings.json',
-        filters: [{ name: 'JSON', extensions: ['json'] }],
-      });
-      if (!path) return;
-      const payload = buildSettingsExportPayload();
-      await writeTextFile(path, JSON.stringify(payload, null, 2));
-      notify('success', t('settings.snapshot.exportJson'), t('settings.snapshot.exportSuccess'));
-    } catch (err) {
-      notify('error', t('notification.error'), err?.message || String(err));
-    } finally {
-      setSettingsBusy(false);
-    }
-  }
-
-  /**
-   * 从本地 JSON 文件导入设置快照并立即应用。
-   *
-   * @returns {Promise<void>} 导入完成后同步语言并提示结果。
-   */
-  async function handleImportJson() {
-    setSettingsBusy(true);
-    try {
-      const path = await open({
-        multiple: false,
-        filters: [{ name: 'JSON', extensions: ['json'] }],
-      });
-      if (!path || Array.isArray(path)) return;
-      const raw = await readTextFile(path);
-      const settings = parseSettingsImportPayload(raw);
-      applySettingsSnapshot(settings);
-      i18n.changeLanguage((settings.language || 'en') === 'zh' ? 'zh' : 'en');
-      notify('success', t('settings.snapshot.importJson'), t('settings.snapshot.importSuccess'));
-    } catch (err) {
-      notify('error', t('notification.error'), err?.message || String(err));
-    } finally {
-      setSettingsBusy(false);
-    }
-  }
-
+  const darkTheme = document.documentElement.dataset.theme === 'dark';
+  const navSummary = {
+    appearance: darkTheme ? t('moki.theme.dark') : t('moki.theme.light'),
+    editor: `${config.fontSize}px · ${config.lineHeight}px`,
+    renderer: `${t('settings.appearance.previewFontSize')} ${config.previewFontSize}`,
+  };
   const menuItems = NAV_KEYS.map((key) => ({
     key,
     icon: NAV_ICONS[key],
     label: t(`settings.nav.${key}`),
+    tooltip: navSummary[key]
+      ? `${t(`settings.nav.${key}`)} · ${navSummary[key]}`
+      : t(`settings.nav.${key}`),
   }));
+  const normalizedQuery = query.trim().toLocaleLowerCase();
+  const keywords = normalizedQuery.split(/\s+/).filter(Boolean);
+  const translation =
+    i18n.getResourceBundle(i18n.resolvedLanguage || i18n.language, 'translation') || {};
+  const native = Boolean(window.__TAURI_INTERNALS__) && !isAndroidRuntime();
+  const windows = Boolean(window.__TAURI_INTERNALS__ && /Windows/i.test(navigator.userAgent));
+  const results =
+    searching && keywords.length
+      ? menuItems
+          .flatMap(({ key: section, label: sectionLabel }) => {
+            const rows = Object.keys(translation)
+              .filter((key) => !/(Desc|Hint|Placeholder)$/.test(key))
+              .filter((key) => sectionForSettingKey(key) === section)
+              .filter(
+                (key) =>
+                  (native || !key.startsWith('workspaceDiff.')) &&
+                  (windows || key !== 'settings.general.externalFileDrag'),
+              );
+            return rows.flatMap((key) => {
+              const label = t(key);
+              const title = label.toLocaleLowerCase();
+              const description = translation[`${key}Desc`] ?? translation[`${key}Hint`] ?? '';
+              const searchable =
+                `${label} ${description} ${sectionLabel} ${key}`.toLocaleLowerCase();
+              if (!keywords.every((word) => searchable.includes(word))) return [];
+              const rank =
+                title === normalizedQuery
+                  ? 0
+                  : title.startsWith(normalizedQuery)
+                    ? 1
+                    : keywords.every((word) => title.includes(word))
+                      ? 2
+                      : 3;
+              return [{ section, key, label, rank }];
+            });
+          })
+          .sort((left, right) => left.rank - right.rank)
+      : [];
+  const match = results[Math.min(matchIndex, results.length - 1)];
+  const matchSection = match?.section;
+  const matchLabel = match?.label;
+  const matchKey = match?.key;
+
+  useLayoutEffect(() => {
+    if (matchSection) activateNav(matchSection);
+  }, [activateNav, matchSection]);
+
+  useEffect(() => {
+    if (!matchKey || activeNav !== matchSection) return undefined;
+    const pane = contentRef.current?.querySelector('.settings-modal__pane');
+    const item = [
+      ...(pane?.querySelectorAll(
+        '.setting-row__label, [aria-label], .moki-theme-card__meta strong, dt',
+      ) || []),
+    ].find(
+      (element) =>
+        (element.getAttribute('aria-label') || element.textContent.trim()) === matchLabel,
+    );
+    const target =
+      item?.closest('.setting-row__label') ||
+      item?.closest('.moki-theme-card__meta strong') ||
+      item;
+    if (!target) return undefined;
+    target.setAttribute('data-settings-highlight', '');
+    target.scrollIntoView?.({ block: 'center', behavior: 'instant' });
+    return () => target.removeAttribute('data-settings-highlight');
+  }, [activeNav, matchKey, matchLabel, matchSection]);
+
+  const moveMatch = (step) => {
+    if (results.length) setMatchIndex((index) => (index + step + results.length) % results.length);
+  };
+  const handleSearchKeys = (event) => {
+    if (event.nativeEvent.isComposing || event.keyCode === 229 || !results.length) return;
+    if (event.key === 'Enter') {
+      event.preventDefault();
+      moveMatch(event.shiftKey ? -1 : 1);
+    }
+    if (
+      ['ArrowUp', 'ArrowDown'].includes(event.key) &&
+      !event.shiftKey &&
+      !event.altKey &&
+      !event.ctrlKey &&
+      !event.metaKey
+    ) {
+      event.preventDefault();
+      moveMatch(event.key === 'ArrowUp' ? -1 : 1);
+    }
+  };
 
   return (
-    <Modal
-      open={openProp}
-      onCancel={onClose}
-      footer={null}
-      width={fullScreen ? '100vw' : 760}
-      centered={!fullScreen}
-      style={fullScreen ? { top: 0, paddingBottom: 0, maxWidth: '100vw' } : undefined}
-      destroyOnHidden
-      maskClosable
-      closable
-      rootClassName={`moki-settings-modal-root${fullScreen ? ' moki-settings-modal-root--fullscreen' : ''}`}
-      styles={{ body: { padding: 0 }, content: { padding: 0 } }}
-      title={null}
-    >
-      <div className={`settings-modal${fullScreen ? ' settings-modal--fullscreen' : ''}`}>
+    <SettingsSearchContext.Provider value={searching ? query : ''}>
+      <section
+        className={`settings-modal settings-page${compact ? ' settings-page--compact' : ''}`}
+        aria-label={t('settings.title')}
+      >
         <div className="settings-modal__header">
-          <div className="settings-modal__header-left">
-            <div className="settings-modal__header-icon">
-              <SettingOutlined />
+          <SettingsNavigation
+            items={menuItems}
+            active={activeNav}
+            direction={direction}
+            onSelect={switchNav}
+            searching={searching}
+            onSearch={() => setSearching(true)}
+            onCloseSearch={closeSearch}
+            query={query}
+            onQuery={(value) => {
+              setQuery(value);
+              setMatchIndex(0);
+            }}
+            onSearchKeys={handleSearchKeys}
+            matchIndex={match ? Math.min(matchIndex, results.length - 1) : -1}
+            matchCount={results.length}
+            onMoveMatch={moveMatch}
+            results={results}
+            onSelectResult={(index) => setMatchIndex(index)}
+          />
+          {side && (
+            <div className="settings-page__header-actions">
+              <Tooltip title={t('settings.closeSide')}>
+                <Button
+                  size="small"
+                  type="text"
+                  icon={<CloseOutlined />}
+                  aria-label={t('settings.closeSide')}
+                  onClick={() => useEditorStore.getState().closeSettingsSplit()}
+                />
+              </Tooltip>
             </div>
-            <div>
-              <h2>{t('settings.title')}</h2>
-            </div>
-          </div>
+          )}
         </div>
 
-        {fullScreen && (
-          <Menu
-            className="settings-modal__tabs"
-            mode="horizontal"
-            selectedKeys={[activeNav]}
-            onClick={({ key }) => switchNav(key)}
-            items={menuItems}
-            overflowedIndicator={null}
-          />
-        )}
-
         <div className="settings-modal__body">
-          {!fullScreen && (
-            <Menu
-              className="settings-modal__nav"
-              mode="inline"
-              selectedKeys={[activeNav]}
-              onClick={({ key }) => switchNav(key)}
-              items={menuItems}
-              style={{ width: 180 }}
-            />
-          )}
-
-          <div className="settings-modal__content">
+          <div className="settings-modal__content" ref={contentRef}>
             <div className="settings-modal__pane" key={activeNav}>
               {activeNav === 'general' && (
                 <div className="settings-section">
                   <SettingGroup label={t('settings.group.snapshot')} />
-                  <SettingRow label={t('settings.snapshot.title')}>
-                    <Space>
-                      <Button
-                        icon={<ExportOutlined />}
-                        loading={settingsBusy}
-                        onClick={handleExportJson}
-                      >
-                        {t('settings.snapshot.exportJson')}
-                      </Button>
-                      <Button
-                        icon={<ImportOutlined />}
-                        disabled={settingsBusy}
-                        onClick={handleImportJson}
-                      >
-                        {t('settings.snapshot.importJson')}
-                      </Button>
-                    </Space>
+                  <SettingRow
+                    label={t('settings.snapshot.title')}
+                    desc={t('settings.snapshot.openLocalDesc')}
+                  >
+                    <Button
+                      icon={<SettingOutlined />}
+                      onClick={() => void openSettingsFile('localSettings')}
+                    >
+                      {t('settings.snapshot.openLocal')}
+                    </Button>
+                  </SettingRow>
+                  <SettingRow
+                    label={t('settings.documents.directory')}
+                    desc={t('settings.documents.directoryDesc')}
+                  >
+                    <Input
+                      key={config.settingsDocumentDirectory}
+                      style={{ width: '100%' }}
+                      defaultValue={config.settingsDocumentDirectory}
+                      placeholder={t('settings.documents.directoryPlaceholder')}
+                      onPressEnter={(event) => event.currentTarget.blur()}
+                      onBlur={(event) => {
+                        const value = event.currentTarget.value.trim();
+                        if (value !== config.settingsDocumentDirectory)
+                          handleChange('settingsDocumentDirectory', value);
+                      }}
+                      suffix={
+                        <Tooltip title={t('settings.editor.chooseFolder')} placement="top">
+                          <Button
+                            type="text"
+                            size="small"
+                            icon={<FolderOpenOutlined />}
+                            aria-label={t('settings.editor.chooseFolder')}
+                            onClick={() => void pickSettingsDirectory()}
+                          />
+                        </Tooltip>
+                      }
+                    />
                   </SettingRow>
                   <SettingGroup label={t('settings.group.workspace')} />
                   <SettingRow
@@ -304,6 +504,7 @@ function SettingsModal({ open: openProp, onClose }) {
                       placeholder="/path/to/workspace"
                     />
                   </SettingRow>
+
                   {window.__TAURI_INTERNALS__ && !isAndroidRuntime() && (
                     <>
                       <SettingGroup label={t('workspaceDiff.gitSettings')} />
@@ -351,7 +552,7 @@ function SettingsModal({ open: openProp, onClose }) {
                       ]}
                     />
                   </SettingRow>
-                  {Boolean(window.__TAURI_INTERNALS__ && /Windows/i.test(navigator.userAgent)) && (
+                  {windows && (
                     <SettingRow
                       label={t('settings.general.externalFileDrag')}
                       desc={t('settings.general.externalFileDragDesc')}
@@ -521,6 +722,48 @@ function SettingsModal({ open: openProp, onClose }) {
                       onChange={(v) => handleChange('autoSave', v)}
                     />
                   </SettingRow>
+                  <SettingGroup label={t('settings.group.images')} />
+                  <SettingRow
+                    label={t('settings.editor.imageDefaultDir')}
+                    desc={t('settings.editor.imageDefaultDirDesc')}
+                  >
+                    <Input
+                      key={config.imageDefaultDir}
+                      style={{ width: '100%' }}
+                      value={imageDirDraft}
+                      placeholder={t('settings.editor.imageDefaultDirPlaceholder')}
+                      onChange={(event) => setImageDirDraft(event.target.value)}
+                      onPressEnter={(event) => event.currentTarget.blur()}
+                      onBlur={(event) => {
+                        const value = event.currentTarget.value.trim();
+                        if (value !== config.imageDefaultDir)
+                          handleChange('imageDefaultDir', value);
+                      }}
+                      suffix={
+                        isImageHostEndpoint(imageDirDraft) ? (
+                          <Tooltip title={t('settings.editor.imageHostRule')} placement="top">
+                            <Button
+                              type="text"
+                              size="small"
+                              icon={<GlobalOutlined />}
+                              aria-label={t('settings.editor.imageHostRule')}
+                              onClick={() => void openSettingsFile('imageHost')}
+                            />
+                          </Tooltip>
+                        ) : (
+                          <Tooltip title={t('settings.editor.chooseFolder')} placement="top">
+                            <Button
+                              type="text"
+                              size="small"
+                              icon={<FolderOpenOutlined />}
+                              aria-label={t('settings.editor.chooseFolder')}
+                              onClick={() => void pickImageFolder()}
+                            />
+                          </Tooltip>
+                        )
+                      }
+                    />
+                  </SettingRow>
                 </div>
               )}
 
@@ -614,7 +857,7 @@ function SettingsModal({ open: openProp, onClose }) {
                 <ShortcutsSettings SettingGroup={SettingGroup} SettingRow={SettingRow} />
               )}
 
-              {activeNav === 'languages' && <LanguageServices onOpenDocs={onClose} />}
+              {activeNav === 'languages' && <LanguageServices onOpenConfig={openSettingsFile} />}
 
               {activeNav === 'about' && (
                 <div className="settings-section">
@@ -707,8 +950,8 @@ function SettingsModal({ open: openProp, onClose }) {
             </div>
           </div>
         </div>
-      </div>
-    </Modal>
+      </section>
+    </SettingsSearchContext.Provider>
   );
 }
 
@@ -813,15 +1056,22 @@ function MarkdownPairSettings({ enabled, value, onToggle, onChange }) {
  * @param {React.ReactNode} props.children 设置控件内容。
  */
 function SettingRow({ label, desc, children }) {
+  const searchQuery = useContext(SettingsSearchContext);
+  const highlight = (text) =>
+    searchQuery && typeof text === 'string' ? (
+      <SearchHighlight text={text} query={searchQuery} />
+    ) : (
+      text
+    );
   return (
     <div className="setting-row">
       <div className="setting-row__info">
-        <span className="setting-row__label">{label}</span>
-        {desc && <span className="setting-row__desc">{desc}</span>}
+        <span className="setting-row__label">{highlight(label)}</span>
+        {desc && <span className="setting-row__desc">{highlight(desc)}</span>}
       </div>
       <div className="setting-row__control">{children}</div>
     </div>
   );
 }
 
-export default SettingsModal;
+export default SettingsPage;
