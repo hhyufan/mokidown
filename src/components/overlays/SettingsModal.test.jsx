@@ -320,18 +320,22 @@ it('uses one switch to control whether the character shows', async () => {
   expect(screen.queryByRole('switch', { name: '周边轻动效' })).not.toBeInTheDocument();
 });
 
-it('falls back to compact theme cards when the character is off', async () => {
-  useConfigStore.setState({ mokiDisplay: 'hidden' });
+it('renders compact theme cards without the character and keeps the character toggle working', async () => {
+  useConfigStore.setState({ mokiDisplay: 'welcome' });
   await act(async () => render(<SettingsModal open onClose={vi.fn()} />));
   fireEvent.click(screen.getByRole('button', { name: '外观' }));
-  // 关闭人物后不再渲染大画布，回到更名前的紧凑卡片形态（两列横卡 + 右侧勾选）。
-  expect(document.querySelector('.moki-theme-card--preview')).not.toBeInTheDocument();
-  expect(document.querySelector('.moki-theme-cards--compact')).toBeInTheDocument();
+  // 主题卡始终是紧凑形态，不再承载角色插画。
   expect(document.querySelectorAll('.moki-theme-card--compact')).toHaveLength(2);
+  expect(document.querySelector('.moki-theme-card__art')).not.toBeInTheDocument();
+  expect(document.querySelector('.moki-theme-cards--compact')).toBeInTheDocument();
   fireEvent.click(screen.getByText('夜读 · 深色'));
   expect(useThemeStore.getState().theme).toBe('dark');
   fireEvent.click(screen.getByText('晴笺 · 浅色'));
   expect(useThemeStore.getState().theme).toBe('light');
+  // 人物显示开关仍只影响主界面形象，不影响主题卡。
+  fireEvent.click(screen.getByRole('switch', { name: '人物显示' }));
+  expect(useConfigStore.getState().mokiDisplay).toBe('hidden');
+  expect(document.querySelectorAll('.moki-theme-card--compact')).toHaveLength(2);
 });
 
 it('switches tab behavior between spaces and tabs', async () => {
