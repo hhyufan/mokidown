@@ -1,7 +1,14 @@
 import { useEffect, useId, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Select, Tooltip } from 'antd';
-import { SearchOutlined, CloseOutlined, LoadingOutlined, FontSizeOutlined, FolderOpenOutlined, EnterOutlined } from '@ant-design/icons';
+import {
+  SearchOutlined,
+  CloseOutlined,
+  LoadingOutlined,
+  FontSizeOutlined,
+  EnterOutlined,
+} from '@ant-design/icons';
+import FolderOpenIcon from '@components/ui/FolderOpenIcon';
 import FileTypeIcon from '@components/ui/FileTypeIcon';
 import MokiStatusEmpty from '@components/moki/MokiStatusEmpty';
 import ChevronIcon from '@components/ui/ChevronIcon';
@@ -17,7 +24,15 @@ import './search-dropdown.scss';
 
 function Highlight({ text = '', query, caseSensitive }) {
   const match = textSearchRange(text, query.trim(), caseSensitive);
-  return match ? <>{text.slice(0, match.start)}<mark>{text.slice(match.start, match.start + match.length)}</mark>{text.slice(match.start + match.length)}</> : text;
+  return match ? (
+    <>
+      {text.slice(0, match.start)}
+      <mark>{text.slice(match.start, match.start + match.length)}</mark>
+      {text.slice(match.start + match.length)}
+    </>
+  ) : (
+    text
+  );
 }
 
 export default function SearchDropdown({ open, onOpen, onClose }) {
@@ -31,7 +46,10 @@ export default function SearchDropdown({ open, onOpen, onClose }) {
   const [selectedIndex, setSelectedIndex] = useState(0);
   const [opening, setOpening] = useState(false);
   const [openError, setOpenError] = useState('');
-  const inputRef = useRef(null), rootRef = useRef(null), listRef = useRef(null), previousFocus = useRef(null);
+  const inputRef = useRef(null),
+    rootRef = useRef(null),
+    listRef = useRef(null),
+    previousFocus = useRef(null);
   const alive = useRef(true);
   const listId = useId();
   const { openFileFromPath } = useFileManager();
@@ -39,128 +57,350 @@ export default function SearchDropdown({ open, onOpen, onClose }) {
   const results = search.results;
   const selected = Math.min(selectedIndex, Math.max(0, results.length - 1));
 
-  useEffect(() => { alive.current = true; return () => { alive.current = false; }; }, []);
+  useEffect(() => {
+    alive.current = true;
+    return () => {
+      alive.current = false;
+    };
+  }, []);
   useEffect(() => {
     if (!open) return undefined;
     previousFocus.current = document.activeElement;
-    inputRef.current?.focus(); inputRef.current?.select();
+    inputRef.current?.focus();
+    inputRef.current?.select();
     const outside = (event) => {
       if (rootRef.current?.contains(event.target)) return;
       // antd 弹层 portal 到 body：点击其中的选项属于面板内交互，不应关闭搜索。
-      if (event.target instanceof Element && event.target.closest('.ant-select-dropdown, .ant-dropdown, .ant-picker-dropdown')) return;
+      if (
+        event.target instanceof Element &&
+        event.target.closest('.ant-select-dropdown, .ant-dropdown, .ant-picker-dropdown')
+      )
+        return;
       onClose();
     };
     document.addEventListener('pointerdown', outside);
     return () => document.removeEventListener('pointerdown', outside);
   }, [open, onClose]);
-  useEffect(() => { setSelectedIndex(0); setOpenError(''); }, [query, mode, scope, caseSensitive, includeExcluded]);
-  useEffect(() => { listRef.current?.querySelector(`[data-index="${selected}"]`)?.scrollIntoView?.({ block: 'nearest' }); }, [selected]);
+  useEffect(() => {
+    setSelectedIndex(0);
+    setOpenError('');
+  }, [query, mode, scope, caseSensitive, includeExcluded]);
+  useEffect(() => {
+    listRef.current
+      ?.querySelector(`[data-index="${selected}"]`)
+      ?.scrollIntoView?.({ block: 'nearest' });
+  }, [selected]);
 
-  const closeWithFocus = () => { onClose(); inputRef.current?.blur(); previousFocus.current?.focus?.(); };
+  const closeWithFocus = () => {
+    onClose();
+    inputRef.current?.blur();
+    previousFocus.current?.focus?.();
+  };
   const select = async (item) => {
     if (!item || opening) return;
-    setOpening(true); setOpenError('');
+    setOpening(true);
+    setOpenError('');
     try {
       if (item.line_number != null) {
-        const line = item.line_number - 1, character = (item.column_number || 1) - 1;
-        const ok = await jumpToProblem({ tabId: item.tabId, filePath: item.path, fileName: item.name,
-          range: { start: { line, character }, end: { line, character: character + (item.match_length || 0) } } }, openFileFromPath);
+        const line = item.line_number - 1,
+          character = (item.column_number || 1) - 1;
+        const ok = await jumpToProblem(
+          {
+            tabId: item.tabId,
+            filePath: item.path,
+            fileName: item.name,
+            range: {
+              start: { line, character },
+              end: { line, character: character + (item.match_length || 0) },
+            },
+          },
+          openFileFromPath,
+        );
         if (!ok) throw new Error(t('search.openFailed'));
       } else {
-        const existing = useEditorStore.getState().tabs.find((tab) => tab.id === item.tabId || Boolean(item.path && searchPathKey(tab.path) === searchPathKey(item.path)));
+        const existing = useEditorStore
+          .getState()
+          .tabs.find(
+            (tab) =>
+              tab.id === item.tabId ||
+              Boolean(item.path && searchPathKey(tab.path) === searchPathKey(item.path)),
+          );
         if (existing) useEditorStore.getState().setActiveTab(existing.id);
         else {
           await openFileFromPath(item.path, item.name);
-          if (!useEditorStore.getState().getTabByPath(item.path)) throw new Error(t('search.openFailed'));
+          if (!useEditorStore.getState().getTabByPath(item.path))
+            throw new Error(t('search.openFailed'));
         }
       }
       if (alive.current) onClose();
-    } catch (error) { if (alive.current) setOpenError(String(error)); }
-    finally { if (alive.current) setOpening(false); }
+    } catch (error) {
+      if (alive.current) setOpenError(String(error));
+    } finally {
+      if (alive.current) setOpening(false);
+    }
   };
   const keyDown = (event) => {
     if (isImeComposing(event)) return;
     const action = matchAction(event, 'search')?.id;
-    if (event.key === 'Escape') { event.preventDefault(); event.stopPropagation(); closeWithFocus(); }
-    else if (action === 'searchFiles' || action === 'searchContent') {
-      event.preventDefault(); setMode(action === 'searchFiles' ? 'files' : 'content');
+    if (event.key === 'Escape') {
+      event.preventDefault();
+      event.stopPropagation();
+      closeWithFocus();
+    } else if (action === 'searchFiles' || action === 'searchContent') {
+      event.preventDefault();
+      setMode(action === 'searchFiles' ? 'files' : 'content');
     } else if (action === 'searchOpen' && open) {
-      event.preventDefault(); select(results[selected]);
+      event.preventDefault();
+      select(results[selected]);
     } else if (action && action !== 'searchOpen') {
       event.preventDefault();
-      if (!open) { onOpen(); return; }
+      if (!open) {
+        onOpen();
+        return;
+      }
       if (!results.length) return;
-      setSelectedIndex(action === 'searchFirstResult' ? 0 : action === 'searchLastResult' ? results.length - 1
-        : (selected + (action === 'searchNextResult' ? 1 : -1) + results.length) % results.length);
+      setSelectedIndex(
+        action === 'searchFirstResult'
+          ? 0
+          : action === 'searchLastResult'
+            ? results.length - 1
+            : (selected + (action === 'searchNextResult' ? 1 : -1) + results.length) %
+              results.length,
+      );
     }
   };
 
-  return <div className={`titlebar__search search-dropdown${open ? ' search-dropdown--open' : ''}`} ref={rootRef}>
-    <SearchOutlined aria-hidden />
-    <input ref={inputRef} role="combobox" aria-label={t('search.title')} aria-expanded={open} aria-controls={open ? listId : undefined}
-      aria-autocomplete="list" aria-activedescendant={open && results.length ? `${listId}-${selected}` : undefined}
-      placeholder={mode === 'content' ? t('search.contentPlaceholder') : t('topbar.search.placeholder')}
-      value={query} onChange={(event) => { setQuery(event.target.value); onOpen(); }} onFocus={onOpen} onKeyDown={keyDown} />
-    {query ? <Tooltip title={t('search.clear')}><button className="search-dropdown__clear" type="button" aria-label={t('search.clear')}
-      onClick={() => { setQuery(''); inputRef.current?.focus(); }}><CloseOutlined /></button></Tooltip>
-      : keybindingOf('search') && <kbd className="search-dropdown__shortcut">{formatKeybinding(keybindingOf('search'))}</kbd>}
-    {open && <div className="search-dropdown__panel" onKeyDown={(event) => { if (event.key === 'Escape') { event.stopPropagation(); closeWithFocus(); } }}>
-      <div className="search-dropdown__toolbar">
-        <div className="search-dropdown__modes" role="tablist" aria-label={t('search.mode')}>
-          {['files', 'content'].map((value) => <button key={value} type="button" role="tab" aria-selected={mode === value}
-            onClick={() => { setMode(value); inputRef.current?.focus(); }}>{t(value === 'files' ? 'search.fileTab' : 'search.contentTab')}</button>)}
+  return (
+    <div
+      className={`titlebar__search search-dropdown${open ? ' search-dropdown--open' : ''}`}
+      ref={rootRef}
+    >
+      <SearchOutlined aria-hidden />
+      <input
+        ref={inputRef}
+        role="combobox"
+        aria-label={t('search.title')}
+        aria-expanded={open}
+        aria-controls={open ? listId : undefined}
+        aria-autocomplete="list"
+        aria-activedescendant={open && results.length ? `${listId}-${selected}` : undefined}
+        placeholder={
+          mode === 'content' ? t('search.contentPlaceholder') : t('topbar.search.placeholder')
+        }
+        value={query}
+        onChange={(event) => {
+          setQuery(event.target.value);
+          onOpen();
+        }}
+        onFocus={onOpen}
+        onKeyDown={keyDown}
+      />
+      {query ? (
+        <Tooltip title={t('search.clear')}>
+          <button
+            className="search-dropdown__clear"
+            type="button"
+            aria-label={t('search.clear')}
+            onClick={() => {
+              setQuery('');
+              inputRef.current?.focus();
+            }}
+          >
+            <CloseOutlined />
+          </button>
+        </Tooltip>
+      ) : (
+        keybindingOf('search') && (
+          <kbd className="search-dropdown__shortcut">
+            {formatKeybinding(keybindingOf('search'))}
+          </kbd>
+        )
+      )}
+      {open && (
+        <div
+          className="search-dropdown__panel"
+          onKeyDown={(event) => {
+            if (event.key === 'Escape') {
+              event.stopPropagation();
+              closeWithFocus();
+            }
+          }}
+        >
+          <div className="search-dropdown__toolbar">
+            <div className="search-dropdown__modes" role="tablist" aria-label={t('search.mode')}>
+              {['files', 'content'].map((value) => (
+                <button
+                  key={value}
+                  type="button"
+                  role="tab"
+                  aria-selected={mode === value}
+                  onClick={() => {
+                    setMode(value);
+                    inputRef.current?.focus();
+                  }}
+                >
+                  {t(value === 'files' ? 'search.fileTab' : 'search.contentTab')}
+                </button>
+              ))}
+            </div>
+            <Select
+              className="search-dropdown__scope"
+              popupClassName="search-dropdown__scope-menu"
+              getPopupContainer={(node) => node.parentElement ?? document.body}
+              size="small"
+              aria-label={t('search.scope')}
+              value={search.effectiveScope}
+              onChange={(value) => {
+                setScope(value);
+                inputRef.current?.focus();
+              }}
+              popupMatchSelectWidth={false}
+              // 与面包屑、历史折叠按钮共用同款箭头（默认朝右，样式里旋转 90° 朝下）。
+              suffixIcon={<ChevronIcon className="search-dropdown__scope-arrow" />}
+              options={[
+                {
+                  value: 'project',
+                  label: <span>{t('search.project')}</span>,
+                  disabled: !search.projectRoot,
+                },
+                {
+                  value: 'folder',
+                  label: <span>{t('search.folder')}</span>,
+                  disabled: !search.currentDir,
+                },
+                { value: 'open', label: <span>{t('search.openFiles')}</span> },
+              ]}
+            />
+            <Tooltip title={t('search.caseSensitive')}>
+              <button
+                type="button"
+                aria-label={t('search.caseSensitive')}
+                aria-pressed={caseSensitive}
+                onClick={() => setCaseSensitive((value) => !value)}
+              >
+                <FontSizeOutlined />
+              </button>
+            </Tooltip>
+            <Tooltip title={t('search.includeExcluded')}>
+              <button
+                type="button"
+                aria-label={t('search.includeExcluded')}
+                aria-pressed={includeExcluded}
+                disabled={search.effectiveScope === 'open'}
+                onClick={() => setIncludeExcluded((value) => !value)}
+              >
+                <FolderOpenIcon />
+              </button>
+            </Tooltip>
+          </div>
+          <div className="search-dropdown__context">
+            <span>
+              {query.trim()
+                ? t('search.resultsCount', { count: results.length })
+                : t('search.suggestions')}
+            </span>
+            <Tooltip title={search.root || t('search.openFiles')}>
+              <span className="search-dropdown__root">{search.root || t('search.openFiles')}</span>
+            </Tooltip>
+            {search.loading && <LoadingOutlined aria-label={t('search.searching')} />}
+          </div>
+          {(search.error || openError) && (
+            <div className="search-dropdown__error" role="alert">
+              {t('search.failed', { error: openError || search.error })}
+            </div>
+          )}
+          <div
+            className="search-dropdown__results"
+            role="listbox"
+            aria-label={t('search.results')}
+            id={listId}
+            ref={listRef}
+            aria-busy={search.loading}
+          >
+            {!results.length &&
+              (search.loading ? (
+                <div className="search-dropdown__empty" role="status">
+                  {t('search.searching')}
+                </div>
+              ) : (
+                <MokiStatusEmpty
+                  compact
+                  title={query.trim() ? t('empty.search.title') : t('search.emptySuggestions')}
+                  hint={query.trim() ? t('empty.search.hint') : t('empty.searchIdle.hint')}
+                />
+              ))}
+            {results.map((item, index) => (
+              <div
+                key={`${item.tabId || item.path}:${item.line_number || 0}`}
+                id={`${listId}-${index}`}
+                role="option"
+                aria-selected={selected === index}
+                data-index={index}
+                className="search-dropdown__item"
+                onMouseEnter={() => setSelectedIndex(index)}
+                onMouseDown={(event) => event.preventDefault()}
+                onClick={() => select(item)}
+              >
+                <FileTypeIcon fileName={item.name} extension={item.name.split('.').pop()} />
+                <div className="search-dropdown__info">
+                  <div className="search-dropdown__name">
+                    <span className="search-dropdown__filename">
+                      <Highlight text={item.name} query={query} caseSensitive={caseSensitive} />
+                    </span>
+                    {item.modified && (
+                      <span className="search-dropdown__dirty" aria-label={t('search.unsaved')} />
+                    )}
+                    {item.line_number != null && (
+                      <span className="search-dropdown__line">
+                        {item.line_number}:{item.column_number || 1}
+                      </span>
+                    )}
+                    {item.source === 'open' && (
+                      <span className="search-dropdown__tag">{t('search.opened')}</span>
+                    )}
+                  </div>
+                  <div className="search-dropdown__path">
+                    {relativeSearchPath(item.path, search.root) || item.name}
+                  </div>
+                  {item.matched_line != null && (
+                    <div className="search-dropdown__preview">
+                      <Highlight
+                        text={item.matched_line}
+                        query={query}
+                        caseSensitive={caseSensitive}
+                      />
+                    </div>
+                  )}
+                </div>
+                <EnterOutlined className="search-dropdown__enter" aria-hidden />
+              </div>
+            ))}
+          </div>
+          {search.truncated && (
+            <div className="search-dropdown__notice">{t('search.truncated')}</div>
+          )}
+          {search.skippedFiles > 0 && (
+            <div className="search-dropdown__notice">
+              {t('search.skipped', { count: search.skippedFiles })}
+            </div>
+          )}
+          <div className="search-dropdown__footer">
+            <span>
+              <kbd>↑</kbd>
+              <kbd>↓</kbd> {t('search.navigate')}
+            </span>
+            <span>
+              <kbd>Enter</kbd> {opening ? t('search.opening') : t('search.open')}
+            </span>
+            <span>
+              <kbd>Esc</kbd> {t('search.close')}
+            </span>
+            <span>
+              <kbd>Alt 1 / 2</kbd> {t('search.mode')}
+            </span>
+          </div>
         </div>
-        <Select
-          className="search-dropdown__scope"
-            popupClassName="search-dropdown__scope-menu"
-            getPopupContainer={(node) => node.parentElement ?? document.body}
-          size="small"
-          aria-label={t('search.scope')}
-          value={search.effectiveScope}
-          onChange={(value) => { setScope(value); inputRef.current?.focus(); }}
-          popupMatchSelectWidth={false}
-          // 与面包屑、历史折叠按钮共用同款箭头（默认朝右，样式里旋转 90° 朝下）。
-          suffixIcon={<ChevronIcon className="search-dropdown__scope-arrow" />}
-          options={[
-            { value: 'project', label: <span>{t('search.project')}</span>, disabled: !search.projectRoot },
-            { value: 'folder', label: <span>{t('search.folder')}</span>, disabled: !search.currentDir },
-            { value: 'open', label: <span>{t('search.openFiles')}</span> },
-          ]}
-        />
-        <Tooltip title={t('search.caseSensitive')}><button type="button" aria-label={t('search.caseSensitive')} aria-pressed={caseSensitive}
-          onClick={() => setCaseSensitive((value) => !value)}><FontSizeOutlined /></button></Tooltip>
-        <Tooltip title={t('search.includeExcluded')}><button type="button" aria-label={t('search.includeExcluded')} aria-pressed={includeExcluded}
-          disabled={search.effectiveScope === 'open'} onClick={() => setIncludeExcluded((value) => !value)}><FolderOpenOutlined /></button></Tooltip>
-      </div>
-      <div className="search-dropdown__context"><span>{query.trim() ? t('search.resultsCount', { count: results.length }) : t('search.suggestions')}</span>
-        <Tooltip title={search.root || t('search.openFiles')}><span className="search-dropdown__root">{search.root || t('search.openFiles')}</span></Tooltip>
-        {search.loading && <LoadingOutlined aria-label={t('search.searching')} />}
-      </div>
-      {(search.error || openError) && <div className="search-dropdown__error" role="alert">{t('search.failed', { error: openError || search.error })}</div>}
-      <div className="search-dropdown__results" role="listbox" aria-label={t('search.results')} id={listId} ref={listRef} aria-busy={search.loading}>
-        {!results.length && (search.loading
-          ? <div className="search-dropdown__empty" role="status">{t('search.searching')}</div>
-          : <MokiStatusEmpty
-              compact
-              title={query.trim() ? t('empty.search.title') : t('search.emptySuggestions')}
-              hint={query.trim() ? t('empty.search.hint') : t('empty.searchIdle.hint')}
-            />)}
-        {results.map((item, index) => <div key={`${item.tabId || item.path}:${item.line_number || 0}`} id={`${listId}-${index}`} role="option"
-          aria-selected={selected === index} data-index={index} className="search-dropdown__item" onMouseEnter={() => setSelectedIndex(index)}
-          onMouseDown={(event) => event.preventDefault()} onClick={() => select(item)}>
-          <FileTypeIcon fileName={item.name} extension={item.name.split('.').pop()} />
-          <div className="search-dropdown__info"><div className="search-dropdown__name"><span className="search-dropdown__filename"><Highlight text={item.name} query={query} caseSensitive={caseSensitive} /></span>
-            {item.modified && <span className="search-dropdown__dirty" aria-label={t('search.unsaved')} />}
-            {item.line_number != null && <span className="search-dropdown__line">{item.line_number}:{item.column_number || 1}</span>}
-            {item.source === 'open' && <span className="search-dropdown__tag">{t('search.opened')}</span>}</div>
-            <div className="search-dropdown__path">{relativeSearchPath(item.path, search.root) || item.name}</div>
-            {item.matched_line != null && <div className="search-dropdown__preview"><Highlight text={item.matched_line} query={query} caseSensitive={caseSensitive} /></div>}
-          </div><EnterOutlined className="search-dropdown__enter" aria-hidden />
-        </div>)}
-      </div>
-      {search.truncated && <div className="search-dropdown__notice">{t('search.truncated')}</div>}
-      {search.skippedFiles > 0 && <div className="search-dropdown__notice">{t('search.skipped', { count: search.skippedFiles })}</div>}
-      <div className="search-dropdown__footer"><span><kbd>↑</kbd><kbd>↓</kbd> {t('search.navigate')}</span><span><kbd>Enter</kbd> {opening ? t('search.opening') : t('search.open')}</span><span><kbd>Esc</kbd> {t('search.close')}</span><span><kbd>Alt 1 / 2</kbd> {t('search.mode')}</span></div>
-    </div>}
-  </div>;
+      )}
+    </div>
+  );
 }

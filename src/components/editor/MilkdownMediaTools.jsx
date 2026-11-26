@@ -1,3 +1,4 @@
+import ImageCopyIcon from '@components/ui/ImageCopyIcon';
 import {
   cloneElement,
   forwardRef,
@@ -12,7 +13,6 @@ import { createPortal } from 'react-dom';
 import { Image, Input, Tooltip } from 'antd';
 import {
   CheckOutlined,
-  CopyOutlined,
   DeleteOutlined,
   DisconnectOutlined,
   EditOutlined,
@@ -52,8 +52,12 @@ const MilkdownMediaTools = forwardRef(function MilkdownMediaTools(
   useEffect(() => {
     if (!previewSource) return;
     const copy = (event) => {
-      if (isImeComposing(event) || !matchesHotkey(event, 'editCopy') ||
-        event.target.closest?.('input, textarea, [contenteditable="true"]')) return;
+      if (
+        isImeComposing(event) ||
+        !matchesHotkey(event, 'editCopy') ||
+        event.target.closest?.('input, textarea, [contenteditable="true"]')
+      )
+        return;
       event.preventDefault();
       event.stopPropagation();
       void copyMarkdownImage(previewSource.address, documentPath);
@@ -500,10 +504,13 @@ const MilkdownMediaTools = forwardRef(function MilkdownMediaTools(
             )}
             {surface.kind === 'image' && surface.address && (
               <Tooltip title={t('media.copyImage')}>
-                <button type="button" aria-label={t('media.copyImage')}
+                <button
+                  type="button"
+                  aria-label={t('media.copyImage')}
                   onMouseDown={(event) => event.preventDefault()}
-                  onClick={() => copyMarkdownImage(surface.address, documentPath)}>
-                  <CopyOutlined />
+                  onClick={() => copyMarkdownImage(surface.address, documentPath)}
+                >
+                  <ImageCopyIcon />
                 </button>
               </Tooltip>
             )}
@@ -550,91 +557,92 @@ const MilkdownMediaTools = forwardRef(function MilkdownMediaTools(
                 original,
                 { className: `${original.props.className} milkdown-media-preview-toolbar` },
                 original.props.children,
-                (
-                  <div
-                    className="milkdown-media-preview-tools"
-                    onMouseDown={(event) => event.stopPropagation()}
-                  >
-                    <Tooltip title={t('media.copyImage')}>
-                      <button type="button" aria-label={t('media.copyImage')}
-                        onClick={() => copyMarkdownImage(preview.source.address, documentPath)}>
-                        <CopyOutlined />
-                      </button>
-                    </Tooltip>
-                    {!readOnly && preview.target && (<>
-                    <Tooltip title={t('media.editDescription')}>
-                      <button
-                        type="button"
-                        aria-label={t('media.editDescription')}
-                        onClick={() =>
-                          setPreviewEdit({ field: 'text', value: preview.target.text })
-                        }
-                      >
-                        <EditOutlined />
-                      </button>
-                    </Tooltip>
-                    <Tooltip title={t('media.editSource')}>
-                      <button
-                        type="button"
-                        aria-label={t('media.editSource')}
-                        onClick={() =>
-                          setPreviewEdit({ field: 'address', value: preview.target.address })
-                        }
-                      >
-                        <PictureOutlined />
-                      </button>
-                    </Tooltip>
-                    </>)}
-                    {previewEdit && (
-                      <div className="milkdown-media-preview-editor">
-                        <Input
-                          autoFocus
-                          aria-label={t(
-                            previewEdit.field === 'text'
-                              ? 'media.description'
-                              : 'media.imageAddress',
-                          )}
-                          value={previewEdit.value}
-                          onChange={(event) =>
-                            setPreviewEdit({ ...previewEdit, value: event.target.value, error: '' })
+                <div
+                  className="milkdown-media-preview-tools"
+                  onMouseDown={(event) => event.stopPropagation()}
+                >
+                  <Tooltip title={t('media.copyImage')}>
+                    <button
+                      type="button"
+                      aria-label={t('media.copyImage')}
+                      onClick={() => copyMarkdownImage(preview.source.address, documentPath)}
+                    >
+                      <ImageCopyIcon />
+                    </button>
+                  </Tooltip>
+                  {!readOnly && preview.target && (
+                    <>
+                      <Tooltip title={t('media.editDescription')}>
+                        <button
+                          type="button"
+                          aria-label={t('media.editDescription')}
+                          onClick={() =>
+                            setPreviewEdit({ field: 'text', value: preview.target.text })
                           }
-                          onKeyDown={(event) => {
-                            event.stopPropagation();
-                            if (event.key === 'Escape') {
-                              event.preventDefault();
-                              setPreviewEdit(null);
-                            }
-                            if (event.key === 'Enter' && !event.nativeEvent.isComposing) {
-                              event.preventDefault();
-                              void savePreview();
-                            }
-                          }}
-                        />
-                        {previewEdit.field === 'address' && (
-                          <Tooltip title={t('media.chooseFile')}>
-                            <button
-                              type="button"
-                              aria-label={t('media.chooseFile')}
-                              onClick={() => void choosePreviewFile()}
-                            >
-                              <PictureOutlined />
-                            </button>
-                          </Tooltip>
+                        >
+                          <EditOutlined />
+                        </button>
+                      </Tooltip>
+                      <Tooltip title={t('media.editSource')}>
+                        <button
+                          type="button"
+                          aria-label={t('media.editSource')}
+                          onClick={() =>
+                            setPreviewEdit({ field: 'address', value: preview.target.address })
+                          }
+                        >
+                          <PictureOutlined />
+                        </button>
+                      </Tooltip>
+                    </>
+                  )}
+                  {previewEdit && (
+                    <div className="milkdown-media-preview-editor">
+                      <Input
+                        autoFocus
+                        aria-label={t(
+                          previewEdit.field === 'text' ? 'media.description' : 'media.imageAddress',
                         )}
-                        <Tooltip title={t('media.save')}>
+                        value={previewEdit.value}
+                        onChange={(event) =>
+                          setPreviewEdit({ ...previewEdit, value: event.target.value, error: '' })
+                        }
+                        onKeyDown={(event) => {
+                          event.stopPropagation();
+                          if (event.key === 'Escape') {
+                            event.preventDefault();
+                            setPreviewEdit(null);
+                          }
+                          if (event.key === 'Enter' && !event.nativeEvent.isComposing) {
+                            event.preventDefault();
+                            void savePreview();
+                          }
+                        }}
+                      />
+                      {previewEdit.field === 'address' && (
+                        <Tooltip title={t('media.chooseFile')}>
                           <button
                             type="button"
-                            aria-label={t('media.save')}
-                            onClick={() => void savePreview()}
+                            aria-label={t('media.chooseFile')}
+                            onClick={() => void choosePreviewFile()}
                           >
-                            <CheckOutlined />
+                            <PictureOutlined />
                           </button>
                         </Tooltip>
-                        {previewEdit.error && <span role="alert">{previewEdit.error}</span>}
-                      </div>
-                    )}
-                  </div>
-                ),
+                      )}
+                      <Tooltip title={t('media.save')}>
+                        <button
+                          type="button"
+                          aria-label={t('media.save')}
+                          onClick={() => void savePreview()}
+                        >
+                          <CheckOutlined />
+                        </button>
+                      </Tooltip>
+                      {previewEdit.error && <span role="alert">{previewEdit.error}</span>}
+                    </div>
+                  )}
+                </div>,
               ),
           }}
         />

@@ -1,3 +1,4 @@
+import FolderOpenIcon from '@components/ui/FolderOpenIcon';
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Dropdown, Popover, Tooltip } from 'antd';
@@ -6,7 +7,6 @@ import {
   CheckOutlined,
   CloseOutlined,
   FileTextOutlined,
-  FolderOpenOutlined,
   GithubOutlined,
 } from '@ant-design/icons';
 import { invoke } from '@tauri-apps/api/core';
@@ -520,7 +520,7 @@ export default function WorkspaceChanges({ directory }) {
             },
             {
               key: 'reveal',
-              icon: <FolderOpenOutlined />,
+              icon: <FolderOpenIcon />,
               label: t('workspaceDiff.reveal'),
               onClick: () => {
                 void openInExplorer(

@@ -1,12 +1,8 @@
+import FolderOpenIcon from '@components/ui/FolderOpenIcon';
 import { useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Tooltip } from 'antd';
-import {
-  FileAddOutlined,
-  FolderOpenOutlined,
-  FileTextOutlined,
-  ArrowRightOutlined,
-} from '@ant-design/icons';
+import { FileAddOutlined, FileTextOutlined, ArrowRightOutlined } from '@ant-design/icons';
 import useConfigStore from '@store/useConfigStore';
 import useThemeStore from '@store/useThemeStore';
 import useEditorStore from '@store/useEditorStore';
@@ -60,7 +56,7 @@ export default function WelcomeScreen() {
             <kbd>Ctrl + O</kbd>
           </button>
           <button type="button" className="moki-action" onClick={openFolderDialog}>
-            <FolderOpenOutlined />
+            <FolderOpenIcon />
             <span className="moki-action__copy">
               <strong>{t('moki.openFolder')}</strong>
               <small>{t('moki.openFolderDesc')}</small>
@@ -73,10 +69,7 @@ export default function WelcomeScreen() {
           {recent.length ? (
             recent.map((file) => (
               <Tooltip key={file.path} title={file.path} placement="top" mouseEnterDelay={0.3}>
-                <button
-                  type="button"
-                  onClick={() => openFileFromPath(file.path, file.name)}
-                >
+                <button type="button" onClick={() => openFileFromPath(file.path, file.name)}>
                   <FileTextOutlined />
                   <span>{file.name}</span>
                   <ArrowRightOutlined />

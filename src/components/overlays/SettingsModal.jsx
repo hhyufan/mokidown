@@ -1,3 +1,4 @@
+import FolderOpenIcon from '@components/ui/FolderOpenIcon';
 import { flushSync } from 'react-dom';
 import {
   useCallback,
@@ -27,7 +28,6 @@ import {
   InfoCircleOutlined,
   GithubOutlined,
   StarFilled,
-  FolderOpenOutlined,
   GlobalOutlined,
 } from '@ant-design/icons';
 import AppMark from '@components/ui/AppMark';
@@ -566,7 +566,7 @@ function SettingsPage({ side = false }) {
                           <Button
                             type="text"
                             size="small"
-                            icon={<FolderOpenOutlined />}
+                            icon={<FolderOpenIcon />}
                             aria-label={t('settings.editor.chooseFolder')}
                             onClick={() => void pickSettingsDirectory()}
                           />
@@ -602,7 +602,7 @@ function SettingsPage({ side = false }) {
                           <Button
                             type="text"
                             size="small"
-                            icon={<FolderOpenOutlined />}
+                            icon={<FolderOpenIcon />}
                             aria-label={t('settings.editor.chooseFolder')}
                             onClick={() => void pickWorkspaceDirectory()}
                           />
@@ -857,7 +857,7 @@ function SettingsPage({ side = false }) {
                             <Button
                               type="text"
                               size="small"
-                              icon={<FolderOpenOutlined />}
+                              icon={<FolderOpenIcon />}
                               aria-label={t('settings.editor.chooseFolder')}
                               onClick={() => void pickImageFolder()}
                             />
