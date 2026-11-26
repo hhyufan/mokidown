@@ -22,6 +22,7 @@ mod hotkeys;
 mod html_preview;
 mod language_plugins;
 mod lsp;
+mod menu_clipboard;
 #[cfg(windows)]
 mod msvc;
 #[cfg(windows)]
@@ -437,50 +438,6 @@ async fn read_file_head(path: String, limit: u32) -> Result<Vec<u8>, String> {
 #[tauri::command]
 async fn check_file_text_head(path: String) -> Result<(), text_file::TextFileError> {
     text_file::check_head(Path::new(&path))
-}
-
-#[tauri::command]
-fn read_clipboard_for_paste() -> Result<String, String> {
-    #[cfg(windows)]
-    {
-        use windows_sys::Win32::Foundation::HGLOBAL;
-        use windows_sys::Win32::System::DataExchange::{
-            CloseClipboard, GetClipboardData, IsClipboardFormatAvailable, OpenClipboard,
-        };
-        use windows_sys::Win32::System::Memory::{GlobalLock, GlobalSize, GlobalUnlock};
-        const CF_UNICODETEXT: u32 = 13;
-        // Keep the clipboard open and the system-owned buffer locked while copying the text.
-        unsafe {
-            if OpenClipboard(0) == 0 {
-                return Err(std::io::Error::last_os_error().to_string());
-            }
-            let read = || {
-                if IsClipboardFormatAvailable(CF_UNICODETEXT) == 0 {
-                    return Ok(String::new());
-                }
-                let handle = GetClipboardData(CF_UNICODETEXT) as HGLOBAL;
-                if handle.is_null() {
-                    return Err(std::io::Error::last_os_error().to_string());
-                }
-                let size = GlobalSize(handle) / std::mem::size_of::<u16>();
-                let data = GlobalLock(handle).cast::<u16>();
-                if data.is_null() {
-                    return Err(std::io::Error::last_os_error().to_string());
-                }
-                let units = std::slice::from_raw_parts(data, size);
-                let text = String::from_utf16_lossy(
-                    units.split(|unit| *unit == 0).next().unwrap_or_default(),
-                );
-                GlobalUnlock(handle);
-                Ok(text)
-            };
-            let result = read();
-            CloseClipboard();
-            result
-        }
-    }
-    #[cfg(not(windows))]
-    Err("System clipboard paste is unavailable on this platform".into())
 }
 
 /// 根据路径扩展名推断二进制文件预览所需的 MIME 类型。
@@ -2200,7 +2157,7 @@ pub fn run() {
             open_settings_document,
             read_file_head,
             check_file_text_head,
-            read_clipboard_for_paste,
+            menu_clipboard::read_clipboard_for_paste,
             read_binary_file,
             download_clipboard_image,
             write_binary_file,

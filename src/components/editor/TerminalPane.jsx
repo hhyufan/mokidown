@@ -10,6 +10,7 @@ import { openExternal } from '@utils/tauriApi';
 import { openEditorLink } from '@utils/editorLinks';
 import { matchesHotkey } from '@hooks/useHotkeys';
 import { isImeComposing } from '@utils/keyboard';
+import { readMenuClipboardText } from '@utils/menuClipboard';
 import '@xterm/xterm/css/xterm.css';
 
 const ansi = {
@@ -345,10 +346,13 @@ export default function TerminalPane({ active, directory }) {
           void navigator.clipboard?.writeText(term.getSelection()).catch(() => {});
         return false;
       }
-      if (action === 'terminalPaste' && navigator.clipboard) {
+      if (action === 'terminalPaste') {
         event.preventDefault();
-        void navigator.clipboard.readText().then(
-          (text) => term.paste(text),
+        const session = current;
+        void readMenuClipboardText().then(
+          (text) => {
+            if (text && session && !session.stopping && isCurrent(session)) term.paste(text);
+          },
           () => {},
         );
         return false;

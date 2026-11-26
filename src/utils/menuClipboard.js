@@ -4,13 +4,22 @@ export function hasNativeMenuClipboard() {
   return Boolean(window.__TAURI_INTERNALS__) && /^Win/i.test(navigator.platform);
 }
 
-export function readMenuClipboardText() {
-  return hasNativeMenuClipboard() ? invoke('read_clipboard_for_paste') : navigator.clipboard.readText();
+export async function readMenuClipboardText() {
+  if (!hasNativeMenuClipboard()) return navigator.clipboard.readText();
+  const { text } = await invoke('read_clipboard_for_paste', { includeImage: false });
+  return text;
 }
 
 export async function readMenuClipboard() {
-  const text = hasNativeMenuClipboard() ? await readMenuClipboardText() : '';
-  if (text) return { text, files: [] };
+  if (hasNativeMenuClipboard()) {
+    const { text, image } = await invoke('read_clipboard_for_paste', { includeImage: true });
+    const files = image
+      ? [new File([Uint8Array.from(atob(image.contentBase64), (byte) => byte.charCodeAt(0))], '', {
+          type: image.mime,
+        })]
+      : [];
+    return { text, files };
+  }
   if (!navigator.clipboard?.read) return { text: await readMenuClipboardText(), files: [] };
 
   const items = await navigator.clipboard.read();
