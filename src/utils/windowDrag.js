@@ -15,6 +15,14 @@ const INTERACTIVE_SELECTOR = [
   '.footer__breadcrumb',
   // 整个侧栏都不参与窗口拖动：面包屑、滚动条、文件列表都要自己处理鼠标。
   '.sidebar',
+  // 编辑器/设置页内容不参与窗口拖动：Segmented、下拉、滑块等控件要自己处理点击。
+  '.editor-content',
+  '.settings-page',
+  '.ant-segmented',
+  '.ant-select',
+  '.ant-slider',
+  '.ant-radio-group',
+  '.ant-checkbox-group',
   '.file-tree__item',
   '.project-tree__row',
   '.sidebar__recent-item',

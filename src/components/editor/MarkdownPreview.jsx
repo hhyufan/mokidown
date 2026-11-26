@@ -78,7 +78,14 @@ import { useEditorContextMenu } from '@hooks/useEditorContextMenu';
 import EditorContextMenu from './EditorContextMenu';
 import { MENU_MOD } from '@utils/contextMenuShortcuts';
 import { jumpToFootnote } from '@utils/footnoteParser';
-import { loadMarkdownImageSrc, parseMarkdownLineHint, resolveMarkdownLinkPath } from '@utils/markdownAssets';
+import {
+  ALLOWED_IMAGE_PROTOCOLS,
+  loadMarkdownImageSrc,
+  markdownUrlTransform,
+  parseMarkdownLineHint,
+  rehypeNormalizeImageSrc,
+  resolveMarkdownLinkPath,
+} from '@utils/markdownAssets';
 import MermaidRenderer from './MermaidRenderer';
 import MarkdownCodePre from './MarkdownCodePre';
 import { rehypeCodeBlockIndexes } from '@utils/markdownCodeBlocks';
@@ -152,6 +159,10 @@ const sanitizeSchema = {
     'ins', 'del', 'mark', 'abbr', 'ruby', 'rt', 'rp',
     'dl', 'dt', 'dd', 'figure', 'figcaption', 'kbd', 'var', 'samp',
   ],
+  protocols: {
+    ...defaultSchema.protocols,
+    src: ALLOWED_IMAGE_PROTOCOLS,
+  },
   attributes: {
     ...defaultSchema.attributes,
     '*': [...(defaultSchema.attributes?.['*'] || []), 'className', 'class', 'style', 'id'],
@@ -197,6 +208,7 @@ function rehypeSingleFootnoteBackref() {
 }
 const rehypePlugins = [
   rehypeRaw,
+  rehypeNormalizeImageSrc,
   [rehypeSanitize, sanitizeSchema],
   rehypeKatex,
   rehypeCodeBlockIndexes,
@@ -297,6 +309,7 @@ const MarkdownView = memo(function MarkdownView({ content, components, taskCasca
       remarkPlugins={remarkPlugins}
       rehypePlugins={taskCascade ? taskCascadePlugins : independentTaskPlugins}
       remarkRehypeOptions={{ footnoteBackContent: '↩' }}
+      urlTransform={markdownUrlTransform}
       components={components}
     >
       {content}

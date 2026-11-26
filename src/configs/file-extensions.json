@@ -31,6 +31,7 @@
   "sass": "scss",
   "less": "less",
   "json": "json",
+  "jsonc": "json",
   "yml": "yaml",
   "yaml": "yaml",
   "xml": "xml",

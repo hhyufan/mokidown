@@ -61,7 +61,16 @@ import { conf as markdownLanguage } from 'monaco-editor/esm/vs/basic-languages/m
 const nativeUndoGroups = new WeakMap();
 const markdownFoldingProvider = monaco.languages.registerFoldingRangeProvider('markdown', {
   provideFoldingRanges(model) {
-    const ranges = markdownFoldingRanges(model.getValue());
+    const source = model.getValue();
+    const ranges = markdownFoldingRanges(source);
+    // Base64 图片语法是单行，Monaco 折叠不接受单行区域；把它和后面的空行
+    // 一起折叠，视觉上收起这一行，展开后仍可直接编辑。
+    const lines = source.split('\n');
+    for (let index = 0; index < lines.length - 1; index++) {
+      if (lines[index].includes('data:image/') && lines[index + 1].trim() === '') {
+        ranges.push({ start: index + 1, end: index + 2 });
+      }
+    }
     const existing = computeRanges(model, false, markdownLanguage.folding.markers);
     for (let index = 0; index < existing.length; index++) {
       ranges.push({

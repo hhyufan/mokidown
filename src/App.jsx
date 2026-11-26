@@ -23,6 +23,7 @@ import { rememberDiskBaseline } from '@/services/localFileGuard';
 import { prepareReaderDragPreview, receiveReaderDocument } from '@/services/readerWindows';
 import { installReaderFileDrag } from '@/services/readerFileDrag';
 import { invoke } from '@utils/tauriInvoke';
+import { loadSettingsDocuments } from '@/services/settingsDocuments';
 import {
   createFileChangeObserver,
   restoreExternalDisk,
@@ -87,7 +88,6 @@ import '@styles/App.scss';
  */
 // 顶层浮层默认都不会在首屏出现，因此统一使用懒加载，避免把较重的依赖
 // 提前打进入口包。
-const SettingsModal = lazy(() => import('@components/overlays/SettingsModal'));
 // ConflictDialog owns a second Monaco entry point (the diff editor). Gate it
 // behind the same complete runtime bootstrap as the main editor so a restored
 // conflict cannot race localization, token providers or theme registration.
@@ -164,7 +164,6 @@ function App({ skipCliArgs = false }) {
   const [searchOpen, setSearchOpen] = useState(false);
   const openSearch = useCallback(() => setSearchOpen(true), []);
   const closeSearch = useCallback(() => setSearchOpen(false), []);
-  const [settingsOpen, setSettingsOpen] = useState(false);
 
   const [unsavedPromptOpen, setUnsavedPromptOpen] = useState(false);
   const [unsavedPromptSaving, setUnsavedPromptSaving] = useState(false);
@@ -270,10 +269,12 @@ function App({ skipCliArgs = false }) {
     [autoSave, closeTabs, openUnsavedClosePrompt],
   );
   const requestTabClose = useCallback((tabId) => requestTabsClose([tabId]), [requestTabsClose]);
+  const openSettings = useCallback(() => useEditorStore.getState().openSettingsTab(), []);
 
   useEffect(() => {
     initTheme();
     useLspStore.getState().refresh();
+    void loadSettingsDocuments();
     const idle = window.requestIdleCallback || ((callback) => setTimeout(callback, 1));
     const task = idle(() => {
       const directory = useFileStore.getState().currentDir;
@@ -537,7 +538,7 @@ function App({ skipCliArgs = false }) {
         save: saveCurrentFile,
         openFile: openFileDialog,
         search: () => setSearchOpen(true),
-        openSettings: () => setSettingsOpen((v) => !v),
+        openSettings,
         toggleSidebar,
         togglePreview: toggleEditPreview,
         toggleFullscreen: () => {
@@ -558,6 +559,7 @@ function App({ skipCliArgs = false }) {
       isDesktopWindow,
       saveCurrentFile,
       openFileDialog,
+      openSettings,
       toggleSidebar,
       toggleEditPreview,
       requestTabsClose,
@@ -611,7 +613,6 @@ function App({ skipCliArgs = false }) {
       // 正在录入快捷键时例外——那时 Escape 表示取消录入。
       if (event.key === 'Escape' && !isCapturingShortcut()) {
         setSearchOpen(false);
-        setSettingsOpen(false);
       }
       handleKeyDown(event);
     };
@@ -975,7 +976,7 @@ function App({ skipCliArgs = false }) {
           isPortrait && 'app--portrait',
         )}
       >
-        <Sidebar onOpenSettings={() => setSettingsOpen(true)} />
+        <Sidebar onOpenSettings={openSettings} />
         {isMobileLayout && sidebarVisible && (
           <button
             className="app__sidebar-backdrop"
@@ -1030,9 +1031,6 @@ function App({ skipCliArgs = false }) {
           />
         )}
         <ExtensionHost />
-        {settingsOpen && (
-          <SettingsModal open={settingsOpen} onClose={() => setSettingsOpen(false)} />
-        )}
 
         {unsavedPromptOpen && (
           <UnsavedChangesModal

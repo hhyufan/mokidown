@@ -7,7 +7,13 @@ import rehypeSanitize, { defaultSchema } from 'rehype-sanitize';
 import rehypeKatex from 'rehype-katex';
 import rehypeHighlight from 'rehype-highlight';
 import remarkMarkdownHtml from '@utils/remarkMarkdownHtml';
-import { loadMarkdownImageSrc, resolveMarkdownLinkPath } from '@utils/markdownAssets';
+import {
+  ALLOWED_IMAGE_PROTOCOLS,
+  loadMarkdownImageSrc,
+  markdownUrlTransform,
+  rehypeNormalizeImageSrc,
+  resolveMarkdownLinkPath,
+} from '@utils/markdownAssets';
 import { invoke } from '@utils/tauriInvoke';
 import { waitForReaderContent } from '@/services/readerContentReady';
 import 'katex/dist/katex.min.css';
@@ -19,6 +25,10 @@ const schema = {
   ...defaultSchema,
   clobberPrefix: '',
   tagNames: [...defaultSchema.tagNames, 'mark', 'kbd', 'sub', 'sup', 'details', 'summary'],
+  protocols: {
+    ...defaultSchema.protocols,
+    src: ALLOWED_IMAGE_PROTOCOLS,
+  },
   attributes: {
     ...defaultSchema.attributes,
     '*': [...(defaultSchema.attributes['*'] || []), 'className', 'id'],
@@ -27,6 +37,7 @@ const schema = {
 };
 const rehypePlugins = [
   rehypeRaw,
+  rehypeNormalizeImageSrc,
   [rehypeSanitize, schema],
   rehypeKatex,
   [rehypeHighlight, { detect: false, ignoreMissing: true }],
@@ -200,6 +211,7 @@ const ReadOnlyMarkdown = memo(function ReadOnlyMarkdown({
       <ReactMarkdown
         remarkPlugins={remarkPlugins}
         rehypePlugins={rehypePlugins}
+        urlTransform={markdownUrlTransform}
         components={components}
       >
         {content}

@@ -1,4 +1,5 @@
 import useEditorStore from '@store/useEditorStore';
+import { settingsDocumentKind } from '@/services/settingsDocumentPaths';
 import { getBuffer, flushEditorBuffers, subscribe as subscribeBuffer } from '@utils/editorBuffer';
 import {
   clearRecoverySnapshot as clearNativeRecoverySnapshot,
@@ -29,7 +30,7 @@ async function hashText(content) {
 async function buildSnapshot() {
   const state = useEditorStore.getState();
   const metaById = new Map(state.tabRenderList.map((tab) => [tab.id, tab]));
-  const dirtyTabs = state.tabs.filter((tab) => metaById.get(tab.id)?.modified ?? tab.modified);
+  const dirtyTabs = state.tabs.filter((tab) => !settingsDocumentKind(tab.path) && (metaById.get(tab.id)?.modified ?? tab.modified));
   const drafts = await Promise.all(dirtyTabs.map(async (tab) => {
     const content = getBuffer(tab.id, tab.content || '');
     const lastSavedContent = tab.content || '';
@@ -57,7 +58,7 @@ async function buildSnapshot() {
       && getBuffer(tab.id, tab.content || '') === draft.content;
   }).map(({ draft }) => draft);
   const latestMeta = new Map(latest.tabRenderList.map((tab) => [tab.id, tab.modified]));
-  if (tabs.length !== latest.tabs.filter((tab) => latestMeta.get(tab.id) ?? tab.modified).length) return null;
+  if (tabs.length !== latest.tabs.filter((tab) => !settingsDocumentKind(tab.path) && (latestMeta.get(tab.id) ?? tab.modified)).length) return null;
   return {
     schemaVersion: RECOVERY_SCHEMA_VERSION,
     updatedAt: Date.now(),
