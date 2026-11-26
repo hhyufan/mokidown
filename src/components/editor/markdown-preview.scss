@@ -649,6 +649,10 @@
   }
 }
 
+.md-preview--milkdown-stable-scroll {
+  overflow-anchor: none;
+}
+
 .md-preview--milkdown {
   --md-code-text: #383a42;
   --md-code-keyword: #a626a4;

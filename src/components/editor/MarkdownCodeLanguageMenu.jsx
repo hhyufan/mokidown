@@ -86,7 +86,11 @@ export default function MarkdownCodeLanguageMenu({ request, onClose }) {
             ...languages.map(([key, label]) => ({ key, label })),
           ],
           style: { width: 'var(--code-language-width)', maxHeight: 'var(--code-language-height)', overflowY: 'auto' },
-          onClick: ({ key }) => {
+          onClick: ({ key, domEvent }) => {
+            if (domEvent.type === 'keydown') {
+              domEvent.preventDefault();
+              domEvent.stopPropagation();
+            }
             onClose();
             request.select(key === 'plain' ? '' : key);
             request.focus();

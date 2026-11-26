@@ -191,6 +191,7 @@ import {
   handleMilkdownBlankPointerDown,
   persistentMilkdownDocument,
 } from './milkdownEditingFlow';
+import { milkdownCodeEditingScroll, milkdownEditingScroll } from './milkdownEditingScroll';
 import { milkdownMarkdownPaste } from './milkdownMarkdownPaste';
 import { htmlBlockSchema, htmlBlockView, sanitizeMilkdownHtml } from './milkdownHtmlBlock';
 import { configureEditingWhitespace, initialEditingSelection } from './milkdownWhitespace';
@@ -344,6 +345,7 @@ const codeMirrorTheme = CodeMirrorView.theme({
 
 const codeBlockExtensions = [
   milkdownFenceConfirmation,
+  milkdownCodeEditingScroll,
   codeMirrorTheme,
   CodeMirrorView.lineWrapping,
   milkdownCodeIndent,
@@ -1158,6 +1160,9 @@ function resolveCodeBlockNodeFromDom(view, dom) {
   const maxPos = view.state.doc.content.size;
   const safePos = Math.max(0, Math.min(rawPos, maxPos));
   const $pos = view.state.doc.resolve(safePos);
+  if ($pos.nodeAfter?.type.name === 'code_block') {
+    return { pos: safePos, node: $pos.nodeAfter, rawPos, depth: $pos.depth + 1 };
+  }
 
   for (let depth = $pos.depth; depth > 0; depth -= 1) {
     const node = $pos.node(depth);
@@ -1196,36 +1201,41 @@ function commitTypedCodeBlockLanguage(view, event) {
   if (isImeComposing(event)) return false;
   if (event.key !== 'Enter') return false;
 
-  const target = event.target;
-  if (!(target instanceof HTMLInputElement) || !target.classList.contains('search-input'))
-    return false;
+  const target = getEventTargetElement(event.target);
+  const input = target?.closest('input.search-input');
+  const option = target?.closest('.language-list-item[data-language]');
+  if (!input && !option) return false;
 
   const picker = target.closest('.language-picker');
   const codeBlock = target.closest('.milkdown-code-block');
   if (!picker || !codeBlock) return false;
 
-  const typedValue = target.value.trim();
+  event.preventDefault();
+  event.stopImmediatePropagation();
+
+  const typedValue = input?.value.trim() ?? '';
   const firstListedLanguage =
     picker.querySelector('.language-list-item[data-language]')?.dataset.language || '';
-  const nextLanguage = findKnownCodeLanguageName(typedValue) || typedValue || firstListedLanguage;
-  if (!nextLanguage) return false;
+  const nextLanguage =
+    option?.dataset.language || findKnownCodeLanguageName(typedValue) ||
+    typedValue || firstListedLanguage;
+  if (!nextLanguage) return true;
 
-  try {
-    const resolved = resolveCodeBlockNodeFromDom(view, codeBlock);
-    const pos = resolved?.pos ?? -1;
-    const node = resolved?.node ?? null;
-    if (!node || !Object.prototype.hasOwnProperty.call(node.attrs || {}, 'language')) return false;
-
-    view.dispatch(view.state.tr.setNodeAttribute(pos, 'language', nextLanguage).scrollIntoView());
-    codeBlock.querySelector('.language-button')?.click();
-    view.focus();
-  } catch {
-    return false;
+  const resolved = resolveCodeBlockNodeFromDom(view, codeBlock);
+  if (!resolved) return true;
+  if (resolved.node.attrs.language !== nextLanguage) {
+    view.dispatch(view.state.tr.setNodeAttribute(resolved.pos, 'language', nextLanguage));
   }
 
-  event.preventDefault();
-  event.stopPropagation();
-  event.stopImmediatePropagation?.();
+  const button = codeBlock.querySelector('.language-button');
+  button?.click();
+  const cmRoot = codeBlock.querySelector('.codemirror-host:not(.hidden) > .cm-editor');
+  const cm = cmRoot && CodeMirrorView.findFromDOM(cmRoot);
+  if (cm) {
+    cm.focus();
+  } else {
+    button?.focus({ preventScroll: true });
+  }
   return true;
 }
 
@@ -1858,7 +1868,7 @@ function MilkdownInner(
         .use(listener);
 
       if (foldBridge) editor.use($prose(() => createMilkdownHeadingFoldsPlugin(foldBridge)));
-      if (!readOnly && !isComparison)
+      if (!readOnly && !isComparison) {
         editor.use(
           milkdownSharedHistory(activeTabId, () => {
             const store = useEditorStore.getState();
@@ -1866,6 +1876,8 @@ function MilkdownInner(
             return tab && (tab.contentRevision ?? 0) === contentRevision;
           }),
         );
+        editor.use(milkdownEditingScroll);
+      }
       if (!readOnly)
         editor
           .use(milkdownHotkeys)
@@ -2356,11 +2368,23 @@ function MilkdownInner(
     const wrapper = wrapperRef.current;
     if (!wrapper) return undefined;
 
+    let committedLanguage = false;
     const keydownHandler = (event) => {
+      if (event.key === 'Enter') {
+        if (committedLanguage && event.repeat) {
+          event.preventDefault();
+          event.stopImmediatePropagation();
+          return;
+        }
+        committedLanguage = false;
+      }
       editorRef.current?.action((ctx) => {
         const view = ctx.get(editorViewCtx);
-        if (handleMilkdownBlockKeyDown(view, event)) return;
-        commitTypedCodeBlockLanguage(view, event);
+        if (commitTypedCodeBlockLanguage(view, event)) {
+          committedLanguage = true;
+          return;
+        }
+        handleMilkdownBlockKeyDown(view, event);
       });
     };
 
@@ -2454,7 +2478,7 @@ function MilkdownInner(
         });
         if (handled) event.stopPropagation();
       }}
-      className={`md-preview md-preview--milkdown ${editorInfo.loading ? 'md-preview--stale' : ''} ${className || ''}`}
+      className={`md-preview md-preview--milkdown ${!readOnly && !isComparison ? 'md-preview--milkdown-stable-scroll' : ''} ${editorInfo.loading ? 'md-preview--stale' : ''} ${className || ''}`}
       style={{
         fontSize: `${fontSize || 14}px`,
         lineHeight: (lineHeight || 24) / (fontSize || 14),

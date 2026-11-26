@@ -8,8 +8,10 @@ import { $prose } from '@milkdown/kit/utils';
 import { isImeComposing } from '@utils/keyboard';
 import { matchesHotkey } from '@hooks/useHotkeys';
 import { liftInlineMath, inlineMathSlot } from './milkdownMathPreview';
+import { milkdownCaretNavigation } from './milkdownEditingScroll';
 
 const enclosedBlocks = new Set(['code_block', 'table', 'math_block', 'table_source_block', 'math_source_block', 'html_block', 'hr']);
+const listTypes = new Set(['bullet_list', 'ordered_list']);
 const temporaryParagraphsKey = new PluginKey('moki-temporary-paragraphs');
 
 // Empty caret landing places are view state, not document content. Keep them
@@ -58,9 +60,94 @@ export function moveOutsideBlock(view, block, direction) {
     tr.setSelection(TextSelection.create(tr.doc, pos + 1));
     tr.setStoredMarks([]);
   }
-  view.dispatch(tr.scrollIntoView());
+  view.dispatch(tr.setMeta(milkdownCaretNavigation, true).scrollIntoView());
   view.focus();
   return true;
+}
+
+const nativePointer = Symbol('nativePointer');
+
+function isBlankParagraph(node) {
+  return node?.type.name === 'paragraph' && !node.content.size;
+}
+
+function hasEditableChildren({ node, dom }) {
+  return node.childCount && !node.isTextblock && !node.isAtom && !node.type.spec.isolating
+    && dom.dataset.mdCollapsed !== 'true';
+}
+
+function blankCaretAtPoint(view, target, clientX, clientY) {
+  const { doc, schema } = view.state;
+  const rtl = view.dom.ownerDocument.defaultView.getComputedStyle(view.dom).direction === 'rtl';
+  const x = rtl ? -clientX : clientX;
+  const inlineStart = (rect) => rtl ? -rect.right : rect.left;
+  const inlineEnd = (rect) => rtl ? -rect.left : rect.right;
+
+  function seek(parent, start, outerIndent) {
+    let preceding;
+    let before;
+    let after;
+    let hit;
+    parent.forEach((node, offset, index) => {
+      if (after || (hit && !isBlankParagraph(hit.node)) || !node.isBlock) return;
+      const pos = start + offset;
+      const dom = view.nodeDOM(pos);
+      if (!(dom instanceof Element)) return;
+      const surface = node.type.spec.tableRole === 'table' ? dom.querySelector('table') ?? dom : dom;
+      const rect = surface.getBoundingClientRect();
+      if (rect.bottom <= rect.top) return;
+      const block = { node, dom, surface, pos, index, rect };
+      if (hit || clientY < rect.top) {
+        after = block;
+      } else if (clientY >= rect.bottom) {
+        preceding = before;
+        before = block;
+      } else {
+        hit = block;
+      }
+    });
+
+    const nearerBefore = before && (!after || clientY - before.rect.bottom <= after.rect.top - clientY);
+    const block = hit ?? (nearerBefore ? before : after);
+    if (!block) return null;
+    const { node, surface, pos, rect, index } = block;
+    const indent = inlineStart(rect);
+    // Allow a small margin at the text edge. In tight indents, use at most
+    // half of the distance to the next shallower legal caret position.
+    if (indent > outerIndent && x < indent - Math.min(8, (indent - outerIndent) / 2)) return null;
+
+    const direction = hit ? (clientY < (rect.top + rect.bottom) / 2 ? -1 : 1) : nearerBefore ? 1 : -1;
+    const boundaryIndex = index + (direction > 0 ? 1 : 0);
+    const canInsert = parent.canReplaceWith(boundaryIndex, boundaryIndex, schema.nodes.paragraph);
+    if (hasEditableChildren(block)) {
+      // Follow the nearest child even beyond its bottom edge: a list item or
+      // quote can accept a continuation below its last visible block.
+      const inner = seek(node, pos + 1, canInsert ? indent : outerIndent);
+      if (inner) return inner;
+    } else if (isBlankParagraph(node)) {
+      // An outdented caret line covers the full editor width. Its left edge
+      // belongs to this paragraph, and its indented area can lead back into
+      // an adjacent container.
+      const neighbors = [block === before ? preceding : before, block === after ? null : after];
+      for (const neighbor of neighbors) {
+        if (!neighbor || !hasEditableChildren(neighbor)) continue;
+        const inner = seek(neighbor.node, neighbor.pos + 1, indent);
+        if (inner && inner !== nativePointer && inner.indent > indent) return inner;
+      }
+      return { position: pos + 1, indent };
+    } else if (hit && (surface.contains(target) || (x >= indent && x <= inlineEnd(rect)))) {
+      return nativePointer;
+    }
+
+    if (node.isTextblock && !node.type.spec.code && !enclosedBlocks.has(node.type.name)
+      && !(node.type.name === 'heading' && direction > 0)) {
+      return { position: direction > 0 ? pos + node.nodeSize - 1 : pos + 1, indent };
+    }
+    return canInsert ? { block, direction, indent } : null;
+  }
+
+  const caret = seek(doc, 0, Infinity);
+  return caret === nativePointer ? null : caret;
 }
 
 // The viewport can be much taller than the contenteditable DOM. Capture clicks
@@ -71,7 +158,7 @@ export function handleMilkdownBlankPointerDown(view, event) {
   const target = event.target instanceof Element ? event.target : null;
   const wrapper = view.dom.closest('.md-preview--milkdown');
   if (!target || !wrapper?.contains(target)
-    || target.closest('input, textarea, button, select, .md-code-execution-mount, .editor-context-menu')) return false;
+    || target.closest('input, textarea, button, select, a, [contenteditable="false"], .milkdown-code-block, .md-code-execution-mount, .editor-context-menu')) return false;
   // Native scrollbar events can target the scroll container itself.
   if (target === wrapper || target.matches('.tableWrapper')) {
     const { left, top } = target.getBoundingClientRect();
@@ -89,29 +176,18 @@ export function handleMilkdownBlankPointerDown(view, event) {
     tr.setSelection(TextSelection.create(tr.doc, 1)).setStoredMarks([]);
     view.dispatch(tr.scrollIntoView()); view.focus();
   } else {
-    // Never steal clicks on text, cells, code, images, or preview controls.
-    if (target !== wrapper && target !== view.dom
-      && !target.matches('.milkdown, [data-milkdown-root], .tableWrapper')) return false;
-    let previous;
-    state.doc.forEach((node, pos) => {
-      const dom = view.nodeDOM(pos);
-      if (!(dom instanceof Element)) return;
-      const content = node.type.name === 'table' ? dom.querySelector('table') || dom : dom;
-      if (event.clientY > content.getBoundingClientRect().bottom) previous = { node, pos };
-    });
-    if (!previous) {
-      const dom = view.nodeDOM(0);
-      if (!first || !enclosedBlocks.has(first.type.name) || !(dom instanceof Element)
-        || event.clientY >= dom.getBoundingClientRect().top) return false;
-      if (!moveOutsideBlock(view, { node: first, pos: 0 }, -1)) return false;
-      event.preventDefault(); event.stopPropagation(); return true;
+    if (target.closest('h1, h2, h3, h4, h5, h6, .tableWrapper table')) return false;
+    const paragraph = target.closest('p');
+    if (paragraph && view.dom.contains(paragraph)) {
+      const $start = state.doc.resolve(view.posAtDOM(paragraph, 0));
+      if ($start.parent.type === state.schema.nodes.paragraph && $start.parent.content.size) return false;
     }
-    if (enclosedBlocks.has(previous.node.type.name) || previous.node.type.name === 'heading') {
-      if (!moveOutsideBlock(view, previous, 1)) return false;
-    } else if (previous.node.isTextblock) {
-      view.dispatch(state.tr.setSelection(TextSelection.create(state.doc, previous.pos + previous.node.nodeSize - 1)).scrollIntoView());
+    const caret = blankCaretAtPoint(view, target, event.clientX, event.clientY);
+    if (!caret) return false;
+    if (caret.position != null) {
+      view.dispatch(state.tr.setSelection(TextSelection.create(state.doc, caret.position)).scrollIntoView());
       view.focus();
-    } else return false;
+    } else if (!moveOutsideBlock(view, caret.block, caret.direction)) return false;
   }
   event.preventDefault(); event.stopPropagation(); return true;
 }
@@ -121,7 +197,7 @@ function outdentListLine(view) {
   const { $from, empty } = state.selection;
   if (!empty || $from.parentOffset || $from.parent.type.name !== 'paragraph' || $from.depth < 3) return false;
   const item = $from.node(-1), list = $from.node(-2);
-  if (item.type.name !== 'list_item' || !['bullet_list', 'ordered_list'].includes(list.type.name)) return false;
+  if (item.type.name !== 'list_item' || !listTypes.has(list.type.name)) return false;
   const paragraphIndex = $from.index(-1);
   if (!paragraphIndex) {
     if ($from.depth < 4 || $from.node(-3).type.name !== 'list_item' ||
@@ -170,6 +246,22 @@ function removeHorizontalRule(view, backward) {
   return true;
 }
 
+function movePastList(view, key) {
+  const { doc, selection } = view.state;
+  const { $from } = selection;
+  if (!(selection instanceof TextSelection) || !selection.empty || $from.depth < 3) return false;
+  const list = $from.node(1);
+  if (!listTypes.has(list.type.name)) return false;
+  const after = doc.resolve($from.after(1));
+  if (after.nodeAfter && (after.nodeAfter.type.name !== 'paragraph' || after.nodeAfter.content.size))
+    return false;
+
+  const last = TextSelection.findFrom(after, -1, true);
+  const atEnd = last && (key === 'ArrowRight' ? $from.pos === last.from
+    : $from.sameParent(last.$from) && view.endOfTextblock('down'));
+  return atEnd ? moveOutsideBlock(view, { node: list, pos: $from.before(1) }, 1) : false;
+}
+
 // Capture at the wrapper because CodeMirror owns its keyboard events and the
 // normal ProseMirror keymap does not see them.
 export function handleMilkdownBlockKeyDown(view, event) {
@@ -206,6 +298,11 @@ export function handleMilkdownBlockKeyDown(view, event) {
     }
   }
   const { selection } = view.state;
+  if (['ArrowDown', 'ArrowRight'].includes(event.key)
+    && !event.ctrlKey && !event.metaKey && !event.shiftKey && !target.closest('.cm-editor')
+    && movePastList(view, event.key)) {
+    event.preventDefault(); event.stopPropagation(); return true;
+  }
   if (['Backspace', 'Delete'].includes(event.key)
     && !event.ctrlKey && !event.metaKey && !event.shiftKey) {
     if (target.closest('.cm-editor')) return false;
@@ -402,16 +499,6 @@ export const createMilkdownEditingFlowPlugin = () => new Plugin({
         if (position == null) return false;
         view.dispatch(view.state.tr.setSelection(TextSelection.create(view.state.doc, position)));
         view.focus(); return true;
-      }
-      if (target !== view.dom) return false;
-      const last = view.state.doc.lastChild;
-      if (!last) return false;
-      const pos = view.state.doc.content.size - last.nodeSize;
-      const dom = view.nodeDOM(pos);
-      if (!(dom instanceof Element) || event.clientY <= dom.getBoundingClientRect().bottom) return false;
-      if (enclosedBlocks.has(last.type.name)) return moveOutsideBlock(view, { node: last, pos }, 1);
-      if (last.type.name === 'heading') {
-        return moveOutsideBlock(view, { node: last, pos }, 1);
       }
       return false;
     },
