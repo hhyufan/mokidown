@@ -1,6 +1,8 @@
 import { useRef, useState } from 'react';
 import { Button, Popover, Tooltip } from 'antd';
-import { DiffOutlined, FileOutlined, FolderOpenOutlined, SwapOutlined } from '@ant-design/icons';
+import { SwapOutlined } from '@ant-design/icons';
+import ManualCompareIcon from '@components/ui/ManualCompareIcon';
+import FolderOpenIcon from '@components/ui/FolderOpenIcon';
 import { useTranslation } from 'react-i18next';
 import { open } from '@tauri-apps/plugin-dialog';
 import { isAndroidRuntime } from '@utils/platform';
@@ -90,14 +92,13 @@ export default function ManualFileCompare() {
             <div className="workspace-compare-picker__row" key={side}>
               <Tooltip title={files[side]?.path} placement="top">
                 <div className="workspace-compare-picker__file">
-                  {files[side] ? (
-                    <FileTypeIcon fileName={files[side].name} size={16} />
-                  ) : (
-                    <FileOutlined />
-                  )}
+                  <FileTypeIcon fileName={files[side]?.name || 'untitled.txt'} size={16} />
                   <div>
-                    <small>{t(`workspaceDiff.${side}`)}</small>
-                    {files[side] && <span>{files[side].name}</span>}
+                    {files[side] ? (
+                      <span>{files[side].name}</span>
+                    ) : (
+                      <small>{t(`workspaceDiff.${side}`)}</small>
+                    )}
                   </div>
                 </div>
               </Tooltip>
@@ -105,7 +106,7 @@ export default function ManualFileCompare() {
                 <Button
                   type="text"
                   size="small"
-                  icon={<FolderOpenOutlined />}
+                  icon={<FolderOpenIcon />}
                   disabled={busy}
                   onClick={() => {
                     if (desktop) void pick(side);
@@ -154,7 +155,7 @@ export default function ManualFileCompare() {
                 <Button
                   type="primary"
                   size="small"
-                  icon={<DiffOutlined />}
+                  icon={<ManualCompareIcon />}
                   aria-label={t('workspaceDiff.compare')}
                   loading={busy}
                   disabled={!files.left || !files.right}
@@ -168,7 +169,7 @@ export default function ManualFileCompare() {
     >
       <Tooltip title={title} placement="bottom">
         <button type="button" className="stb" aria-label={title} aria-expanded={panelOpen}>
-          <DiffOutlined />
+          <ManualCompareIcon />
         </button>
       </Tooltip>
     </Popover>
