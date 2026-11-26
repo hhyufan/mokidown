@@ -526,32 +526,9 @@ const tableSourceBlockSchema = rawSourceNodeSchema(tableSourceBlockType, { inlin
 /**
  * 允许用户在已渲染态与源码态之间切换的 ProseMirror 插件。
  *
- * 对数学公式、图片和表格这类原子节点，Backspace/Delete 不直接删除整块，
- * 而是先回退到可编辑的 Markdown 源码表示，降低误删成本。
+ * 对数学公式和表格这类原子节点，Backspace/Delete 先回退到可编辑的
+ * Markdown 源码表示，降低误删成本；图片则直接整张删除。
  */
-/**
- * 转义 Markdown 图片标题中的双引号。
- *
- * @param {string} title 原始标题文本。
- * @returns {string} 可安全写回 Markdown 的标题文本。
- */
-function escapeImageTitle(title) {
-  return String(title || '').replace(/"/g, '\\"');
-}
-
-/**
- * 将图片节点序列化为 Markdown 源码片段。
- *
- * @param {any} node 图片节点。
- * @returns {string} 对应的 Markdown 图片语法。
- */
-function imageToSource(node) {
-  const alt = node.attrs.alt || '';
-  const src = node.attrs.src || '';
-  const title = node.attrs.title ? ` "${escapeImageTitle(node.attrs.title)}"` : '';
-  return `![${alt}](${src}${title})`;
-}
-
 /**
  * 解析 Markdown 图片源码，提取图片属性。
  *
@@ -820,23 +797,27 @@ const mathValueEditPlugin = $prose((ctx) => {
   const replaceMathWithSource = (view, pos, node, fromEnd) => {
     if (!node.attrs.value) return removeEmptyMathBlock(view, pos, node, fromEnd);
     view.dispatch(
-      mathSourceTransaction(view.state, pos, node, blockSourceType, fromEnd, false).scrollIntoView(),
+      mathSourceTransaction(
+        view.state,
+        pos,
+        node,
+        blockSourceType,
+        fromEnd,
+        false,
+      ).scrollIntoView(),
     );
     return true;
   };
 
   const replaceRenderedWithSource = (view, pos, node, fromEnd) => {
+    // 图片是原子节点：退格/删除直接删掉整张图片，不再退回源码。
+    if (node.type === imageType) {
+      const tr = view.state.tr.delete(pos, pos + node.nodeSize);
+      tr.setSelection(TextSelection.near(tr.doc.resolve(Math.min(pos, tr.doc.content.size))));
+      view.dispatch(tr.scrollIntoView());
+      return true;
+    }
     if (isMathNode(node)) return replaceMathWithSource(view, pos, node, fromEnd);
-    if (node.type === imageType)
-      return replaceWithRawSource(
-        view,
-        pos,
-        node,
-        imageSourceType,
-        imageToSource(node),
-        fromEnd,
-        0,
-      );
     if (node.type === tableType)
       return replaceWithRawSource(
         view,
@@ -869,10 +850,10 @@ const mathValueEditPlugin = $prose((ctx) => {
       // 鼠标那一下另算（单击只选中，双击才展开），由事件那头带上 meta 把它排除在外。
       const { selection } = newState;
       if (
-        selection instanceof NodeSelection
-        && isMathNode(selection.node)
+        selection instanceof NodeSelection &&
+        isMathNode(selection.node) &&
         // 只认把选区放上来的那一笔：跟着来的补正事务不带 meta，不能算第二次「刚被选中」。
-        && transactions.some((tr) => tr.selectionSet && !tr.getMeta(mathBlockSelectMeta))
+        transactions.some((tr) => tr.selectionSet && !tr.getMeta(mathBlockSelectMeta))
       )
         return mathSourceTransaction(
           newState,
