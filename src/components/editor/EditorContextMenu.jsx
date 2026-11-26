@@ -3,6 +3,7 @@ import { createPortal } from 'react-dom';
 import { useTranslation } from 'react-i18next';
 import useNotificationStore from '@store/useNotificationStore';
 import { matchesMenuShortcut } from '@utils/contextMenuShortcuts';
+import { matchesKeybinding } from '@utils/keybinding';
 import './monaco-context-menu.scss';
 
 export default function EditorContextMenu({ menu, onClose }) {
@@ -26,7 +27,9 @@ export default function EditorContextMenu({ menu, onClose }) {
     const outside = (event) => { if (!ref.current?.contains(event.target)) onClose(); };
     const keydown = (event) => {
       if (event.key === 'Escape') { event.preventDefault(); event.stopPropagation(); onClose(); previousFocus?.focus?.(); return; }
-      const item = menu.items.find((entry) => matchesMenuShortcut(event, entry.shortcut));
+      const item = menu.items.find((entry) => entry.keybinding === undefined
+        ? matchesMenuShortcut(event, entry.shortcut)
+        : !event.isComposing && event.keyCode !== 229 && matchesKeybinding(event, entry.keybinding));
       if (item) {
         event.preventDefault(); event.stopPropagation();
         if (!item.disabled) activate(item);

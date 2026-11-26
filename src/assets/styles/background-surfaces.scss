@@ -297,6 +297,11 @@ body.moki-has-background {
     --moki-monaco-control: color-mix(in srgb, var(--text) 7%, transparent);
     --vscode-input-background: var(--moki-monaco-control);
     --vscode-editorHoverWidget-statusBarBackground: var(--moki-monaco-control);
+    --vscode-toolbar-hoverBackground: var(--moki-glass-hover);
+    --vscode-toolbar-activeBackground: var(--moki-glass-hover);
+    --vscode-list-hoverBackground: var(--moki-glass-hover);
+    --vscode-editorSuggestWidget-selectedBackground: var(--moki-glass-hover);
+    --vscode-quickInputList-focusBackground: var(--moki-glass-hover);
     --vscode-peekViewEditor-background: transparent;
     --vscode-peekViewEditorGutter-background: transparent;
     --vscode-peekViewResult-background: transparent;
@@ -306,6 +311,10 @@ body.moki-has-background {
     }
     .monaco-inputbox {
       background-color: var(--moki-monaco-control) !important;
+    }
+    :is(.monaco-toolbar, .monaco-action-bar) .action-label:hover,
+    .monaco-list-row:hover:not(.focused):not(.selected) {
+      background-color: var(--moki-glass-hover);
     }
     .diff-hidden-lines > & {
       box-shadow: none;

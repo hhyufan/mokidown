@@ -1,3 +1,5 @@
+@use '../../assets/styles/background-popup';
+
 .editor-scroll-frame {
   position: relative;
 }
@@ -7,24 +9,21 @@
   inset: 0;
   z-index: 4;
   pointer-events: none;
-  --editor-edge-color: color-mix(in srgb, var(--surface) 92%, transparent);
 
   &::before,
   &::after {
     content: '';
     position: absolute;
-    inset-inline: 0;
-    height: 24px;
+    inset: 0;
     opacity: 0;
+    background-color: var(--surface);
     transition: opacity 140ms ease;
   }
   &::before {
-    inset-block-start: 0;
-    background: linear-gradient(to bottom, var(--editor-edge-color), transparent);
+    mask-image: linear-gradient(to bottom, black 2px, transparent 24px);
   }
   &::after {
-    inset-block-end: 0;
-    background: linear-gradient(to top, var(--editor-edge-color), transparent);
+    mask-image: linear-gradient(to top, black 2px, transparent 24px);
   }
   &[data-top]::before,
   &[data-bottom]::after {
@@ -33,7 +32,10 @@
 }
 
 body.moki-has-background .editor-scroll-edges {
-  --editor-edge-color: color-mix(in srgb, var(--moki-background-base) 70%, transparent);
+  &::before,
+  &::after {
+    @include background-popup.image-surface;
+  }
 }
 
 @media (prefers-reduced-motion: reduce) {
