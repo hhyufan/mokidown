@@ -165,7 +165,7 @@ const useEditorStore = create(
         flushEditorBuffer(activeTabId);
         if (tabs.some((tab) => tab.id === id)) {
           const source = tabs.find((tab) => tab.id === sourceTabId);
-          const ext = source?.ext || name.split('.').pop() || '';
+          const ext = name.includes('.') ? name.split('.').pop() : source?.ext || '';
           const update = (list) => list.map((tab) => (tab.id === id ? { ...tab, name, ext } : tab));
           set({
             tabs: update(tabs),
@@ -179,7 +179,7 @@ const useEditorStore = create(
           id,
           name,
           path: null,
-          ext: source?.ext || name.split('.').pop() || '',
+          ext: name.includes('.') ? name.split('.').pop() : source?.ext || '',
           builtin: 'diff',
           modified: false,
         };
@@ -195,11 +195,15 @@ const useEditorStore = create(
         const tab = { id: SETTINGS_TAB_ID, name: 'Settings', builtin: 'settings', modified: false };
         const existing = tabs.some(({ id }) => id === tab.id);
         const activeDocument = tabs.find((entry) => entry.id === activeTabId && !entry.builtin);
-        const otherDocument = activeDocument || tabs.find((entry) => entry.id === settingsReturnTabId && !entry.builtin)
-          || tabs.findLast((entry) => !entry.builtin);
+        const otherDocument =
+          activeDocument ||
+          tabs.find((entry) => entry.id === settingsReturnTabId && !entry.builtin) ||
+          tabs.findLast((entry) => !entry.builtin);
         if (activeTabId) flushEditorBuffer(activeTabId);
         set({
-          ...(existing ? {} : { tabs: [...tabs, tab], tabRenderList: [...tabRenderList, toTabMeta(tab)] }),
+          ...(existing
+            ? {}
+            : { tabs: [...tabs, tab], tabRenderList: [...tabRenderList, toTabMeta(tab)] }),
           activeTabId: split && otherDocument ? otherDocument.id : tab.id,
           settingsReturnTabId: otherDocument?.id ?? null,
           settingsSplit: Boolean(split && otherDocument),
@@ -556,7 +560,9 @@ const useEditorStore = create(
           activeTabId: requested.has(activeTabId) ? (remaining.at(-1)?.id ?? null) : activeTabId,
           externalFileConflicts: conflicts,
           ...(closedWebTab && !remainingWebTab ? { webSplitUrl: null } : {}),
-          ...(requested.has(SETTINGS_TAB_ID) ? { settingsSplit: false, settingsReturnTabId: null } : {}),
+          ...(requested.has(SETTINGS_TAB_ID)
+            ? { settingsSplit: false, settingsReturnTabId: null }
+            : {}),
         });
       },
 
@@ -760,19 +766,34 @@ const useEditorStore = create(
         }),
 
       applyLayoutSnapshot: (uiState = {}, meta = {}) =>
-        set((state) => ({
-          sidebarVisible:
-            typeof uiState.sidebarVisible === 'boolean'
-              ? uiState.sidebarVisible
-              : state.sidebarVisible,
-          sidebarView: uiState.sidebarView || state.sidebarView,
-          viewMode: uiState.viewMode || state.viewMode,
-          toolbarVisible:
-            typeof uiState.toolbarVisible === 'boolean'
-              ? uiState.toolbarVisible
-              : state.toolbarVisible,
-          uiStateUpdatedAt: meta.updatedAt ?? state.uiStateUpdatedAt ?? Date.now(),
-        })),
+        set((state) => {
+          const minWidth = Number(uiState.sidebarMinWidth);
+          const sidebarMinWidth = Number.isFinite(minWidth)
+            ? Math.max(220, Math.ceil(minWidth))
+            : state.sidebarMinWidth;
+          const width = Number(uiState.sidebarWidth);
+          const splitRatio = Number(uiState.splitRatio);
+          return {
+            sidebarVisible:
+              typeof uiState.sidebarVisible === 'boolean'
+                ? uiState.sidebarVisible
+                : state.sidebarVisible,
+            sidebarView: uiState.sidebarView || state.sidebarView,
+            sidebarMinWidth,
+            sidebarWidth: Number.isFinite(width)
+              ? Math.max(sidebarMinWidth, Math.min(800, width))
+              : state.sidebarWidth,
+            viewMode: uiState.viewMode || state.viewMode,
+            splitRatio: Number.isFinite(splitRatio)
+              ? Math.max(0.15, Math.min(0.85, splitRatio))
+              : state.splitRatio,
+            toolbarVisible:
+              typeof uiState.toolbarVisible === 'boolean'
+                ? uiState.toolbarVisible
+                : state.toolbarVisible,
+            uiStateUpdatedAt: meta.updatedAt ?? state.uiStateUpdatedAt ?? Date.now(),
+          };
+        }),
     }),
     {
       name: 'mokidown-editor',

@@ -1,4 +1,3 @@
-
 import useConfigStore from '@store/useConfigStore';
 import useThemeStore from '@store/useThemeStore';
 import useEditorStore from '@store/useEditorStore';
@@ -36,6 +35,11 @@ export function getLocalSettingsSnapshot({ includeDeviceLocal = false } = {}) {
     markdownFolding: config.markdownFolding !== false,
     openLinksInEditor: config.openLinksInEditor === true,
     ...normalizeMarkdownPairSettings(config),
+    insertSpaces: config.insertSpaces !== false,
+    renderWhitespaceEnabled: config.renderWhitespaceEnabled !== false,
+    indentRainbowEnabled: config.indentRainbowEnabled !== false,
+    indentRainbowStyle: config.indentRainbowStyle || 'surface',
+    gitChangesMarkdownOnly: config.gitChangesMarkdownOnly !== false,
     tabSize: config.tabSize,
     wordWrap: config.wordWrap,
     lineNumbers: config.lineNumbers,
@@ -45,17 +49,31 @@ export function getLocalSettingsSnapshot({ includeDeviceLocal = false } = {}) {
     editorState: {
       sidebarVisible: editor.sidebarVisible,
       sidebarView: editor.sidebarView,
+      sidebarWidth: editor.sidebarWidth,
+      sidebarMinWidth: editor.sidebarMinWidth,
       viewMode: editor.viewMode,
+      splitRatio: editor.splitRatio,
       toolbarVisible: editor.toolbarVisible,
     },
-    
+
     updatedAt,
   };
   if (includeDeviceLocal) {
     snapshot.workspacePath = config.workspacePath;
+    snapshot.gitExecutablePath = config.gitExecutablePath || '';
     snapshot.associatedOpenMode = config.associatedOpenMode;
     snapshot.externalFileDrag = config.externalFileDrag;
     snapshot.htmlPreviewPort = config.htmlPreviewPort ?? 0;
+    snapshot.htmlPreviewLiveReload = config.htmlPreviewLiveReload !== false;
+    snapshot.imageDefaultDir = config.imageDefaultDir || '';
+    snapshot.backgroundImage = config.backgroundImage || '';
+    snapshot.backgroundImageName = config.backgroundImageName || '';
+    snapshot.backgroundEnabled = config.backgroundEnabled === true;
+    snapshot.backgroundTransparency = { ...config.backgroundTransparency };
+    snapshot.hotkeys = { ...config.hotkeys };
+    snapshot.restoreLastSession = config.restoreLastSession !== false;
+    // settingsDocumentDirectory 与 imageUploadRule 分别由配置目录和
+    // image-host.jsonc 管理，写入快照会自指或覆盖独立文件，因此不包含。
   }
   return snapshot;
 }
@@ -71,41 +89,113 @@ export function applySettingsSnapshot(snapshot = {}, { includeDeviceLocal = true
   const language = snapshot.language ?? 'en';
   const fontSize = snapshot.fontSize ?? 14;
   const lineHeight = snapshot.lineHeight ?? 24;
-  useConfigStore.getState().loadConfig({
-    language,
-    fontSize,
-    previewFontSize: snapshot.previewFontSize ?? fontSize,
-    fontFamily: snapshot.fontFamily || 'JetBrains Mono',
-    lineHeight,
-    previewLineHeight: snapshot.previewLineHeight ?? lineHeight,
-    previewZoomSync: snapshot.previewZoomSync ?? true,
-    markdownTaskCascade: snapshot.markdownTaskCascade === undefined
-      ? useConfigStore.getState().markdownTaskCascade !== false : snapshot.markdownTaskCascade !== false,
-    markdownFolding: snapshot.markdownFolding ?? useConfigStore.getState().markdownFolding ?? true,
-    openLinksInEditor: typeof snapshot.openLinksInEditor === 'boolean'
-      ? snapshot.openLinksInEditor : useConfigStore.getState().openLinksInEditor === true,
-    ...normalizeMarkdownPairSettings(snapshot, useConfigStore.getState()),
-    tabSize: snapshot.tabSize ?? 2,
-    wordWrap: snapshot.wordWrap ?? true,
-    lineNumbers: snapshot.lineNumbers ?? true,
-    minimap: sanitizeMinimap(snapshot.minimap),
-    autoSave: snapshot.autoSave ?? true,
-    mokiDisplay: snapshot.mokiDisplay === 'companion' ? 'welcome'
-      : ['welcome', 'hidden'].includes(snapshot.mokiDisplay)
-        ? snapshot.mokiDisplay : useConfigStore.getState().mokiDisplay,
-    
-    workspacePath: includeDeviceLocal
-      ? snapshot.workspacePath ?? useConfigStore.getState().workspacePath ?? ''
-      : useConfigStore.getState().workspacePath ?? '',
-    associatedOpenMode: includeDeviceLocal && snapshot.associatedOpenMode !== undefined
-      ? (snapshot.associatedOpenMode === 'reader' ? 'reader' : 'editor')
-      : useConfigStore.getState().associatedOpenMode,
-    externalFileDrag: includeDeviceLocal && ['reader', 'explorer'].includes(snapshot.externalFileDrag)
-      ? snapshot.externalFileDrag : useConfigStore.getState().externalFileDrag,
-    htmlPreviewPort: includeDeviceLocal && Number.isInteger(snapshot.htmlPreviewPort)
-      && snapshot.htmlPreviewPort >= 0 && snapshot.htmlPreviewPort <= 65535
-      ? snapshot.htmlPreviewPort : useConfigStore.getState().htmlPreviewPort ?? 0,
-  }, { updatedAt });
+  useConfigStore.getState().loadConfig(
+    {
+      language,
+      fontSize,
+      previewFontSize: snapshot.previewFontSize ?? fontSize,
+      fontFamily: snapshot.fontFamily || 'JetBrains Mono',
+      lineHeight,
+      previewLineHeight: snapshot.previewLineHeight ?? lineHeight,
+      previewZoomSync: snapshot.previewZoomSync ?? true,
+      markdownTaskCascade:
+        snapshot.markdownTaskCascade === undefined
+          ? useConfigStore.getState().markdownTaskCascade !== false
+          : snapshot.markdownTaskCascade !== false,
+      markdownFolding:
+        snapshot.markdownFolding ?? useConfigStore.getState().markdownFolding ?? true,
+      openLinksInEditor:
+        typeof snapshot.openLinksInEditor === 'boolean'
+          ? snapshot.openLinksInEditor
+          : useConfigStore.getState().openLinksInEditor === true,
+      ...normalizeMarkdownPairSettings(snapshot, useConfigStore.getState()),
+      insertSpaces:
+        snapshot.insertSpaces !== undefined
+          ? snapshot.insertSpaces !== false
+          : useConfigStore.getState().insertSpaces !== false,
+      renderWhitespaceEnabled:
+        snapshot.renderWhitespaceEnabled !== undefined
+          ? snapshot.renderWhitespaceEnabled !== false
+          : useConfigStore.getState().renderWhitespaceEnabled !== false,
+      indentRainbowEnabled:
+        snapshot.indentRainbowEnabled !== undefined
+          ? snapshot.indentRainbowEnabled !== false
+          : useConfigStore.getState().indentRainbowEnabled !== false,
+      indentRainbowStyle:
+        snapshot.indentRainbowStyle || useConfigStore.getState().indentRainbowStyle || 'surface',
+      gitChangesMarkdownOnly:
+        snapshot.gitChangesMarkdownOnly !== undefined
+          ? snapshot.gitChangesMarkdownOnly !== false
+          : useConfigStore.getState().gitChangesMarkdownOnly !== false,
+      tabSize: snapshot.tabSize ?? 2,
+      wordWrap: snapshot.wordWrap ?? true,
+      lineNumbers: snapshot.lineNumbers ?? true,
+      minimap: sanitizeMinimap(snapshot.minimap),
+      autoSave: snapshot.autoSave ?? true,
+      mokiDisplay:
+        snapshot.mokiDisplay === 'companion'
+          ? 'welcome'
+          : ['welcome', 'hidden'].includes(snapshot.mokiDisplay)
+            ? snapshot.mokiDisplay
+            : useConfigStore.getState().mokiDisplay,
+
+      workspacePath: includeDeviceLocal
+        ? (snapshot.workspacePath ?? useConfigStore.getState().workspacePath ?? '')
+        : (useConfigStore.getState().workspacePath ?? ''),
+      associatedOpenMode:
+        includeDeviceLocal && snapshot.associatedOpenMode !== undefined
+          ? snapshot.associatedOpenMode === 'reader'
+            ? 'reader'
+            : 'editor'
+          : useConfigStore.getState().associatedOpenMode,
+      externalFileDrag:
+        includeDeviceLocal && ['reader', 'explorer'].includes(snapshot.externalFileDrag)
+          ? snapshot.externalFileDrag
+          : useConfigStore.getState().externalFileDrag,
+      htmlPreviewPort:
+        includeDeviceLocal &&
+        Number.isInteger(snapshot.htmlPreviewPort) &&
+        snapshot.htmlPreviewPort >= 0 &&
+        snapshot.htmlPreviewPort <= 65535
+          ? snapshot.htmlPreviewPort
+          : (useConfigStore.getState().htmlPreviewPort ?? 0),
+      ...(includeDeviceLocal
+        ? {
+            ...(snapshot.htmlPreviewLiveReload !== undefined
+              ? { htmlPreviewLiveReload: snapshot.htmlPreviewLiveReload !== false }
+              : {}),
+            ...(typeof snapshot.gitExecutablePath === 'string'
+              ? { gitExecutablePath: snapshot.gitExecutablePath }
+              : {}),
+            ...(typeof snapshot.imageDefaultDir === 'string'
+              ? { imageDefaultDir: snapshot.imageDefaultDir }
+              : {}),
+            ...(typeof snapshot.backgroundImage === 'string'
+              ? { backgroundImage: snapshot.backgroundImage }
+              : {}),
+            ...(typeof snapshot.backgroundImageName === 'string'
+              ? { backgroundImageName: snapshot.backgroundImageName }
+              : {}),
+            ...(typeof snapshot.backgroundEnabled === 'boolean'
+              ? { backgroundEnabled: snapshot.backgroundEnabled }
+              : {}),
+            ...(snapshot.backgroundTransparency &&
+            typeof snapshot.backgroundTransparency === 'object'
+              ? {
+                  backgroundTransparency: {
+                    dark: Number(snapshot.backgroundTransparency.dark) || 0,
+                    light: Number(snapshot.backgroundTransparency.light) || 0,
+                  },
+                }
+              : {}),
+            ...(snapshot.hotkeys && typeof snapshot.hotkeys === 'object'
+              ? { hotkeys: snapshot.hotkeys }
+              : {}),
+          }
+        : {}),
+    },
+    { updatedAt },
+  );
   i18n.changeLanguage(language === 'zh' ? 'zh' : 'en');
   useEditorStore.getState().applyLayoutSnapshot(snapshot.editorState || {}, { updatedAt });
 }
@@ -127,9 +217,8 @@ export function buildSettingsExportPayload() {
  */
 export function parseSettingsImportPayload(rawText) {
   const parsed = JSON.parse(rawText);
-  const settings = parsed?.settings && typeof parsed.settings === 'object'
-    ? parsed.settings
-    : parsed;
+  const settings =
+    parsed?.settings && typeof parsed.settings === 'object' ? parsed.settings : parsed;
   if (!settings || typeof settings !== 'object') {
     throw new Error('Invalid settings payload');
   }

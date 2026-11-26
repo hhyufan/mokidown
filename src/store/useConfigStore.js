@@ -25,6 +25,7 @@ const DEVICE_LOCAL_CONFIG_KEYS = new Set([
   'backgroundTransparency',
   // 键位取决于本机键盘布局与外接键盘，跨设备同步会把别人机器上的手感带过来。
   'hotkeys',
+  'restoreLastSession',
   // 品牌标识属于本机外观偏好，不必跟着账号同步到其它设备。
 ]);
 const initialLanguage = readInitialLanguage();
@@ -75,6 +76,8 @@ const useConfigStore = create(
       mokiDisplay: 'welcome',
       // 是否用 Moki 形象徽章替换界面左上角的 M 图标。纯外观偏好，默认关闭。
       autoSave: true,
+      // 启动时是否恢复上次打开的标签与视图状态。
+      restoreLastSession: true,
       workspacePath: '',
       gitExecutablePath: '',
       settingsDocumentDirectory: '',

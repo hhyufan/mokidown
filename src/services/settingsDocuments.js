@@ -1,6 +1,6 @@
 import { invoke } from '@tauri-apps/api/core';
 import { parseJsonDocument } from '@utils/jsonDocument';
-import { registerWebFile } from '@utils/tauriApi';
+import { registerWebFile, writeFileContent } from '@utils/tauriApi';
 import useConfigStore from '@store/useConfigStore';
 import { applySettingsSnapshot, getLocalSettingsSnapshot } from '@utils/settingsSnapshot';
 import useExtensionStore from '@store/useExtensionStore';
@@ -144,6 +144,35 @@ export function loadSettingsDocument(
       registerWebFile(file.path, null, content);
     }
     registerSettingsDocumentPath(file.path, kind);
+    if (kind === 'localSettings' && file.path && !file.path.startsWith('web://')) {
+      // 旧文件缺新字段时补齐并写回，避免用户在编辑器里看到的还是旧结构。
+      try {
+        const current = parseJsonDocument(file.content) || {};
+        const snapshot = getLocalSettingsSnapshot({ includeDeviceLocal: true });
+        let changed = false;
+        for (const [key, value] of Object.entries(snapshot)) {
+          if (!(key in current)) {
+            current[key] = value;
+            changed = true;
+          } else if (key === 'editorState' && value && typeof value === 'object') {
+            current.editorState = { ...value, ...(current.editorState || {}) };
+            for (const [childKey, childValue] of Object.entries(value)) {
+              if (!(childKey in current.editorState)) {
+                current.editorState[childKey] = childValue;
+                changed = true;
+              }
+            }
+          }
+        }
+        if (changed) {
+          const content = `${JSON.stringify(current, null, 2)}\n`;
+          await writeFileContent(file.path, content);
+          file.content = content;
+        }
+      } catch (error) {
+        console.warn('[settings] Could not upgrade local settings document:', error);
+      }
+    }
     // Invalid files still open in the editor so their contents can be repaired.
     try {
       publishDocument(kind, file.content)();

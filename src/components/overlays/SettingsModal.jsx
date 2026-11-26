@@ -615,8 +615,8 @@ function SettingsPage({ side = false }) {
                     desc={t('settings.general.startupDesc')}
                   >
                     <Switch
-                      checked={config.autoSave}
-                      onChange={(v) => handleChange('autoSave', v)}
+                      checked={config.restoreLastSession !== false}
+                      onChange={(v) => handleChange('restoreLastSession', v)}
                     />
                   </SettingRow>
                 </div>
