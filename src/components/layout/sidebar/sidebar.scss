@@ -99,6 +99,10 @@
   display: grid;
   width: max-content;
 
+  .sidebar__tabs-measure {
+    width: max-content;
+  }
+
   .sidebar__tab-measure-button {
     width: auto;
   }

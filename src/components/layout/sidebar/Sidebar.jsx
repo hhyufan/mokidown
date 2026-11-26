@@ -59,7 +59,13 @@ import './sidebar.scss';
 function ToolbarButton({ title, onClick, children, disabled = false }) {
   return (
     <Tooltip title={title} placement="bottom" mouseEnterDelay={0.3}>
-      <button type="button" className="stb" aria-label={title} onClick={onClick} disabled={disabled}>
+      <button
+        type="button"
+        className="stb"
+        aria-label={title}
+        onClick={onClick}
+        disabled={disabled}
+      >
         {children}
       </button>
     </Tooltip>
@@ -80,38 +86,75 @@ function renderSortDropdown({ sortBy, sortOrder, setSortBy, setSortOrder, t, clo
     <div className="sort-dropdown" onClick={(e) => e.stopPropagation()}>
       <div
         className={cn('sort-item', sortOrder === 'asc' && 'sort-item--active')}
-        onClick={() => { setSortOrder('asc'); close(); }}
+        onClick={() => {
+          setSortOrder('asc');
+          close();
+        }}
       >
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M3 6l4 4 4-4" /><path d="M7 10V2" /><path d="M21 12H11" /><path d="M21 6H11" /><path d="M21 18H11" /></svg>
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+          <path d="M3 6l4 4 4-4" />
+          <path d="M7 10V2" />
+          <path d="M21 12H11" />
+          <path d="M21 6H11" />
+          <path d="M21 18H11" />
+        </svg>
         {t('sort.ascending')}
       </div>
       <div
         className={cn('sort-item', sortOrder === 'desc' && 'sort-item--active')}
-        onClick={() => { setSortOrder('desc'); close(); }}
+        onClick={() => {
+          setSortOrder('desc');
+          close();
+        }}
       >
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M3 14l4 4 4-4" /><path d="M7 18V2" /><path d="M21 12H11" /><path d="M21 6H11" /><path d="M21 18H11" /></svg>
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+          <path d="M3 14l4 4 4-4" />
+          <path d="M7 18V2" />
+          <path d="M21 12H11" />
+          <path d="M21 6H11" />
+          <path d="M21 18H11" />
+        </svg>
         {t('sort.descending')}
       </div>
       <div className="sort-divider" />
       <div
         className={cn('sort-item', sortBy === 'name' && 'sort-item--active')}
-        onClick={() => { setSortBy('name'); close(); }}
+        onClick={() => {
+          setSortBy('name');
+          close();
+        }}
       >
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M4 7V4h16v3" /><path d="M9 20h6" /><path d="M12 4v16" /></svg>
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+          <path d="M4 7V4h16v3" />
+          <path d="M9 20h6" />
+          <path d="M12 4v16" />
+        </svg>
         {t('sort.byName')}
       </div>
       <div
         className={cn('sort-item', sortBy === 'time' && 'sort-item--active')}
-        onClick={() => { setSortBy('time'); close(); }}
+        onClick={() => {
+          setSortBy('time');
+          close();
+        }}
       >
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="12" r="10" /><polyline points="12 6 12 12 16 14" /></svg>
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+          <circle cx="12" cy="12" r="10" />
+          <polyline points="12 6 12 12 16 14" />
+        </svg>
         {t('sort.byTime')}
       </div>
       <div
         className={cn('sort-item', sortBy === 'size' && 'sort-item--active')}
-        onClick={() => { setSortBy('size'); close(); }}
+        onClick={() => {
+          setSortBy('size');
+          close();
+        }}
       >
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="4" y="4" width="16" height="16" rx="2" /><path d="M9 9h6v6H9z" /></svg>
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+          <rect x="4" y="4" width="16" height="16" rx="2" />
+          <path d="M9 9h6v6H9z" />
+        </svg>
         {t('sort.bySize')}
       </div>
     </div>
@@ -139,12 +182,36 @@ function ExplorerToolbar() {
     <div className="sidebar__toolbar">
       <span className="sidebar__toolbar-label sidebar__explorer-heading">
         {t(explorerMode === 'project' ? 'sidebar.project.title' : 'sidebar.explorer.title')}
-        <Tooltip title={t(explorerMode === 'project' ? 'sidebar.project.switchToFiles' : 'sidebar.project.switchToProject')} placement="bottom">
-          <button type="button" className="sidebar__mode-toggle"
-            aria-label={t(explorerMode === 'project' ? 'sidebar.project.switchToFiles' : 'sidebar.project.switchToProject')}
+        <Tooltip
+          title={t(
+            explorerMode === 'project'
+              ? 'sidebar.project.switchToFiles'
+              : 'sidebar.project.switchToProject',
+          )}
+          placement="bottom"
+        >
+          <button
+            type="button"
+            className="sidebar__mode-toggle"
+            aria-label={t(
+              explorerMode === 'project'
+                ? 'sidebar.project.switchToFiles'
+                : 'sidebar.project.switchToProject',
+            )}
             aria-pressed={explorerMode === 'project'}
-            onClick={() => setExplorerMode(explorerMode === 'project' ? 'files' : 'project')}>
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+            onClick={() => setExplorerMode(explorerMode === 'project' ? 'files' : 'project')}
+          >
+            <svg
+              width="16"
+              height="16"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="1.8"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              aria-hidden="true"
+            >
               <path d="M19 7H5m4-4L5 7l4 4M5 17h14m-4-4 4 4-4 4" />
             </svg>
           </button>
@@ -157,25 +224,48 @@ function ExplorerToolbar() {
           trigger={['click']}
           placement="bottomRight"
           arrow={false}
-          popupRender={renderSortDropdown({ sortBy, sortOrder, setSortBy, setSortOrder, t, close: closeSort })}
+          popupRender={renderSortDropdown({
+            sortBy,
+            sortOrder,
+            setSortBy,
+            setSortOrder,
+            t,
+            close: closeSort,
+          })}
         >
           <span>
             <ToolbarButton title={t('sidebar.explorer.sort')}>
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M3 6h18M3 12h12M3 18h6" /></svg>
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <path d="M3 6h18M3 12h12M3 18h6" />
+              </svg>
             </ToolbarButton>
           </span>
         </Dropdown>
       </div>
-      <ToolbarButton title={t('sidebar.explorer.newFile')} onClick={createFileWithDialog} disabled={explorerMode === 'project' && projectRootCollapsed}>
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M12 5v14M5 12h14" /></svg>
+      <ToolbarButton
+        title={t('sidebar.explorer.newFile')}
+        onClick={createFileWithDialog}
+        disabled={explorerMode === 'project' && projectRootCollapsed}
+      >
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+          <path d="M12 5v14M5 12h14" />
+        </svg>
       </ToolbarButton>
       <ToolbarButton title={t('sidebar.explorer.save')} onClick={saveCurrentFile}>
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z" /><polyline points="17 21 17 13 7 13 7 21" /><polyline points="7 3 7 8 15 8" /></svg>
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+          <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z" />
+          <polyline points="17 21 17 13 7 13 7 21" />
+          <polyline points="7 3 7 8 15 8" />
+        </svg>
       </ToolbarButton>
       <ManualFileCompare />
       <div className="stb-sep" />
       <ToolbarButton title={t('sidebar.explorer.openFolder')} onClick={openFolderDialog}>
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z" /><line x1="12" y1="11" x2="12" y2="17" /><line x1="9" y1="14" x2="15" y2="14" /></svg>
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+          <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z" />
+          <line x1="12" y1="11" x2="12" y2="17" />
+          <line x1="9" y1="14" x2="15" y2="14" />
+        </svg>
       </ToolbarButton>
     </div>
   );
@@ -216,7 +306,10 @@ function RecentToolbar() {
     <div className="sidebar__toolbar">
       <span className="sidebar__toolbar-label">{t('sidebar.recent.title')}</span>
       <ToolbarButton title={t('sidebar.recent.deleteAll')} onClick={clearRecentFiles}>
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="3 6 5 6 21 6" /><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" /></svg>
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+          <polyline points="3 6 5 6 21 6" />
+          <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
+        </svg>
       </ToolbarButton>
     </div>
   );
@@ -247,11 +340,7 @@ function RecentList() {
     <div className="sidebar__view">
       <RecentToolbar />
       {sortedFiles.length === 0 ? (
-        <MokiStatusEmpty
-          title={t('empty.recent.title')}
-          hint={t('empty.recent.hint')}
-          compact
-        />
+        <MokiStatusEmpty title={t('empty.recent.title')} hint={t('empty.recent.hint')} compact />
       ) : (
         <div className="sidebar__recent-list">
           {sortedFiles.map((f) => {
@@ -261,31 +350,42 @@ function RecentList() {
             return (
               <Tooltip key={f.path} title={titleText} placement="right" mouseEnterDelay={0.5}>
                 <div
-                  className={cn('sidebar__recent-item', isBookmarked && 'sidebar__recent-item--bookmarked')}
+                  className={cn(
+                    'sidebar__recent-item',
+                    isBookmarked && 'sidebar__recent-item--bookmarked',
+                  )}
                   data-reader-path={f.path}
                   data-reader-name={f.name}
                   onClick={() => openFileFromPath(f.path, f.name)}
                 >
                   <span className="sidebar__recent-icon">
                     <FileTypeIcon extension={f.ext} fileName={f.name} />
-
                   </span>
                   <span className="sidebar__recent-name">{f.name}</span>
                   {isBookmarked && (
                     <Tooltip title={t('tabbar.bookmark')} placement="top" mouseEnterDelay={0.3}>
                       <span className="sidebar__recent-bookmark">
-                        <svg viewBox="0 0 24 24" fill="currentColor" stroke="currentColor" strokeWidth="2" width="12" height="12"><path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z" /></svg>
+                        <svg
+                          viewBox="0 0 24 24"
+                          fill="currentColor"
+                          stroke="currentColor"
+                          strokeWidth="2"
+                          width="12"
+                          height="12"
+                        >
+                          <path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z" />
+                        </svg>
                       </span>
                     </Tooltip>
                   )}
                   <Tooltip title={t('sidebar.recent.remove')} placement="top" mouseEnterDelay={0.3}>
-                      <span
-                        className="sidebar__recent-del"
-                        onClick={(e) => handleRemove(e, f)}
-                      >
-                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" /></svg>
-                      </span>
-                    </Tooltip>
+                    <span className="sidebar__recent-del" onClick={(e) => handleRemove(e, f)}>
+                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                        <line x1="18" y1="6" x2="6" y2="18" />
+                        <line x1="6" y1="6" x2="18" y2="18" />
+                      </svg>
+                    </span>
+                  </Tooltip>
                 </div>
               </Tooltip>
             );
@@ -305,7 +405,12 @@ function RecentList() {
  */
 function SidebarTabIcon({ id }) {
   if (id === 'changes') return <BranchesOutlined />;
-  if (id === 'knowledge') return <span className="sidebar__knowledge-icon"><FileTypeIcon extension="mgtree" size={14} /></span>;
+  if (id === 'knowledge')
+    return (
+      <span className="sidebar__knowledge-icon">
+        <FileTypeIcon extension="mgtree" size={14} />
+      </span>
+    );
   if (id === 'explorer') {
     return (
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
@@ -352,7 +457,8 @@ function Sidebar({ onOpenSettings }) {
       invoke('git_workspace_available', { directory, gitPath })
         .then((available) => {
           if (current === request) setGitWorkspace({ directory, available });
-        }).catch(() => {
+        })
+        .catch(() => {
           if (current === request) setGitWorkspace({ directory, available: false });
         });
     };
@@ -363,25 +469,45 @@ function Sidebar({ onOpenSettings }) {
       window.removeEventListener('focus', probe);
     };
   }, [directory, gitPath]);
-  const gitVisible = Boolean(directory && gitWorkspace?.directory === directory && gitWorkspace.available);
+  const gitVisible = Boolean(
+    directory && gitWorkspace?.directory === directory && gitWorkspace.available,
+  );
   const setSidebarView = useEditorStore((s) => s.setSidebarView);
   const activeTab = useEditorStore((s) => s.tabs.find((tab) => tab.id === s.activeTabId));
   const sidebarWidth = useEditorStore((s) => s.sidebarWidth);
   const sidebarMinWidth = useEditorStore((s) => s.sidebarMinWidth);
   const setSidebarMinWidth = useEditorStore((s) => s.setSidebarMinWidth);
+  const setSidebarWidth = useEditorStore((s) => s.setSidebarWidth);
   const source = useEditorBufferContent(activeTab?.id, activeTab?.content || '');
   const isMarkdown = /\.(md|markdown|mdx)$/i.test(activeTab?.name || '');
   const { trees, pending } = useKnowledgeTreesState(activeTab?.path || '', source, isMarkdown);
   const lastKnowledgeVisible = useRef(false);
-  const knowledgeVisible = isMarkdown && (trees.length > 0 || (pending && lastKnowledgeVisible.current));
-  useLayoutEffect(() => { lastKnowledgeVisible.current = knowledgeVisible; }, [knowledgeVisible]);
+  const knowledgeVisible =
+    isMarkdown && (trees.length > 0 || (pending && lastKnowledgeVisible.current));
+  useLayoutEffect(() => {
+    lastKnowledgeVisible.current = knowledgeVisible;
+  }, [knowledgeVisible]);
   const openTreeEditor = useOpenTreeEditor();
-  const effectiveView = sidebarView === 'knowledge' && !knowledgeVisible ? (isMarkdown ? 'outline' : 'explorer')
-    : (sidebarView === 'outline' && !isMarkdown) || (sidebarView === 'changes' && !gitVisible) ? 'explorer' : sidebarView;
+  const effectiveView =
+    sidebarView === 'knowledge' && !knowledgeVisible
+      ? isMarkdown
+        ? 'outline'
+        : 'explorer'
+      : (sidebarView === 'outline' && !isMarkdown) || (sidebarView === 'changes' && !gitVisible)
+        ? 'explorer'
+        : sidebarView;
   const { toggleTheme } = useThemeStore();
 
+  // 侧边栏宽度以滑动导航的实际文字宽度为准，语言或可见标签变化时自动贴合；
+  // 最小宽度仍由底部图标宽度保底（sidebarMinWidth 的 220 下限）。
+  useEffect(() => {
+    setSidebarWidth(sidebarMinWidth);
+  }, [setSidebarWidth, sidebarMinWidth]);
+
   const themeButtonRef = useRef(null);
-  const checkingUpdate = useUpdateStore((s) => ['checking', 'downloading', 'installing'].includes(s.stage));
+  const checkingUpdate = useUpdateStore((s) =>
+    ['checking', 'downloading', 'installing'].includes(s.stage),
+  );
   const handleCheckUpdates = () => useUpdateStore.getState().check();
   const [appVersion, setAppVersion] = useState('');
 
@@ -391,9 +517,13 @@ function Sidebar({ onOpenSettings }) {
     if (!canCheckUpdates()) return undefined;
     let cancelled = false;
     getVersion()
-      .then((version) => { if (!cancelled) setAppVersion(version); })
+      .then((version) => {
+        if (!cancelled) setAppVersion(version);
+      })
       .catch(() => {});
-    return () => { cancelled = true; };
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   const tabs = [
@@ -416,7 +546,10 @@ function Sidebar({ onOpenSettings }) {
     const rect = element?.getBoundingClientRect();
     const x = rect ? rect.left + rect.width / 2 : window.innerWidth - 48;
     const y = rect ? rect.top + rect.height / 2 : window.innerHeight - 48;
-    if (!document.startViewTransition) { toggleTheme(); return; }
+    if (!document.startViewTransition) {
+      toggleTheme();
+      return;
+    }
     // Ripple out of the toggle. The circle is a CSS keyframe on the View
     // Transition snapshot, so it does not depend on Element.animate()'s
     // pseudo-element support.
@@ -424,12 +557,22 @@ function Sidebar({ onOpenSettings }) {
     root.style.setProperty('--theme-x', `${x}px`);
     root.style.setProperty('--theme-y', `${y}px`);
     root.dataset.themeTransition = 'ripple';
-    const transition = document.startViewTransition(() => { toggleTheme(); });
-    transition.finished.finally(() => { delete root.dataset.themeTransition; });
+    const transition = document.startViewTransition(() => {
+      toggleTheme();
+    });
+    transition.finished.finally(() => {
+      delete root.dataset.themeTransition;
+    });
   }
 
   return (
-    <aside className={cn('sidebar', !sidebarVisible && 'sidebar--hidden')} style={{ '--sidebar-width': `${sidebarWidth}px`, '--sidebar-min-width': `${sidebarMinWidth}px` }}>
+    <aside
+      className={cn('sidebar', !sidebarVisible && 'sidebar--hidden')}
+      style={{
+        '--sidebar-width': `${sidebarWidth}px`,
+        '--sidebar-min-width': `${sidebarMinWidth}px`,
+      }}
+    >
       <SidebarResizer />
       <div className="sidebar__header">
         {/* 品牌区：应用图标 + 产品字标（蓝边白字「MokiDown」）。
@@ -439,15 +582,30 @@ function Sidebar({ onOpenSettings }) {
         <AppMark size={20} variant="wordmark" className="sidebar__wordmark" />
       </div>
 
-      <SidebarTabs items={tabs} activeId={effectiveView} onChange={setSidebarView}
-        onMinWidthChange={setSidebarMinWidth} renderIcon={SidebarTabIcon} />
+      <SidebarTabs
+        items={tabs}
+        activeId={effectiveView}
+        onChange={setSidebarView}
+        onMinWidthChange={setSidebarMinWidth}
+        renderIcon={SidebarTabIcon}
+      />
 
       <div key={effectiveView} className="sidebar__content sidebar__content--enter">
-        {effectiveView === 'knowledge' && <div className="knowledge-tree__list">
-          {trees.map((tree) => <KnowledgeTree key={`${activeTab?.id}:${tree.key}`} source={tree.source}
-            onOpen={tree.path ? () => openTreeEditor(tree.path) : undefined}
-            title={tree.path?.split(/[\\/]/).pop()} onJump={(language, index) => useEditorStore.getState().requestKnowledgeJump(language, index)} />)}
-        </div>}
+        {effectiveView === 'knowledge' && (
+          <div className="knowledge-tree__list">
+            {trees.map((tree) => (
+              <KnowledgeTree
+                key={`${activeTab?.id}:${tree.key}`}
+                source={tree.source}
+                onOpen={tree.path ? () => openTreeEditor(tree.path) : undefined}
+                title={tree.path?.split(/[\\/]/).pop()}
+                onJump={(language, index) =>
+                  useEditorStore.getState().requestKnowledgeJump(language, index)
+                }
+              />
+            ))}
+          </div>
+        )}
         {effectiveView === 'explorer' && (
           <div className="sidebar__view">
             <ExplorerToolbar />
@@ -463,23 +621,25 @@ function Sidebar({ onOpenSettings }) {
             <OutlineView />
           </div>
         )}
-        {effectiveView === 'recent' && (
-          <RecentList />
-        )}
+        {effectiveView === 'recent' && <RecentList />}
         {effectiveView === 'changes' && <WorkspaceChanges key={directory} directory={directory} />}
       </div>
 
       <footer className="sidebar__footer">
         <Tooltip title="GitHub" placement="top">
           <Button type="text" onClick={() => openEditorLink(REPO_URL)} aria-label="GitHub">
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M12 .5A12 12 0 0 0 8.2 23.9c.6.1.8-.3.8-.6v-2.2c-3.3.7-4-1.4-4-1.4-.5-1.4-1.3-1.7-1.3-1.7-1.1-.8.1-.8.1-.8 1.2.1 1.8 1.2 1.8 1.2 1.1 1.8 2.8 1.3 3.4 1 .1-.8.4-1.3.8-1.6-2.7-.3-5.5-1.4-5.5-6A4.7 4.7 0 0 1 5.5 8.5c-.1-.3-.5-1.6.1-3.2 0 0 1-.3 3.3 1.2a11.3 11.3 0 0 1 6 0C17.2 5 18.2 5.3 18.2 5.3c.6 1.6.2 2.9.1 3.2a4.7 4.7 0 0 1 1.2 3.3c0 4.6-2.8 5.7-5.5 6 .4.4.8 1.1.8 2.2v3.3c0 .3.2.7.8.6A12 12 0 0 0 12 .5z" /></svg>
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+              <path d="M12 .5A12 12 0 0 0 8.2 23.9c.6.1.8-.3.8-.6v-2.2c-3.3.7-4-1.4-4-1.4-.5-1.4-1.3-1.7-1.3-1.7-1.1-.8.1-.8.1-.8 1.2.1 1.8 1.2 1.8 1.2 1.1 1.8 2.8 1.3 3.4 1 .1-.8.4-1.3.8-1.6-2.7-.3-5.5-1.4-5.5-6A4.7 4.7 0 0 1 5.5 8.5c-.1-.3-.5-1.6.1-3.2 0 0 1-.3 3.3 1.2a11.3 11.3 0 0 1 6 0C17.2 5 18.2 5.3 18.2 5.3c.6 1.6.2 2.9.1 3.2a4.7 4.7 0 0 1 1.2 3.3c0 4.6-2.8 5.7-5.5 6 .4.4.8 1.1.8 2.2v3.3c0 .3.2.7.8.6A12 12 0 0 0 12 .5z" />
+            </svg>
           </Button>
         </Tooltip>
         {}
 
         {/* 版本号从运行时读，别再写死：写死后升级了界面还显示旧版本，
             而且很容易和 tauri.conf.json 里的真实版本对不上。 */}
-        <Tag className="sidebar__version" bordered={false}>{appVersion ? `v${appVersion}` : ''}</Tag>
+        <Tag className="sidebar__version" bordered={false}>
+          {appVersion ? `v${appVersion}` : ''}
+        </Tag>
         <div style={{ marginLeft: 'auto', display: 'flex', gap: 2, alignItems: 'center' }}>
           <Tooltip title={t('sidebar.footer.themeSwitch')} placement="top" mouseEnterDelay={0.3}>
             <Button
@@ -490,8 +650,32 @@ function Sidebar({ onOpenSettings }) {
               onMouseUp={(event) => event.currentTarget.blur()}
               icon={
                 <span className="theme-switch-icons" aria-hidden="true">
-                  <svg className="theme-icon theme-icon--sun" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="12" r="5" /><line x1="12" y1="1" x2="12" y2="3" /><line x1="12" y1="21" x2="12" y2="23" /><line x1="4.22" y1="4.22" x2="5.64" y2="5.64" /><line x1="18.36" y1="18.36" x2="19.78" y2="19.78" /><line x1="1" y1="12" x2="3" y2="12" /><line x1="21" y1="12" x2="23" y2="12" /><line x1="4.22" y1="19.78" x2="5.64" y2="18.36" /><line x1="18.36" y1="5.64" x2="19.78" y2="4.22" /></svg>
-                  <svg className="theme-icon theme-icon--moon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z" /></svg>
+                  <svg
+                    className="theme-icon theme-icon--sun"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="2"
+                  >
+                    <circle cx="12" cy="12" r="5" />
+                    <line x1="12" y1="1" x2="12" y2="3" />
+                    <line x1="12" y1="21" x2="12" y2="23" />
+                    <line x1="4.22" y1="4.22" x2="5.64" y2="5.64" />
+                    <line x1="18.36" y1="18.36" x2="19.78" y2="19.78" />
+                    <line x1="1" y1="12" x2="3" y2="12" />
+                    <line x1="21" y1="12" x2="23" y2="12" />
+                    <line x1="4.22" y1="19.78" x2="5.64" y2="18.36" />
+                    <line x1="18.36" y1="5.64" x2="19.78" y2="4.22" />
+                  </svg>
+                  <svg
+                    className="theme-icon theme-icon--moon"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="2"
+                  >
+                    <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z" />
+                  </svg>
                 </span>
               }
             />
@@ -503,7 +687,12 @@ function Sidebar({ onOpenSettings }) {
               loading={checkingUpdate}
               onClick={handleCheckUpdates}
               onMouseUp={(event) => event.currentTarget.blur()}
-              icon={<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="23 4 23 10 17 10" /><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10" /></svg>}
+              icon={
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <polyline points="23 4 23 10 17 10" />
+                  <path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10" />
+                </svg>
+              }
             />
           </Tooltip>
           <Tooltip title={t('sidebar.footer.settings')} placement="top" mouseEnterDelay={0.3}>
@@ -512,7 +701,12 @@ function Sidebar({ onOpenSettings }) {
               className="sidebar__footer-btn"
               onClick={() => onOpenSettings?.()}
               onMouseUp={(event) => event.currentTarget.blur()}
-              icon={<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="12" r="3" /><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z" /></svg>}
+              icon={
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <circle cx="12" cy="12" r="3" />
+                  <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z" />
+                </svg>
+              }
             />
           </Tooltip>
         </div>
