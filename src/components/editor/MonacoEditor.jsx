@@ -174,6 +174,36 @@ const MonacoEditorComponent = forwardRef(function MonacoEditorComponent(
   // 由于 ref 对象本身稳定，工具栏监听可能永远挂在空实例上。
   const [editorInstance, setEditorInstance] = useState(null);
   const [codeLanguageMenu, setCodeLanguageMenu] = useState(null);
+
+  const handleContainerPaste = useCallback((event) => {
+    const files = Array.from(event.clipboardData?.files || []).filter((file) =>
+      file.type.startsWith('image/'),
+    );
+    if (!files.length) return;
+    event.preventDefault();
+    event.stopPropagation();
+    event.nativeEvent.stopImmediatePropagation?.();
+    const editor = editorRef.current;
+    if (!editor) return;
+    const markdown = editor.getModel()?.getLanguageId() === 'markdown';
+    void (async () => {
+      try {
+        const { markdownImageDestination, resolvePastedImage } =
+          await import('./milkdownMarkdownPaste');
+        const parts = [];
+        for (let index = 0; index < files.length; index++) {
+          const { src, name } = await resolvePastedImage(files[index], index);
+          if (src) parts.push(markdown ? `![${name}](${markdownImageDestination(src)})` : src);
+        }
+        if (!parts.length) return;
+        const selection = editor.getSelection();
+        editor.executeEdits('paste-image', [{ range: selection, text: parts.join('\n') }]);
+        editor.pushUndoStop();
+      } catch (error) {
+        console.warn('[paste] Failed to store pasted image:', error);
+      }
+    })();
+  }, []);
   const closeCodeLanguageMenu = useCallback(() => setCodeLanguageMenu(null), []);
   const { isAndroid, isMobileLayout, isTouchLike } = useResponsiveLayout();
   // 仅在真实移动端触摸布局或 Android 运行时启用移动端选区能力。像带触摸屏的
@@ -1027,6 +1057,7 @@ const MonacoEditorComponent = forwardRef(function MonacoEditorComponent(
         // 再额外拦截一层容器级原生右键菜单，避免长按或右键冒泡穿透 Monaco
         // 视图节点后，又把宿主浏览器默认菜单弹出来。
         onContextMenu={(e) => e.preventDefault()}
+        onPasteCapture={handleContainerPaste}
         onKeyDownCapture={(event) => {
           const direction = markdownUndoDirection(event.nativeEvent);
           if (!direction || !editorRef.current?.hasTextFocus() || !replayHistory(direction)) return;

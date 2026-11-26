@@ -129,11 +129,12 @@ function imageExtension(type) {
 /** 把粘贴的图片写入默认目录，或退回 Base64 内嵌。 */
 async function resolvePastedImageSrc(file, index) {
   const dataUrl = await readImageAsDataUrl(file);
-  const [{ default: useConfigStore }, { writeBinaryFile }, { getImageHostRule }] = await Promise.all([
-    import('@store/useConfigStore'),
-    import('@utils/tauriApi'),
-    import('@/services/settingsDocuments'),
-  ]);
+  const [{ default: useConfigStore }, { writeBinaryFile }, { getImageHostRule }] =
+    await Promise.all([
+      import('@store/useConfigStore'),
+      import('@utils/tauriApi'),
+      import('@/services/settingsDocuments'),
+    ]);
   const { imageDefaultDir = '' } = useConfigStore.getState();
   const base64 = dataUrl.split(',')[1] || '';
   const name = `image-${Date.now()}-${index}.${imageExtension(file.type)}`;
@@ -160,13 +161,48 @@ async function resolvePastedImageSrc(file, index) {
   return target.replaceAll('\\', '/');
 }
 
+/**
+ * 按需给 Markdown 链接目标加尖括号：含空格、括号或反斜杠时才需要。
+ *
+ * @param {string} src 图片地址。
+ * @returns {string} 可直接放进 Markdown 图片语法的目标。
+ */
+export function markdownImageDestination(src) {
+  const value = String(src || '');
+  return /[\s()\\<>]/.test(value) ? `<${value}>` : value;
+}
+
+/**
+ * 保存/上传粘贴图片，并返回图片地址与用于 alt 的文件名。
+ *
+ * @param {File} file 图片文件。
+ * @param {number} index 同一批图片中的序号。
+ * @returns {Promise<{src: string, name: string}>} 图片地址与文件名。
+ */
+export async function resolvePastedImage(file, index = 0) {
+  const src = await resolvePastedImageSrc(file, index);
+  const fallback = file.name || `image-${Date.now()}-${index}.${imageExtension(file.type)}`;
+  let name = fallback;
+  if (/^https?:\/\//i.test(src)) {
+    const segment = src.split('/').pop()?.split('?')[0] || '';
+    try {
+      name = decodeURIComponent(segment) || fallback;
+    } catch {
+      name = segment || fallback;
+    }
+  } else if (src && !src.startsWith('data:')) {
+    name = src.split(/[\\/]/).pop() || fallback;
+  }
+  return { src, name };
+}
+
 async function insertPastedImages(view, ctx, files) {
   const markdown = [];
   for (let index = 0; index < files.length; index++) {
     const file = files[index];
     try {
-      const src = await resolvePastedImageSrc(file, index);
-      if (src) markdown.push(`![${file.name || ''}](<${src}>)`);
+      const { src, name } = await resolvePastedImage(file, index);
+      if (src) markdown.push(`![${name}](${markdownImageDestination(src)})`);
     } catch (error) {
       console.warn('[paste] Failed to store pasted image:', error);
     }
