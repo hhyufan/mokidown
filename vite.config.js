@@ -1,5 +1,6 @@
 import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
+import { monacoLocalization } from './scripts/monaco-localization.mjs';
 import { resolve } from 'path';
 import { readFileSync } from 'fs';
 import { fileURLToPath } from 'node:url';
@@ -26,31 +27,6 @@ const stripMonacoBrokenSourcemaps = {
       } catch {
         return null;
       }
-    }
-    return null;
-  },
-};
-
-// `monaco-editor-nls-adapter` used to rewrite every `nls.localize(...)` call in
-// Monaco's ESM sources at build time so its UI could be translated through a
-// runtime proxy. That pipeline turned out to be far more fragile than it was
-// worth: it rewrote 160+ upstream modules, needed a custom CJS→ESM proxy shim,
-// and required build-time chunk-order assertions just to keep the locale
-// dictionary ahead of the editor. It has been removed; Monaco now ships its
-// stock English UI, which needs no rewriting at all.
-//
-// This guard keeps the removal honest: any transitive import that reintroduces
-// the adapter fails the build loudly instead of silently rebuilding the whole
-// fragile pipeline.
-const assertNoMonacoNls = {
-  name: 'assert-no-monaco-nls',
-  enforce: 'pre',
-  transform(_code, id) {
-    if (id.includes('monaco-editor-nls-adapter')) {
-      this.error(
-        'monaco-editor-nls-adapter is no longer part of the Monaco pipeline. ' +
-          'Remove the import instead of reintroducing the NLS source rewriting.',
-      );
     }
     return null;
   },
@@ -95,7 +71,7 @@ export default defineConfig(async ({ mode }) => ({
     },
     webDemoEntry(mode === 'demo' || webDemo),
     stripMonacoBrokenSourcemaps,
-    assertNoMonacoNls,
+    monacoLocalization(),
     react(),
   ],
 
@@ -110,6 +86,15 @@ export default defineConfig(async ({ mode }) => ({
   },
 
   resolve: {
+    dedupe: [
+      '@milkdown/core',
+      '@milkdown/prose',
+      '@milkdown/preset-gfm',
+      'prosemirror-model',
+      'prosemirror-state',
+      'prosemirror-tables',
+      'prosemirror-view',
+    ],
     alias: {
       '@': resolve(__dirname, './src'),
       '@components': resolve(__dirname, './src/components'),
@@ -170,6 +155,7 @@ export default defineConfig(async ({ mode }) => ({
         // at app startup before the highlight/theme bootstrap can run.
         manualChunks(id) {
           if (id.includes('\x00vite/preload-helper')) return 'vite-preload-helper';
+          if (id.replace(/\\/g, '/').endsWith('/src/i18n/language.js')) return 'app-language';
           if (!id.includes('node_modules')) return undefined;
 
           // Path normalization — avoid greedy `id.includes('react')` matches
@@ -248,7 +234,17 @@ export default defineConfig(async ({ mode }) => ({
     // Shiki and its Monaco bridge are loaded lazily by the highlight bootstrap.
     // Pre-bundling them keeps a cold `vite dev` start from discovering them
     // mid-session and triggering an extra full reload.
-    include: ['shiki', '@shikijs/monaco'],
+    include: [
+      'shiki',
+      '@shikijs/monaco',
+      // Optimize the GFM and standalone table entry points together. Both
+      // share one CellSelection registration with the same ProseMirror state.
+      '@milkdown/kit/preset/gfm',
+      '@milkdown/kit/prose/state',
+      '@milkdown/kit/prose/tables',
+      'prosemirror-state',
+      'prosemirror-tables',
+    ],
     // Monaco is intentionally served/processed as source: the highlight and
     // theme bootstrap must run against the same module instance the editor is
     // created from, and esbuild prebundling would duplicate it.

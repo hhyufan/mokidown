@@ -1,5 +1,26 @@
 import { test, expect } from '@playwright/test';
 
+test('the built Monaco find toolbar and command palette use the configured Chinese locale', async ({ page }) => {
+  const errors = [];
+  page.on('pageerror', (error) => errors.push(error.message));
+  await page.addInitScript(() => localStorage.setItem('mokidown-config', JSON.stringify({
+    state: { autoSave: false, language: 'zh' }, version: 0,
+  })));
+  await page.goto('/');
+  await page.locator('.moki-action--primary').click();
+  const editor = page.locator('.monaco-editor').first();
+  await editor.locator('textarea').focus();
+  await page.keyboard.press('Control+f');
+  const find = editor.locator('.find-widget');
+  await expect(find).toBeVisible();
+  await expect(find.getByRole('textbox', { name: /查找/ })).toBeVisible();
+  await page.keyboard.press('Escape');
+  await page.keyboard.press('F1');
+  await expect(page.locator('.quick-input-widget')).toBeVisible();
+  await expect(page.locator('.quick-input-widget')).toContainText(/以递归方式折叠|从内容中检测缩进方式/);
+  expect(errors).toEqual([]);
+});
+
 test('the built application warms Monaco before opening a file and creates only one document model', async ({ page }) => {
   const errors = [];
   page.on('pageerror', (error) => errors.push(error.message));
@@ -30,7 +51,7 @@ test('the built application warms Monaco before opening a file and creates only 
   await page.locator('.moki-action--primary').click();
   await expect(page.locator('.monaco-editor .view-lines')).toBeVisible();
   await page.locator('.monaco-editor textarea').focus();
-  await page.keyboard.type('# Ready\n\n**bold**\n');
+  await page.keyboard.insertText('# Ready\n\n**bold**\n');
   await expect.poll(() => page.evaluate(() => window.monacoTrial.editor.getModels()[0].getValue())).toContain('**bold**');
   expect(await page.evaluate(() => {
     window.modelListener.dispose(); window.spinnerObserver.disconnect();
