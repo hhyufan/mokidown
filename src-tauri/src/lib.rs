@@ -719,11 +719,11 @@ fn encode_file_content(content: &str, target_encoding: &str) -> Result<(Vec<u8>,
     let bytes = match target_upper.as_str() {
         "UTF-8-BOM" => [text_file::UTF8_BOM, content.as_bytes()].concat(),
         "UTF-16LE" => text_file::encode_utf16(content, true),
-        "UTF-16BE" => text_file::encode_utf16(&content, false),
+        "UTF-16BE" => text_file::encode_utf16(content, false),
         _ if code_page.is_some() => {
             #[cfg(windows)]
             {
-                text_file::encode_code_page(&content, code_page.unwrap())?
+                text_file::encode_code_page(content, code_page.unwrap())?
             }
             #[cfg(not(windows))]
             {
