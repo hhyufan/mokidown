@@ -2608,11 +2608,15 @@ const MilkdownMarkdownEditor = forwardRef(function MilkdownMarkdownEditor(
   );
   const activeTabId = comparison?.tabId ?? documentVersion.id;
   const contentRevision = comparison ? 0 : documentVersion.revision;
-  const editorFontSize = useConfigStore((s) => s.fontSize);
-  const editorLineHeight = useConfigStore((s) => s.lineHeight);
-  const previewFontSize = useConfigStore((s) => s.previewFontSize);
-  const previewLineHeight = useConfigStore((s) => s.previewLineHeight);
-  const previewZoomSync = useConfigStore((s) => s.previewZoomSync);
+  const { fontSize, lineHeight } = useConfigStore(
+    useShallow(
+      (s) =>
+        comparison?.typography ?? {
+          fontSize: s.previewZoomSync ? s.fontSize : s.previewFontSize || s.fontSize,
+          lineHeight: s.previewZoomSync ? s.lineHeight : s.previewLineHeight || s.lineHeight,
+        },
+    ),
+  );
   // External replacements reset the editor. Ordinary typing and saves keep its undo history.
   const fallback = useMemo(() => {
     const tab = useEditorStore.getState().tabs.find((t) => t.id === documentVersion.id);
@@ -2624,8 +2628,6 @@ const MilkdownMarkdownEditor = forwardRef(function MilkdownMarkdownEditor(
     240,
   );
   const content = comparison ? comparison.initialContent : readOnly ? bufferedContent : fallback;
-  const fontSize = previewZoomSync ? editorFontSize : previewFontSize || editorFontSize;
-  const lineHeight = previewZoomSync ? editorLineHeight : previewLineHeight || editorLineHeight;
   const comparisonReady = comparison?.onReady;
   const notifyReady = useCallback(() => {
     comparisonReady?.();

@@ -67,17 +67,15 @@ export function useMarkdownComparisonAlignment(ref, visibleRows, onAligned, enab
         const actions = controls.map((control) => {
           const side = control.parentElement.dataset.direction === 'right' ? 0 : 1;
           const anchorTop = boxes[side][i].bottom;
-          const lineTop = comparisonLineReaders.get(editors[side])?.(Number(control.dataset.historyLine));
+          const lineTop = comparisonLineReaders.get(editors[side])?.(
+            Number(control.dataset.historyLine),
+          );
           const position = lineTop == null ? offsets[side] : Math.max(0, lineTop - anchorTop);
           offsets[side] = position + control.offsetHeight;
           return { control, position };
         });
         const minimum = row.hasAttribute('data-fold') ? 24 : changed ? 26 : 0;
-        const height = Math.max(
-          minimum,
-          ...heights,
-          ...offsets,
-        );
+        const height = Math.max(minimum, ...heights, ...offsets);
         const boundary = boxes[0][i + 1].height - (parseFloat(anchors[0][i + 1].style.height) || 0);
         const measurement = {
           top,
@@ -121,7 +119,8 @@ export function useMarkdownComparisonAlignment(ref, visibleRows, onAligned, enab
             editors.includes(target) ||
             target.matches?.('[data-history-row]') ||
             (target.closest?.('.history-markdown-draft__pane') &&
-              (editors.length < 2 || editors.some((editor) => !editor.isConnected))),
+              (!root.hasAttribute('data-aligned') ||
+                editors.some((editor) => !editor.isConnected))),
         )
       )
         return;
