@@ -1237,5 +1237,6 @@
   "snapshot.saved": "截图已保存",
   "snapshot.quickSaved": "快速截图已保存",
   "snapshot.saveFailed": "保存截图失败",
-  "snapshot.empty": "当前没有可截图的内容"
+  "snapshot.empty": "当前没有可截图的内容",
+  "snapshot.sampleMarkdown": "# MokiDown\n\n- [x] 快速截图预设样式\n- [x] 支持项目背景与透明度\n\n> 所见即所得，一键直达剪贴板或 PNG。"
 }

@@ -24,26 +24,8 @@ function getSampleCode(tabSize) {
   ].join('\n');
 }
 
-const SAMPLE_MARKDOWN = [
-  '# MokiDown',
-  '',
-  '- [x] 快速截图预设样式',
-  '- [x] 支持项目背景与透明度',
-  '',
-  '> 所见即所得，一键直达剪贴板或 PNG。',
-].join('\n');
-
-const SAMPLE_MARKDOWN_EN = [
-  '# MokiDown',
-  '',
-  '- [x] Instant quick-snapshot presets',
-  '- [x] App background & transparency sync',
-  '',
-  '> Capture cleanly to clipboard or PNG without a dialog.',
-].join('\n');
-
 export default function QuickSnapshotSettings({ SettingGroup, SettingRow }) {
-  const { t, i18n } = useTranslation();
+  const { t } = useTranslation();
   const quick = useSnapshotStore((s) => s.quick);
   const setQuickPref = useSnapshotStore((s) => s.setQuickPref);
   const resetQuickPrefs = useSnapshotStore((s) => s.resetQuickPrefs);
@@ -68,9 +50,7 @@ export default function QuickSnapshotSettings({ SettingGroup, SettingRow }) {
   }, [quick.trimIndent, tabSize]);
   const codeFontFamily = `'${fontFamilyBase || 'JetBrains Mono'}', 'Source-HanSan', Consolas, monospace`;
 
-  const markdownSample = (i18n.resolvedLanguage || i18n.language || '').startsWith('zh')
-    ? SAMPLE_MARKDOWN
-    : SAMPLE_MARKDOWN_EN;
+  const markdownSample = t('snapshot.sampleMarkdown');
 
   return (
     <div className="settings-section snapshot-quick-settings">

@@ -1237,5 +1237,6 @@
   "snapshot.saved": "Snapshot saved",
   "snapshot.quickSaved": "Quick snapshot saved",
   "snapshot.saveFailed": "Could not save snapshot",
-  "snapshot.empty": "No content available to capture"
+  "snapshot.empty": "No content available to capture",
+  "snapshot.sampleMarkdown": "# MokiDown\n\n- [x] Instant quick-snapshot presets\n- [x] App background & transparency sync\n\n> Capture cleanly to clipboard or PNG without a dialog."
 }
