@@ -2227,6 +2227,8 @@ pub fn run() {
             #[cfg(windows)]
             native_web_preview::native_web_preview_open,
             #[cfg(windows)]
+            native_web_preview::native_web_preview_navigate,
+            #[cfg(windows)]
             native_web_preview::native_web_preview_layout,
             #[cfg(windows)]
             native_web_preview::native_web_preview_hide,

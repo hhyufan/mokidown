@@ -7,7 +7,7 @@ use std::{cell::RefCell, collections::HashMap, sync::Arc};
 use tauri::Manager;
 use tauri::{ipc::Channel, Webview};
 use webview2_com::{
-    take_pwstr, CallDevToolsProtocolMethodCompletedHandler,
+    take_pwstr, CallDevToolsProtocolMethodCompletedHandler, ContentLoadingEventHandler,
     CreateCoreWebView2ControllerCompletedHandler, CreateCoreWebView2EnvironmentCompletedHandler,
     DOMContentLoadedEventHandler, FaviconChangedEventHandler, Microsoft::Web::WebView2::Win32::*,
     NavigationCompletedEventHandler, NavigationStartingEventHandler,
@@ -199,15 +199,18 @@ pub(crate) enum PreviewEvent {
     Page {
         url: String,
         icons: Vec<String>,
+        revision: u64,
     },
     ContentReady {
         navigation_id: u64,
+        revision: u64,
     },
     Navigation {
         success: bool,
         status: i32,
         code: i32,
         navigation_id: u64,
+        revision: u64,
     },
     Popup {
         url: String,
@@ -220,12 +223,15 @@ pub(crate) enum PreviewEvent {
 struct Session {
     pane: PreviewPane,
     url: String,
+    revision: u64,
     bounds: Bounds,
     applied_bounds: Option<Bounds>,
     activation: u64,
     appearance: Appearance,
     wallpaper: Option<Arc<str>>,
     navigation_id: u64,
+    navigation_revision: u64,
+    document_ready: bool,
     script_context: Option<i64>,
     events: Channel<PreviewEvent>,
     controller: Option<ICoreWebView2Controller>,
@@ -319,18 +325,27 @@ fn update_appearance(
     )
 }
 
-fn is_current_document(id: &str, navigation_id: u64) -> bool {
+fn current_revision(id: &str, navigation_id: u64) -> Option<u64> {
     HOST.with(|host| {
         host.borrow()
             .sessions
             .get(id)
-            .is_some_and(|view| view.navigation_id == navigation_id)
+            .filter(|view| {
+                view.navigation_id == navigation_id && view.navigation_revision == view.revision
+            })
+            .map(|view| view.revision)
     })
 }
 
 fn content_ready(id: &str, navigation_id: u64) {
-    if is_current_document(id, navigation_id) {
-        send(id, PreviewEvent::ContentReady { navigation_id });
+    if let Some(revision) = current_revision(id, navigation_id) {
+        send(
+            id,
+            PreviewEvent::ContentReady {
+                navigation_id,
+                revision,
+            },
+        );
     }
 }
 
@@ -342,7 +357,7 @@ fn prepare_appearance(
     let guest = view.clone();
     let session = id.to_owned();
     devtools(view, "Page.getFrameTree", json!({}), move |result| {
-        if !is_current_document(&session, navigation_id) {
+        if current_revision(&session, navigation_id).is_none() {
             return;
         }
         let Some(result) = result else {
@@ -362,11 +377,10 @@ fn prepare_appearance(
                 let context = result.and_then(|result| result["executionContextId"].as_i64());
                 let installed = HOST.with(|host| {
                     let mut host = host.borrow_mut();
-                    let Some(view) = host
-                        .sessions
-                        .get_mut(&target)
-                        .filter(|view| view.navigation_id == navigation_id)
-                    else {
+                    let Some(view) = host.sessions.get_mut(&target).filter(|view| {
+                        view.navigation_id == navigation_id
+                            && view.navigation_revision == view.revision
+                    }) else {
                         return false;
                     };
                     view.script_context = context;
@@ -427,10 +441,29 @@ fn fail(id: &str, message: impl ToString) {
     close(id);
 }
 
-unsafe fn publish_page(id: &str, view: &ICoreWebView2) -> windows::core::Result<()> {
+unsafe fn publish_page(
+    id: &str,
+    view: &ICoreWebView2,
+    same_document: bool,
+) -> windows::core::Result<()> {
     let mut source = PWSTR::null();
     view.Source(&mut source)?;
     let Some(url) = web_url(&take_pwstr(source)) else {
+        return Ok(());
+    };
+    let Some((revision, navigation_id, resumed)) = HOST.with(|host| {
+        let mut host = host.borrow_mut();
+        let session = host.sessions.get_mut(id)?;
+        let resumed = session.navigation_revision != session.revision;
+        if resumed {
+            // A fragment change doesn't fire NavigationStarting or ContentLoading.
+            if !same_document || session.url != url.as_str() {
+                return None;
+            }
+            session.navigation_revision = session.revision;
+        }
+        Some((session.revision, session.navigation_id, resumed))
+    }) else {
         return Ok(());
     };
     let mut icons = Vec::new();
@@ -448,8 +481,12 @@ unsafe fn publish_page(id: &str, view: &ICoreWebView2) -> windows::core::Result<
         PreviewEvent::Page {
             url: url.into(),
             icons,
+            revision,
         },
     );
+    if resumed {
+        content_ready(id, navigation_id);
+    }
     Ok(())
 }
 
@@ -479,8 +516,12 @@ unsafe fn configure(
                     args.NavigationId(&mut navigation_id)?;
                     HOST.with(|host| {
                         if let Some(view) = host.borrow_mut().sessions.get_mut(&session) {
+                            if view.navigation_id != navigation_id {
+                                view.script_context = None;
+                                view.document_ready = false;
+                            }
                             view.navigation_id = navigation_id;
-                            view.script_context = None;
+                            view.navigation_revision = view.revision;
                         }
                     });
                 }
@@ -522,9 +563,31 @@ unsafe fn configure(
 
     let session = id.to_owned();
     view.add_SourceChanged(
-        &SourceChangedEventHandler::create(Box::new(move |view, _| {
+        &SourceChangedEventHandler::create(Box::new(move |view, args| {
             if let Some(view) = view {
-                publish_page(&session, &view)?;
+                let mut new_document = Default::default();
+                if let Some(args) = args {
+                    args.IsNewDocument(&mut new_document)?;
+                }
+                publish_page(&session, &view, !new_document.as_bool())?;
+            }
+            Ok(())
+        })),
+        &mut token,
+    )?;
+
+    let session = id.to_owned();
+    // Let Chromium paint the new document while it is still parsing the DOM.
+    view.add_ContentLoading(
+        &ContentLoadingEventHandler::create(Box::new(move |_, args| {
+            if let Some(args) = args {
+                let mut error_page = Default::default();
+                args.IsErrorPage(&mut error_page)?;
+                if !error_page.as_bool() {
+                    let mut navigation_id = 0;
+                    args.NavigationId(&mut navigation_id)?;
+                    content_ready(&session, navigation_id);
+                }
             }
             Ok(())
         })),
@@ -538,8 +601,18 @@ unsafe fn configure(
             if let Some(args) = args {
                 args.NavigationId(&mut navigation_id)?;
             }
-            content_ready(&session, navigation_id);
-            if let Some(view) = view {
+            let wallpaper_enabled = HOST.with(|host| {
+                let mut host = host.borrow_mut();
+                let Some(current) = host.sessions.get_mut(&session).filter(|current| {
+                    current.navigation_id == navigation_id
+                        && current.navigation_revision == current.revision
+                }) else {
+                    return false;
+                };
+                current.document_ready = true;
+                current.appearance.enabled
+            });
+            if let Some(view) = view.filter(|_| wallpaper_enabled) {
                 let _ = prepare_appearance(&view, &session, navigation_id);
             }
             Ok(())
@@ -563,6 +636,9 @@ unsafe fn configure(
             if let Ok(http) = args.cast::<ICoreWebView2NavigationCompletedEventArgs2>() {
                 let _ = http.HttpStatusCode(&mut status);
             }
+            let Some(revision) = current_revision(&session, navigation_id) else {
+                return Ok(());
+            };
             if code != COREWEBVIEW2_WEB_ERROR_STATUS_OPERATION_CANCELED {
                 send(
                     &session,
@@ -571,11 +647,12 @@ unsafe fn configure(
                         status,
                         code: code.0,
                         navigation_id,
+                        revision,
                     },
                 );
             }
             if let Some(view) = view {
-                publish_page(&session, &view)?;
+                publish_page(&session, &view, false)?;
             }
             Ok(())
         })),
@@ -587,7 +664,7 @@ unsafe fn configure(
         favicons.add_FaviconChanged(
             &FaviconChangedEventHandler::create(Box::new(move |view, _| {
                 if let Some(view) = view {
-                    publish_page(&session, &view)?;
+                    publish_page(&session, &view, false)?;
                 }
                 Ok(())
             })),
@@ -635,9 +712,9 @@ fn create_controller(environment: &ICoreWebView2Environment, id: String) {
             };
             let opened = unsafe {
                 configure(id, &controller).and_then(|web| {
+                    web.Navigate(&HSTRING::from(url))?;
                     appearance.apply_background(&controller)?;
-                    bounds.apply(parent, &controller, None)?;
-                    web.Navigate(&HSTRING::from(url))
+                    bounds.apply(parent, &controller, None)
                 })
             };
             if let Err(error) = opened {
@@ -703,6 +780,7 @@ pub async fn native_web_preview_open(
     webview: Webview,
     id: String,
     url: String,
+    revision: u64,
     bounds: Bounds,
     appearance: Option<Appearance>,
     events: Channel<PreviewEvent>,
@@ -740,12 +818,15 @@ pub async fn native_web_preview_open(
                     Session {
                         pane,
                         url: url.into(),
+                        revision,
                         bounds,
                         applied_bounds: None,
                         activation: 0,
                         appearance: appearance.unwrap_or_default(),
                         wallpaper: None,
                         navigation_id: 0,
+                        navigation_revision: revision,
+                        document_ready: false,
                         script_context: None,
                         events,
                         controller: None,
@@ -756,6 +837,49 @@ pub async fn native_web_preview_open(
                     let _ = events.send(PreviewEvent::Error {
                         message: error.to_string(),
                     });
+                }
+            }
+        })
+        .map_err(|error| error.to_string())
+}
+
+#[tauri::command]
+pub fn native_web_preview_navigate(
+    webview: Webview,
+    id: String,
+    url: String,
+    revision: u64,
+    reload: bool,
+) -> Result<(), String> {
+    editor_only(&webview)?;
+    let url = web_url(&url).ok_or("Only HTTP and HTTPS previews are supported")?;
+    webview
+        .run_on_main_thread(move || {
+            let controller = HOST.with(|host| {
+                let mut host = host.borrow_mut();
+                let session = host.sessions.get_mut(&id)?;
+                if revision <= session.revision {
+                    return None;
+                }
+                session.revision = revision;
+                session.url = url.as_str().to_owned();
+                session.controller.clone()
+            });
+            if let Some(controller) = controller {
+                let result = unsafe {
+                    controller.CoreWebView2().and_then(|view| {
+                        if reload {
+                            let mut current = PWSTR::null();
+                            view.Source(&mut current)?;
+                            if take_pwstr(current) == url.as_str() {
+                                return view.Reload();
+                            }
+                        }
+                        view.Navigate(&HSTRING::from(url.as_str()))
+                    })
+                };
+                if let Err(error) = result {
+                    fail(&id, error);
                 }
             }
         })
@@ -807,7 +931,23 @@ pub async fn native_web_preview_layout(
                 if let Err(error) = fitted.apply(pane, &controller, previous) {
                     fail(&id, error);
                 } else if changed.is_some() || wallpaper_moved {
-                    let _ = update_appearance(&id, false, false);
+                    let document = HOST.with(|host| {
+                        let host = host.borrow();
+                        let current = host.sessions.get(&id)?;
+                        (current.document_ready
+                            && current.appearance.enabled
+                            && current.script_context.is_none()
+                            && current.navigation_revision == current.revision
+                            && changed.is_some())
+                        .then_some(current.navigation_id)
+                    });
+                    if let Some(navigation_id) = document {
+                        if let Ok(view) = unsafe { controller.CoreWebView2() } {
+                            let _ = prepare_appearance(&view, &id, navigation_id);
+                        }
+                    } else {
+                        let _ = update_appearance(&id, false, false);
+                    }
                 }
             }
             let _ = applied.try_send(());
@@ -1124,6 +1264,7 @@ mod tests {
                 activation: 0,
                 applied_bounds: None,
                 url: base.clone(),
+                revision: 0,
                 appearance: Appearance {
                     enabled: true,
                     light: 46.0,
@@ -1131,6 +1272,8 @@ mod tests {
                 },
                 wallpaper: Some(test_wallpaper()),
                 navigation_id: 0,
+                navigation_revision: 0,
+                document_ready: false,
                 script_context: None,
                 bounds: Bounds {
                     x: 0,

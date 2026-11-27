@@ -256,7 +256,6 @@ const useEditorStore = create(
           id,
           name: parsed.hostname || parsed.href,
           url: parsed.href,
-          favicon: `${parsed.origin}/favicon.ico`,
           ext: 'html',
           builtin: 'web',
           modified: false,
@@ -309,10 +308,9 @@ const useEditorStore = create(
         const { tabs, tabRenderList } = get();
         const tab = tabs.find((entry) => entry.id === tabId && entry.builtin === 'web');
         if (!tab) return;
-        const fallback = `${new URL(webLocation).origin}/favicon.ico`;
         const faviconUrls = [
           ...new Set(
-            [...urls.slice(0, 8), fallback].filter(
+            urls.slice(0, 8).filter(
               (url) =>
                 typeof url === 'string' &&
                 url.length < 16384 &&

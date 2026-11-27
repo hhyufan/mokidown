@@ -39,7 +39,14 @@ function previewWallpaper(id) {
       canvas.width = Math.max(1, Math.round(bitmap.width * scale));
       canvas.height = Math.max(1, Math.round(bitmap.height * scale));
       canvas.getContext('2d').drawImage(bitmap, 0, 0, canvas.width, canvas.height);
-      return canvas.toDataURL('image/webp', 0.9).split(',')[1];
+      const encoded = await new Promise((resolve) => canvas.toBlob(resolve, 'image/webp', 0.9));
+      if (!encoded) return null;
+      return new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(String(reader.result).split(',')[1]);
+        reader.onerror = () => reject(reader.error);
+        reader.readAsDataURL(encoded);
+      });
     } finally {
       bitmap.close();
     }
@@ -114,11 +121,14 @@ function measureBounds(element, ready, enabled) {
   };
 }
 
-export default function NativeWebPage({ url, active, onPage }) {
+export default function NativeWebPage({ url, revision = 0, reload = false, active, onPage }) {
   const { t } = useTranslation();
   const viewport = useRef(null);
   const scheduleLayout = useRef(null);
   const activeSession = useRef(null);
+  const request = useRef(null);
+  request.current = { url, revision, reload };
+  const [attempt, setAttempt] = useState(0);
   const wallpaperId = useConfigStore(
     (state) => (state.backgroundEnabled && state.backgroundImage) || null,
   );
@@ -149,6 +159,9 @@ export default function NativeWebPage({ url, active, onPage }) {
     let failedNavigation = -1;
     let presenting = false;
     let activation = 0;
+    const initial = request.current;
+    let currentRevision = initial.revision;
+    let loadTimeout;
 
     const update = () => {
       frame = 0;
@@ -180,6 +193,10 @@ export default function NativeWebPage({ url, active, onPage }) {
       if (!frame && !disposed && presenting) frame = requestAnimationFrame(update);
     };
     scheduleLayout.current = schedule;
+    const flushLayout = () => {
+      if (frame) cancelAnimationFrame(frame);
+      update();
+    };
     const fail = (error) => {
       if (disposed || failed) return;
       failed = true;
@@ -189,26 +206,34 @@ export default function NativeWebPage({ url, active, onPage }) {
       setState({ type: 'error', message: String(error?.message || error) });
       void invoke('native_web_preview_close', { id }).catch(() => {});
     };
-    const loadTimeout = setTimeout(() => {
-      setState({ type: 'error', timedOut: true });
-    }, LOAD_TIMEOUT_MS);
+    const beginLoading = () => {
+      clearTimeout(loadTimeout);
+      failedNavigation = -1;
+      setState({ type: 'loading' });
+      loadTimeout = setTimeout(() => {
+        ready = false;
+        setState({ type: 'error', timedOut: true });
+        flushLayout();
+      }, LOAD_TIMEOUT_MS);
+    };
 
     events.onmessage = (event) => {
       if (disposed || failed) return;
+      if (event.revision != null && event.revision !== currentRevision) return;
       if (event.type === 'page') onPageRef.current?.(event.url, event.icons);
       if (event.type === 'error') fail(event.message);
       if (event.type === 'contentReady' && event.navigationId !== failedNavigation) {
         clearTimeout(loadTimeout);
         ready = true;
         setState({ type: 'ready' });
-        schedule();
+        flushLayout();
       }
       if (event.type === 'navigation' && !event.success) {
         clearTimeout(loadTimeout);
         failedNavigation = event.navigationId;
         ready = false;
         setState({ type: 'error', status: event.status, code: event.code });
-        schedule();
+        flushLayout();
       }
       if (event.type === 'popup') {
         if (useConfigStore.getState().openLinksInEditor)
@@ -217,19 +242,39 @@ export default function NativeWebPage({ url, active, onPage }) {
       }
     };
 
-    setState({ type: 'loading' });
+    beginLoading();
     const opening = invoke('native_web_preview_open', {
       id,
-      url,
+      url: initial.url,
+      revision: initial.revision,
       bounds: measureBounds(element, false, appearance.current.enabled),
       appearance: appearance.current,
       events,
     }).then(() => {
       if (!disposed && !failed) {
         opened = true;
-        schedule();
+        flushLayout();
       }
     }, fail);
+    const navigate = (next) => {
+      if (next.revision <= currentRevision) return;
+      if (failed) {
+        setAttempt((value) => value + 1);
+        return;
+      }
+      currentRevision = next.revision;
+      beginLoading();
+      void opening
+        .then(() => {
+          if (!disposed && !failed && currentRevision === next.revision) {
+            return invoke('native_web_preview_navigate', { id, ...next });
+          }
+          return undefined;
+        })
+        .catch((error) => {
+          if (currentRevision === next.revision) fail(error);
+        });
+    };
     const setActive = (next) => {
       if (presenting === next) return;
       presenting = next;
@@ -242,7 +287,7 @@ export default function NativeWebPage({ url, active, onPage }) {
         void invoke('native_web_preview_hide', { id, activation }).catch(fail);
       }
     };
-    activeSession.current = { id, opening, setActive };
+    activeSession.current = { id, opening, navigate, setActive };
     const resize = new ResizeObserver(() => {
       if (frame) cancelAnimationFrame(frame);
       update();
@@ -274,16 +319,21 @@ export default function NativeWebPage({ url, active, onPage }) {
       const close = () => invoke('native_web_preview_close', { id });
       void (opened ? close() : opening.then(close)).catch(() => {});
     };
-  }, [url]);
+  }, [attempt]);
   useLayoutEffect(() => {
     activeSession.current?.setActive(active);
-  }, [url, active]);
+  }, [attempt, active]);
+  useLayoutEffect(() => {
+    activeSession.current?.navigate({ url, revision, reload });
+  }, [attempt, reload, revision, url]);
   useLayoutEffect(() => {
     scheduleLayout.current?.();
   }, [wallpaperEnabled, transparency]);
   useEffect(() => {
     const session = activeSession.current;
     if (!session) return undefined;
+    if (!wallpaperId && !session.wallpaperRequested) return undefined;
+    session.wallpaperRequested = Boolean(wallpaperId);
     let cancelled = false;
     const image = wallpaperId ? previewWallpaper(wallpaperId) : Promise.resolve(null);
     void Promise.all([session.opening, image])
@@ -298,7 +348,7 @@ export default function NativeWebPage({ url, active, onPage }) {
     return () => {
       cancelled = true;
     };
-  }, [url, wallpaperId]);
+  }, [attempt, wallpaperId]);
 
   return (
     <div className="web-page__viewport web-page__native preview-wallpaper" ref={viewport}>

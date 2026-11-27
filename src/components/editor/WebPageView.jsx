@@ -1,5 +1,5 @@
 import { useTranslation } from 'react-i18next';
-import { useRef, useState } from 'react';
+import { useLayoutEffect, useRef, useState } from 'react';
 import { openExternal } from '@utils/tauriApi';
 import { isImeComposing } from '@utils/keyboard';
 import { parsePreviewAddress } from '@utils/previewAddress';
@@ -33,6 +33,7 @@ export default function WebPageView({
   const [draft, setDraft] = useState(null);
   const [pageUrl, setPageUrl] = useState(initialLocation);
   const [frameSource, setFrameSource] = useState({ url: initialLocation, revision: 0 });
+  const previousUrl = useRef(url);
   const [invalid, setInvalid] = useState(false);
   const useNativeView =
     Boolean(window.__TAURI_INTERNALS__) &&
@@ -47,16 +48,33 @@ export default function WebPageView({
     onPage: syncPage,
   });
   const address = draft ?? pageUrl;
-  const refresh = () =>
-    setFrameSource((previous) => ({ url: pageUrl, revision: previous.revision + 1 }));
+  const openLocation = (location, reload = false) =>
+    setFrameSource((previous) => ({ url: location, revision: previous.revision + 1, reload }));
+  useLayoutEffect(() => {
+    if (previousUrl.current === url) return;
+    previousUrl.current = url;
+    setDraft(null);
+    setInvalid(false);
+    setPageUrl(url);
+    setFrameSource((previous) => ({ url, revision: previous.revision + 1 }));
+  }, [url]);
+  const refresh = () => openLocation(pageUrl, true);
   const submitAddress = (event) => {
     event.preventDefault();
     const target = parsePreviewAddress(address, pageUrl);
     setInvalid(!target);
     if (!target) return;
     setDraft(null);
-    if (target.href === pageUrl) refresh();
-    else onNavigate(target.href);
+    if (target.href === pageUrl) {
+      refresh();
+    } else {
+      // A page can follow links without changing the URL that opened its tab.
+      if (target.href === url) {
+        setPageUrl(target.href);
+        openLocation(target.href);
+      }
+      onNavigate(target.href);
+    }
   };
   return (
     <div className={`web-page ${className}`} hidden={!active}>
@@ -121,8 +139,9 @@ export default function WebPageView({
       )}
       {useNativeView ? (
         <NativeWebPage
-          key={frameSource.revision}
           url={frameSource.url}
+          revision={frameSource.revision}
+          reload={frameSource.reload}
           active={active}
           onPage={syncPage}
         />
