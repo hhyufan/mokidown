@@ -14,7 +14,9 @@ struct ClipboardImage {
 }
 
 #[tauri::command]
-pub(crate) async fn read_clipboard_for_paste(include_image: bool) -> Result<ClipboardContents, String> {
+pub(crate) async fn read_clipboard_for_paste(
+    include_image: bool,
+) -> Result<ClipboardContents, String> {
     #[cfg(windows)]
     {
         tauri::async_runtime::spawn_blocking(move || windows_clipboard::read(include_image))
@@ -29,19 +31,42 @@ pub(crate) async fn read_clipboard_for_paste(include_image: bool) -> Result<Clip
 }
 
 #[cfg(windows)]
+#[tauri::command]
+pub(crate) async fn write_clipboard_image(
+    window: tauri::WebviewWindow,
+    content_base64: String,
+    dib_base64: Option<String>,
+) -> Result<(), String> {
+    if window.label() != "main" {
+        return Err("Only the editor can copy images".into());
+    }
+    let owner = window.hwnd().map_err(|error| error.to_string())?.0 as isize;
+    tauri::async_runtime::spawn_blocking(move || {
+        windows_clipboard::write(owner, &content_base64, dib_base64.as_deref())
+    })
+    .await
+    .map_err(|error| error.to_string())?
+}
+
+#[cfg(windows)]
 mod windows_clipboard {
     use super::{ClipboardContents, ClipboardImage};
     use base64::{engine::general_purpose::STANDARD, Engine};
     use std::io;
+    use windows_sys::Win32::Foundation::{GlobalFree, HGLOBAL, HWND};
     use windows_sys::Win32::System::DataExchange::{
-        CloseClipboard, GetClipboardData, OpenClipboard, RegisterClipboardFormatW,
+        CloseClipboard, EmptyClipboard, GetClipboardData, OpenClipboard, RegisterClipboardFormatW,
+        SetClipboardData,
     };
-    use windows_sys::Win32::System::Memory::{GlobalLock, GlobalSize, GlobalUnlock};
+    use windows_sys::Win32::System::Memory::{
+        GlobalAlloc, GlobalLock, GlobalSize, GlobalUnlock, GMEM_MOVEABLE,
+    };
 
     const CF_DIB: u32 = 8;
     const CF_UNICODETEXT: u32 = 13;
     const CF_DIBV5: u32 = 17;
     const BMP_HEADER_SIZE: u32 = 14;
+    const PNG_NAME: [u16; 4] = [b'P' as u16, b'N' as u16, b'G' as u16, 0];
 
     struct OpenClipboardGuard;
 
@@ -51,19 +76,102 @@ mod windows_clipboard {
         }
     }
 
+    fn open(owner: HWND) -> io::Result<OpenClipboardGuard> {
+        for attempt in 0..3 {
+            if attempt > 0 {
+                std::thread::sleep(std::time::Duration::from_millis(10));
+            }
+            if unsafe { OpenClipboard(owner) } != 0 {
+                return Ok(OpenClipboardGuard);
+            }
+        }
+        Err(io::Error::last_os_error())
+    }
+
+    struct ClipboardBuffer(HGLOBAL);
+
+    impl ClipboardBuffer {
+        fn new(bytes: &[u8]) -> io::Result<Self> {
+            unsafe {
+                let handle = GlobalAlloc(GMEM_MOVEABLE, bytes.len());
+                if handle.is_null() {
+                    return Err(io::Error::last_os_error());
+                }
+                let buffer = Self(handle);
+                let memory = GlobalLock(handle).cast::<u8>();
+                if memory.is_null() {
+                    return Err(io::Error::last_os_error());
+                }
+                std::ptr::copy_nonoverlapping(bytes.as_ptr(), memory, bytes.len());
+                GlobalUnlock(handle);
+                Ok(buffer)
+            }
+        }
+
+        fn publish(mut self, format: u32) -> io::Result<()> {
+            if unsafe { SetClipboardData(format, self.0 as _) } == 0 {
+                return Err(io::Error::last_os_error());
+            }
+            // Windows owns the handle after SetClipboardData succeeds.
+            self.0 = std::ptr::null_mut();
+            Ok(())
+        }
+    }
+
+    impl Drop for ClipboardBuffer {
+        fn drop(&mut self) {
+            if !self.0.is_null() {
+                unsafe { GlobalFree(self.0) };
+            }
+        }
+    }
+
+    pub(super) fn write(owner: HWND, png: &str, bitmap: Option<&str>) -> Result<(), String> {
+        let decode = |data: &str, max: usize| {
+            if data.len() > max.div_ceil(3) * 4 {
+                return Err("Clipboard image is too large".to_owned());
+            }
+            STANDARD.decode(data).map_err(|error| error.to_string())
+        };
+        let png = decode(png, 32 * 1024 * 1024)?;
+        if !png.starts_with(b"\x89PNG\r\n\x1a\n") {
+            return Err("Invalid PNG clipboard image".into());
+        }
+        let format = unsafe { RegisterClipboardFormatW(PNG_NAME.as_ptr()) };
+        if format == 0 {
+            return Err(io::Error::last_os_error().to_string());
+        }
+        let png = ClipboardBuffer::new(&png).map_err(|error| error.to_string())?;
+        let bitmap = bitmap
+            .map(|data| decode(data, 16 * 1024 * 1024 + 124))
+            .transpose()?
+            .filter(|data| {
+                let word =
+                    |offset| u32::from_le_bytes(data[offset..offset + 4].try_into().unwrap());
+                data.len() >= 124
+                    && word(0) == 124
+                    && (word(4) as i32) > 0
+                    && (word(8) as i32) < 0
+                    && (word(4) as usize)
+                        .checked_mul((word(8) as i32).unsigned_abs() as usize)
+                        .and_then(|pixels| pixels.checked_mul(4))
+                        .is_some_and(|size| size == data.len() - 124)
+            })
+            .and_then(|bytes| ClipboardBuffer::new(&bytes).ok());
+        let _clipboard = open(owner).map_err(|error| error.to_string())?;
+        if unsafe { EmptyClipboard() } == 0 {
+            return Err(io::Error::last_os_error().to_string());
+        }
+        let png = png.publish(format);
+        if bitmap.is_some_and(|buffer| buffer.publish(CF_DIBV5).is_ok()) {
+            return Ok(());
+        }
+        png.map_err(|error| error.to_string())
+    }
+
     pub(super) fn read(include_image: bool) -> Result<ClipboardContents, String> {
         let (text, image) = {
-            let clipboard = (0..3).find_map(|attempt| {
-                if attempt > 0 {
-                    std::thread::sleep(std::time::Duration::from_millis(10));
-                }
-                if unsafe { OpenClipboard(0) } == 0 {
-                    None
-                } else {
-                    Some(OpenClipboardGuard)
-                }
-            });
-            let _clipboard = clipboard.ok_or_else(|| io::Error::last_os_error().to_string())?;
+            let _clipboard = open(0).map_err(|error| error.to_string())?;
             let text = with_format(CF_UNICODETEXT, |bytes| {
                 let units: Vec<_> = bytes
                     .chunks_exact(2)
@@ -115,7 +223,6 @@ mod windows_clipboard {
     }
 
     fn read_image() -> Option<(&'static str, Vec<u8>)> {
-        const PNG_NAME: [u16; 4] = [b'P' as u16, b'N' as u16, b'G' as u16, 0];
         let png = unsafe { RegisterClipboardFormatW(PNG_NAME.as_ptr()) };
         with_format(png, |bytes| {
             bytes
@@ -131,8 +238,16 @@ mod windows_clipboard {
     }
 
     fn dib_as_bmp(dib: &[u8]) -> Option<Vec<u8>> {
-        let word = |start| Some(u16::from_le_bytes(dib.get(start..start + 2)?.try_into().ok()?));
-        let dword = |start| Some(u32::from_le_bytes(dib.get(start..start + 4)?.try_into().ok()?));
+        let word = |start| {
+            Some(u16::from_le_bytes(
+                dib.get(start..start + 2)?.try_into().ok()?,
+            ))
+        };
+        let dword = |start| {
+            Some(u32::from_le_bytes(
+                dib.get(start..start + 4)?.try_into().ok()?,
+            ))
+        };
         let header = dword(0)?;
         let palette_entries = |bits| match bits {
             1 | 4 | 8 => 1u32 << bits,
@@ -150,7 +265,9 @@ mod windows_clipboard {
                     (40, 6) => 16, // BI_ALPHABITFIELDS adds an alpha mask.
                     _ => 0,
                 };
-                header.checked_add(masks)?.checked_add(colors.checked_mul(4)?)?
+                header
+                    .checked_add(masks)?
+                    .checked_add(colors.checked_mul(4)?)?
             }
             _ => return None,
         };

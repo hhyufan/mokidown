@@ -2159,6 +2159,8 @@ pub fn run() {
             read_file_head,
             check_file_text_head,
             menu_clipboard::read_clipboard_for_paste,
+            #[cfg(windows)]
+            menu_clipboard::write_clipboard_image,
             read_binary_file,
             download_clipboard_image,
             write_binary_file,
