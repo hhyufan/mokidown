@@ -12,6 +12,7 @@ import useConfigStore from '@store/useConfigStore';
 import useNotificationStore from '@store/useNotificationStore';
 import { useFileManager } from '@hooks/useFileManager';
 import { useEditorBufferContent } from '@hooks/useEditorBufferContent';
+import useComparisonTypography from '@hooks/useComparisonTypography';
 import { broadcastToPlugins, executePluginCommand, sendToPlugin } from '@utils/pluginBus';
 import { getBuffer, flushEditorBuffer } from '@utils/editorBuffer';
 import {
@@ -23,6 +24,7 @@ import {
 import { sha256 } from '../../../shared/plugin-package.mjs';
 import { historyCapture, onFileChanged, readFileContent, writeFileContent } from '@utils/tauriApi';
 import { withFileOperation } from '@/services/localFileGuard';
+import { reportRuntimeLog } from '@/services/runtimeLogs';
 import { getFileLanguage } from '@utils/fileLanguage';
 import {
   hasSelectedHistoryChanges,
@@ -47,18 +49,12 @@ function formatTime(timestamp) {
 
 const normalizeLines = (text) => text.replace(/\r\n|\r/g, '\n');
 const NO_CHANGES = [];
+const COMPARISON_OPEN_TIMEOUT_MS = 15000;
 const defaultFoldState = () => ({ defaultExpanded: false, overrides: new Map() });
 
 function comparablePath(path) {
   const normalized = String(path || '').replaceAll('\\', '/');
   return /^(?:[a-z]:|\/\/)/i.test(normalized) ? normalized.toLowerCase() : normalized;
-}
-
-function hiddenLineCount(editor) {
-  return editor
-    ._getViewModel?.()
-    ?.getHiddenAreas?.()
-    .reduce((count, range) => count + range.endLineNumber - range.startLineNumber + 1, 0);
 }
 
 async function captureAppliedHistory(path, previousContent, content, restoredFrom, onError) {
@@ -144,9 +140,10 @@ function MonacoHistoryDiff({
     if (!containerRef.current) return undefined;
     let cancelled = false;
     let revealFrame = 0;
-    let revealed = false;
-    let diffInitialized = false;
     const listeners = [];
+    const fail = (failure) => {
+      if (!cancelled) setError(String(failure?.message || failure));
+    };
     Promise.all([
       import('monaco-editor'),
       import('@utils/monacoShiki'),
@@ -229,30 +226,6 @@ function MonacoHistoryDiff({
         let computed;
         let expandInitial = props.initiallyExpanded;
         const readFolds = () => diff.saveViewState?.()?.modelState?.collapsedRegions;
-        const scheduleReveal = () => {
-          if (cancelled || revealed || revealFrame || !diffInitialized) return;
-          revealFrame = requestAnimationFrame(() => {
-            revealFrame = 0;
-            if (cancelled) return;
-            const expected = (readFolds() || []).reduce(
-              (count, { range: [start, end] }) => count + end - start,
-              0,
-            );
-            // The diff result can arrive before both view models consume the hidden ranges.
-            if (
-              [originalEditor, modifiedEditor].some((editor) => {
-                const actual = hiddenLineCount(editor);
-                return actual !== undefined && actual !== expected;
-              })
-            )
-              return;
-            updateSplit();
-            originalEditor.render?.(true);
-            modifiedEditor.render?.(true);
-            revealed = true;
-            setReady(true);
-          });
-        };
         const reportComparison = () => {
           if (!computed || computedVersion !== modifiedModel.getVersionId()) return;
           const regions = readFolds();
@@ -270,7 +243,6 @@ function MonacoHistoryDiff({
             listeners.push(
               editor.onDidChangeHiddenAreas(() => {
                 if (editor === modifiedEditor) reportComparison();
-                scheduleReveal();
               }),
             );
         }
@@ -326,7 +298,6 @@ function MonacoHistoryDiff({
               diff.showAllUnchangedRegions?.();
             }
             reportComparison();
-            scheduleReveal();
           }),
         );
         const restore = (changes, selection, selectedSide) => {
@@ -433,12 +404,21 @@ function MonacoHistoryDiff({
           expandInitial = false;
           diff.showAllUnchangedRegions();
         }
-        diffInitialized = true;
-        scheduleReveal();
+        // The diff transaction applies Monaco's folds before the next paint.
+        // Serialized folds are for saving state. A pane can show more lines.
+        revealFrame = requestAnimationFrame(() => {
+          if (cancelled) return;
+          try {
+            updateSplit();
+            originalEditor.render?.(true);
+            modifiedEditor.render?.(true);
+            setReady(true);
+          } catch (failure) {
+            fail(failure);
+          }
+        });
       })
-      .catch((failure) => {
-        if (!cancelled) setError(String(failure?.message || failure));
-      });
+      .catch(fail);
 
     return () => {
       cancelled = true;
@@ -511,11 +491,6 @@ function MonacoHistoryDiff({
 
   return (
     <>
-      {error && (
-        <div className="history-diff__error" role="alert">
-          {error}
-        </div>
-      )}
       <div className="history-diff__surface editor-scroll-frame" hidden={noChanges}>
         <div
           className="history-diff__editor"
@@ -542,7 +517,7 @@ function MonacoHistoryDiff({
  *
  * 左侧 = 历史版本，右侧 = 当前内容；顶部横栏提供「关闭对比」与「恢复此版本」。
  */
-export default function HistoryDiffView() {
+export default function HistoryDiffView({ active = true, comparison }) {
   const { t } = useTranslation();
   const revertLabel = t('history.revertChange');
   const removeLabel = t('history.revertAddition');
@@ -550,14 +525,12 @@ export default function HistoryDiffView() {
     () => ({ revert: revertLabel, remove: removeLabel }),
     [revertLabel, removeLabel],
   );
-  const diff = useHistoryStore((s) => s.diff);
+  const diff = useHistoryStore((s) => comparison ?? s.diff);
   const mode = useHistoryStore((s) => s.viewMode);
   const clearDiff = useHistoryStore((s) => s.clearDiff);
   const tabs = useEditorStore((s) => s.tabs);
   const theme = useThemeStore((s) => s.theme);
-  const fontSize = useConfigStore((s) => s.fontSize);
   const fontFamily = useConfigStore((s) => s.fontFamily);
-  const lineHeight = useConfigStore((s) => s.lineHeight);
   const tabSize = useConfigStore((s) => s.tabSize);
   const { saveTab } = useFileManager();
 
@@ -574,6 +547,8 @@ export default function HistoryDiffView() {
   const [monacoReady, setMonacoReady] = useState(null);
   const [monacoError, setMonacoError] = useState(null);
   const [markdownAligned, setMarkdownAligned] = useState(null);
+  const [renderAttempt, setRenderAttempt] = useState(0);
+  const [openTimeout, setOpenTimeout] = useState(null);
   const [markdownFolds, setMarkdownFolds] = useState(defaultFoldState);
   const [markdownFoldSummary, setMarkdownFoldSummary] = useState({
     collapsedCount: 0,
@@ -583,8 +558,11 @@ export default function HistoryDiffView() {
   const comparisonBoundsRef = useRef(null);
 
   const tab = tabs.find((item) => item.id === (diff?.sourceTabId ?? diff?.tabId)) || null;
-  const bufferContent = useEditorBufferContent(tab?.id, tab?.content || '');
   const external = diff?.external;
+  const rendered = mode === 'preview' && isMarkdownComparison(tab, diff);
+  const comparisonKey = tab || external ? `${diff.tabId}:${diff.timestamp}` : null;
+  const typography = useComparisonTypography(comparisonBoundsRef, comparisonKey, rendered);
+  const bufferContent = useEditorBufferContent(tab?.id, tab?.content || '');
   const gitEdit = external?.gitEdit;
   const editable = !external || Boolean(gitEdit) || !external.repository;
   const comparisonId = external ? `external:${diff.timestamp}` : tab?.id;
@@ -649,7 +627,9 @@ export default function HistoryDiffView() {
           if (!result) return;
           const { content, missing } = result;
           setLiveModified((previous) =>
-            previous?.external === external && previous.content === content && previous.missing === missing
+            previous?.external === external &&
+            previous.content === content &&
+            previous.missing === missing
               ? previous
               : { external, content, missing },
           );
@@ -674,20 +654,22 @@ export default function HistoryDiffView() {
     };
   }, [external, externalModifiedPath]);
   const disk = liveModified?.external === external ? liveModified : null;
-  const current = external
-    ? (disk?.content ?? external.modified)
-    : bufferContent;
+  const current = external ? (disk?.content ?? external.modified) : bufferContent;
   const currentMissing = disk?.missing ?? gitEdit?.expectedMissing ?? false;
   const draft = draftState?.comparison === diff ? draftState?.content : null;
   const modified = draft ?? current;
-  const writeDraft = useCallback((content) => {
-    const previous = draftRef.current;
-    const base = previous?.comparison === diff
-      ? previous.base
-      : { content: current, missing: currentMissing };
-    draftRef.current = content === current ? null : { comparison: diff, content, base };
-    setDraftState(draftRef.current);
-  }, [current, currentMissing, diff]);
+  const writeDraft = useCallback(
+    (content) => {
+      const previous = draftRef.current;
+      const base =
+        previous?.comparison === diff
+          ? previous.base
+          : { content: current, missing: currentMissing };
+      draftRef.current = content === current ? null : { comparison: diff, content, base };
+      setDraftState(draftRef.current);
+    },
+    [current, currentMissing, diff],
+  );
   const updateDraft = useCallback(
     (content) => {
       if (!diff || useHistoryStore.getState().diff !== diff) return;
@@ -699,7 +681,7 @@ export default function HistoryDiffView() {
     [current, diff, writeDraft],
   );
   useEffect(() => {
-    if (!diff || !editable || busy) return undefined;
+    if (!active || !diff || !editable || busy) return undefined;
     const onKeyDown = (event) => {
       const direction = markdownUndoDirection(event);
       if (!direction || useHistoryStore.getState().diff !== diff) return;
@@ -722,19 +704,23 @@ export default function HistoryDiffView() {
     };
     document.addEventListener('keydown', onKeyDown, true);
     return () => document.removeEventListener('keydown', onKeyDown, true);
-  }, [busy, current, diff, editable, writeDraft]);
-  const rendered = mode === 'preview' && isMarkdownComparison(tab, diff);
+  }, [active, busy, current, diff, editable, writeDraft]);
   const handleMonacoReady = useCallback(
-    (value) => setMonacoReady(value ? { diff, rendered } : null),
-    [diff, rendered],
+    (value) => setMonacoReady(value ? { diff, renderAttempt } : null),
+    [diff, renderAttempt],
   );
   const handleMonacoError = useCallback(
-    (value) => setMonacoError(value ? { diff, rendered, message: value } : null),
-    [diff, rendered],
+    (value) => setMonacoError(value ? { diff, renderAttempt, message: value } : null),
+    [diff, renderAttempt],
   );
   const handleMarkdownAligned = useCallback(
-    (value) => setMarkdownAligned(value ? { diff, rendered } : null),
-    [diff, rendered],
+    (value) =>
+      setMarkdownAligned((current) => {
+        if (!value) return null;
+        if (current?.diff === diff && current.renderAttempt === renderAttempt) return current;
+        return { diff, renderAttempt };
+      }),
+    [diff, renderAttempt],
   );
   // Monaco 按行比较，不把 CRLF/LF 的差别当成代码修改。
   const originalText = normalizeLines(historyContent ?? '');
@@ -745,22 +731,60 @@ export default function HistoryDiffView() {
     : computedDiff?.original === originalText
       ? computedDiff
       : null;
-  const preview = useMarkdownHistoryComparison(originalText, modifiedText, rendered, draft != null);
+  const preview = useMarkdownHistoryComparison(
+    originalText,
+    modifiedText,
+    rendered,
+    draft != null,
+    renderAttempt,
+  );
   const currentDiff = (rendered ? preview : renderedDiff)?.modified === modifiedText;
   const noChanges = identical || (rendered && currentDiff && Boolean(preview?.identical));
   const showEmpty = noChanges && (!rendered || draft == null);
-  const isMonacoReady =
-    !rendered && monacoReady?.diff === diff && monacoReady?.rendered === rendered;
-  const hasMonacoError = Boolean(
-    !rendered && monacoError?.diff === diff && monacoError?.rendered === rendered && monacoError?.message,
-  );
-  const isMarkdownAligned =
-    rendered && markdownAligned?.diff === diff && markdownAligned?.rendered === rendered;
+  const isCurrentAttempt = (state) =>
+    state?.diff === diff && state?.renderAttempt === renderAttempt;
+  const renderError = rendered
+    ? preview?.error
+    : isCurrentAttempt(monacoError) && monacoError.message;
   const diffReady =
     showEmpty ||
-    hasMonacoError ||
-    (rendered ? Boolean(preview?.error) || (Boolean(preview?.layout) && isMarkdownAligned) : isMonacoReady);
-  if (!diff || (!tab && !external)) return null;
+    (rendered
+      ? Boolean(preview?.layout) && isCurrentAttempt(markdownAligned)
+      : isCurrentAttempt(monacoReady));
+  const canRender = Boolean(diff && (tab || external));
+  useEffect(() => {
+    if (!active || !canRender || diffReady || renderError) return undefined;
+    const timer = setTimeout(
+      () => setOpenTimeout({ diff, renderAttempt, rendered }),
+      COMPARISON_OPEN_TIMEOUT_MS,
+    );
+    return () => clearTimeout(timer);
+  }, [active, canRender, diff, diffReady, renderAttempt, renderError, rendered]);
+  const openFailure =
+    renderError ||
+    (isCurrentAttempt(openTimeout) && openTimeout.rendered === rendered
+      ? 'Timed out waiting for the comparison editor'
+      : '');
+  useEffect(() => {
+    if (active && !diffReady && openFailure) {
+      reportRuntimeLog({
+        message: openFailure,
+        detail: rendered ? 'Milkdown comparison' : 'Monaco comparison',
+        announce: false,
+      });
+    }
+  }, [active, diffReady, openFailure, rendered]);
+  if (!diff) return null;
+  if (!canRender) {
+    return (
+      <div className="history-diff">
+        <div className="history-diff__load-status" role="alert">
+          <span>{t('history.openFailed')}</span>
+          <Button onClick={() => clearDiff(diff)}>{t('history.closeDiff')}</Button>
+        </div>
+      </div>
+    );
+  }
 
   const hash = historyHash?.content === diff.content ? historyHash.hash : '';
   const hasDraft = draft != null && modifiedText !== normalizeLines(current);
@@ -840,26 +864,35 @@ export default function HistoryDiffView() {
   };
 
   const saveExternal = async (content) => {
-    if (busy || !editable || !external?.modifiedPath || useHistoryStore.getState().diff !== diff) return;
+    if (busy || !editable || !external?.modifiedPath || useHistoryStore.getState().diff !== diff)
+      return;
     setPendingDiff(diff);
     setActionError('');
     try {
       const path = external.modifiedPath;
       const pending = draftRef.current;
-      const base = pending?.comparison === diff && pending.content === content
-        ? pending.base
-        : { content: current, missing: currentMissing };
+      const base =
+        pending?.comparison === diff && pending.content === content
+          ? pending.base
+          : { content: current, missing: currentMissing };
       if (gitEdit) {
         const worktree = gitEdit.layer === 'worktree';
-        const findTarget = () => useEditorStore.getState().tabs.find((item) =>
-          !item.builtin && comparablePath(item.path) === comparablePath(path));
+        const findTarget = () =>
+          useEditorStore
+            .getState()
+            .tabs.find(
+              (item) => !item.builtin && comparablePath(item.path) === comparablePath(path),
+            );
         const apply = async () => {
           if (worktree) {
             const tab = findTarget();
             if (tab) {
               flushEditorBuffer(tab.id);
               const latest = findTarget();
-              if (latest?.modified || (latest && getBuffer(latest.id, latest.content) !== latest.content))
+              if (
+                latest?.modified ||
+                (latest && getBuffer(latest.id, latest.content) !== latest.content)
+              )
                 throw new Error('saveBeforeGitApply');
             }
           }
@@ -871,11 +904,14 @@ export default function HistoryDiffView() {
             content,
           });
         };
-        const saved = worktree ? await withFileOperation(findTarget()?.path || path, apply) : await apply();
+        const saved = worktree
+          ? await withFileOperation(findTarget()?.path || path, apply)
+          : await apply();
         external.onGitApplied?.();
-        if (worktree) void captureAppliedHistory(path, current, saved ?? content, undefined, (messageKey) => {
-          useNotificationStore.getState().notify('warning', t('history.title'), t(messageKey));
-        });
+        if (worktree)
+          void captureAppliedHistory(path, current, saved ?? content, undefined, (messageKey) => {
+            useNotificationStore.getState().notify('warning', t('history.title'), t(messageKey));
+          });
       } else {
         if (base.content !== current || base.missing !== currentMissing) {
           setActionError(t('history.applyConflict'));
@@ -887,7 +923,9 @@ export default function HistoryDiffView() {
     } catch (error) {
       if (useHistoryStore.getState().diff === diff) {
         const detail = String(error?.message || error);
-        setActionError(gitEdit ? t(`workspaceDiff.errors.${detail}`, { defaultValue: detail }) : detail);
+        setActionError(
+          gitEdit ? t(`workspaceDiff.errors.${detail}`, { defaultValue: detail }) : detail,
+        );
       }
     } finally {
       setPendingDiff((pending) => (pending === diff ? null : pending));
@@ -922,6 +960,15 @@ export default function HistoryDiffView() {
 
   return (
     <div className="history-diff" ref={comparisonBoundsRef} data-ready={diffReady}>
+      {!diffReady && openFailure && (
+        <div className="history-diff__load-status" role="alert">
+          <span>{t('history.openFailed')}</span>
+          {renderError && <span>{renderError}</span>}
+          <Button onClick={() => setRenderAttempt((attempt) => attempt + 1)}>
+            {t('runtimeLogs.retry')}
+          </Button>
+        </div>
+      )}
       <header className="history-diff__bar">
         <span className="history-diff__title">{diff.label || t('history.title')}</span>
         <div className="history-diff__actions">
@@ -997,7 +1044,9 @@ export default function HistoryDiffView() {
                     aria-label={t('workspaceDiff.revertChanges')}
                     icon={<HistoryOutlined aria-hidden="true" />}
                     disabled={busy}
-                    onClick={() => gitEdit ? updateDraft(diff.content) : void saveExternal(diff.content)}
+                    onClick={() =>
+                      gitEdit ? updateDraft(diff.content) : void saveExternal(diff.content)
+                    }
                   />
                 </span>
               </Tooltip>
@@ -1105,21 +1154,17 @@ export default function HistoryDiffView() {
           />
         </div>
       )}
-      {rendered && !showEmpty && !preview?.layout && preview?.error && (
-        <div className="history-diff__error" role="alert">
-          {`${t('editor.loadFailed')} ${preview.error}`}
-        </div>
-      )}
       {rendered && (preview?.layout || (!showEmpty && !preview?.error)) && (
         <div className="history-diff__surface editor-scroll-frame" hidden={showEmpty}>
           <MarkdownHistoryDiff
-            key={`${comparisonId}:${diff.timestamp}`}
+            key={`${comparisonId}:${diff.timestamp}:${renderAttempt}`}
             tabId={comparisonId}
             originalPath={external?.originalPath}
             modifiedPath={external?.modifiedPath}
             original={diff.content}
             draftContent={modified}
             comparison={preview?.layout}
+            typography={typography}
             previewBoundsRef={comparisonBoundsRef}
             hidden={showEmpty}
             foldState={markdownFolds}
@@ -1141,14 +1186,14 @@ export default function HistoryDiffView() {
       )}
       {!rendered && (!noChanges || draft != null) && (
         <MonacoHistoryDiff
-          key={`${comparisonId}:${diff.timestamp}`}
+          key={`${comparisonId}:${diff.timestamp}:${renderAttempt}`}
           original={diff.content}
           modified={modified}
           fileName={external?.modifiedName ?? tab?.name}
           theme={theme}
-          fontSize={fontSize}
+          fontSize={typography.fontSize}
           fontFamily={fontFamily}
-          lineHeight={lineHeight}
+          lineHeight={typography.lineHeight}
           tabSize={tabSize}
           arrowLabels={arrowLabels}
           busy={busy || !editable}

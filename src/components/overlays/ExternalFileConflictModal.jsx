@@ -16,7 +16,8 @@ function ExternalFileConflictModal({ conflict, onKeep, onUseDisk, onSaveAs, onCl
   useTranslation();
   const tab = useEditorStore((state) => state.tabs.find((item) => item.id === conflict?.tabId));
   const theme = useThemeStore((state) => state.theme);
-  const { fontSize, fontFamily, lineHeight, tabSize } = useConfigStore();
+  const fontFamily = useConfigStore((state) => state.fontFamily);
+  const tabSize = useConfigStore((state) => state.tabSize);
   const [reloading, setReloading] = useState(false);
   const [localContent, setLocalContent] = useState(() => getBuffer(conflict?.tabId, tab?.content || ''));
   useEffect(() => {
@@ -76,9 +77,7 @@ function ExternalFileConflictModal({ conflict, onKeep, onUseDisk, onSaveAs, onCl
             localLabel={i18n.t('sync.conflict.local')}
             remoteLabel={i18n.t('sync.conflict.remote')}
             theme={theme}
-            fontSize={fontSize}
             fontFamily={fontFamily}
-            lineHeight={lineHeight}
             tabSize={tabSize}
           />
         </div>

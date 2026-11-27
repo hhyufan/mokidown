@@ -5,6 +5,7 @@ import { getFileLanguage } from '@utils/fileLanguage';
 import { getMonacoThemeName } from '@utils/monacoShiki';
 import { prepareMonacoRuntime } from '@utils/monacoRuntimeBoot';
 import { installIndentRainbow } from '@utils/monacoIndentRainbow';
+import useComparisonTypography from '@hooks/useComparisonTypography';
 
 function countLines(content = '') {
   if (!content) return 1;
@@ -24,11 +25,8 @@ function countLines(content = '') {
  * @param {string} props.localLabel 左侧标签文案。
  * @param {string} props.remoteLabel 右侧标签文案。
  * @param {string} props.theme 当前主题标识。
- * @param {number} props.fontSize 编辑器字体大小。
  * @param {string} props.fontFamily 编辑器字体族。
- * @param {number} props.lineHeight 编辑器行高。
- * @param {number} props.renderWhitespace: 'boundary',
-        tabSize 制表符宽度。
+ * @param {number} props.tabSize 制表符宽度。
  */
 export default function MonacoConflictDiff({
   original,
@@ -37,13 +35,12 @@ export default function MonacoConflictDiff({
   localLabel,
   remoteLabel,
   theme,
-  fontSize,
   fontFamily,
-  lineHeight,
   tabSize,
 }) {
   const wrapperRef = useRef(null);
   const containerRef = useRef(null);
+  const { fontSize, lineHeight } = useComparisonTypography(containerRef, fileName);
   const diffEditorRef = useRef(null);
   const rainbowDisposersRef = useRef([]);
   const originalModelRef = useRef(null);
@@ -273,6 +270,7 @@ export default function MonacoConflictDiff({
       <div
         ref={containerRef}
         className="conflict-dialog__monaco"
+        data-comparison-zoom="edit"
         data-pending={!editorReady || undefined}
         aria-busy={!editorReady}
       />

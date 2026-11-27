@@ -419,13 +419,7 @@ export default function WorkspaceChanges({ directory }) {
 
   const runComparison = async (read) => {
     const request = ++comparisonRequest.current;
-    const state = useEditorStore.getState();
-    const activeTab = state.tabs.find((tab) => tab.id === state.activeTabId);
-    // 当前停在对比标签上时，要对比的是它记录的原文件标签。
-    const tabId =
-      activeTab?.builtin === 'diff'
-        ? (useHistoryStore.getState().diff?.sourceTabId ?? state.activeTabId)
-        : state.activeTabId;
+    const tabId = useEditorStore.getState().activeTabId;
     setComparing(true);
     try {
       const { original, external, label } = await read();

@@ -211,6 +211,7 @@
   --history-fold-background: var(--hover);
   --history-fold-shadow: color-mix(in srgb, var(--text) 24%, transparent);
 
+  position: relative;
   display: flex;
   flex-direction: column;
   width: 100%;
@@ -218,9 +219,33 @@
   min-width: 0;
   min-height: 0;
 
+  // 加载/失败态只隐藏对比内容，加载提示和重试按钮必须可见可点。
   &[data-ready='false'] {
-    opacity: 0;
-    pointer-events: none;
+    > :not(.history-diff__load-status) {
+      visibility: hidden;
+    }
+  }
+}
+
+.history-diff__load-status {
+  position: absolute;
+  inset: 0;
+  z-index: 20;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  padding: 24px;
+  background: var(--bg);
+  color: var(--text-sec);
+  font-size: 12px;
+  line-height: 1.6;
+  text-align: center;
+
+  > span {
+    max-width: 560px;
+    overflow-wrap: anywhere;
   }
 }
 
@@ -560,6 +585,7 @@ body.moki-has-background .history-diff {
   flex: 1;
   min-height: 0;
   overflow: auto;
+  padding-bottom: var(--editor-popup-space, 0px);
   scrollbar-gutter: stable;
   &.history-markdown-draft:not([data-aligned]) {
     visibility: hidden;

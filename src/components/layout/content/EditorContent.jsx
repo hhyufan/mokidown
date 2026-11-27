@@ -36,7 +36,7 @@ import { MilkdownEditor, loadHistoryDiffView } from '@utils/editorRendererBoot';
 import { registerEditorPaneTransition } from '@utils/editorPaneTransition';
 import { externalLink, openEditorLink } from '@utils/editorLinks';
 import { createAppHotkeyHandlers } from '@utils/hotkeyCommands';
-import { reportReactError } from '@/services/runtimeLogs';
+import { reportReactError, reportRuntimeLog } from '@/services/runtimeLogs';
 import {
   bindMarkdownFolding,
   bindMarkdownScroll,
@@ -111,18 +111,41 @@ class RendererErrorBoundary extends Component {
  *
  * @returns {JSX.Element} 带有重新加载操作的错误提示。
  */
-function RendererLoadError({ onReady }) {
+function RendererLoadError({
+  onReady,
+  message = 'editor.rendererLoadFailed',
+  action = 'editor.reloadRenderer',
+  onAction = () => window.location.reload(),
+}) {
   const { t } = useTranslation();
   useLayoutEffect(() => {
     onReady?.();
   }, [onReady]);
   return (
     <div className="editor-content__renderer-error" role="alert">
-      <strong>{t('editor.rendererLoadFailed')}</strong>
-      <button type="button" onClick={() => window.location.reload()}>
-        {t('editor.reloadRenderer')}
+      <strong>{t(message)}</strong>
+      <button type="button" onClick={onAction}>
+        {t(action)}
       </button>
     </div>
+  );
+}
+
+function ComparisonRenderer({ comparison, active }) {
+  const [{ attempt, View }, setRenderer] = useState(() => ({ attempt: 0, View: HistoryDiffView }));
+  const retry = () =>
+    setRenderer(({ attempt }) => ({ attempt: attempt + 1, View: lazy(loadHistoryDiffView) }));
+  return (
+    <RendererErrorBoundary
+      key={attempt}
+      fallback={
+        <RendererLoadError message="history.openFailed" action="runtimeLogs.retry" onAction={retry} />
+      }
+    >
+      <Suspense fallback={null}>
+        <View comparison={comparison} active={active} />
+      </Suspense>
+    </RendererErrorBoundary>
   );
 }
 
@@ -134,6 +157,7 @@ const DEFAULT_LINE_HEIGHT = 24;
 // 累积阈值平滑缩放，避免字号在每个微小刻度上抖动；普通鼠标滚轮仍可立即生效。
 const WHEEL_ZOOM_THRESHOLD = 24;
 const WHEEL_ZOOM_RESET_MS = 250;
+const MAX_WORKSPACE_SNAPSHOT_MS = 400;
 const ZOOM_AREA_EDITOR = 'editor';
 const ZOOM_AREA_PREVIEW = 'preview';
 const ZOOM_TARGET_BOTH = 'both';
@@ -289,15 +313,16 @@ function EditorContent() {
     () => createAppHotkeyHandlers({ toggleSidebar, togglePreview: toggleEditPreview }),
     [toggleSidebar, toggleEditPreview],
   );
-  const historyDiff = useHistoryStore((s) => s.diff);
-  useEffect(() => {
-    if (!activeTabId) return;
-    const tab = useEditorStore.getState().tabRenderList.find((item) => item.id === activeTabId);
-    if (tab?.builtin !== 'diff') return;
-    if (historyDiff?.tabId !== activeTabId) {
-      useHistoryStore.getState().activateComparison(activeTabId);
-    }
-  }, [activeTabId, historyDiff?.tabId]);
+  const historyDiff = useHistoryStore((s) => s.comparisons[activeTabId] ?? s.diff);
+  useLayoutEffect(() => {
+    const history = useHistoryStore.getState();
+    if (
+      historyDiff &&
+      history.comparisons[activeTabId] === historyDiff &&
+      history.diff !== historyDiff
+    )
+      history.activateComparison(activeTabId);
+  }, [activeTabId, historyDiff]);
   const monacoRef = useRef(null);
   const milkdownRef = useRef(null);
   const surfaceRef = useRef(null);
@@ -348,7 +373,8 @@ function EditorContent() {
   const webSplitUrl = useEditorStore((state) => state.webSplitUrl);
   const isWebSplit = Boolean(webSplitUrl) && !isSettings && !isSettingsSplit;
   // Leave the current pane full size until the split preview has real content.
-  const isSplit = isSettingsSplit || isWebSplit || (splitRequested && (!isMarkdown || markdownPreviewReady));
+  const isSplit =
+    isSettingsSplit || isWebSplit || (splitRequested && (!isMarkdown || markdownPreviewReady));
   const showMilkdown =
     isMarkdown &&
     (viewMode === 'preview' ||
@@ -509,9 +535,7 @@ function EditorContent() {
 
     const handleWheel = (event) => {
       if (!(event.ctrlKey || event.metaKey) || event.deltaY === 0) return;
-      const comparisonMode =
-        event.target.closest?.('[data-comparison-zoom]')?.dataset.comparisonZoom;
-      if (!comparisonMode && !container.contains(event.target)) return;
+      if (!container.contains(event.target)) return;
 
       event.preventDefault();
       event.stopPropagation();
@@ -526,12 +550,7 @@ function EditorContent() {
       if (Math.abs(wheelAccumulator) < WHEEL_ZOOM_THRESHOLD) return;
 
       const step = wheelAccumulator > 0 ? -1 : 1;
-      const zoomTarget = resolveZoomTarget(
-        event.target,
-        comparisonMode
-          ? { viewMode: comparisonMode, isMarkdown: comparisonMode === 'preview' }
-          : { viewMode, isMarkdown: hasPreview },
-      );
+      const zoomTarget = resolveZoomTarget(event.target, { viewMode, isMarkdown: hasPreview });
       wheelAccumulator = 0;
       applyTypography(getNextTypographyUpdate(zoomTarget, step));
     };
@@ -630,7 +649,20 @@ function EditorContent() {
     return bindMarkdownScroll(splitEditor, preview);
   }, [activeTabId, isMarkdown, isSplit, previewSyncHandle, splitEditor]);
   const showHistoryDiff = Boolean(historyDiff && historyDiff.tabId === activeTabId);
-  const showWorkspace = !showHistoryDiff && !isSettings && (isWebSplit || (activeTabMeta && !isPluginDocs));
+  const missingComparison = activeTabMeta?.builtin === 'diff' && !showHistoryDiff;
+  const showWorkspace =
+    !showHistoryDiff &&
+    !missingComparison &&
+    !isSettings &&
+    (isWebSplit || (activeTabMeta && !isPluginDocs));
+  useEffect(() => {
+    if (missingComparison)
+      reportRuntimeLog({
+        message: 'No comparison record for the active tab',
+        detail: activeTabId,
+        announce: false,
+      });
+  }, [activeTabId, missingComparison]);
   const showMonaco = Boolean(
     showWorkspace &&
     activeTabMeta &&
@@ -643,7 +675,11 @@ function EditorContent() {
     showWorkspace && (showMilkdown || (viewMode === 'preview' && isTree)),
   );
   const showHtmlPreview = Boolean(
-    showWorkspace && isHtml && viewMode !== 'edit' && !(isWebSplit && viewMode === 'split') && !isSettingsSplit,
+    showWorkspace &&
+    isHtml &&
+    viewMode !== 'edit' &&
+    !(isWebSplit && viewMode === 'split') &&
+    !isSettingsSplit,
   );
   const showSplitTree = Boolean(showWorkspace && splitRequested && isTree && !isWebSplit);
   const [monacoMounted, setMonacoMounted] = useState(false);
@@ -673,37 +709,48 @@ function EditorContent() {
     }
   }, [activeTabId, editableTabs, showSplitTree]);
 
-  const stopWorkspaceTransition = useCallback(() => {
+  const stopWorkspaceTransition = useCallback((preserveUpdate = false) => {
     const pending = workspaceTransition.current;
-    workspaceTransition.current = null;
-    pending?.resolve?.();
-    pending?.transition?.skipTransition();
+    if (!pending) return;
+    if (preserveUpdate) pending.skip = true;
+    else workspaceTransition.current = null;
+    clearTimeout(pending.timer);
+    pending.resolve?.();
+    pending.resolve = null;
+    pending.transition?.skipTransition();
   }, []);
   useLayoutEffect(() => stopWorkspaceTransition, [stopWorkspaceTransition]);
   useLayoutEffect(() => {
+    if (showHistoryDiff) stopWorkspaceTransition();
+  }, [showHistoryDiff, stopWorkspaceTransition]);
+  useLayoutEffect(() => {
     // Snapshots taken at the old viewport size must not cover the resized editor.
-    const handleResize = () => workspaceTransition.current?.transition?.skipTransition();
-    window.addEventListener('resize', handleResize);
-    return () => window.removeEventListener('resize', handleResize);
-  }, []);
+    const onResize = () => stopWorkspaceTransition(true);
+    window.addEventListener('resize', onResize);
+    return () => window.removeEventListener('resize', onResize);
+  }, [stopWorkspaceTransition]);
 
   const transitionWorkspace = useCallback(
     (update) => {
       stopWorkspaceTransition();
+      if (!useEditorStore.getState().activeTabId) return update();
       const pending = {};
       workspaceTransition.current = pending;
       pending.transition = startContentTransition(surfaceRef.current, (animated) => {
         if (workspaceTransition.current !== pending) return;
-        if (!animated) {
+        if (!animated || pending.skip) {
           workspaceTransition.current = null;
           update();
           return;
         }
         return new Promise((resolve) => {
           pending.resolve = resolve;
+          // Rendering can need a frame or a lazy import while the old snapshot is held.
+          pending.timer = setTimeout(stopWorkspaceTransition, MAX_WORKSPACE_SNAPSHOT_MS);
           const previousTab = useEditorStore.getState().activeTabId;
           flushSync(() => {
             if (!update()) {
+              clearTimeout(pending.timer);
               pending.resolve = null;
               pending.transition?.skipTransition();
               resolve();
@@ -717,6 +764,7 @@ function EditorContent() {
       });
       void pending.transition?.finished
         .finally(() => {
+          clearTimeout(pending.timer);
           if (workspaceTransition.current === pending) workspaceTransition.current = null;
         })
         .catch(() => {});
@@ -738,6 +786,7 @@ function EditorContent() {
         isWebSplit ||
         markdownPreviewTab === activeTabId);
     if (activeTabId !== pending.id || viewMode !== pending.mode || ready) {
+      clearTimeout(pending.timer);
       pending.resolve();
       pending.resolve = null;
     }
@@ -769,15 +818,27 @@ function EditorContent() {
     >
       {historyDiff && (
         <div className="editor-content__history-diff" hidden={!showHistoryDiff}>
-          <Suspense fallback={null}>
-            <HistoryDiffView />
-          </Suspense>
+          <ComparisonRenderer
+            key={historyDiff.tabId}
+            comparison={historyDiff}
+            active={showHistoryDiff}
+          />
         </div>
       )}
+      {missingComparison && (
+        <RendererLoadError
+          message="history.openFailed"
+          action="history.closeDiff"
+          onAction={() => useEditorStore.getState().closeTabs([activeTabId])}
+        />
+      )}
       {!showHistoryDiff &&
+        !missingComparison &&
         !showWorkspace &&
         (isSettings ? (
-          <Suspense fallback={<PreviewFallback />}><SettingsPage /></Suspense>
+          <Suspense fallback={<PreviewFallback />}>
+            <SettingsPage />
+          </Suspense>
         ) : isPluginDocs ? (
           <PluginDocsPage title={activeTabMeta.name} />
         ) : (
@@ -795,7 +856,7 @@ function EditorContent() {
           .filter(Boolean)
           .map((tab) => (
             <WebPageView
-              key={`${tab.id}:${tab.url}`}
+              key={tab.id}
               active={tab.id === activeTabId && !showHistoryDiff}
               className="editor-content__primary-surface"
               url={tab.url}
@@ -995,17 +1056,20 @@ function EditorContent() {
                 />
                 {isSettingsSplit ? (
                   <div className="editor-content__preview editor-content__preview--half editor-content__settings-split">
-                    <Suspense fallback={<PreviewFallback />}><SettingsPage side /></Suspense>
+                    <Suspense fallback={<PreviewFallback />}>
+                      <SettingsPage side />
+                    </Suspense>
                   </div>
-                ) : <WebPageView
-                  key={webSplitUrl}
-                  className="editor-content__preview editor-content__preview--half"
-                  url={webSplitUrl}
-                  moveLabel={t('web.newTab')}
-                  onMove={(url) => useEditorStore.getState().openWebTab(url, { fromSplit: true })}
-                  onNavigate={(url) => useEditorStore.getState().openWebSplit(url)}
-                  onClose={() => useEditorStore.getState().closeWebSplit()}
-                />}
+                ) : (
+                  <WebPageView
+                    className="editor-content__preview editor-content__preview--half"
+                    url={webSplitUrl}
+                    moveLabel={t('web.newTab')}
+                    onMove={(url) => useEditorStore.getState().openWebTab(url, { fromSplit: true })}
+                    onNavigate={(url) => useEditorStore.getState().openWebSplit(url)}
+                    onClose={() => useEditorStore.getState().closeWebSplit()}
+                  />
+                )}
               </div>
             )}
             <FloatingRunButton />

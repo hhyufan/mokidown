@@ -3,6 +3,7 @@ import useEditorStore from '@store/useEditorStore';
 import { isMarkdownPath, prepareComparisonRenderer } from '@utils/editorRendererBoot';
 
 let comparisonSequence = Date.now();
+const previousHistory = import.meta.hot?.data.history;
 
 export function isMarkdownComparison(tab, diff) {
   if (diff?.external) {
@@ -36,10 +37,10 @@ function viewModeFor(external) {
  * 把 `diff` 换成对应记录，关闭标签时再丢弃记录。
  */
 const useHistoryStore = create((set, get) => ({
-  diff: null,
-  comparisons: {},
+  diff: previousHistory?.diff ?? null,
+  comparisons: previousHistory?.comparisons ?? {},
   historyWrite: null,
-  viewMode: 'preview',
+  viewMode: previousHistory?.viewMode ?? 'preview',
 
   setDiff: (diff) => {
     const viewMode = diff?.external ? 'edit' : 'preview';
@@ -55,7 +56,7 @@ const useHistoryStore = create((set, get) => ({
   openFileComparison: (tabId, content, external, label) => {
     const editor = useEditorStore.getState();
     const requested = editor.tabs.find((tab) => tab.id === tabId);
-    const previous = Object.values(get().comparisons).find((item) => item.tabId === tabId);
+    const previous = get().comparisons[tabId];
     // 当前激活的是对比标签时，真正要对比的是它记录的原文件标签。
     const sourceTabId = requested?.builtin === 'diff' ? (previous?.sourceTabId ?? tabId) : tabId;
     const source = editor.tabs.find((tab) => tab.id === sourceTabId);
@@ -67,7 +68,6 @@ const useHistoryStore = create((set, get) => ({
     const id = existing?.tabId ?? `diff:${crypto.randomUUID()}`;
     const viewMode = viewModeFor(external);
     prepareComparisonRenderer(viewMode === 'preview');
-    editor.openComparisonTab({ id, name, sourceTabId });
     const comparison = {
       tabId: id,
       sourceTabId,
@@ -82,6 +82,7 @@ const useHistoryStore = create((set, get) => ({
       diff: comparison,
       viewMode,
     }));
+    editor.openComparisonTab({ id, name, sourceTabId });
   },
 
   /** 切换标签时恢复该对比标签自己的数据。 */
@@ -130,5 +131,12 @@ const useHistoryStore = create((set, get) => ({
 
   notifyHistoryWrite: (path) => set({ historyWrite: { path } }),
 }));
+
+if (import.meta.hot) {
+  import.meta.hot.dispose((data) => {
+    const { diff, comparisons, viewMode } = useHistoryStore.getState();
+    data.history = { diff, comparisons, viewMode };
+  });
+}
 
 export default useHistoryStore;

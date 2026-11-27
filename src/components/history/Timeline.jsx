@@ -72,8 +72,8 @@ export default function Timeline() {
   }, []);
 
   useEffect(() => {
-    const comparison = useHistoryStore.getState().diff;
-    if (comparison && comparison.tabId !== activeTabId) setDiff(null);
+    const { diff, comparisons } = useHistoryStore.getState();
+    if (diff && diff.tabId !== activeTabId && !comparisons[diff.tabId]) setDiff(null);
     setEntries([]);
     setLoaded(false);
     load();

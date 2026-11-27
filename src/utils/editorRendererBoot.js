@@ -5,6 +5,7 @@ import { preloadMonacoEditor } from './monacoRuntimeBoot';
 let milkdownRequest;
 let loadedMilkdown;
 let historyRequest;
+const HISTORY_MODULE_TIMEOUT_MS = 15000;
 
 export const isMarkdownPath = (path) =>
   typeof path === 'string' && /\.(?:md|markdown|mdx)$/i.test(path);
@@ -17,12 +18,13 @@ export function loadMilkdownEditor() {
     })
     .catch((error) => {
       milkdownRequest = undefined;
+      PendingMilkdownEditor = lazy(loadMilkdownEditor);
       throw error;
     });
   return milkdownRequest;
 }
 
-const PendingMilkdownEditor = lazy(loadMilkdownEditor);
+let PendingMilkdownEditor = lazy(loadMilkdownEditor);
 
 export const MilkdownEditor = forwardRef(function MilkdownEditor(props, ref) {
   // Keep the resolved component type stable for each mounted document.
@@ -31,12 +33,23 @@ export const MilkdownEditor = forwardRef(function MilkdownEditor(props, ref) {
 });
 
 export function loadHistoryDiffView() {
-  historyRequest ??= importWithRetry(() => import('../components/history/HistoryDiffView')).catch(
-    (error) => {
+  if (historyRequest) return historyRequest;
+  let timer;
+  const deadline = new Promise((_, reject) => {
+    timer = setTimeout(
+      () => reject(new Error('Timed out loading the comparison module')),
+      HISTORY_MODULE_TIMEOUT_MS,
+    );
+  });
+  historyRequest = Promise.race([
+    importWithRetry(() => import('../components/history/HistoryDiffView')),
+    deadline,
+  ])
+    .finally(() => clearTimeout(timer))
+    .catch((error) => {
       historyRequest = undefined;
       throw error;
-    },
-  );
+    });
   return historyRequest;
 }
 

@@ -6,6 +6,7 @@ import { MilkdownEditor } from '@utils/editorRendererBoot';
 export default function MarkdownComparisonEditor({
   tabId,
   content,
+  typography,
   filePath,
   onDraftChange,
   busy,
@@ -37,6 +38,7 @@ export default function MarkdownComparisonEditor({
               filePath,
               initialContent,
               content,
+              typography,
               onChange: onDraftChange,
               layout,
               onReady,

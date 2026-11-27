@@ -15,7 +15,8 @@ const { Paragraph } = Typography;
 function RecoveryModal({ open, drafts, onRestore, onDiscard }) {
   useTranslation();
   const theme = useThemeStore((state) => state.theme);
-  const { fontSize, fontFamily, lineHeight, tabSize } = useConfigStore();
+  const fontFamily = useConfigStore((state) => state.fontFamily);
+  const tabSize = useConfigStore((state) => state.tabSize);
   const [selected, setSelected] = useState(() => new Set(drafts.map((draft) => draft.recoveryId)));
   const [previewId, setPreviewId] = useState(drafts[0]?.recoveryId);
   const preview = drafts.find((draft) => draft.recoveryId === previewId) || drafts[0];
@@ -94,7 +95,7 @@ function RecoveryModal({ open, drafts, onRestore, onDiscard }) {
               fileName={preview.path || preview.name}
               localLabel={typeof preview.diskContent === 'string' ? i18n.t('sync.conflict.remote') : i18n.t('unsaved.noDiskContent')}
               remoteLabel={i18n.t('unsaved.recoveredContent')}
-              theme={theme} fontSize={fontSize} fontFamily={fontFamily} lineHeight={lineHeight} tabSize={tabSize}
+              theme={theme} fontFamily={fontFamily} tabSize={tabSize}
             />
           </Suspense>
         </div>

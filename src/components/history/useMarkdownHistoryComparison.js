@@ -3,13 +3,23 @@ import { useEffect, useRef, useState } from 'react';
 const MAX_CACHED_COMPARISONS = 2;
 const MAX_CACHED_SOURCE_LENGTH = 500_000;
 
-export function useMarkdownHistoryComparison(original, modified, enabled, includeIdentical) {
+export function useMarkdownHistoryComparison(
+  original,
+  modified,
+  enabled,
+  includeIdentical,
+  attempt = 0,
+) {
   const [result, setResult] = useState(null);
   const clientRef = useRef(null);
   const completed = useRef([]);
   const cached = enabled
     ? completed.current.find((entry) => entry.original === original && entry.modified === modified)
     : null;
+
+  useEffect(() => {
+    if (attempt > 0) setResult(null);
+  }, [attempt]);
 
   useEffect(() => {
     if (!enabled) return undefined;
@@ -52,6 +62,7 @@ export function useMarkdownHistoryComparison(original, modified, enabled, includ
         original,
         layout: previous?.original === original ? previous.layout : null,
         error: String(error?.message || error),
+        attempt,
       }));
     };
     const openInline = () => {
@@ -74,17 +85,25 @@ export function useMarkdownHistoryComparison(original, modified, enabled, includ
         openInline();
         return;
       }
-      worker = new Worker(new URL('../../workers/markdownHistory.worker.js', import.meta.url), {
-        type: 'module',
-      });
-      // Worker 在个别环境里会静默不返回（模块加载失败但无 error 事件），
-      // 超时后切到同线程计算，避免对比界面一直停在加载态。
-      watchdog = setTimeout(() => {
-        if (hasResult) return;
+      try {
+        worker = new Worker(new URL('../../workers/markdownHistory.worker.js', import.meta.url), {
+          type: 'module',
+        });
+      } catch {
+        openInline();
+        return;
+      }
+      const fallback = () => {
+        clearTimeout(watchdog);
         worker?.terminate();
         worker = null;
         active = null;
         openInline();
+      };
+      // Worker 在个别环境里会静默不返回（模块加载失败但无 error 事件），
+      // 超时后切到同线程计算，避免对比界面一直停在加载态。
+      watchdog = setTimeout(() => {
+        if (!hasResult) fallback();
       }, 1500);
       worker.onmessage = ({ data }) => {
         clearTimeout(watchdog);
@@ -98,9 +117,9 @@ export function useMarkdownHistoryComparison(original, modified, enabled, includ
       };
       worker.onerror = (event) => {
         event.preventDefault();
-        fail(event.message || 'Markdown comparison failed');
+        fallback();
       };
-      worker.onmessageerror = () => fail('Invalid Markdown comparison result');
+      worker.onmessageerror = fallback;
       worker.postMessage({ original });
     };
     const run = () => {
@@ -154,11 +173,12 @@ export function useMarkdownHistoryComparison(original, modified, enabled, includ
       }
       clientRef.current = null;
     };
-  }, [enabled, original]);
+  }, [attempt, enabled, original]);
 
   useEffect(() => {
     if (enabled) clientRef.current?.(modified, includeIdentical);
-  }, [enabled, original, modified, includeIdentical]);
+  }, [attempt, enabled, original, modified, includeIdentical]);
 
-  return cached ?? (enabled && result?.original === original ? result : null);
+  const current = enabled && result?.original === original;
+  return cached ?? (current && (!result.error || result.attempt === attempt) ? result : null);
 }

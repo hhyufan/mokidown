@@ -1178,5 +1178,6 @@
   "settings.documents.directoryDesc": "Where configuration files such as the image host rule live; leave empty to use AppData.",
   "settings.documents.directoryPlaceholder": "Default (AppData)",
   "settings.snapshot.openLocal": "Open local settings",
-  "settings.snapshot.openLocalDesc": "Edit local settings in the editor; saving applies them immediately."
+  "settings.snapshot.openLocalDesc": "Edit local settings in the editor; saving applies them immediately.",
+  "history.openFailed": "Failed to open comparison"
 }

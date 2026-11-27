@@ -4,6 +4,7 @@ import { act, cleanup, fireEvent, render, screen } from '@testing-library/react'
 import useEditorStore from '@store/useEditorStore';
 import useConfigStore from '@store/useConfigStore';
 import useHistoryStore from '@store/useHistoryStore';
+import useComparisonTypography from '@hooks/useComparisonTypography';
 import { openExternal } from '@utils/tauriApi';
 import EditorContent from './EditorContent';
 
@@ -53,10 +54,13 @@ vi.mock('@components/editor/FloatingRunButton', () => ({ default: () => null }))
 vi.mock('@components/history/HistoryDiffView', () => ({
   default: function HistoryDiffViewMock() {
     const mode = useHistoryStore((state) => state.viewMode);
+    const diff = useHistoryStore((state) => state.diff);
+    const root = React.useRef(null);
+    const { fontSize } = useComparisonTypography(root, diff, mode === 'preview');
     return (
-      <div data-comparison-zoom={mode}>
-        <div>original pane</div>
-        <div>modified pane</div>
+      <div ref={root} data-comparison-zoom={mode}>
+        <div style={{ fontSize }}>original pane</div>
+        <div style={{ fontSize }}>modified pane</div>
       </div>
     );
   },
@@ -76,17 +80,21 @@ beforeEach(() => {
   vi.clearAllMocks();
 });
 
-it('zooms both diff panes with the typography setting for the current comparison mode', async () => {
-  useConfigStore.setState({ previewZoomSync: false });
+it('zooms both diff panes without changing the main editor or preview typography', async () => {
+  useConfigStore.setState({ fontSize: 22, previewFontSize: 24, previewZoomSync: false });
   render(<EditorContent />);
   open('test.md');
   act(() => useHistoryStore.getState().setDiff({ tabId: 'test.md', content: '# Before' }));
   const original = await screen.findByText('original pane');
+  const modified = screen.getByText('modified pane');
+  expect(original).toHaveStyle({ fontSize: '14px' });
   fireEvent.wheel(original, { ctrlKey: true, deltaY: -120 });
-  expect(useConfigStore.getState()).toMatchObject({ fontSize: 14, previewFontSize: 15 });
+  expect(modified).toHaveStyle({ fontSize: '15px' });
   act(() => useHistoryStore.getState().toggleViewMode());
-  fireEvent.wheel(screen.getByText('modified pane'), { ctrlKey: true, deltaY: -120 });
-  expect(useConfigStore.getState()).toMatchObject({ fontSize: 15, previewFontSize: 15 });
+  expect(original).toHaveStyle({ fontSize: '14px' });
+  fireEvent.wheel(modified, { ctrlKey: true, deltaY: -120 });
+  expect(original).toHaveStyle({ fontSize: '15px' });
+  expect(useConfigStore.getState()).toMatchObject({ fontSize: 22, previewFontSize: 24 });
 });
 afterEach(cleanup);
 function open(name, mode = 'edit') {

@@ -567,7 +567,10 @@ const useEditorStore = create(
 
       /** ??????????? */
       setActiveTab: (tabId, { animate = false } = {}) => {
-        const from = get().activeTabId;
+        const { activeTabId: from, tabRenderList } = get();
+        const opensComparison = tabRenderList.some(
+          (tab) => tab.id === tabId && tab.builtin === 'diff',
+        );
         const activate = () => {
           const { activeTabId, tabRenderList } = get();
           if (tabId === activeTabId) return false;
@@ -577,7 +580,9 @@ const useEditorStore = create(
           set({ activeTabId: tabId });
           return true;
         };
-        if (animate) transitionEditorPane(activate);
+        // Comparisons fade in once Monaco or Milkdown is ready. They can need live
+        // layout and animation frames, so don't hold them behind a workspace snapshot.
+        if (animate && !opensComparison) transitionEditorPane(activate);
         else activate();
       },
 

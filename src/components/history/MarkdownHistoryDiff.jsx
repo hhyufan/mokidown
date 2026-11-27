@@ -138,6 +138,7 @@ export default function MarkdownHistoryDiff({
   modifiedPath,
   draftContent,
   comparison,
+  typography,
   previewBoundsRef,
   hidden,
   foldState,
@@ -297,6 +298,7 @@ export default function MarkdownHistoryDiff({
         <MarkdownComparisonEditor
           tabId={tabId}
           content={original}
+          typography={typography}
           layout={comparison ? originalLayout : null}
           previewBoundsRef={previewBoundsRef}
           filePath={originalPath}
@@ -306,6 +308,7 @@ export default function MarkdownHistoryDiff({
           tabId={tabId}
           side="modified"
           content={draftContent}
+          typography={typography}
           filePath={modifiedPath}
           readOnly={!onDraftChange}
           layout={comparison && ready ? modifiedLayout : null}

@@ -1178,5 +1178,6 @@
   "settings.documents.directoryDesc": "图床规则等配置文件的存放目录；留空使用 AppData。",
   "settings.documents.directoryPlaceholder": "默认（AppData）",
   "settings.snapshot.openLocal": "打开本地设置文件",
-  "settings.snapshot.openLocalDesc": "在编辑器里直接编辑本地设置，保存后立即应用。"
+  "settings.snapshot.openLocalDesc": "在编辑器里直接编辑本地设置，保存后立即应用。",
+  "history.openFailed": "对比打开失败"
 }
