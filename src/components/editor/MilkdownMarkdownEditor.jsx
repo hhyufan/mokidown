@@ -2461,11 +2461,18 @@ function MilkdownInner(
         const input = event.target.closest('input, textarea');
         const handled = handleEditingShortcut(event.nativeEvent, (action, custom) => {
           if (input) return runTextFieldShortcut(input, action, custom);
+          const cmRoot = event.target.closest('.cm-editor');
+          if (action === 'copy' && !cmRoot) {
+            const image = selectedImageSource(view.state);
+            if (image) {
+              void copyMarkdownImage(image, documentPath);
+              return true;
+            }
+          }
           const direction = action === 'undo' ? -1 : action === 'redo' ? 1 : 0;
           if (direction && !isComparison && !readOnly && replayHistory(direction)) return true;
           if (!custom) return false;
           if (readOnly && action !== 'copy' && action !== 'selectAll') return true;
-          const cmRoot = event.target.closest('.cm-editor');
           const cm = cmRoot && CodeMirrorView.findFromDOM(cmRoot);
           if (direction) {
             (direction < 0 ? undo : redo)(view.state, view.dispatch);
