@@ -5,7 +5,7 @@ import remarkMath from 'remark-math';
 import rehypeRaw from 'rehype-raw';
 import rehypeSanitize, { defaultSchema } from 'rehype-sanitize';
 import rehypeKatex from 'rehype-katex';
-import Prism from 'prismjs';
+import Prism from '@utils/prismGlobal';
 import remarkMarkdownHtml from '@utils/remarkMarkdownHtml';
 import 'katex/dist/katex.min.css';
 import {

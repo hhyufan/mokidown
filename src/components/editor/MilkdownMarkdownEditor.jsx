@@ -23,7 +23,11 @@ import MarkdownTreeBlock from './MarkdownTreeBlock';
 import { useCodeBlockNavigation } from '@hooks/useCodeBlockNavigation';
 import { useMarkdownJumpFeedback } from '@hooks/useMarkdownJumpFeedback';
 import { normalizeCodeLanguage } from '@utils/knowledgeTree';
-import { createMilkdownHeadingFoldsPlugin, restoreMilkdownFolds, revealMilkdownOutlineTarget } from './milkdownHeadingFolds';
+import {
+  createMilkdownHeadingFoldsPlugin,
+  restoreMilkdownFolds,
+  revealMilkdownOutlineTarget,
+} from './milkdownHeadingFolds';
 import { jumpToFootnote } from '@utils/footnoteParser';
 import { createMilkdownFoldBridge, milkdownFoldPositions } from './milkdownFoldBridge';
 import { findOutlineDomTarget } from './outlineNavigation';
@@ -121,7 +125,7 @@ import { rust } from '@codemirror/legacy-modes/mode/rust';
 import { ruby } from '@codemirror/legacy-modes/mode/ruby';
 import { yaml } from '@codemirror/legacy-modes/mode/yaml';
 import { toml } from '@codemirror/legacy-modes/mode/toml';
-import Prism from 'prismjs';
+import Prism from '@utils/prismGlobal';
 import 'prismjs/components/prism-markup';
 import 'prismjs/components/prism-markup-templating';
 import 'prismjs/components/prism-css';
@@ -1232,8 +1236,10 @@ function commitTypedCodeBlockLanguage(view, event) {
   const firstListedLanguage =
     picker.querySelector('.language-list-item[data-language]')?.dataset.language || '';
   const nextLanguage =
-    option?.dataset.language || findKnownCodeLanguageName(typedValue) ||
-    typedValue || firstListedLanguage;
+    option?.dataset.language ||
+    findKnownCodeLanguageName(typedValue) ||
+    typedValue ||
+    firstListedLanguage;
   if (!nextLanguage) return true;
 
   const resolved = resolveCodeBlockNodeFromDom(view, codeBlock);
@@ -1906,14 +1912,14 @@ function MilkdownInner(
                   decorations: (state) => comparisonLayoutKey.getState(state),
                 },
                 view: (view) => ({
-                      destroy: bindComparisonLineReader(view, () => comparisonLayoutRef.current),
-                      update(view, previous) {
-                        if (readOnly || view.state.doc === previous.doc) return;
-                        queueMicrotask(() => {
-                          if (!view.isDestroyed) publishEditorContent(ctx);
-                        });
-                      },
-                    }),
+                  destroy: bindComparisonLineReader(view, () => comparisonLayoutRef.current),
+                  update(view, previous) {
+                    if (readOnly || view.state.doc === previous.doc) return;
+                    queueMicrotask(() => {
+                      if (!view.isDestroyed) publishEditorContent(ctx);
+                    });
+                  },
+                }),
               }),
           ),
         );
@@ -2353,10 +2359,14 @@ function MilkdownInner(
         const node = doc.nodeAt(pos);
         if (!node || node.type.name !== kind) return false;
         revealMilkdownOutlineTarget(view, pos);
-        const label = kind === 'list_item' && node.firstChild?.type.name === 'paragraph' ? pos + 1 : pos;
-        showOutlineJump(() => !view.isDestroyed && view.state.doc === doc ? view.nodeDOM(label) : null, {
-          highlight: () => highlightOutlinePosition(view, label),
-        });
+        const label =
+          kind === 'list_item' && node.firstChild?.type.name === 'paragraph' ? pos + 1 : pos;
+        showOutlineJump(
+          () => (!view.isDestroyed && view.state.doc === doc ? view.nodeDOM(label) : null),
+          {
+            highlight: () => highlightOutlinePosition(view, label),
+          },
+        );
         return true;
       };
       if (position != null && jump(position)) return;
@@ -2491,17 +2501,24 @@ function MilkdownInner(
         }
       }}
       onContextMenuCapture={(event) => {
-        if (contextMenuSelection.current || selectedRange(event.currentTarget)) handleContextMenu(event);
+        if (contextMenuSelection.current || selectedRange(event.currentTarget))
+          handleContextMenu(event);
       }}
       onContextMenu={handleContextMenu}
       onCopyCapture={(event) => {
         const view = getMediaView();
-        if (!view?.dom.contains(event.target) ||
-          event.target.closest('input, textarea, .cm-editor, .milkdown-media-inline')) return;
+        if (
+          !view?.dom.contains(event.target) ||
+          event.target.closest('input, textarea, .cm-editor, .milkdown-media-inline')
+        )
+          return;
         if (selectedMarkdownHtml(view.dom)) {
           event.preventDefault();
           event.stopPropagation();
-          event.clipboardData.setData('text/plain', view.dom.ownerDocument.getSelection().toString());
+          event.clipboardData.setData(
+            'text/plain',
+            view.dom.ownerDocument.getSelection().toString(),
+          );
           return;
         }
         const src = selectedImageSource(view.state);
@@ -2536,9 +2553,17 @@ function MilkdownInner(
             const { doc, selection } = cm?.state ?? view.state;
             void pasteMilkdownClipboard(view, cm, () => {
               const state = cm?.state ?? view.state;
-              return !view.isDestroyed && (!cm || cm.dom.isConnected) &&
-                state.doc === doc && state.selection.eq(selection);
-            }).catch(() => useNotificationStore.getState().notify('error', i18n.t('editor.menu.actionFailed'), '', 2500));
+              return (
+                !view.isDestroyed &&
+                (!cm || cm.dom.isConnected) &&
+                state.doc === doc &&
+                state.selection.eq(selection)
+              );
+            }).catch(() =>
+              useNotificationStore
+                .getState()
+                .notify('error', i18n.t('editor.menu.actionFailed'), '', 2500),
+            );
           } else if (action === 'selectAll') {
             if (cm) cm.dispatch({ selection: { anchor: 0, head: cm.state.doc.length } });
             else view.dispatch(view.state.tr.setSelection(new AllSelection(view.state.doc)));

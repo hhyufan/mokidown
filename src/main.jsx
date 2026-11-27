@@ -1,4 +1,5 @@
 // Select the runtime before importing any editor, session or extension modules.
+import '@utils/prismGlobal';
 import '@utils/storageMigration';
 import { invoke } from '@utils/tauriInvoke';
 import useConfigStore from '@store/useConfigStore';

@@ -36,7 +36,7 @@ import remarkMarkdownHtml from '@utils/remarkMarkdownHtml';
 import rehypeRaw from 'rehype-raw';
 import rehypeKatex from 'rehype-katex';
 import rehypeSanitize, { defaultSchema } from 'rehype-sanitize';
-import Prism from 'prismjs';
+import Prism from '@utils/prismGlobal';
 import 'katex/dist/katex.min.css';
 import 'prismjs/components/prism-markup';
 import 'prismjs/components/prism-markup-templating';
@@ -79,7 +79,11 @@ import EditorContextMenu from './EditorContextMenu';
 import { editingShortcutOf, handleEditingShortcut } from '@utils/basicEditingShortcuts';
 import { getResolvedHotkeys } from '@hooks/useHotkeys';
 import { formatKeybinding } from '@utils/keybinding';
-import { capturePreviewSelection, openSnapshotPayload, runQuickSnapshot } from '@utils/snapshotCapture';
+import {
+  capturePreviewSelection,
+  openSnapshotPayload,
+  runQuickSnapshot,
+} from '@utils/snapshotCapture';
 import { jumpToFootnote } from '@utils/footnoteParser';
 import {
   ALLOWED_IMAGE_PROTOCOLS,
@@ -117,15 +121,46 @@ function slugify(text) {
 }
 
 const LANG_DISPLAY = {
-  html: 'HTML', xml: 'XML', sql: 'SQL', css: 'CSS', cpp: 'C++',
-  js: 'JavaScript', javascript: 'JavaScript', ts: 'TypeScript', typescript: 'TypeScript',
-  py: 'Python', python: 'Python', php: 'PHP', md: 'Markdown',
-  yml: 'YAML', yaml: 'YAML', json: 'JSON', rb: 'Ruby', java: 'Java',
-  c: 'C', go: 'Go', rust: 'Rust', kotlin: 'Kotlin', swift: 'Swift',
-  scss: 'SCSS', sass: 'Sass', bash: 'Bash', shell: 'Shell', sh: 'Shell',
-  mermaid: 'Mermaid', jsx: 'JSX', tsx: 'TSX', vue: 'Vue',
-  toml: 'TOML', ini: 'INI', lua: 'Lua', r: 'R', dart: 'Dart',
-  cs: 'C#', csharp: 'C#', 'c#': 'C#',
+  html: 'HTML',
+  xml: 'XML',
+  sql: 'SQL',
+  css: 'CSS',
+  cpp: 'C++',
+  js: 'JavaScript',
+  javascript: 'JavaScript',
+  ts: 'TypeScript',
+  typescript: 'TypeScript',
+  py: 'Python',
+  python: 'Python',
+  php: 'PHP',
+  md: 'Markdown',
+  yml: 'YAML',
+  yaml: 'YAML',
+  json: 'JSON',
+  rb: 'Ruby',
+  java: 'Java',
+  c: 'C',
+  go: 'Go',
+  rust: 'Rust',
+  kotlin: 'Kotlin',
+  swift: 'Swift',
+  scss: 'SCSS',
+  sass: 'Sass',
+  bash: 'Bash',
+  shell: 'Shell',
+  sh: 'Shell',
+  mermaid: 'Mermaid',
+  jsx: 'JSX',
+  tsx: 'TSX',
+  vue: 'Vue',
+  toml: 'TOML',
+  ini: 'INI',
+  lua: 'Lua',
+  r: 'R',
+  dart: 'Dart',
+  cs: 'C#',
+  csharp: 'C#',
+  'c#': 'C#',
 };
 
 /**
@@ -136,7 +171,7 @@ const LANG_DISPLAY = {
  */
 function getLangDisplay(raw) {
   const key = (raw || '').toLowerCase();
-  return LANG_DISPLAY[key] || (key.charAt(0).toUpperCase() + key.slice(1));
+  return LANG_DISPLAY[key] || key.charAt(0).toUpperCase() + key.slice(1);
 }
 
 const sanitizeSchema = {
@@ -145,9 +180,28 @@ const sanitizeSchema = {
   clobber: [],
   tagNames: [
     ...(defaultSchema.tagNames || []),
-    'span', 'div', 'section', 'details', 'summary', 'sup', 'sub',
-    'ins', 'del', 'mark', 'abbr', 'ruby', 'rt', 'rp',
-    'dl', 'dt', 'dd', 'figure', 'figcaption', 'kbd', 'var', 'samp',
+    'span',
+    'div',
+    'section',
+    'details',
+    'summary',
+    'sup',
+    'sub',
+    'ins',
+    'del',
+    'mark',
+    'abbr',
+    'ruby',
+    'rt',
+    'rp',
+    'dl',
+    'dt',
+    'dd',
+    'figure',
+    'figcaption',
+    'kbd',
+    'var',
+    'samp',
   ],
   protocols: {
     ...defaultSchema.protocols,
@@ -156,11 +210,27 @@ const sanitizeSchema = {
   attributes: {
     ...defaultSchema.attributes,
     '*': [...(defaultSchema.attributes?.['*'] || []), 'className', 'class', 'style', 'id'],
-    a: [...(defaultSchema.attributes?.a || []), 'id', 'className', 'class', 'dataFootnoteRef', 'dataFootnoteBackref'],
+    a: [
+      ...(defaultSchema.attributes?.a || []),
+      'id',
+      'className',
+      'class',
+      'dataFootnoteRef',
+      'dataFootnoteBackref',
+    ],
     code: [...(defaultSchema.attributes?.code || []), 'className', 'class'],
     span: [...(defaultSchema.attributes?.span || []), 'className', 'class', 'style', 'id'],
     div: [...(defaultSchema.attributes?.div || []), 'className', 'class', 'style'],
-    img: [...(defaultSchema.attributes?.img || []), 'src', 'alt', 'title', 'width', 'height', 'className', 'class'],
+    img: [
+      ...(defaultSchema.attributes?.img || []),
+      'src',
+      'alt',
+      'title',
+      'width',
+      'height',
+      'className',
+      'class',
+    ],
     sup: ['id', 'class'],
     li: ['id', 'className', 'class'],
     ul: ['className', 'class'],
@@ -206,7 +276,11 @@ const rehypePlugins = [
   rehypeSingleFootnoteBackref,
 ];
 const taskCascadePlugins = [...rehypePlugins, rehypeTaskListTree, rehypeMarkdownSections];
-const independentTaskPlugins = [...rehypePlugins, [rehypeTaskListTree, { cascade: false }], rehypeMarkdownSections];
+const independentTaskPlugins = [
+  ...rehypePlugins,
+  [rehypeTaskListTree, { cascade: false }],
+  rehypeMarkdownSections,
+];
 
 /**
  * 渲染 Markdown 代码节点，并按语言分流到普通代码、高亮代码或 Mermaid 组件。
@@ -225,10 +299,18 @@ const CodeBlock = memo(function CodeBlock({ children, className, ...props }) {
   }
 
   if (!match) {
-    return <code className={className} {...props}>{children}</code>;
+    return (
+      <code className={className} {...props}>
+        {children}
+      </code>
+    );
   }
 
-  return <code className={`language-${lang}`} {...props}>{children}</code>;
+  return (
+    <code className={`language-${lang}`} {...props}>
+      {children}
+    </code>
+  );
 });
 
 /**
@@ -240,17 +322,28 @@ const CodeBlock = memo(function CodeBlock({ children, className, ...props }) {
 function makeHeading(tag, foldControl) {
   return function Heading({ children, node, ...props }) {
     const labelId = useId();
-    const text = typeof children === 'string'
-      ? children
-      : Array.isArray(children)
-        ? children.map((c) => (typeof c === 'string' ? c : c?.props?.children ?? '')).join('')
-        : '';
+    const text =
+      typeof children === 'string'
+        ? children
+        : Array.isArray(children)
+          ? children.map((c) => (typeof c === 'string' ? c : (c?.props?.children ?? ''))).join('')
+          : '';
     const id = slugify(text);
     const control = foldControl(props['data-md-heading']);
     const attributes = { id, ...props, 'data-outline-line': node?.position?.start?.line };
     if (!control) return createElement(tag, attributes, children);
-    return createElement(tag, { ...attributes, className: `${props.className || ''} moki-foldable-heading`, 'aria-labelledby': labelId },
-      control, <span className="md-preview__fold-heading-label" id={labelId}>{children}</span>);
+    return createElement(
+      tag,
+      {
+        ...attributes,
+        className: `${props.className || ''} moki-foldable-heading`,
+        'aria-labelledby': labelId,
+      },
+      control,
+      <span className="md-preview__fold-heading-label" id={labelId}>
+        {children}
+      </span>,
+    );
   };
 }
 
@@ -327,7 +420,10 @@ const cancelIdle =
  * @param {object} props 组件属性。
  * @returns {JSX.Element} Markdown 预览面板。
  */
-const MarkdownPreview = forwardRef(function MarkdownPreview({ className, foldedRanges = noFolds, onToggleFold, visible = true, onReady }, ref) {
+const MarkdownPreview = forwardRef(function MarkdownPreview(
+  { className, foldedRanges = noFolds, onToggleFold, visible = true, onReady },
+  ref,
+) {
   const { t } = useTranslation();
   const footnoteOrigins = useRef(new WeakMap());
   const activeTabId = useEditorStore((s) => s.activeTabId);
@@ -351,32 +447,67 @@ const MarkdownPreview = forwardRef(function MarkdownPreview({ className, foldedR
   const handleContextMenu = (event) => {
     const selection = window.getSelection();
     const root = containerRef.current;
-    const selected = root?.contains(selection?.anchorNode) && root?.contains(selection?.focusNode) ? selection.toString() : '';
+    const selected =
+      root?.contains(selection?.anchorNode) && root?.contains(selection?.focusNode)
+        ? selection.toString()
+        : '';
     const hotkeys = getResolvedHotkeys();
     const snapshotBinding = hotkeys.captureSnapshot;
     const quickSnapshotBinding = hotkeys.quickSnapshot;
     const snapshotPayload = capturePreviewSelection(root, rawContent, activeTab, event.target);
-    openMenu(event, [
-      { key: 'copy', label: i18n.t('editor.menu.copy'), ...editingShortcutOf('copy'), disabled: !selected,
-        run: () => navigator.clipboard.writeText(selected) },
-      { key: 'copyAll', label: i18n.t('editor.menu.copyAll'), run: () => navigator.clipboard.writeText(rawContent) },
-      { key: 'snapshot', label: i18n.t('editor.menu.snapshot'), keybinding: snapshotBinding,
-        shortcut: formatKeybinding(snapshotBinding),
-        runOnPress: true,
-        run: () => openSnapshotPayload(snapshotPayload) },
-      { key: 'quickSnapshot', label: i18n.t('editor.menu.quickSnapshot'), keybinding: quickSnapshotBinding,
-        shortcut: formatKeybinding(quickSnapshotBinding),
-        runOnPress: true,
-        run: () => runQuickSnapshot(snapshotPayload) },
-      { key: 's1', separator: true },
-      { key: 'selectAll', label: i18n.t('editor.menu.selectAll'), ...editingShortcutOf('selectAll'), run: () => {
-        const range = document.createRange(); range.selectNodeContents(root);
-        selection.removeAllRanges(); selection.addRange(range);
-      } },
-    ], 'preview');
+    openMenu(
+      event,
+      [
+        {
+          key: 'copy',
+          label: i18n.t('editor.menu.copy'),
+          ...editingShortcutOf('copy'),
+          disabled: !selected,
+          run: () => navigator.clipboard.writeText(selected),
+        },
+        {
+          key: 'copyAll',
+          label: i18n.t('editor.menu.copyAll'),
+          run: () => navigator.clipboard.writeText(rawContent),
+        },
+        {
+          key: 'snapshot',
+          label: i18n.t('editor.menu.snapshot'),
+          keybinding: snapshotBinding,
+          shortcut: formatKeybinding(snapshotBinding),
+          runOnPress: true,
+          run: () => openSnapshotPayload(snapshotPayload),
+        },
+        {
+          key: 'quickSnapshot',
+          label: i18n.t('editor.menu.quickSnapshot'),
+          keybinding: quickSnapshotBinding,
+          shortcut: formatKeybinding(quickSnapshotBinding),
+          runOnPress: true,
+          run: () => runQuickSnapshot(snapshotPayload),
+        },
+        { key: 's1', separator: true },
+        {
+          key: 'selectAll',
+          label: i18n.t('editor.menu.selectAll'),
+          ...editingShortcutOf('selectAll'),
+          run: () => {
+            const range = document.createRange();
+            range.selectNodeContents(root);
+            selection.removeAllRanges();
+            selection.addRange(range);
+          },
+        },
+      ],
+      'preview',
+    );
   };
 
-  const { value: processedContent, pending: isAnalyzing } = useMarkdownAnalysis(activeTabId, rawContent, 'footnotes');
+  const { value: processedContent, pending: isAnalyzing } = useMarkdownAnalysis(
+    activeTabId,
+    rawContent,
+    'footnotes',
+  );
 
   // `useDeferredValue` 会把较重的 Markdown 树渲染降到较低优先级处理。新的
   // 预览树尚在构建时，旧树仍然保持可交互，从而降低长文档下编辑器、滚动条
@@ -390,7 +521,11 @@ const MarkdownPreview = forwardRef(function MarkdownPreview({ className, foldedR
     const stopDrawers = observeFoldDrawers(containerRef.current);
     const stopStrikes = observeTaskListStrikes(containerRef.current);
     const stopCheckboxes = observeTaskListCheckboxes(containerRef.current);
-    return () => { stopDrawers(); stopStrikes(); stopCheckboxes(); };
+    return () => {
+      stopDrawers();
+      stopStrikes();
+      stopCheckboxes();
+    };
   }, [activeTabId]);
   useEffect(() => {
     const pending = foldAnimations.current;
@@ -410,7 +545,8 @@ const MarkdownPreview = forwardRef(function MarkdownPreview({ className, foldedR
       const end = Number(block.dataset.mdFold);
       while (foldedRanges[rangeIndex]?.end < line) rangeIndex++;
       const range = foldedRanges[rangeIndex];
-      block.hidden = index < hiddenUntil || Boolean(range && line > range.start && endLine <= range.end);
+      block.hidden =
+        index < hiddenUntil || Boolean(range && line > range.start && endLine <= range.end);
       if (end && isFolded(line)) hiddenUntil = Math.max(hiddenUntil, end);
     }
     for (const button of container.querySelectorAll('button.md-preview__fold')) {
@@ -424,15 +560,31 @@ const MarkdownPreview = forwardRef(function MarkdownPreview({ className, foldedR
   useEffect(() => {
     if (containerRef.current) return observePreviewBlockSelection(containerRef.current);
   }, [content]);
-  const resolveCodeTarget = useCallback((language, index) => findCodeBlock(containerRef.current, language, index), []);
+  const resolveCodeTarget = useCallback(
+    (language, index) => findCodeBlock(containerRef.current, language, index),
+    [],
+  );
   const beforeCodeJump = useCallback((target) => {
-    if (target.dataset.sourceLine) window.dispatchEvent(new CustomEvent('editor:jump-to-line', {
-      detail: { line: Number(target.dataset.sourceLine) },
-    }));
+    if (target.dataset.sourceLine)
+      window.dispatchEvent(
+        new CustomEvent('editor:jump-to-line', {
+          detail: { line: Number(target.dataset.sourceLine) },
+        }),
+      );
   }, []);
-  const jumpToCode = useCodeBlockNavigation(activeTabId, resolveCodeTarget, !isAnalyzing && content === processedContent, beforeCodeJump);
+  const jumpToCode = useCodeBlockNavigation(
+    activeTabId,
+    resolveCodeTarget,
+    !isAnalyzing && content === processedContent,
+    beforeCodeJump,
+  );
   const showOutlineJump = useMarkdownJumpFeedback(visible ? activeTabId : null);
-  useDocumentScrollState(containerRef, activeTabId, 'preview', visible && !isAnalyzing && content === processedContent);
+  useDocumentScrollState(
+    containerRef,
+    activeTabId,
+    'preview',
+    visible && !isAnalyzing && content === processedContent,
+  );
 
   // Prism 的代码块配色随应用样式表一起打包（见 `@styles/prism-theme.scss`），
   // 这里不再在运行时插入/移除 `<link id="prism-theme">`：那个元素此前由本组件和
@@ -464,11 +616,14 @@ const MarkdownPreview = forwardRef(function MarkdownPreview({ className, foldedR
       tag.dataset.mokiTooltip = i18n.t('editor.copyCode');
       tag.setAttribute('aria-label', i18n.t('editor.copyCode'));
       tag.addEventListener('click', () => {
-        navigator.clipboard.writeText(code.textContent || '').then(() => {
-          notify('success', i18n.t('preview.copiedToClipboard'), '', 2500);
-        }).catch(() => {
-          notify('error', i18n.t('preview.copyFailed'), '', 2500);
-        });
+        navigator.clipboard
+          .writeText(code.textContent || '')
+          .then(() => {
+            notify('success', i18n.t('preview.copiedToClipboard'), '', 2500);
+          })
+          .catch(() => {
+            notify('error', i18n.t('preview.copyFailed'), '', 2500);
+          });
       });
 
       if (!pre.style.position) pre.style.position = 'relative';
@@ -576,179 +731,255 @@ const MarkdownPreview = forwardRef(function MarkdownPreview({ className, foldedR
    * 对当前文档可解析的本地相对路径，改为在应用内打开到编辑器标签；
    * 其他外链仍保留浏览器默认新窗口行为。
    */
-  const handleLinkClick = useCallback(async (e, href) => {
-    const anchor = e.currentTarget;
-    const target = resolveMarkdownLinkPath(href, documentPath);
-    if (!target.internal || !target.path) return;
-    e.preventDefault();
-    const fileName = target.path.split(/[\\/]/).pop() || target.path;
-    await openFileFromPath(target.path, fileName);
-    const lineHint = parseMarkdownLineHint(target.hash)
-      || parseMarkdownLineHint([
-        anchor?.textContent || '',
-        anchor?.getAttribute?.('aria-label') || '',
-        anchor?.querySelector?.('img')?.getAttribute?.('alt') || '',
-        anchor?.querySelector?.('img')?.dataset?.mokiTooltip || '',
-      ].filter(Boolean).join(' '));
-    if (lineHint?.line) {
-      window.setTimeout(() => {
-        window.dispatchEvent(new CustomEvent('editor:jump-to-line', {
-          detail: { line: lineHint.line },
-        }));
-      }, 150);
-    }
-  }, [documentPath, openFileFromPath]);
+  const handleLinkClick = useCallback(
+    async (e, href) => {
+      const anchor = e.currentTarget;
+      const target = resolveMarkdownLinkPath(href, documentPath);
+      if (!target.internal || !target.path) return;
+      e.preventDefault();
+      const fileName = target.path.split(/[\\/]/).pop() || target.path;
+      await openFileFromPath(target.path, fileName);
+      const lineHint =
+        parseMarkdownLineHint(target.hash) ||
+        parseMarkdownLineHint(
+          [
+            anchor?.textContent || '',
+            anchor?.getAttribute?.('aria-label') || '',
+            anchor?.querySelector?.('img')?.getAttribute?.('alt') || '',
+            anchor?.querySelector?.('img')?.dataset?.mokiTooltip || '',
+          ]
+            .filter(Boolean)
+            .join(' '),
+        );
+      if (lineHint?.line) {
+        window.setTimeout(() => {
+          window.dispatchEvent(
+            new CustomEvent('editor:jump-to-line', {
+              detail: { line: lineHint.line },
+            }),
+          );
+        }, 150);
+      }
+    },
+    [documentPath, openFileFromPath],
+  );
 
-  const foldControl = useCallback((sourceLine) => {
-    const line = Number(sourceLine);
-    if (!line) return null;
-    return <button type="button" className="md-preview__fold" data-md-fold-line={line} aria-expanded="true"
-      aria-label={t('editor.collapseSection')}
-      onClick={(event) => {
-        if (useConfigStore.getState().markdownFolding === false && event.currentTarget.getAttribute('aria-expanded') !== 'false') return;
-        if (onToggleFold?.(line)) return;
-        setLocalFolds(({ tabId, lines }) => {
-          const next = new Set(tabId === activeTabId ? lines : []);
-          if (next.has(line)) next.delete(line);
-          else next.add(line);
-          return { tabId: activeTabId, lines: next };
-        });
-      }} />;
-  }, [activeTabId, onToggleFold, t]);
+  const foldControl = useCallback(
+    (sourceLine) => {
+      const line = Number(sourceLine);
+      if (!line) return null;
+      return (
+        <button
+          type="button"
+          className="md-preview__fold"
+          data-md-fold-line={line}
+          aria-expanded="true"
+          aria-label={t('editor.collapseSection')}
+          onClick={(event) => {
+            if (
+              useConfigStore.getState().markdownFolding === false &&
+              event.currentTarget.getAttribute('aria-expanded') !== 'false'
+            )
+              return;
+            if (onToggleFold?.(line)) return;
+            setLocalFolds(({ tabId, lines }) => {
+              const next = new Set(tabId === activeTabId ? lines : []);
+              if (next.has(line)) next.delete(line);
+              else next.add(line);
+              return { tabId: activeTabId, lines: next };
+            });
+          }}
+        />
+      );
+    },
+    [activeTabId, onToggleFold, t],
+  );
 
-  const components = useMemo(() => ({
-    div: ({ node: _node, children, className, ...props }) => (
-      <div className={className} {...props}>
-        {props['data-md-code'] != null && <>
-          {foldControl(props['data-md-start'])}
-          <span className="md-preview__folded-code-summary">{'```'}{props['data-md-code']}
-            <span className="md-preview__fold-ellipsis" aria-hidden="true" />
-          </span>
-        </>}
-        {children}
-      </div>
-    ),
-    li: ({ node, children, ...props }) => (
-      <li {...props} data-outline-line={node?.position?.start?.line}>
-        {foldControl(props['data-md-item'])}{children}
-      </li>
-    ),
-    code: CodeBlock,
-    pre: (props) => <MarkdownCodePre {...props} onTreeJump={jumpToCode} documentId={activeTabId} filePath={documentPath} fileName={activeTab?.name || 'Markdown'} />,
-    h1: makeHeading('h1', foldControl),
-    h2: makeHeading('h2', foldControl),
-    h3: makeHeading('h3', foldControl),
-    h4: makeHeading('h4', foldControl),
-    h5: makeHeading('h5', foldControl),
-    h6: makeHeading('h6', foldControl),
-    a: ({ href, children, id, className, ...props }) => {
-      if (href?.startsWith('#')) {
+  const components = useMemo(
+    () => ({
+      div: ({ node: _node, children, className, ...props }) => (
+        <div className={className} {...props}>
+          {props['data-md-code'] != null && (
+            <>
+              {foldControl(props['data-md-start'])}
+              <span className="md-preview__folded-code-summary">
+                {'```'}
+                {props['data-md-code']}
+                <span className="md-preview__fold-ellipsis" aria-hidden="true" />
+              </span>
+            </>
+          )}
+          {children}
+        </div>
+      ),
+      li: ({ node, children, ...props }) => (
+        <li {...props} data-outline-line={node?.position?.start?.line}>
+          {foldControl(props['data-md-item'])}
+          {children}
+        </li>
+      ),
+      code: CodeBlock,
+      pre: (props) => (
+        <MarkdownCodePre
+          {...props}
+          onTreeJump={jumpToCode}
+          documentId={activeTabId}
+          filePath={documentPath}
+          fileName={activeTab?.name || 'Markdown'}
+        />
+      ),
+      h1: makeHeading('h1', foldControl),
+      h2: makeHeading('h2', foldControl),
+      h3: makeHeading('h3', foldControl),
+      h4: makeHeading('h4', foldControl),
+      h5: makeHeading('h5', foldControl),
+      h6: makeHeading('h6', foldControl),
+      a: ({ href, children, id, className, ...props }) => {
+        if (href?.startsWith('#')) {
+          return (
+            <a
+              href={href}
+              id={id}
+              className={
+                props['data-footnote-ref'] != null
+                  ? 'footnote-ref'
+                  : props['data-footnote-backref'] != null
+                    ? 'footnote-backref'
+                    : className
+              }
+              onClick={(e) => {
+                e.preventDefault();
+                const back = e.currentTarget.matches('.footnote-backref, [data-footnote-backref]');
+                const target = containerRef.current?.querySelector(`#${CSS.escape(href.slice(1))}`);
+                if (!target) return;
+                if (back) {
+                  const definition = e.currentTarget.closest('li[id^="user-content-fn-"]');
+                  const origin = footnoteOrigins.current.get(definition);
+                  jumpToFootnote(origin?.isConnected ? origin : target, true);
+                } else if (e.currentTarget.matches('.footnote-ref, [data-footnote-ref]')) {
+                  footnoteOrigins.current.set(target, e.currentTarget);
+                  jumpToFootnote(target, false);
+                } else target.scrollIntoView({ behavior: 'smooth', block: 'center' });
+              }}
+              {...props}
+            >
+              {props['data-footnote-ref'] != null ? `[${children}]` : children}
+            </a>
+          );
+        }
+        const target = resolveMarkdownLinkPath(href, documentPath);
+        if (target.internal && target.path) {
+          return (
+            <a
+              href={target.path}
+              id={id}
+              className={className}
+              onClick={(e) => {
+                handleLinkClick(e, href);
+              }}
+              {...props}
+            >
+              {children}
+            </a>
+          );
+        }
         return (
           <a
             href={href}
             id={id}
-            className={props['data-footnote-ref'] != null ? 'footnote-ref'
-              : props['data-footnote-backref'] != null ? 'footnote-backref' : className}
-            onClick={(e) => {
-              e.preventDefault();
-              const back = e.currentTarget.matches('.footnote-backref, [data-footnote-backref]');
-              const target = containerRef.current?.querySelector(`#${CSS.escape(href.slice(1))}`);
-              if (!target) return;
-              if (back) {
-                const definition = e.currentTarget.closest('li[id^="user-content-fn-"]');
-                const origin = footnoteOrigins.current.get(definition);
-                jumpToFootnote(origin?.isConnected ? origin : target, true);
-              } else if (e.currentTarget.matches('.footnote-ref, [data-footnote-ref]')) {
-                footnoteOrigins.current.set(target, e.currentTarget);
-                jumpToFootnote(target, false);
-              } else target.scrollIntoView({ behavior: 'smooth', block: 'center' });
-            }}
-            {...props}
-          >
-            {props['data-footnote-ref'] != null ? `[${children}]` : children}
-          </a>
-        );
-      }
-      const target = resolveMarkdownLinkPath(href, documentPath);
-      if (target.internal && target.path) {
-        return (
-          <a
-            href={target.path}
-            id={id}
             className={className}
-            onClick={(e) => {
-              handleLinkClick(e, href);
-            }}
+            target="_blank"
+            rel="noopener noreferrer"
             {...props}
           >
             {children}
           </a>
         );
-      }
-      return <a href={href} id={id} className={className} target="_blank" rel="noopener noreferrer" {...props}>{children}</a>;
-    },
-    table: ({ children, ...props }) => (
-      <div className="md-preview__table-wrap">
-        <table {...props}>{children}</table>
-      </div>
-    ),
-    input: ({ type, checked, ...props }) => {
-      if (type === 'checkbox') {
-        if (props.className === 'md-preview__task-checkbox') {
-          return <button type="button" disabled role="checkbox" className={props.className} aria-checked={props['aria-checked']}>
-            <svg className="md-preview__task-strike" aria-hidden="true" />
-          </button>;
+      },
+      table: ({ children, ...props }) => (
+        <div className="md-preview__table-wrap">
+          <table {...props}>{children}</table>
+        </div>
+      ),
+      input: ({ type, checked, ...props }) => {
+        if (type === 'checkbox') {
+          if (props.className === 'md-preview__task-checkbox') {
+            return (
+              <button
+                type="button"
+                disabled
+                role="checkbox"
+                className={props.className}
+                aria-checked={props['aria-checked']}
+              >
+                <svg className="md-preview__task-strike" aria-hidden="true" />
+              </button>
+            );
+          }
+          return <input type="checkbox" checked={checked} readOnly {...props} />;
         }
-        return <input type="checkbox" checked={checked} readOnly {...props} />;
-      }
-      return <input type={type} {...props} />;
-    },
-    details: ({ children, ...props }) => <details {...props}>{children}</details>,
-    summary: ({ children, ...props }) => <summary {...props}>{children}</summary>,
-    del: ({ children }) => <del>{children}</del>,
-    mark: ({ children }) => <mark>{children}</mark>,
-    sup: ({ children, ...props }) => <sup {...props}>{children}</sup>,
-    sub: ({ children }) => <sub>{children}</sub>,
-    abbr: ({ children, ...props }) => <abbr {...props}>{children}</abbr>,
-    kbd: ({ children }) => <kbd className="md-preview__kbd">{children}</kbd>,
-    img: ({ src, alt, ...props }) => (
-      <MarkdownImage src={src} alt={alt} documentPath={documentPath} {...props} />
-    ),
-  }), [activeTabId, activeTab?.name, documentPath, foldControl, handleLinkClick, jumpToCode]);
+        return <input type={type} {...props} />;
+      },
+      details: ({ children, ...props }) => <details {...props}>{children}</details>,
+      summary: ({ children, ...props }) => <summary {...props}>{children}</summary>,
+      del: ({ children }) => <del>{children}</del>,
+      mark: ({ children }) => <mark>{children}</mark>,
+      sup: ({ children, ...props }) => <sup {...props}>{children}</sup>,
+      sub: ({ children }) => <sub>{children}</sub>,
+      abbr: ({ children, ...props }) => <abbr {...props}>{children}</abbr>,
+      kbd: ({ children }) => <kbd className="md-preview__kbd">{children}</kbd>,
+      img: ({ src, alt, ...props }) => (
+        <MarkdownImage src={src} alt={alt} documentPath={documentPath} {...props} />
+      ),
+    }),
+    [activeTabId, activeTab?.name, documentPath, foldControl, handleLinkClick, jumpToCode],
+  );
 
   const isStale = isAnalyzing || content !== processedContent;
   useLayoutEffect(() => {
     if (!isStale) onReady?.();
   }, [isStale, onReady]);
-  const fontSize = previewZoomSync ? editorFontSize : (previewFontSize || editorFontSize);
-  const lineHeight = previewZoomSync ? editorLineHeight : (previewLineHeight || editorLineHeight);
+  const fontSize = previewZoomSync ? editorFontSize : previewFontSize || editorFontSize;
+  const lineHeight = previewZoomSync ? editorLineHeight : previewLineHeight || editorLineHeight;
 
-  useImperativeHandle(ref, () => ({
-    getScrollContainer: () => containerRef.current,
-  }), []);
+  useImperativeHandle(
+    ref,
+    () => ({
+      getScrollContainer: () => containerRef.current,
+    }),
+    [],
+  );
 
   return (
     <div
       ref={containerRef}
       onMouseDown={(event) => {
         const selection = window.getSelection();
-        if (event.button === 2 && !selection?.isCollapsed && containerRef.current?.contains(selection?.anchorNode)) event.preventDefault();
+        if (
+          event.button === 2 &&
+          !selection?.isCollapsed &&
+          containerRef.current?.contains(selection?.anchorNode)
+        )
+          event.preventDefault();
       }}
       onContextMenu={handleContextMenu}
       onKeyDownCapture={(event) => {
         if (event.target.closest('input, textarea, select')) return;
-        if (handleEditingShortcut(event.nativeEvent, (action, custom) => {
-          if (!custom) return false;
-          if (action === 'copy') document.execCommand('copy');
-          else if (action === 'selectAll') {
-            const range = document.createRange();
-            range.selectNodeContents(containerRef.current);
-            const selection = window.getSelection();
-            selection.removeAllRanges();
-            selection.addRange(range);
-          } else return false;
-          return true;
-        })) event.stopPropagation();
+        if (
+          handleEditingShortcut(event.nativeEvent, (action, custom) => {
+            if (!custom) return false;
+            if (action === 'copy') document.execCommand('copy');
+            else if (action === 'selectAll') {
+              const range = document.createRange();
+              range.selectNodeContents(containerRef.current);
+              const selection = window.getSelection();
+              selection.removeAllRanges();
+              selection.addRange(range);
+            } else return false;
+            return true;
+          })
+        )
+          event.stopPropagation();
       }}
       className={`md-preview ${isStale ? 'md-preview--stale' : ''} ${className || ''}`}
       style={{
