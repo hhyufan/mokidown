@@ -174,8 +174,10 @@ mod windows_clipboard {
             let _clipboard = open(0).map_err(|error| error.to_string())?;
             let text = with_format(CF_UNICODETEXT, |bytes| {
                 let units: Vec<_> = bytes
-                    .chunks_exact(2)
-                    .map(|pair| u16::from_le_bytes([pair[0], pair[1]]))
+                    .as_chunks::<2>()
+                    .0
+                    .iter()
+                    .map(|pair| u16::from_le_bytes(*pair))
                     .take_while(|unit| *unit != 0)
                     .collect();
                 Some(String::from_utf16_lossy(&units))

@@ -497,6 +497,7 @@ fn update(
     })
 }
 
+#[allow(clippy::too_many_arguments)]
 #[tauri::command]
 pub async fn html_preview_update(
     window: WebviewWindow,
