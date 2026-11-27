@@ -41,6 +41,7 @@ struct Preview {
     root: Option<PathBuf>,
     entry: String,
     source: String,
+    client_script: String,
     changes: Arc<Mutex<Changes>>,
     _watcher: Option<RecommendedWatcher>,
 }
@@ -51,7 +52,6 @@ struct PreviewServer {
     port: u16,
     websocket_port: u16,
     initial_root: Option<PathBuf>,
-    client_script: String,
     active_id: Mutex<String>,
     previews: Mutex<HashMap<String, Preview>>,
 }
@@ -165,7 +165,7 @@ fn serve(request: Request, state: &PreviewServer) {
             .query_pairs()
             .find(|(name, _)| name == "session")
             .map(|(_, value)| value.into_owned());
-        let Some(id) = id.filter(|id| previews.contains_key(id)) else {
+        let Some((id, preview)) = id.and_then(|id| previews.get_key_value(&id)) else {
             drop(previews);
             respond_text(request, "Preview closed".into(), "text/plain", 404);
             return;
@@ -179,7 +179,7 @@ fn serve(request: Request, state: &PreviewServer) {
             "path": format!("__moki_livereload/{id}?revision={revision}"), "snipver":1});
         let script = format!(
             "window.LiveReloadOptions={options};\n{}",
-            state.client_script
+            preview.client_script
         );
         drop(previews);
         respond_text(request, script, "text/javascript; charset=utf-8", 200);
@@ -188,33 +188,46 @@ fn serve(request: Request, state: &PreviewServer) {
     let decoded = percent_decode_str(path).decode_utf8().ok();
     let active_id = state.active_id.lock().unwrap();
     let active = previews.get_key_value(active_id.as_str());
-    let referer_path = request
+    let referer = request
         .headers()
         .iter()
         .find(|item| item.field.equiv("Referer"))
         .and_then(|item| reqwest::Url::parse(item.value.as_str()).ok())
-        .filter(|url| url.host_str() == Some("127.0.0.1") && url.port() == Some(state.port))
-        .and_then(|url| {
-            percent_decode_str(url.path().trim_start_matches('/'))
-                .decode_utf8()
-                .ok()
-                .map(|path| path.into_owned())
-        });
-    let selected = active
-        .filter(|(_, preview)| {
-            path.is_empty() || decoded.as_deref() == Some(preview.entry.as_str())
-        })
-        .or_else(|| {
-            previews
-                .iter()
-                .find(|(_, preview)| decoded.as_deref() == Some(preview.entry.as_str()))
-        })
-        .or_else(|| {
-            previews
-                .iter()
-                .find(|(_, preview)| referer_path.as_deref() == Some(preview.entry.as_str()))
-        })
-        .or(active);
+        .filter(|url| url.host_str() == Some("127.0.0.1") && url.port() == Some(state.port));
+    let referer_path = referer.as_ref().and_then(|url| {
+        percent_decode_str(url.path().trim_start_matches('/'))
+            .decode_utf8()
+            .ok()
+            .map(|path| path.into_owned())
+    });
+    let session = |url: &reqwest::Url| {
+        url.query_pairs()
+            .find(|(name, _)| name == "__moki_preview")
+            .and_then(|(_, id)| previews.get_key_value(id.as_ref()))
+    };
+    let selected = if url.query_pairs().any(|(name, _)| name == "__moki_preview") {
+        session(&url)
+    } else {
+        referer
+            .as_ref()
+            .and_then(session)
+            .or_else(|| {
+                active.filter(|(_, preview)| {
+                    path.is_empty() || decoded.as_deref() == Some(preview.entry.as_str())
+                })
+            })
+            .or_else(|| {
+                previews
+                    .iter()
+                    .find(|(_, preview)| decoded.as_deref() == Some(preview.entry.as_str()))
+            })
+            .or_else(|| {
+                previews
+                    .iter()
+                    .find(|(_, preview)| referer_path.as_deref() == Some(preview.entry.as_str()))
+            })
+            .or(active)
+    };
     let Some((id, preview)) = selected else {
         drop(active_id);
         drop(previews);
@@ -285,7 +298,6 @@ fn find_server(
     servers: &mut Vec<Arc<PreviewServer>>,
     port: u16,
     root: &Option<PathBuf>,
-    client_script: Option<String>,
 ) -> Result<Arc<PreviewServer>, String> {
     if let Some(server) = servers.iter().find(|server| {
         if port == 0 {
@@ -313,7 +325,6 @@ fn find_server(
             .map_err(|error| error.to_string())?
             .port(),
         initial_root: root.clone(),
-        client_script: client_script.ok_or("Missing LiveReload client")?,
         active_id: Mutex::new(String::new()),
         previews: Mutex::new(HashMap::new()),
     });
@@ -345,6 +356,7 @@ fn update(
     root: Option<PathBuf>,
     port: u16,
     client_script: Option<String>,
+    live_reload: bool,
 ) -> Result<PreviewLocation, String> {
     if !valid_id(&id) || source.len() > MAX_SOURCE_BYTES {
         return Err("Invalid HTML preview source".into());
@@ -382,7 +394,21 @@ fn update(
     servers.retain(|server| {
         server.requested_port == port || !server.previews.lock().unwrap().is_empty()
     });
-    let server = find_server(&mut servers, port, &root, client_script)?;
+    let existing = servers
+        .iter()
+        .find(|server| server.previews.lock().unwrap().contains_key(&id))
+        .cloned();
+    let server = match existing {
+        Some(server) => server,
+        None => find_server(&mut servers, port, &root).or_else(|error| {
+            if port == 0 {
+                Err(error)
+            } else {
+                log::warn!("{error}; using an available HTML preview port");
+                find_server(&mut servers, 0, &root)
+            }
+        })?,
+    };
     let mut previews = server.previews.lock().unwrap();
     if let Some(preview) = previews.get_mut(&id) {
         if preview.source != source {
@@ -394,44 +420,53 @@ fn update(
                 .record([preview.entry.clone()]);
         }
     } else {
+        let client_script = client_script.ok_or("Missing HTML preview client")?;
         let changes = Arc::new(Mutex::new(Changes {
             revision: 1,
             paths: VecDeque::new(),
         }));
         let changed = changes.clone();
         let watched_root = root.clone();
-        let watcher = if let Some(root) = &root {
-            let mut watcher =
-                notify::recommended_watcher(move |event: Result<notify::Event, notify::Error>| {
-                    if let Ok(event) = event {
-                        if matches!(
-                            event.kind,
-                            EventKind::Modify(_) | EventKind::Create(_) | EventKind::Remove(_)
-                        ) {
-                            let paths: Vec<_> = event
-                                .paths
-                                .iter()
-                                .filter(|path| live_reload::is_web_resource(path))
-                                .map(|path| {
-                                    path.strip_prefix(watched_root.as_ref().unwrap())
-                                        .unwrap_or(path)
-                                        .to_string_lossy()
-                                        .replace('\\', "/")
-                                })
-                                .collect();
-                            if !paths.is_empty() {
-                                changed.lock().unwrap().record(paths);
+        let watcher = match root.as_ref().filter(|_| live_reload) {
+            Some(root) => {
+                let watcher = notify::recommended_watcher(
+                    move |event: Result<notify::Event, notify::Error>| {
+                        if let Ok(event) = event {
+                            if matches!(
+                                event.kind,
+                                EventKind::Modify(_) | EventKind::Create(_) | EventKind::Remove(_)
+                            ) {
+                                let paths: Vec<_> = event
+                                    .paths
+                                    .iter()
+                                    .filter(|path| live_reload::is_web_resource(path))
+                                    .map(|path| {
+                                        path.strip_prefix(watched_root.as_ref().unwrap())
+                                            .unwrap_or(path)
+                                            .to_string_lossy()
+                                            .replace('\\', "/")
+                                    })
+                                    .collect();
+                                if !paths.is_empty() {
+                                    changed.lock().unwrap().record(paths);
+                                }
                             }
                         }
+                    },
+                )
+                .and_then(|mut watcher| {
+                    watcher.watch(root, RecursiveMode::Recursive)?;
+                    Ok(watcher)
+                });
+                match watcher {
+                    Ok(watcher) => Some(watcher),
+                    Err(error) => {
+                        log::warn!("Could not watch assets for HTML preview: {error}");
+                        None
                     }
-                })
-                .map_err(|error| error.to_string())?;
-            watcher
-                .watch(root, RecursiveMode::Recursive)
-                .map_err(|error| error.to_string())?;
-            Some(watcher)
-        } else {
-            None
+                }
+            }
+            None => None,
         };
         previews.insert(
             id.clone(),
@@ -439,6 +474,7 @@ fn update(
                 root,
                 entry: entry.clone(),
                 source,
+                client_script,
                 changes,
                 _watcher: watcher,
             },
@@ -470,10 +506,19 @@ pub async fn html_preview_update(
     root: Option<PathBuf>,
     port: u16,
     client_script: Option<String>,
+    live_reload: Option<bool>,
 ) -> Result<PreviewLocation, String> {
     check_window(&window)?;
     tauri::async_runtime::spawn_blocking(move || {
-        update(id, source, file_path, root, port, client_script)
+        update(
+            id,
+            source,
+            file_path,
+            root,
+            port,
+            client_script,
+            live_reload.unwrap_or(true),
+        )
     })
     .await
     .map_err(|error| error.to_string())?
@@ -513,6 +558,7 @@ mod tests {
             Some(folder.path().into()),
             0,
             Some("/* LiveReload test client */".into()),
+            true,
         )
         .unwrap();
         let client = reqwest::blocking::Client::builder()
@@ -582,6 +628,7 @@ mod tests {
             Some(folder.path().into()),
             0,
             None,
+            true,
         )
         .unwrap();
         assert!(client

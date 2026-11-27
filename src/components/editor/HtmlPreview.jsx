@@ -32,7 +32,7 @@ export default function HtmlPreview({
     Boolean(window.__TAURI_INTERNALS__) && !window.AndroidBridge && !isAndroidRuntime();
   const hideBar = desktop && !liveReload;
   const root = useFileStore((state) => state.currentDir);
-  // 关闭热更新后走本地 iframe 渲染，不启动本地端口。
+  // Desktop uses the same loopback origin in both modes so scripts and linked assets work.
   const native = desktop;
   const [frame, setFrame] = useState(null);
   const [error, setError] = useState('');
@@ -124,15 +124,19 @@ export default function HtmlPreview({
     };
     sessionRef.current = session;
     const close = () => invoke('html_preview_close', { id: session.id }).catch(() => {});
-    session.flush = async () => {
+    session.flush = async (reload = false) => {
       if (session.closed) return;
+      session.reload ||= reload;
       if (session.pending) {
         session.dirty = true;
         return;
       }
       const source = latestSource.current || '';
+      const reloadFrame = session.reload;
+      session.reload = false;
       if (!native) {
         setFrame({ html: source });
+        if (reloadFrame) setRefresh((value) => value + 1);
         return;
       }
       session.pending = true;
@@ -144,18 +148,29 @@ export default function HtmlPreview({
           filePath: filePath || null,
           root: root || null,
           port: requestedPort,
+          liveReload,
           clientScript: session.created
             ? null
             : `${previewFrameBridgeScript}\n${htmlPreviewSizingScript}${liveReload ? `\n${liveReloadClient}` : ''}`,
         });
         if (session.closed) return;
+        if (!result?.url) throw new Error('Missing HTML preview address');
         session.created = true;
         setFrame((previous) =>
-          previous?.url === result.url && previous.revision === result.revision ? previous : result,
+          previous?.sessionId === session.id &&
+          previous.url === result.url &&
+          previous.revision === result.revision
+            ? previous
+            : { ...result, sessionId: session.id },
         );
+        if (reloadFrame) setRefresh((value) => value + 1);
         setError('');
       } catch (error) {
-        if (!session.closed) setError(String(error?.message || error));
+        if (!session.closed) {
+          session.created = false;
+          setFrame({ html: source });
+          setError(String(error?.message || error));
+        }
       } finally {
         session.pending = false;
         if (session.closed) void close();
@@ -193,7 +208,7 @@ export default function HtmlPreview({
     }
     // 关闭热更新时：重新提交当前内容并重载 iframe，让 HTML 与关联资源都取最新。
     if (!liveReload) {
-      void sessionRef.current?.flush();
+      void sessionRef.current?.flush(true);
       return;
     }
     setRefresh((value) => value + 1);
@@ -203,17 +218,25 @@ export default function HtmlPreview({
     const closeMenu = (event) => {
       if (!event.target.closest('.html-preview__menu')) setMenu(null);
     };
+    const clearMenu = () => setMenu(null);
     window.addEventListener('pointerdown', closeMenu, true);
-    window.addEventListener('blur', () => setMenu(null));
+    window.addEventListener('blur', clearMenu);
     return () => {
       window.removeEventListener('pointerdown', closeMenu, true);
+      window.removeEventListener('blur', clearMenu);
     };
   }, [menu]);
   const label = title || t('htmlPreview.title');
   const width = Math.max(contentWidth, dimensions.width);
   const scale = dimensions.width ? Math.min(1, dimensions.width / width) : 1;
   scaleRef.current = scale;
-  const url = navigationUrl || (frame?.url ? `${frame.url}?revision=${frame.revision}` : undefined);
+  let url = navigationUrl ?? undefined;
+  if (!url && frame?.url) {
+    const location = new URL(frame.url);
+    location.searchParams.set('__moki_preview', frame.sessionId);
+    location.searchParams.set('revision', frame.revision);
+    url = location.href;
+  }
   return (
     <section
       className={`html-preview${compact ? ' html-preview--compact' : ''} ${className}`}
@@ -241,7 +264,7 @@ export default function HtmlPreview({
                 setError(t('htmlPreview.invalidAddress'));
                 return;
               }
-              setNavigationUrl(target.href);
+              setNavigationUrl(target.href === frame?.url ? null : target.href);
               setAddress(target.href);
               setError('');
             }}
@@ -296,7 +319,7 @@ export default function HtmlPreview({
             title={label}
             className="html-preview__frame"
             src={url}
-            srcDoc={!native && !navigationUrl ? frame.html : undefined}
+            srcDoc={!url ? frame.html : undefined}
             onLoad={() => {
               setContentWidth(1280);
               syncFrameTheme();
@@ -311,7 +334,9 @@ export default function HtmlPreview({
             sandbox={
               url
                 ? 'allow-scripts allow-forms allow-same-origin allow-downloads'
-                : 'allow-scripts allow-forms allow-same-origin'
+                : native
+                  ? 'allow-scripts allow-forms'
+                  : 'allow-scripts allow-forms allow-same-origin'
             }
             referrerPolicy="same-origin"
           />
