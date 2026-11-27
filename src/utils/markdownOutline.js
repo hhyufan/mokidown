@@ -114,15 +114,23 @@ export function extractItems(content) {
 export function outlineRows(items, collapsed) {
   const ancestors = [];
   const lists = [];
+  // Keep running counts instead of scanning every ancestor/list for each row:
+  // long lists otherwise make this O(n²).
+  let collapsedAncestors = 0;
+  let collapsedLists = 0;
   return items.map((item, index) => {
     const section = item.type === 'heading' && !item.indent;
     if (section) {
-      while (ancestors.length && ancestors.at(-1).level >= item.level) ancestors.pop();
+      while (ancestors.length && ancestors.at(-1).level >= item.level) {
+        const popped = ancestors.pop();
+        if (collapsed[popped.index]) collapsedAncestors -= 1;
+      }
     }
-    while (lists.length && item.line > lists.at(-1).endLine) lists.pop();
-    const hidden =
-      ancestors.some((heading) => collapsed[heading.index]) ||
-      lists.some((list) => collapsed[list.index]);
+    while (lists.length && item.line > lists.at(-1).endLine) {
+      const popped = lists.pop();
+      if (collapsed[popped.index]) collapsedLists -= 1;
+    }
+    const hidden = collapsedAncestors > 0 || collapsedLists > 0;
     const next = items[index + 1];
     const canCollapse =
       item.endLine != null ||
@@ -130,8 +138,14 @@ export function outlineRows(items, collapsed) {
         Boolean(next) &&
         (next.type !== 'heading' || next.indent > 0 || next.level > item.level));
     const parent = lists.at(-1)?.index ?? ancestors.at(-1)?.index;
-    if (section) ancestors.push({ level: item.level, index });
-    if (item.endLine != null) lists.push({ index, endLine: item.endLine });
+    if (section) {
+      ancestors.push({ level: item.level, index });
+      if (collapsed[index]) collapsedAncestors += 1;
+    }
+    if (item.endLine != null) {
+      lists.push({ index, endLine: item.endLine });
+      if (collapsed[index]) collapsedLists += 1;
+    }
     return { item, index, parent, hidden, canCollapse };
   });
 }

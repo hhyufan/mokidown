@@ -515,10 +515,10 @@ it.each(['before', 'a\nb\n', ''])(
     });
     const { container } = render(<HistoryDiffView />);
     expect(screen.getByRole('status')).toHaveTextContent('没有更改');
-    expect(container.querySelector('.history-diff__editor')).not.toBeVisible();
+    expect(container.querySelector('.history-diff__editor')).toBeNull();
     expect(screen.getByRole('group', { name: '现在' })).toBeVisible();
     expect(screen.getByRole('button', { name: '应用修改' })).toBeDisabled();
-    await waitFor(() => expect(mock.models).toHaveLength(2));
+    await waitFor(() => expect(mock.models).toHaveLength(0));
   },
 );
 

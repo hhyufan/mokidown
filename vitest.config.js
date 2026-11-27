@@ -16,6 +16,7 @@ export default defineConfig({
       { find: '@store', replacement: resolve(import.meta.dirname, 'src/store') },
       { find: '@components', replacement: resolve(import.meta.dirname, 'src/components') },
       { find: '@hooks', replacement: resolve(import.meta.dirname, 'src/hooks') },
+      { find: '@styles', replacement: resolve(import.meta.dirname, 'src/assets/styles') },
     ],
   },
   test: {

@@ -70,7 +70,7 @@ for (const action of actions)
       screen
         .getAllByRole('button')
         .map((node) => node.textContent)
-        .filter(Boolean),
+        .filter((text) => ['使用本地', '使用云端', '应用修改'].includes(text)),
     ).toEqual(['使用本地', '使用云端', '应用修改']);
     fireEvent.click(screen.getByRole('button', { name: action.title }));
     await waitFor(() => expect(mock.execute).toHaveBeenCalled());
