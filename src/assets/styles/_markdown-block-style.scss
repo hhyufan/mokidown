@@ -26,7 +26,7 @@
       display: inline-block;
       width: 0.85em;
       height: 0.7em;
-      margin-right: 8px;
+      margin-inline-end: 8px;
       vertical-align: -0.02em;
       background-color: currentColor;
       -webkit-mask: var(--md-notebook) no-repeat center / contain;
@@ -39,6 +39,7 @@
 
     &::before {
       content: '#';
+      display: inline-block;
       margin-inline-end: var(--md-heading-marker-gap);
       color: var(--md-hash);
     }

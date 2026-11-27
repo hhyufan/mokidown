@@ -77,6 +77,9 @@ import useNotificationStore from '@store/useNotificationStore';
 import { useEditorContextMenu } from '@hooks/useEditorContextMenu';
 import EditorContextMenu from './EditorContextMenu';
 import { editingShortcutOf, handleEditingShortcut } from '@utils/basicEditingShortcuts';
+import { getResolvedHotkeys } from '@hooks/useHotkeys';
+import { formatKeybinding } from '@utils/keybinding';
+import { capturePreviewSelection, openSnapshotPayload, runQuickSnapshot } from '@utils/snapshotCapture';
 import { jumpToFootnote } from '@utils/footnoteParser';
 import {
   ALLOWED_IMAGE_PROTOCOLS,
@@ -349,10 +352,22 @@ const MarkdownPreview = forwardRef(function MarkdownPreview({ className, foldedR
     const selection = window.getSelection();
     const root = containerRef.current;
     const selected = root?.contains(selection?.anchorNode) && root?.contains(selection?.focusNode) ? selection.toString() : '';
+    const hotkeys = getResolvedHotkeys();
+    const snapshotBinding = hotkeys.captureSnapshot;
+    const quickSnapshotBinding = hotkeys.quickSnapshot;
+    const snapshotPayload = capturePreviewSelection(root, rawContent, activeTab, event.target);
     openMenu(event, [
       { key: 'copy', label: i18n.t('editor.menu.copy'), ...editingShortcutOf('copy'), disabled: !selected,
         run: () => navigator.clipboard.writeText(selected) },
       { key: 'copyAll', label: i18n.t('editor.menu.copyAll'), run: () => navigator.clipboard.writeText(rawContent) },
+      { key: 'snapshot', label: i18n.t('editor.menu.snapshot'), keybinding: snapshotBinding,
+        shortcut: formatKeybinding(snapshotBinding),
+        runOnPress: true,
+        run: () => openSnapshotPayload(snapshotPayload) },
+      { key: 'quickSnapshot', label: i18n.t('editor.menu.quickSnapshot'), keybinding: quickSnapshotBinding,
+        shortcut: formatKeybinding(quickSnapshotBinding),
+        runOnPress: true,
+        run: () => runQuickSnapshot(snapshotPayload) },
       { key: 's1', separator: true },
       { key: 'selectAll', label: i18n.t('editor.menu.selectAll'), ...editingShortcutOf('selectAll'), run: () => {
         const range = document.createRange(); range.selectNodeContents(root);

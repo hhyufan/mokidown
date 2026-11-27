@@ -30,6 +30,7 @@ export const htmlBlockView = $view(htmlBlockSchema.node, () => (initialNode, vie
   const dom = document.createElement('div');
   dom.className = 'md-preview__html-block'; dom.dataset.type = 'html_block'; dom.contentEditable = 'false';
   const preview = document.createElement('div'); preview.className = 'md-preview__html md-preview__html-block-preview';
+  preview.tabIndex = -1;
   const button = document.createElement('button'); button.type = 'button'; button.className = 'md-preview__html-edit';
   button.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m16 3 5 5-13 13H3v-5Z"/><path d="m14 5 5 5"/></svg>';
   button.setAttribute('aria-label', i18n.t('editor.editHtml')); button.dataset.mokiTooltip = i18n.t('editor.editHtml'); button.hidden = !view.editable;
@@ -59,10 +60,6 @@ export const htmlBlockView = $view(htmlBlockSchema.node, () => (initialNode, vie
     editing = false; render(); input.hidden = true; panel.hidden = true; preview.hidden = false; button.hidden = !view.editable;
   };
   button.addEventListener('click', edit);
-  preview.addEventListener('dblclick', (event) => {
-    if (event.target.closest('a, button, input, select, video, audio')) return;
-    event.preventDefault(); edit();
-  });
   input.addEventListener('input', () => {
     const pos = getPos();
     if (typeof pos !== 'number' || input.value === node.attrs.value) return;
@@ -95,7 +92,8 @@ export const htmlBlockView = $view(htmlBlockSchema.node, () => (initialNode, vie
       }
       return true;
     },
-    stopEvent: (event) => panel.contains(event.target) || button.contains(event.target),
+    stopEvent: (event) =>
+      panel.contains(event.target) || button.contains(event.target) || preview.contains(event.target),
     ignoreMutation: () => true,
   };
 });

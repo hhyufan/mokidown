@@ -25,6 +25,7 @@ import { closeHistory } from '@milkdown/kit/prose/history';
 import { loadMarkdownImageSrc } from '@utils/markdownAssets';
 import { matchesHotkey } from '@hooks/useHotkeys';
 import { isImeComposing } from '@utils/keyboard';
+import { selectedRange } from '@utils/markdownSelection';
 import { copyMarkdownImage } from './milkdownImageClipboard';
 import {
   mediaAt,
@@ -249,6 +250,7 @@ const MilkdownMediaTools = forwardRef(function MilkdownMediaTools(
     if (!ready || !root) return undefined;
     const contextMenu = (event) => {
       if (readOnly || event.target.closest?.('.milkdown-media-inline')) return;
+      if (selectedRange(root) && root.ownerDocument.getSelection().toString().trim()) return;
       const element = event.target.closest?.('a, img[src], [data-moki-empty-image]');
       const view = getView();
       if (!view || !element || !view.dom.contains(element)) return;
@@ -269,6 +271,7 @@ const MilkdownMediaTools = forwardRef(function MilkdownMediaTools(
       const image = event.target.closest?.('img[src], [data-moki-empty-image]');
       const view = getView();
       if (!image || !view?.dom.contains(image)) return;
+      if (selectedRange(root)?.intersectsNode(image)) return;
       event.preventDefault();
       event.stopPropagation();
       event.stopImmediatePropagation();

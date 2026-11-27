@@ -4,7 +4,7 @@ import { Tooltip } from 'antd';
 import { useTranslation } from 'react-i18next';
 
 const selectors =
-  '[data-moki-tooltip], [title]:not(iframe), .milkdown-code-block .copy-button, .milkdown-code-block .language-button, .milkdown-code-block .preview-toggle-button, .md-preview__html-block-preview, [data-type="math_block"]';
+  '[data-moki-tooltip], [title]:not(iframe), .milkdown-code-block .copy-button, .milkdown-code-block .language-button, .milkdown-code-block .preview-toggle-button, [data-type="math_block"]';
 
 // Milkdown owns these node views (including Vue controls). Delegate events and
 // anchor Antd to a portal rather than wrapping or replacing ProseMirror DOM.
@@ -47,8 +47,6 @@ export default function MilkdownTooltips({
             ? 'editor.showCode'
             : 'editor.showPreview',
         );
-      if (!readOnly && element.matches('.md-preview__html-block-preview'))
-        return t('editor.editHtmlHint');
       if (!readOnly && element.matches('[data-type="math_block"]'))
         return t('editor.editMathHint');
       return '';

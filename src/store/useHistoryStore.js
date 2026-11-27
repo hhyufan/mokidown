@@ -3,7 +3,7 @@ import useEditorStore from '@store/useEditorStore';
 import { isMarkdownPath, prepareComparisonRenderer } from '@utils/editorRendererBoot';
 
 let comparisonSequence = Date.now();
-const previousHistory = import.meta.hot?.data.history;
+const previousHistory = import.meta.hot?.data?.history;
 
 export function isMarkdownComparison(tab, diff) {
   if (diff?.external) {

@@ -20,11 +20,62 @@
   overflow-x: hidden;
   overflow-y: auto;
   --md-fold-gutter: max(32px, 3.15em + 8px);
+  --md-cell-selection-bg: color-mix(in srgb, var(--accent) 16%, transparent);
   padding: 24px 32px;
   padding-inline-start: var(--md-fold-gutter);
   font-family: var(--font-app);
   line-height: 1.75;
   color: var(--text);
+
+  a[href] {
+    -webkit-user-drag: none;
+  }
+
+  :is(.md-preview__html-block-preview, span[data-type='html'].md-preview__html) {
+    user-select: text;
+
+    &::selection,
+    *::selection {
+      background: var(--selection-bg);
+    }
+  }
+
+  &__selection-markers,
+  &__selection-cells {
+    position: absolute;
+    inset: 0;
+    z-index: 1;
+    pointer-events: none;
+    user-select: none;
+
+    > span {
+      position: absolute;
+    }
+  }
+
+  &__selection-markers {
+    mix-blend-mode: multiply;
+
+    html[data-theme='dark'] & {
+      mix-blend-mode: screen;
+    }
+
+    > span {
+      background: var(--selection-bg);
+    }
+  }
+
+  &__selection-cells > span {
+    background: var(--md-cell-selection-bg);
+  }
+
+  &:has(> .md-preview__selection-cells > span) :is(th, td),
+  :is(th, td).selectedCell {
+    &::selection,
+    *::selection {
+      background: transparent;
+    }
+  }
 
   .md-preview__source-block,
   .moki-foldable-heading,
@@ -801,6 +852,7 @@
     .md-preview__html-block-preview {
       display: block;
       max-width: 100%;
+      outline: none;
       > :first-child {
         margin-top: 0;
       }
@@ -1386,7 +1438,8 @@
     content: '';
     position: absolute;
     inset: 0;
-    background: color-mix(in srgb, var(--accent) 16%, transparent);
+    border-radius: inherit;
+    background: var(--md-cell-selection-bg);
     pointer-events: none;
   }
 

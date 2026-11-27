@@ -61,8 +61,16 @@ export default function EditorContextMenu({ menu, onClose }) {
       : <button key={item.key} role="menuitem" type="button" disabled={item.disabled}
         aria-label={item.label} aria-keyshortcuts={item.shortcut?.replace('⌘', 'Meta').replace('Ctrl', 'Control')}
         className={`monaco-context-menu__item editor-context-menu__item${item.danger ? ' is-danger' : ''}`}
+        onPointerDown={(event) => {
+          if (!item.runOnPress || item.disabled || event.button !== 0) return;
+          event.preventDefault();
+          event.stopPropagation();
+          void activate(item);
+        }}
         onMouseDown={(event) => event.preventDefault()}
-        onClick={() => activate(item)}>
+        onClick={(event) => {
+          if (!item.runOnPress || event.detail === 0) void activate(item);
+        }}>
         <span className="monaco-context-menu__label">{item.label}</span>
         {item.shortcut && <span className="monaco-context-menu__shortcut">{item.shortcut}</span>}
       </button>)}

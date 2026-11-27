@@ -160,7 +160,19 @@ import 'katex/dist/katex.min.css';
 import { useFileManager } from '@hooks/useFileManager';
 import { useEditorContextMenu } from '@hooks/useEditorContextMenu';
 import EditorContextMenu from './EditorContextMenu';
-import { milkdownContextItems, pasteMilkdownClipboard } from './milkdownContextMenu';
+import {
+  extractMilkdownSnapshot,
+  milkdownContextItems,
+  pasteMilkdownClipboard,
+} from './milkdownContextMenu';
+import { registerSnapshotSource } from '@utils/snapshotCapture';
+import {
+  enableRenderedHtmlDragSelection,
+  renderedMarkdownHtml,
+  selectedMarkdownHtml,
+  selectedRange,
+} from '@utils/markdownSelection';
+import { observePreviewBlockSelection } from './previewBlockSelection';
 import { copyMarkdownImage, selectedImageSource } from './milkdownImageClipboard';
 import { disablePresetMarkdownShortcuts, milkdownHotkeys } from './milkdownHotkeys';
 import { handleEditingShortcut, runTextFieldShortcut } from '@utils/basicEditingShortcuts';
@@ -1339,7 +1351,7 @@ function createNonEditablePreviewSelectionHandler(getEditor, readOnly) {
 
     if (
       readOnly ||
-      event.target.closest?.('[data-type="html_block"]') ||
+      event.target.closest?.(`[data-type="html_block"], ${renderedMarkdownHtml}`) ||
       !isNonEditablePreviewTarget(event.target)
     )
       return;
@@ -1427,6 +1439,7 @@ function renderMilkdownHtml(root) {
     if (node.dataset.renderedValue === value) return;
     node.classList.add('md-preview__html');
     node.setAttribute('contenteditable', 'false');
+    node.tabIndex = -1;
     node.innerHTML = sanitizeMilkdownHtml(value);
     node.dataset.renderedValue = value;
   });
@@ -1615,7 +1628,8 @@ function MilkdownInner(
     }
   }, []);
   const [renderTick, setRenderTick] = useState(0);
-  const { menu, openMenu, closeMenu } = useEditorContextMenu(`${activeTabId}:${renderTick}`);
+  const contextMenuSelection = useRef(null);
+  const { menu, openMenu, closeMenu } = useEditorContextMenu(`${activeTabId}:${contentRevision}`);
   useEffect(() => {
     if (active) return;
     closeMenu();
@@ -1623,11 +1637,15 @@ function MilkdownInner(
     closeMathCompletion();
   }, [active, closeCodeLanguageMenu, closeMathCompletion, closeMenu]);
   const handleContextMenu = (event) => {
+    const selection = contextMenuSelection.current || selectedRange(event.currentTarget);
+    contextMenuSelection.current = null;
     const editor = editorRef.current;
     if (!editor || readOnly || event.target.closest('input, textarea, button, select')) return;
     const items = milkdownContextItems({
       editor,
       target: event.target,
+      selectionRoot: event.currentTarget,
+      domRange: selection,
       x: event.clientX,
       y: event.clientY,
       documentPath,
@@ -1988,11 +2006,20 @@ function MilkdownInner(
   useEffect(() => {
     if (isComparison || editorInfo.loading || readOnly) return undefined;
     const editor = editorRef.current;
-    return registerEditorBufferFlusher(
+    const stopFlusher = registerEditorBufferFlusher(
       () => activeTabId,
       () => editor?.action(publishEditorContent),
     );
-  }, [activeTabId, editorInfo.loading, isComparison, readOnly, publishEditorContent]);
+    const stopSnapshot = registerSnapshotSource('milkdown', () => {
+      if (!editor) return null;
+      const tab = useEditorStore.getState().tabs.find((item) => item.id === activeTabId);
+      return extractMilkdownSnapshot(editor, null, tab?.name || '', tab?.path || documentPath);
+    });
+    return () => {
+      stopFlusher();
+      stopSnapshot();
+    };
+  }, [activeTabId, documentPath, editorInfo.loading, isComparison, readOnly, publishEditorContent]);
 
   useDocumentScrollState(
     wrapperRef,
@@ -2240,6 +2267,17 @@ function MilkdownInner(
   useEffect(() => {
     const wrapper = wrapperRef.current;
     if (!wrapper) return undefined;
+    const stopSelection = observePreviewBlockSelection(wrapper, { highlightBlocks: false });
+    const stopHtmlDrag = enableRenderedHtmlDragSelection(wrapper);
+    return () => {
+      stopHtmlDrag();
+      stopSelection();
+    };
+  }, []);
+
+  useEffect(() => {
+    const wrapper = wrapperRef.current;
+    if (!wrapper) return undefined;
 
     const handleLinkClick = (event) => {
       if (getEventTargetElement(event.target)?.closest('.milkdown-media-inline')) return;
@@ -2443,12 +2481,29 @@ function MilkdownInner(
   return (
     <div
       ref={wrapperRef}
-      onClickCapture={(event) => handleFootnoteClick(event, footnoteOrigins.current)}
+      onClick={(event) => handleFootnoteClick(event, footnoteOrigins.current)}
+      onMouseDownCapture={(event) => {
+        const range = event.button === 2 ? selectedRange(event.currentTarget) : null;
+        contextMenuSelection.current = range?.cloneRange() || null;
+        if (range) {
+          event.preventDefault();
+          event.stopPropagation();
+        }
+      }}
+      onContextMenuCapture={(event) => {
+        if (contextMenuSelection.current || selectedRange(event.currentTarget)) handleContextMenu(event);
+      }}
       onContextMenu={handleContextMenu}
       onCopyCapture={(event) => {
         const view = getMediaView();
         if (!view?.dom.contains(event.target) ||
           event.target.closest('input, textarea, .cm-editor, .milkdown-media-inline')) return;
+        if (selectedMarkdownHtml(view.dom)) {
+          event.preventDefault();
+          event.stopPropagation();
+          event.clipboardData.setData('text/plain', view.dom.ownerDocument.getSelection().toString());
+          return;
+        }
         const src = selectedImageSource(view.state);
         if (!src) return;
         event.preventDefault();
@@ -2458,6 +2513,7 @@ function MilkdownInner(
       onKeyDownCapture={(event) => {
         const view = getMediaView();
         if (!view?.dom.contains(event.target)) return;
+        if (event.target.closest(renderedMarkdownHtml)) return;
         const input = event.target.closest('input, textarea');
         const handled = handleEditingShortcut(event.nativeEvent, (action, custom) => {
           if (input) return runTextFieldShortcut(input, action, custom);

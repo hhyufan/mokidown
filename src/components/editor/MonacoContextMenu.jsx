@@ -7,6 +7,8 @@ import { useHotkeys } from '@hooks/useHotkeys';
 import { formatKeybinding } from '@utils/keybinding';
 import { monacoEditingCommands, pasteMonacoClipboard } from './monacoImagePaste';
 import { editingShortcutOf } from '@utils/basicEditingShortcuts';
+import { openSnapshotPayload, runQuickSnapshot } from '@utils/snapshotCapture';
+import useEditorStore from '@store/useEditorStore';
 import './monaco-context-menu.scss';
 
 /**
@@ -92,6 +94,43 @@ export default function MonacoContextMenu({ visible, x, y, onClose, editorRef, r
     }
   };
 
+  const buildSnapshotPayload = () => {
+    const editor = editorRef.current;
+    const model = editor?.getModel();
+    if (!model) return null;
+    const selection = editor.getSelection();
+    const hasSelection = Boolean(selection && !selection.isEmpty());
+    const content = hasSelection ? model.getValueInRange(selection) : model.getValue();
+    const startLine = hasSelection ? selection.startLineNumber : 1;
+    const { tabs, activeTabId } = useEditorStore.getState();
+    const tab = tabs.find((entry) => entry.id === activeTabId) || null;
+    return {
+      mode: 'code',
+      content,
+      language: model.getLanguageId() || 'plaintext',
+      fileName: tab?.name || '',
+      documentPath: tab?.path || '',
+      startLine,
+      isSelection: hasSelection,
+    };
+  };
+
+  const captureSnapshot = (event) => {
+    event.preventDefault();
+    event.stopPropagation();
+    onClose();
+    const payload = buildSnapshotPayload();
+    if (payload) openSnapshotPayload(payload);
+  };
+
+  const captureQuickSnapshot = (event) => {
+    event.preventDefault();
+    event.stopPropagation();
+    onClose();
+    const payload = buildSnapshotPayload();
+    if (payload) void runQuickSnapshot(payload);
+  };
+
   // 菜单项顺序与常见编辑器右键菜单保持一致，分隔项仅用于视觉分组。
   const editing = (key, action = trigger(monacoEditingCommands[key])) => ({
     key, label: t(`editor.menu.${key}`), ...editingShortcutOf(key), action,
@@ -105,6 +144,8 @@ export default function MonacoContextMenu({ visible, x, y, onClose, editorRef, r
     editing('paste', paste),
     { key: 's2', type: 'separator' },
     editing('selectAll'),
+    { key: 'snapshot', label: t('editor.menu.snapshot'), shortcut: shortcutOf('captureSnapshot'), action: captureSnapshot },
+    { key: 'quickSnapshot', label: t('editor.menu.quickSnapshot'), shortcut: shortcutOf('quickSnapshot'), action: captureQuickSnapshot },
     { key: 's3', type: 'separator' },
     { key: 'find', label: t('editor.menu.find'), shortcut: shortcutOf('findInEditor'), action: trigger('actions.find') },
     { key: 'replace', label: t('editor.menu.replace'), shortcut: shortcutOf('replaceInEditor'), action: trigger('editor.action.startFindReplaceAction') },

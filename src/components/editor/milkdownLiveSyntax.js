@@ -504,10 +504,10 @@ function boundaryMarkers(position, boundary, offset, revealMark) {
   return markers;
 }
 
-function selectClickedDelimiter(view, event, marker) {
+function delimiterPointerHit(view, event, marker) {
   const $pos = view.state.doc.resolve(view.posAtDOM(marker, 0));
   const boundary = delimiterBoundary(view.state, $pos);
-  if (!boundary) return false;
+  if (!boundary) return null;
   const box = marker.getBoundingClientRect();
   const length = marker.dataset.mokiMarker.length;
   const rtl = marker.ownerDocument.defaultView.getComputedStyle(marker).direction === 'rtl';
@@ -517,11 +517,93 @@ function selectClickedDelimiter(view, event, marker) {
     ? Number(marker.dataset.markerSide) < 0 ? boundary.text.length - length : 0
     : Number(marker.dataset.markerStart);
   const offset = start + Math.round(Math.max(0, Math.min(1, ratio)) * length);
-  event.preventDefault();
+  return { $pos, boundary, offset };
+}
+
+function pointerPresentation(view) {
+  const { selection, storedMarks } = view.state;
+  return {
+    selection,
+    caret: liveSyntaxKey.getState(view.state).caret,
+    marks: storedMarks ?? selection.$from.marks(),
+    focused: view.hasFocus(),
+  };
+}
+
+function beginDelimiterSelectionDrag(view, down, { $pos, boundary, offset }) {
+  const window = view.dom.ownerDocument.defaultView;
+  const doc = view.state.doc;
+  const pointer = pointerPresentation(view);
+  const listeners = new AbortController();
+  const { signal } = listeners;
+  let dragging = false;
+  const cancel = () => {
+    listeners.abort();
+    inlinePointerGestures.delete(view);
+  };
+  const current = () => !view.isDestroyed && view.state.doc === doc &&
+    liveSyntaxKey.getState(view.state).pointer === pointer;
+  const release = (click = false) => {
+    cancel();
+    if (!current()) return;
+    if (click) {
+      selectDelimiterPosition(view, $pos, boundary, offset, false, null);
+      if (!view.hasFocus()) view.focus();
+    } else {
+      view.dispatch(view.state.tr.setMeta(liveSyntaxKey, { pointer: null }));
+    }
+  };
+  const extend = (event) => {
+    if (!current() || !view.hasFocus()) return;
+    if (!dragging && Math.hypot(event.clientX - down.clientX, event.clientY - down.clientY) < 3) return;
+    dragging = true;
+    const hit = view.posAtCoords({ left: event.clientX, top: event.clientY });
+    if (!hit) return;
+    const selection = TextSelection.between($pos, doc.resolve(hit.pos));
+    if (!selection.eq(view.state.selection)) {
+      view.dispatch(view.state.tr.setSelection(selection).setMeta('pointer', true));
+    }
+  };
+  down.preventDefault();
   inlinePointerGestures.get(view)?.cancel();
-  selectDelimiterPosition(view, $pos, boundary, offset, false, null);
-  if (!view.hasFocus()) view.focus();
+  inlinePointerGestures.set(view, {
+    cancel,
+    finish: () => release(),
+    schedule: () => { if (!current()) cancel(); },
+  });
+  window.addEventListener('mousemove', extend, { capture: true, signal });
+  window.addEventListener('mouseup', (event) => {
+    if (event.button !== 0) return;
+    extend(event);
+    release(!dragging && view.dom.contains(event.target));
+  }, { capture: true, signal });
+  window.addEventListener('pointercancel', () => release(), { signal });
+  window.addEventListener('blur', () => release(), { signal });
+  view.dom.addEventListener('blur', () => release(), { signal });
+  // Freeze the expanded syntax until the final hit-test. Collapsing it on the
+  // first selection transaction moves the text under the pointer.
+  view.dispatch(view.state.tr.setMeta(liveSyntaxKey, { pointer }));
   return true;
+}
+
+function markerAtPointer(block, event) {
+  const marker = event.target.closest?.('.moki-markdown-marker');
+  if (marker || !block) return marker;
+  const window = block.ownerDocument.defaultView;
+  for (const candidate of block.querySelectorAll('.moki-markdown-marker')) {
+    const style = window.getComputedStyle(candidate);
+    const margin = style.direction === 'rtl' ? style.marginLeft : style.marginRight;
+    const width = parseFloat(margin);
+    if (!(width > 0)) continue;
+    for (const rect of candidate.getClientRects()) {
+      if (event.clientY < rect.top || event.clientY >= rect.bottom) continue;
+      const inMargin = style.direction === 'rtl'
+        ? event.clientX < rect.left && event.clientX >= rect.left - width
+        : event.clientX > rect.right && event.clientX <= rect.right + width;
+      if (inMargin) return candidate;
+    }
+  }
+  return null;
 }
 
 function marksOutsideInlineBoundary($pos) {
@@ -600,7 +682,6 @@ function nativeSelectionIsCommitted(view) {
 }
 
 function beginInlinePointerGesture(view, event, inline, gap) {
-  const { selection, storedMarks } = view.state;
   const doc = view.dom.ownerDocument;
   const window = doc.defaultView;
   const mathElement = event.target.closest?.('[data-moki-math-mark]');
@@ -608,12 +689,7 @@ function beginInlinePointerGesture(view, event, inline, gap) {
   const mathTo = mathElement && view.posAtDOM(mathElement, mathElement.childNodes.length);
   // Capture the side of real text before the decorations can change the layout.
   const textHit = mathElement ? null : inlineTextHit(view, inline, event);
-  const pointer = {
-    selection,
-    caret: liveSyntaxKey.getState(view.state).caret,
-    marks: storedMarks ?? selection.$from.marks(),
-    focused: view.hasFocus(),
-  };
+  const pointer = pointerPresentation(view);
   const listeners = new AbortController();
   const { signal } = listeners;
   let frame = 0;
@@ -712,11 +788,12 @@ function handleInlinePointer(view, event) {
   )
     return false;
 
-  const marker = target.closest?.('.moki-markdown-marker');
-  if (marker) return selectClickedDelimiter(view, event, marker);
+  const block = target.closest?.('p, h1, h2, h3, h4, h5, h6, td, th');
+  const marker = markerAtPointer(block, event);
+  const delimiter = marker && delimiterPointerHit(view, event, marker);
+  if (delimiter) return beginDelimiterSelectionDrag(view, event, delimiter);
   const inlineSelector = 'strong, b, em, i, del, s, code, [data-moki-math-mark]';
   const inline = target.closest?.(inlineSelector);
-  const block = target.closest?.('p, h1, h2, h3, h4, h5, h6, td, th');
   if (inline || block?.querySelector(inlineSelector) ||
       view.dom.querySelector('.moki-markdown-marker, .moki-math-source')) {
     const gap = !inline && inlineGapHit(view, block, inlineSelector, event);
