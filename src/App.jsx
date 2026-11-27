@@ -77,6 +77,7 @@ import VersionList from '@components/overlays/VersionList';
 import CrtBoot from '@components/overlays/CrtBoot';
 import RuntimeErrorBoundary from '@components/overlays/RuntimeErrorBoundary';
 import useNotificationStore from '@store/useNotificationStore';
+import { captureActiveEditorSnapshot, captureActiveQuickSnapshot } from '@utils/snapshotCapture';
 
 import { cn } from '@utils/classNames';
 import '@styles/App.scss';
@@ -556,6 +557,8 @@ function App({ skipCliArgs = false }) {
         closeOtherTabs: () =>
           requestTabsClose(tabs.filter(({ id }) => id !== activeTabId).map(({ id }) => id)),
         closeAllTabs: () => requestTabsClose(tabs.map(({ id }) => id)),
+        captureSnapshot: captureActiveEditorSnapshot,
+        quickSnapshot: captureActiveQuickSnapshot,
       };
       const handler = handlers[actionId];
       if (!handler) return false;

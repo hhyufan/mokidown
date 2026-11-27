@@ -1,3 +1,5 @@
+@use '../../assets/styles/settings-segmented';
+
 /**
  * @file settings-modal.scss
  * @description 定义设置弹窗的基础布局、分区导航、设置项表单以及移动端全屏模式样式。
@@ -1190,29 +1192,6 @@ html[data-theme='dark'] .settings-about__portrait > .moki-sprite {
 
 /* 只给容器加底色，滑块和动画仍然走 antd 默认实现。 */
 /* 与侧栏导航的分段控件保持一致：hover 底、surface 滑块、6px 圆角。 */
-.settings-indent-segmented.ant-segmented {
-  padding: 5px;
-  border-radius: 8px;
-  background: color-mix(in srgb, var(--surface) 58%, transparent);
-
-  .ant-segmented-thumb,
-  .ant-segmented-item-selected {
-    background: color-mix(in srgb, var(--surface) 78%, transparent);
-    box-shadow: 0 1px 2px color-mix(in srgb, var(--text) 8%, transparent);
-    border-radius: 6px;
-  }
-
-  .ant-segmented-item {
-    color: var(--text-sec);
-    font-size: 12px;
-    font-weight: 500;
-  }
-
-  .ant-segmented-item-selected {
-    color: var(--text);
-  }
-}
-
 /* 设置导航 */
 .settings-nav {
   position: relative;

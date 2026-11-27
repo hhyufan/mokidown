@@ -347,3 +347,37 @@ it('switches tab behavior between spaces and tabs', async () => {
   fireEvent.click(screen.getByText('空格'));
   expect(useConfigStore.getState().insertSpaces).toBe(true);
 });
+
+it('shows quick snapshot settings before About with a camera icon and updates quick snapshot presets', async () => {
+  await act(async () => render(<SettingsModal open onClose={vi.fn()} />));
+  const navButtons = [...document.querySelectorAll('.settings-nav__button')].map((el) =>
+    el.getAttribute('aria-label'),
+  );
+  const quickIdx = navButtons.indexOf('快速截图');
+  const aboutIdx = navButtons.indexOf('关于');
+  expect(quickIdx).toBeGreaterThan(-1);
+  expect(aboutIdx).toBe(quickIdx + 1);
+
+  fireEvent.click(screen.getByRole('button', { name: '快速截图' }));
+  expect(document.querySelector('.snapshot-quick-settings')).toBeInTheDocument();
+
+  const fileNameToggle = screen.getByRole('switch', { name: '显示文件名称' });
+  const fileTypeToggle = screen.getByRole('switch', { name: '显示文件类型' });
+  const rainbowToggle = screen.getByRole('switch', { name: '彩虹缩进' });
+  const appBgToggle = screen.getByRole('switch', { name: '附带项目背景' });
+
+  fireEvent.click(fileNameToggle);
+  fireEvent.click(fileTypeToggle);
+  fireEvent.click(rainbowToggle);
+  fireEvent.click(appBgToggle);
+  fireEvent.click(screen.getByText('保存 PNG'));
+
+  const { default: useSnapshotStore } = await import('@store/useSnapshotStore');
+  expect(useSnapshotStore.getState().quick).toMatchObject({
+    showFileName: false,
+    showFileType: false,
+    showIndentRainbow: false,
+    useAppBackground: true,
+    quickAction: 'save',
+  });
+});

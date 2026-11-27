@@ -1,0 +1,181 @@
+@use '../../assets/styles/markdown-block-style' as markdown;
+
+.snapshot-card__markdown {
+  font-family: var(--font-app);
+  font-size: var(--snap-font-size, 14px);
+  display: flow-root;
+  box-sizing: border-box;
+  --text: var(--snap-heading);
+  --text-sec: var(--snap-muted);
+  --accent: var(--snap-accent);
+  line-height: 1.72;
+  white-space: normal;
+  color: var(--snap-text);
+  word-break: break-word;
+
+  > *:first-child {
+    margin-top: 0;
+  }
+  > *:last-child {
+    margin-bottom: 0;
+  }
+
+  @include markdown.headings;
+  @include markdown.list-markers;
+
+  p {
+    margin: 0.65em 0;
+  }
+
+  a {
+    display: inline;
+    color: var(--snap-accent);
+    text-decoration: none;
+  }
+
+  strong {
+    color: var(--snap-heading);
+    font-weight: 600;
+  }
+
+  blockquote {
+    margin: 0.85em 0;
+    padding: 8px 14px;
+    border-radius: 6px;
+    background: var(--snap-quote-bg);
+    color: var(--snap-text);
+
+    > p:first-child {
+      margin-top: 0;
+    }
+    > p:last-child {
+      margin-bottom: 0;
+    }
+  }
+
+  ul,
+  ol {
+    margin: 0.55em 0;
+    padding-left: 1.65em;
+  }
+
+  li {
+    margin: 0.25em 0;
+    &::marker {
+      color: var(--snap-accent);
+      font-weight: 600;
+    }
+  }
+
+  :is(li.task-list-item, li[data-item-type='task']) {
+    list-style: none;
+    input[type='checkbox'] {
+      accent-color: var(--snap-accent);
+      margin: 0 7px 0 -1.35em;
+      vertical-align: middle;
+    }
+  }
+
+  code {
+    font-family: var(--font-editor);
+    font-size: 0.88em;
+    padding: 1.5px 6px;
+    border-radius: 4px;
+    background: var(--snap-inline-code-bg);
+    color: var(--snap-heading);
+  }
+
+  pre {
+    margin: 0.85em 0;
+    padding: 12px 14px;
+    border-radius: 8px;
+    background: var(--snap-code-bg);
+    border: 1px solid var(--snap-header-border);
+    overflow: hidden;
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+    font-family: var(--font-editor);
+    font-size: 0.88em;
+    line-height: 1.6;
+
+    code {
+      background: none;
+      padding: 0;
+      font-size: inherit;
+      color: inherit;
+    }
+  }
+
+  --snap-code-keyword: #a626a4;
+  --snap-code-string: #50a14f;
+  --snap-code-function: #4078f2;
+  --snap-code-number: #986801;
+  --snap-code-property: #e45649;
+
+  &[data-snapshot-theme='dark'] {
+    --snap-code-keyword: #c678dd;
+    --snap-code-string: #98c379;
+    --snap-code-function: #61afef;
+    --snap-code-number: #d19a66;
+    --snap-code-property: #e06c75;
+  }
+
+  .token:is(.comment, .prolog) {
+    color: var(--snap-muted);
+    font-style: italic;
+  }
+  .token:is(.keyword, .operator) {
+    color: var(--snap-code-keyword);
+  }
+  .token:is(.string, .attr-value) {
+    color: var(--snap-code-string);
+  }
+  .token:is(.function, .class-name) {
+    color: var(--snap-code-function);
+  }
+  .token:is(.number, .boolean, .constant) {
+    color: var(--snap-code-number);
+  }
+  .token:is(.tag, .property, .symbol) {
+    color: var(--snap-code-property);
+  }
+
+  hr {
+    border: 0;
+    height: 1.5px;
+    background: var(--snap-rule);
+    margin: 1.1em 0;
+  }
+
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    margin: 0.85em 0;
+    font-size: 0.94em;
+  }
+
+  th,
+  td {
+    padding: 7px 11px;
+    border-bottom: 1px solid var(--snap-rule);
+    text-align: left;
+  }
+
+  th {
+    background: var(--snap-table-head);
+    color: var(--snap-accent);
+    font-weight: 600;
+  }
+
+  tbody tr:nth-child(even) {
+    background: var(--snap-table-alt);
+  }
+
+  img {
+    display: inline-block;
+    max-width: 100%;
+    height: auto;
+    vertical-align: middle;
+    border-radius: 6px;
+  }
+}

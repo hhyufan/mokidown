@@ -1,0 +1,26 @@
+.settings-indent-segmented.ant-segmented {
+  padding: 5px;
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--settings-segmented-surface, var(--surface)) 58%, transparent);
+
+  body.moki-has-background & {
+    --settings-segmented-surface: var(--moki-background-base);
+  }
+
+  .ant-segmented-thumb,
+  .ant-segmented-item-selected {
+    background: color-mix(in srgb, var(--settings-segmented-surface, var(--surface)) 78%, transparent);
+    box-shadow: 0 1px 2px color-mix(in srgb, var(--text) 8%, transparent);
+    border-radius: 6px;
+  }
+
+  .ant-segmented-item {
+    color: var(--text-sec);
+    font-size: 12px;
+    font-weight: 500;
+  }
+
+  .ant-segmented-item-selected {
+    color: var(--text);
+  }
+}

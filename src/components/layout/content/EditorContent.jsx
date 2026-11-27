@@ -22,6 +22,7 @@ import useEditorStore from '@store/useEditorStore';
 import useConfigStore from '@store/useConfigStore';
 import useHistoryStore from '@store/useHistoryStore';
 import useThemeStore from '@store/useThemeStore';
+import useSnapshotStore from '@store/useSnapshotStore';
 import MonacoEditor from '@components/editor/LazyMonacoEditor';
 import FloatingToolbar from '@components/editor/FloatingToolbar';
 import { applyMarkdownToolbarAction } from '@components/editor/applyMarkdownToolbarAction';
@@ -52,6 +53,7 @@ const TreeEditor = lazyWithRetry(() => import('@components/editor/TreeEditor'));
 const HistoryDiffView = lazy(loadHistoryDiffView);
 const HtmlFilePreview = lazyWithRetry(() => import('@components/editor/HtmlFilePreview'));
 const SettingsPage = lazyWithRetry(() => import('@components/overlays/SettingsModal'));
+const loadSnapshotModal = () => import('@components/overlays/SnapshotModal');
 import WebPageView from '@components/editor/WebPageView';
 
 function PluginDocsPage({ title }) {
@@ -128,6 +130,31 @@ function RendererLoadError({
         {t(action)}
       </button>
     </div>
+  );
+}
+
+function SnapshotOverlay() {
+  const [{ attempt, View }, setRenderer] = useState(() => ({
+    attempt: 0,
+    View: lazyWithRetry(loadSnapshotModal),
+  }));
+  const retry = () => setRenderer(({ attempt }) => ({
+    attempt: attempt + 1,
+    View: lazyWithRetry(loadSnapshotModal),
+  }));
+  return (
+    <RendererErrorBoundary
+      key={attempt}
+      fallback={
+        <div className="editor-content__snapshot-error">
+          <RendererLoadError message="snapshot.openFailed" action="runtimeLogs.retry" onAction={retry} />
+        </div>
+      }
+    >
+      <Suspense fallback={null}>
+        <View />
+      </Suspense>
+    </RendererErrorBoundary>
   );
 }
 
@@ -304,6 +331,12 @@ function EditorContent() {
   const { t } = useTranslation();
   const tabs = useEditorStore((s) => s.tabRenderList);
   const activeTabId = useEditorStore((s) => s.activeTabId);
+  const snapshotPayload = useSnapshotStore((s) => s.payload);
+  const snapshotBelongsToTab = snapshotPayload?.tabId === undefined ||
+    snapshotPayload.tabId === activeTabId;
+  useLayoutEffect(() => {
+    if (snapshotPayload && !snapshotBelongsToTab) useSnapshotStore.getState().closeSnapshot();
+  }, [snapshotPayload, snapshotBelongsToTab]);
   const viewMode = useEditorStore((s) => s.viewMode);
   const toggleSidebar = useEditorStore((s) => s.toggleSidebar);
   const toggleEditPreview = useEditorStore((s) => s.toggleEditPreview);
@@ -1079,6 +1112,7 @@ function EditorContent() {
 
       {/* 浮动工具栏放在工作区外层，避免被内部 `overflow: hidden` 裁切。 */}
       {!showHistoryDiff && isMarkdown && <FloatingToolbar onInsert={handleToolbarInsert} />}
+      {snapshotPayload && snapshotBelongsToTab && <SnapshotOverlay />}
     </main>
   );
 }

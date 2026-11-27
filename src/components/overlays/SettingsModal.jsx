@@ -28,6 +28,7 @@ import {
   GithubOutlined,
   StarFilled,
   GlobalOutlined,
+  CameraOutlined,
 } from '@ant-design/icons';
 import AppMark from '@components/ui/AppMark';
 import SearchHighlight from '@components/ui/SearchHighlight';
@@ -56,6 +57,7 @@ import LanguageServices from './LanguageServices';
 import BackgroundSettings from './BackgroundSettings';
 import MokiSettings from '@components/moki/MokiSettings';
 import ShortcutsSettings from './ShortcutsSettings';
+import QuickSnapshotSettings from './QuickSnapshotSettings';
 import MokiSprite from '@components/moki/MokiSprite';
 import SettingsNavigation from './SettingsNavigation';
 
@@ -119,11 +121,20 @@ const NAV_ICONS = {
   renderer: <PaletteIcon />,
   shortcuts: <ShortcutsIcon />,
   languages: <PluginsIcon />,
-
+  quickSnapshot: <CameraOutlined />,
   about: <InfoCircleOutlined />,
 };
 
-const NAV_KEYS = ['general', 'appearance', 'editor', 'renderer', 'shortcuts', 'languages', 'about'];
+const NAV_KEYS = [
+  'general',
+  'appearance',
+  'editor',
+  'renderer',
+  'shortcuts',
+  'languages',
+  'quickSnapshot',
+  'about',
+];
 
 const SETTINGS_VIEW_STORAGE_KEY = 'mokidown-settings-view';
 
@@ -152,6 +163,7 @@ const SEARCH_SECTIONS = [
   ['settings.appearance.', 'renderer'],
   ['settings.editor.', 'editor'],
   ['settings.documents.', 'languages'],
+  ['settings.quickSnapshot.', 'quickSnapshot'],
   ['settings.about.', 'about'],
 ];
 
@@ -953,6 +965,10 @@ function SettingsPage({ side = false }) {
               )}
 
               {activeNav === 'languages' && <LanguageServices onOpenConfig={openSettingsFile} />}
+
+              {activeNav === 'quickSnapshot' && (
+                <QuickSnapshotSettings SettingGroup={SettingGroup} SettingRow={SettingRow} />
+              )}
 
               {activeNav === 'about' && (
                 <div className="settings-section">

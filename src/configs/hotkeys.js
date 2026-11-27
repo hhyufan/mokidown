@@ -167,6 +167,20 @@ export const HOTKEY_ACTIONS = [
     defaultKeybinding: 'F1',
   },
   {
+    id: 'captureSnapshot',
+    scope: 'app',
+    group: 'editor',
+    label: 'settings.shortcuts.action.captureSnapshot',
+    defaultKeybinding: 'Ctrl+Alt+KeyS',
+  },
+  {
+    id: 'quickSnapshot',
+    scope: 'app',
+    group: 'editor',
+    label: 'settings.shortcuts.action.quickSnapshot',
+    defaultKeybinding: 'Ctrl+Alt+Shift+KeyS',
+  },
+  {
     id: 'closeTab',
     scope: 'app',
     group: 'tabs',

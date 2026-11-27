@@ -39,5 +39,7 @@ export function createAppHotkeyHandlers({ toggleSidebar, togglePreview }) {
     toggleSidebar,
     togglePreview,
     toggleFullscreen: () => dispatchHotkeyCommand('toggleFullscreen'),
+    captureSnapshot: () => dispatchHotkeyCommand('captureSnapshot'),
+    quickSnapshot: () => dispatchHotkeyCommand('quickSnapshot'),
   };
 }

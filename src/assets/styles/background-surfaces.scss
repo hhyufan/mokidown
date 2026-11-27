@@ -106,6 +106,10 @@ body.moki-has-background,
     background: color-mix(in srgb, var(--surface) 18%, transparent);
   }
 
+  .snapshot-quick-settings__stage {
+    background-color: color-mix(in srgb, var(--surface) 18%, transparent);
+  }
+
   .preview-wallpaper[data-preview-theme] {
     --moki-background-base: #fff;
     --moki-background-wash: color-mix(

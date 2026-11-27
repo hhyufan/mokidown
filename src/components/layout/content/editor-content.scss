@@ -213,6 +213,23 @@
   }
 }
 
+.editor-content__snapshot-error {
+  position: absolute;
+  inset: 0;
+  z-index: 30;
+  display: grid;
+  place-items: center;
+  pointer-events: none;
+
+  .editor-content__renderer-error {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    box-shadow: var(--shadow-lg);
+    pointer-events: auto;
+  }
+}
+
 .editor-content__split-divider {
   @include resize-handle.surface;
   width: resize-handle.$track-size;
