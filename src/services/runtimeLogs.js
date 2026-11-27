@@ -157,20 +157,21 @@ export function reportReactError(error, info) {
 export function reportTauriFailure(command, reason, args) {
   if (isCancellation(reason)) return;
   const message = typeof reason === 'string' ? reason : reason?.message || 'Tauri command failed';
+  const missingPath = /os error (?:2|3)\b|not found|No such file/i.test(message);
   // A vanished file is an expected business state: callers surface it as a
   // missing/blocked tab. Logging every autosave/switch attempt only floods the
   // panel, and the old entry had no path to locate the file anyway.
-  if (command === 'read_file_content' && /os error (?:2|3)\b|not found|No such file/i.test(message))
-    return;
+  if (command === 'read_file_content' && missingPath) return;
   const filePath = args?.filePath || args?.path;
+  const missingImage = command === 'read_binary_file' && missingPath;
   reportRuntimeLog({
     source: 'Tauri',
     detail: filePath ? `${command} ${filePath}` : command,
     announce: false,
-    level: ['missing', 'binary', 'not-file', 'too-large'].includes(reason?.kind)
+    level: missingImage || ['missing', 'binary', 'not-file', 'too-large'].includes(reason?.kind)
       ? 'warning'
       : 'error',
-    message,
+    message: missingImage && filePath ? `${message} (${filePath})` : message,
     stack: reason?.stack,
   });
 }
