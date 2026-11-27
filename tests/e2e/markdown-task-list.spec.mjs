@@ -399,16 +399,12 @@ test('completing a task list marker immediately places the writing caret at text
   await page.evaluate(() => window.trial.selectTextblock(0));
   await page.keyboard.type('- [ ] ', { delay: 20 });
   await expect(editor.getByRole('checkbox')).toHaveCount(1);
-  const caret = page.locator('.moki-writing-caret:not([hidden])');
-  await expect(caret).toBeVisible();
-  const geometry = await editor.evaluate((root) => {
-    const box = root.querySelector('.md-preview__task-checkbox').getBoundingClientRect();
-    const paragraph = root.querySelector('li p').getBoundingClientRect();
-    const drawn = document.querySelector('.moki-writing-caret').getBoundingClientRect();
-    return { boxRight: box.right, boxHeight: box.height, pLeft: paragraph.left, caretLeft: drawn.left, caretHeight: drawn.height };
-  });
-  expect(Math.abs(geometry.caretLeft - geometry.pLeft)).toBeLessThan(1);
-  expect(geometry.caretLeft).toBeGreaterThan(geometry.boxRight + 4);
-  expect(geometry.caretHeight).toBeGreaterThan(geometry.boxHeight + 2);
+  await expect.poll(() => editor.evaluate((root) => {
+    const selection = root.ownerDocument.getSelection();
+    const text = root.querySelector('li p');
+    const checkbox = text.querySelector('.md-preview__task-checkbox');
+    return selection.isCollapsed && text.contains(selection.focusNode)
+      && !checkbox?.contains(selection.focusNode);
+  })).toBe(true);
 });
 

@@ -533,6 +533,12 @@
 }
 
 .md-preview--milkdown {
+  --moki-writing-caret-color: var(--text, #2c2c2e);
+
+  @media (forced-colors: active) {
+    --moki-writing-caret-color: CanvasText;
+  }
+
   &[data-milkdown-starting] > [data-milkdown-root] {
     visibility: hidden;
   }
@@ -614,15 +620,10 @@
       pointer-events: none;
     }
 
-    &:not(
-      .ProseMirror-hideselection,
-      .moki-markdown-virtual-caret,
-      .moki-markdown-pointer-pending,
-      [data-drawn-caret]
-    ) {
-      caret-color: var(--text, #2c2c2e) !important;
+    &:not(.ProseMirror-hideselection, .moki-markdown-virtual-caret, .moki-markdown-native-gesture) {
+      caret-color: var(--moki-writing-caret-color) !important;
     }
-    &[data-drawn-caret] {
+    &.moki-markdown-native-gesture {
       caret-color: transparent !important;
     }
     .cm-content {
@@ -639,6 +640,12 @@
     }
     .moki-markdown-marker {
       display: none;
+    }
+    .moki-markdown-native-edge {
+      display: inline-block;
+      inline-size: 0;
+      block-size: 0;
+      pointer-events: none;
     }
 
     &.ProseMirror-focused {
@@ -658,13 +665,6 @@
           content: attr(data-moki-marker);
         }
       }
-      &.moki-markdown-virtual-caret,
-      &.moki-markdown-pointer-pending {
-        caret-color: transparent !important;
-      }
-      &.moki-markdown-pointer-pending .moki-markdown-marker--with-caret > i::after {
-        visibility: hidden;
-      }
       .moki-markdown-marker--with-caret {
         &::before {
           content: attr(data-marker-before);
@@ -676,18 +676,23 @@
           position: relative;
           font-family: var(--font-app);
           font-style: normal;
-          &::after {
-            position: absolute;
-            inset-inline-start: 0;
-            inset-block-start: var(--moki-caret-top, 0px);
-            block-size: var(--moki-caret-height, 100%);
-            border-inline-start: 1px solid var(--text, #2c2c2e);
-            animation: ProseMirror-cursor-blink 1.1s steps(2, start) infinite;
-            content: '';
-            z-index: 1;
-            @media (prefers-reduced-motion: reduce) {
-              animation: none;
-            }
+        }
+      }
+      &.moki-markdown-virtual-caret {
+        caret-color: transparent !important;
+
+        .moki-markdown-marker--with-caret > i::after {
+          position: absolute;
+          inset-inline-start: 0;
+          inset-block-start: var(--moki-caret-top, 0px);
+          block-size: var(--moki-caret-height, 100%);
+          border-inline-start: 1px solid var(--moki-writing-caret-color);
+          animation: ProseMirror-cursor-blink 1.1s steps(2, start) infinite;
+          content: '';
+          pointer-events: none;
+          z-index: 1;
+          @media (prefers-reduced-motion: reduce) {
+            animation: none;
           }
         }
       }
@@ -1058,20 +1063,20 @@
     position: absolute;
     // 包含块就是 math mark 自己那个 span（见 [data-moki-math-mark]）。左边落到
     // 正文盒子的中点再左移自身一半宽度，气泡中线便跟着正文中线；垂直贴在正文上沿。
-    inset-inline-start: 50%;
+    left: 50%;
     bottom: 100%;
     z-index: 3;
     margin-bottom: 6px;
     // 正文两侧留白比旧版宽一倍，字不再贴着气泡边。
     padding: 4px 16px;
+    display: block;
     width: max-content;
-    // 不设 max-width：公式本身不能断行，硬截断会吃掉内容。超宽时由
-    // milkdownMathPreview 量出编辑区可视宽度，把整颗气泡等比缩到放得下
-    // （--moki-preview-scale），内容完整、边框与尾巴一起缩，不会探出边界。
-    // 横向收回的位移量、以及放不下时要不要翻到下方，都由 milkdownMathPreview 按
-    // 编辑区可视范围量出来后写成行内样式/属性。不能交给 position-try：它只按
-    // 「包含块」判断放得下放不下，而气泡的包含块是正文那段源码的宽度，量不到
-    // 编辑区边界，滚动起来更是对不上。
+    // Measure the full formula before positioning and scaling the bubble as a unit.
+    .moki-math-preview__content {
+      display: block;
+      width: max-content;
+      white-space: nowrap;
+    }
     transform: translate(calc(-50% + var(--moki-preview-shift, 0px)))
       scale(var(--moki-preview-scale, 1));
     transform-origin: 50% 100%;
@@ -1082,6 +1087,7 @@
       inset-block-end: auto;
       margin-block-start: 6px;
       margin-block-end: 0;
+      transform-origin: 50% 0%;
       --moki-tail-top: -6px;
       --moki-tail-bottom: auto;
       --moki-tail-up: 1px;
@@ -1093,8 +1099,8 @@
       position: absolute;
       // 尾巴在气泡正中：气泡既然按正文中线居中，尾巴就该正对着公式。
       // 横向收回来时气泡自己挪了位，尾巴按同样的量反向挪回去，依旧指着公式。
-      inset-inline-start: calc(50% - var(--moki-preview-shift, 0px));
-      margin-inline-start: -5px;
+      left: clamp(10px, 50% - var(--moki-preview-tail-shift, 0px), 100% - 10px);
+      margin-left: -5px;
       // 方块中心压在描边那条线上，旋转后朝外的两条边正好接住气泡描边。
       inset-block-start: var(--moki-tail-top, auto);
       inset-block-end: var(--moki-tail-bottom, -6px);
@@ -1391,32 +1397,6 @@
     overflow-y: hidden;
     // 表格间距统一由 table 自身承担，相邻表格之间才有一致的上下留白。
     margin: 0;
-  }
-}
-
-.moki-writing-caret {
-  position: absolute;
-  inset: 0 auto auto 0;
-  width: 2px;
-  z-index: 2;
-  background: var(--text, #2c2c2e);
-  pointer-events: none;
-  animation: moki-writing-caret-blink 1.1s step-end infinite;
-  &[hidden] {
-    display: none;
-  }
-  @media (prefers-reduced-motion: reduce) {
-    animation: none;
-  }
-  @media (forced-colors: active) {
-    background: CanvasText;
-    forced-color-adjust: none;
-  }
-}
-
-@keyframes moki-writing-caret-blink {
-  55% {
-    opacity: 0;
   }
 }
 

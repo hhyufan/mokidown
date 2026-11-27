@@ -28,6 +28,7 @@ import { closeHistory } from '@milkdown/kit/prose/history';
 import { $prose } from '@milkdown/kit/utils';
 import { isImeComposing } from '@utils/keyboard';
 import katex from 'katex';
+import { editorPopupBounds } from './editorPopupPlacement';
 import {
   isClicked,
   isMathEditing,
@@ -95,8 +96,16 @@ function renderPreview(value, spec) {
   bubble.setAttribute('contenteditable', 'false');
   bubble.setAttribute('aria-hidden', 'true');
   // 正文为空时不摆东西：气泡只在有正文时才挂上来（见 addBubble）。
-  bubble.innerHTML =
+  const html =
     (spec.cover ? coverHtml(value) : previewHtml(value, spec.displayMode)).html || '';
+  if (spec.variant === 'inline') {
+    const content = document.createElement('span');
+    content.className = 'moki-math-preview__content';
+    content.innerHTML = html;
+    bubble.append(content);
+  } else {
+    bubble.innerHTML = html;
+  }
   if (!spec.draft) return bubble;
   // 草稿正文没挂 mark，PM 又会在 widget 两侧断开装饰 span，气泡在正文里找不到
   // position:relative 的参照物。所以让 widget 自带一个零宽锚点当包含块。
@@ -123,18 +132,11 @@ function mathRanges(doc, type) {
 // 「什么时候算在编辑这条公式」由 milkdownMathMark 的 isMathEditing 统一判定，实时语法画 `$`
 // 用的是同一个条件；这里再判一次就会出现两个插件各说各话的状态。
 
-// 单击为什么要自己记一笔，而不等光标落点说了算：点的位置离首尾那个字近一半，浏览器就把光标
-// 放在边界上，inclusive:false 让那个位置读起来是「在旁边打字」，掀开判定不放行。
-// 位置要用 PM 的坐标换算而不是量 DOM 盒子：mousedown 已经把定界符画出来，
-// 正文在指针底下挪了位，mouseup 再按盒子判就已经偏了。
-// `event.detail` 分出这两下：一下把源码掀开，两下再把压在边界上的光标收进正文（见 editPos）。
-// 第二下要在 `dblclick` 里收而不是 mouseup——mouseup 时浏览器还没开始选词；可它当场也还没
-// 选完，落光标得再等一拍，详见下面那段。
-function revealClickedMath(view, event) {
+// Live syntax owns the single click. The second click puts the caret inside
+// the formula after the browser's word selection, using the revealed source.
+function revealDoubleClickedMath(view, event) {
   const { state } = view;
-  const double = event.type === 'dblclick';
-  if (!view.editable || event.button !== 0) return;
-  if (double ? event.detail !== 2 : event.detail !== 1) return;
+  if (!view.editable || event.button !== 0 || event.detail !== 2) return;
   const math = state.schema.marks[mathMarkName];
   if (!math) return;
   const ranges = mathRanges(state.doc, math);
@@ -144,11 +146,7 @@ function revealClickedMath(view, event) {
   const at = view.posAtCoords({ left: event.clientX, top: event.clientY })?.pos ?? head;
   const range =
     ranges.find(({ from, to }) => at >= from && at <= to) ??
-    (double ? ranges.find(({ from, to }) => end > from && start < to) : null);
-  if (!double) {
-    if (range) view.dispatch(state.tr.setMeta(previewKey, { from: range.from, to: range.to }));
-    return;
-  }
+    ranges.find(({ from, to }) => end > from && start < to);
   // 双击第二下交回来的是浏览器的原生选词，可公式刚被第一下重新排过，Chromium 找不回
   // 那个词，退化成整行选中（`正文 $x^2$ 结尾` 量到 8→17）：两头都在公式外面，之后方向键、
   // 打字全都跑偏，定界符与补全也因为选区非空而收走。所以这一下由我们自己落进正文。
@@ -434,35 +432,55 @@ function scrollParent(element) {
   return null;
 }
 
-// 气泡浮在正文上方，第一行写公式就会被编辑区上沿裁掉；预览比源码宽很多时，
-// 按中线居中又会探出左右边界。所以每次更新按可视范围量一次，放不下就翻到下方，
-// 探出去就按差值平移收回来的距离。
-// 横向用平移而不是贴边，是为了让尾巴始终指着公式——贴到正文末尾会把尾巴撇开几十像素。
-function fitBubbles(view) {
-  const scroller = scrollParent(view.dom);
-  if (!scroller) return;
-  const box = scroller.getBoundingClientRect();
+function fitBubbleContent(bubble) {
+  const content = bubble.firstElementChild;
+  const formula = content.querySelector('.katex-html');
+  if (!formula) return;
+  content.style.margin = '';
+  const box = content.getBoundingClientRect();
+  const range = bubble.ownerDocument.createRange();
+  range.selectNodeContents(formula);
+  // KaTeX can intentionally position visible parts outside the formula's layout box.
+  const edges = { top: box.top, right: box.right, bottom: box.bottom, left: box.left };
+  for (const rect of range.getClientRects()) {
+    if (!rect.width || !rect.height) continue;
+    edges.top = Math.min(edges.top, rect.top);
+    edges.right = Math.max(edges.right, rect.right);
+    edges.bottom = Math.max(edges.bottom, rect.bottom);
+    edges.left = Math.min(edges.left, rect.left);
+  }
+  content.style.margin = `${box.top - edges.top}px ${edges.right - box.right}px ${edges.bottom - box.bottom}px ${box.left - edges.left}px`;
+}
+
+function fitBubbles(view, scroller) {
+  const bounds = editorPopupBounds(view.dom.ownerDocument.defaultView, scroller.getBoundingClientRect());
   for (const bubble of view.dom.querySelectorAll('.moki-math-preview--inline')) {
-    // 先退回默认摆法再量：属性留着的话，量到的是上一次挪完之后的位置。
     bubble.removeAttribute('data-moki-math-preview-side');
     bubble.style.setProperty('--moki-preview-shift', '0px');
     bubble.style.setProperty('--moki-preview-scale', '1');
-    // 长公式（例如一长串数字）没有可断行的位置，气泡会按内容宽度撑出编辑区。
-    // 先量内容宽度，超出可视范围就整颗缩放到放得下，而不是截断公式。
-    const available = Math.min(320, box.width - 32);
-    const contentWidth = bubble.getBoundingClientRect().width;
-    if (available > 0 && contentWidth > available) {
-      bubble.style.setProperty('--moki-preview-scale', String(available / contentWidth));
+    fitBubbleContent(bubble);
+
+    const { width, height, bottom } = bubble.getBoundingClientRect();
+    if (!width || !height) continue;
+    const left = bounds.left + 8;
+    const right = bounds.right - 8;
+    const widthScale = Math.min(1, Math.max(0, Math.min(320, right - left)) / width);
+    let room = bottom - bounds.top;
+    if (height * widthScale > room) {
+      bubble.dataset.mokiMathPreviewSide = 'below';
+      const below = bounds.bottom - bubble.getBoundingClientRect().top;
+      if (below > room) room = below;
+      else bubble.removeAttribute('data-moki-math-preview-side');
     }
+    const scale = Math.min(widthScale, Math.max(0, room) / height);
+    bubble.style.visibility = scale ? '' : 'hidden';
+    if (!scale) continue;
+    bubble.style.setProperty('--moki-preview-scale', String(scale));
+
     const rect = bubble.getBoundingClientRect();
-    if (rect.top < box.top) bubble.dataset.mokiMathPreviewSide = 'below';
-    const shift =
-      rect.right > box.right
-        ? box.right - rect.right
-        : rect.left < box.left
-          ? box.left - rect.left
-          : 0;
+    const shift = Math.max(left, Math.min(right - rect.width, rect.left)) - rect.left;
     bubble.style.setProperty('--moki-preview-shift', `${shift}px`);
+    bubble.style.setProperty('--moki-preview-tail-shift', `${shift / scale}px`);
   }
 }
 
@@ -475,7 +493,6 @@ function staysInside(steps, clicked) {
 export const milkdownMathPreview = $prose(() => {
   // 「上一次成功的样子」按编辑器实例保存：跨标签页或换文档不会把别的公式的预览带过来。
   const lastGood = new Map();
-  let scroller = null;
 
   return new Plugin({
     key: previewKey,
@@ -547,27 +564,47 @@ export const milkdownMathPreview = $prose(() => {
       return state.tr.setStoredMarks(marks);
     },
     view(editorView) {
-      const refit = () => fitBubbles(editorView);
-      const onClick = (event) => revealClickedMath(editorView, event);
-      // 虚拟边界（$ 符号）由 milkdownLiveSyntax 的 decorations 渲染，它在插件视图的 update()
-      // 之后才应用到 DOM。用 queueMicrotask 延迟到当前事务处理完毕再量，确保 DOM 已包含所有装饰。
-      const refitAsync = () => queueMicrotask(refit);
+      const { ownerDocument } = editorView.dom;
+      const window = ownerDocument.defaultView;
+      let scroller = null;
+      const refit = () => {
+        if (scroller && !editorView.isDestroyed) fitBubbles(editorView, scroller);
+      };
+      const onDoubleClick = (event) => revealDoubleClickedMath(editorView, event);
+      const resize = window.ResizeObserver ? new window.ResizeObserver(refit) : null;
+      const updateScroller = () => {
+        const next = scrollParent(editorView.dom);
+        if (next === scroller) return;
+        if (scroller) {
+          resize?.unobserve(scroller);
+          scroller.removeEventListener('scroll', refit, true);
+        }
+        scroller = next;
+        if (scroller) {
+          resize?.observe(scroller);
+          scroller.addEventListener('scroll', refit, { capture: true, passive: true });
+        }
+      };
+      updateScroller();
       window.addEventListener('resize', refit);
-      editorView.dom.addEventListener('mouseup', onClick);
-      editorView.dom.addEventListener('dblclick', onClick);
+      window.visualViewport?.addEventListener('resize', refit);
+      window.visualViewport?.addEventListener('scroll', refit);
+      ownerDocument.fonts?.addEventListener('loadingdone', refit);
+      editorView.dom.addEventListener('dblclick', onDoubleClick);
       return {
         update() {
-          if (scroller?.isConnected) return refitAsync();
-          scroller?.removeEventListener('scroll', refit);
-          scroller = scrollParent(editorView.dom);
-          scroller?.addEventListener('scroll', refit, { passive: true });
-          refitAsync();
+          if (!scroller?.isConnected) updateScroller();
+          // Measure after both plugins have updated the source text and its delimiters.
+          queueMicrotask(refit);
         },
         destroy() {
+          resize?.disconnect();
           window.removeEventListener('resize', refit);
-          editorView.dom.removeEventListener('mouseup', onClick);
-          editorView.dom.removeEventListener('dblclick', onClick);
-          scroller?.removeEventListener('scroll', refit);
+          window.visualViewport?.removeEventListener('resize', refit);
+          window.visualViewport?.removeEventListener('scroll', refit);
+          ownerDocument.fonts?.removeEventListener('loadingdone', refit);
+          editorView.dom.removeEventListener('dblclick', onDoubleClick);
+          scroller?.removeEventListener('scroll', refit, true);
           scroller = null;
         },
       };

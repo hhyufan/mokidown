@@ -42,14 +42,11 @@ test('the writing caret uses the active theme foreground in light and dark modes
       document.documentElement.dataset.theme = theme;
       window.trial.selectTextblock(0);
     }, theme);
-    const caret = page.locator('.moki-writing-caret:not([hidden])');
-    await expect(caret).toBeVisible();
     const colors = await editor.evaluate((element) => {
       const style = getComputedStyle(element);
       return { nativeCaret: style.caretColor, text: style.color, colorScheme: style.colorScheme };
     });
-    await expect(caret).toHaveCSS('background-color', colors.text);
-    expect(colors.nativeCaret).toBe('rgba(0, 0, 0, 0)');
+    expect(colors.nativeCaret).toBe(colors.text);
     expect(colors.colorScheme.split(' ')).toContain(theme);
     if (theme === 'light') {
       expect(colors.colorScheme.split(' ')).toContain('only');
@@ -57,13 +54,12 @@ test('the writing caret uses the active theme foreground in light and dark modes
     }
   }
   await page.keyboard.press('Home');
-  const caret = page.locator('.moki-writing-caret:not([hidden])');
-  await expect(caret).toBeVisible();
-  const before = await caret.evaluate((element) => element.style.transform);
+  const position = () => page.evaluate(() => window.trial.state().selection.head);
+  const before = await position();
   await page.keyboard.press('ArrowRight');
-  await expect.poll(() => caret.evaluate((element) => element.style.transform)).not.toBe(before);
+  await expect.poll(position).not.toBe(before);
   await page.keyboard.press('Shift+ArrowRight');
-  await expect(caret).toHaveCount(0);
+  await expect.poll(() => page.evaluate(() => window.getSelection().isCollapsed)).toBe(false);
 });
 
 test('code and virtual Markdown carets follow the application theme', async ({ page }) => {
@@ -88,13 +84,13 @@ test('code and virtual Markdown carets follow the application theme', async ({ p
   await page.keyboard.press('ArrowLeft');
   const virtual = editor.locator('.moki-markdown-marker--with-caret i');
   await expect(virtual).toHaveCount(1);
-  await expect(page.locator('.moki-writing-caret:not([hidden])')).toHaveCount(0);
+  await expect(editor).toHaveCSS('caret-color', 'rgba(0, 0, 0, 0)');
   expect(
     await virtual.evaluate((node) => getComputedStyle(node, '::after').borderInlineStartColor),
   ).toBe('rgb(44, 44, 46)');
 });
 
-test('draft delimiters are muted, completed formatting is solid, and clicking its left edge reveals source markers', async ({
+test('draft delimiters are muted and clicking the first glyph opens completed formatting', async ({
   page,
 }) => {
   const editor = await openEditor(page);
@@ -312,14 +308,16 @@ test('the inline bubble moves out of the way when it does not fit', async ({ pag
   const wide = await edge.locator('.moki-math-draft').boundingBox();
   expect(shifted.x + shifted.width).toBeLessThanOrEqual(pane.x + pane.width + 0.5);
   expect(shifted.x).toBeGreaterThan(pane.x);
-  // 气泡整块挪了位，尾巴还得正对着公式：inset 从边框内侧量起，所以补 1px。
-  const tailX = await edgeBubble.evaluate(
-    (node) =>
-      node.getBoundingClientRect().x +
-      parseFloat(getComputedStyle(node, '::after').insetInlineStart) +
-      1,
-  );
-  expect(Math.abs(tailX - (wide.x + wide.width / 2))).toBeLessThan(2);
+  const shiftedTail = await edgeBubble.evaluate((node) => {
+    const { x } = node.getBoundingClientRect();
+    const style = getComputedStyle(node);
+    const scale = parseFloat(style.getPropertyValue('--moki-preview-scale'));
+    const inset = parseFloat(getComputedStyle(node, '::after').left);
+    return { x: x + (inset + node.clientLeft) * scale, padding: 10 * scale };
+  });
+  const target = Math.min(shifted.x + shifted.width - shiftedTail.padding,
+    Math.max(shifted.x + shiftedTail.padding, wide.x + wide.width / 2));
+  expect(Math.abs(shiftedTail.x - target)).toBeLessThan(2);
 });
 
 test('the block preview is the formula itself, with no box around it', async ({ page }) => {
@@ -810,36 +808,22 @@ test('typing at the right edge now writes in the prose', async ({ page }) => {
   );
 });
 
-// 屏幕上真在闪的那一个有两个载体：光标落在正文里由 `.moki-writing-caret` 画，落在画出来的
-// 那枚 `$` 上则由该 marker 自己的 `i::after` 描出一道 1px 竖线（`.moki-writing-caret` 藏起）。
-// 量错载体就会一直等不到变化，所以先看虚拟光标那枚 marker 在不在。
-async function liveCaretBox(page) {
-  const marker = page.locator('.moki-markdown-marker--with-caret > i');
-  if (await marker.count()) return marker.first().boundingBox();
-  const drawn = page.locator('.moki-writing-caret:not([hidden])');
-  await expect(drawn).toBeVisible();
-  return drawn.boundingBox();
-}
-
-// 点在画出来的左 `$` 上，光标该停在源码这一行。气泡就挂在公式开头同一个位置，
-// 兜底量坐标时按「位置之后」读 DOM，读到的其实是气泡的盒子，光标于是跳到气泡那一行：
-// 第一行的公式气泡朝下（看着像跑到下一行），第二行的气泡朝上（看着像跑到上一行）。
 const clickLeftDelimiter = async (page, content) => {
   const editor = await openEditor(page, content);
   const box = await editor.locator('[data-moki-math-mark]').boundingBox();
   await page.mouse.click(box.x + box.width / 2, box.y + box.height / 2);
   await expect.poll(() => visibleMarkers(editor)).toEqual(['$', '$']);
   const dollar = await editor.locator('.moki-markdown-marker').first().boundingBox();
-  // 画光标排在 requestAnimationFrame 上：先等它从「点正文那一下」的位置挪开再量，不然量到旧位置。
-  const before = await liveCaretBox(page);
-  await page.mouse.click(dollar.x + dollar.width / 2, dollar.y + dollar.height / 2);
-  await expect
-    .poll(() => liveCaretBox(page).then((caret) => caret && Math.round(caret.x)))
-    .not.toBe(Math.round(before.x));
+  await page.mouse.click(dollar.x + dollar.width * 0.8, dollar.y + dollar.height / 2);
+  const opening = editor.locator('.moki-markdown-marker').first();
+  await expect(opening).toHaveAttribute('data-marker-start', '0');
+  await expect(editor.locator('.moki-markdown-marker--with-caret')).toHaveCount(0);
   return {
-    head: await page.evaluate(() => window.trial.state().selection.head),
-    caret: await liveCaretBox(page),
-    dollar,
+    caretInSourceLine: await opening.evaluate((node) => {
+      const selection = node.ownerDocument.getSelection();
+      return selection.isCollapsed && node.closest('p').contains(selection.focusNode)
+        && !node.closest('p').querySelector('.moki-math-preview--inline').contains(selection.focusNode);
+    }),
     source: await editor.locator('[data-moki-math-mark]').boundingBox(),
     bubble: await editor.locator('.moki-math-preview--inline').boundingBox(),
   };
@@ -849,15 +833,9 @@ test('clicking the left delimiter draws the caret on the source line, not on the
   page,
 }) => {
   for (const content of ['正文 $\\alpha^2$ 结尾', '上面一行\n\n正文 $\\alpha^2$ 结尾']) {
-    const { caret, dollar, source, bubble, head } = await clickLeftDelimiter(page, content);
-    const measured = JSON.stringify({ head, caret, dollar, source, bubble });
-    // 这一行摆得下就朝上、摆不下就朝下：两种翻法都得让光标留在源码那一行。
-    expect(bubble.y > source.y, measured).toBe(content.startsWith('正文'));
-    // 点的是左边界，光标就落在「画出来的 `$` 到源码第一个字」这一格里，不会跑到气泡那头。
-    expect(caret.x, measured).toBeGreaterThanOrEqual(dollar.x - 2);
-    expect(caret.x, measured).toBeLessThanOrEqual(source.x + 2);
-    expect(caret.y, measured).toBeGreaterThanOrEqual(source.y - 2);
-    expect(caret.y + caret.height, measured).toBeLessThanOrEqual(source.y + source.height + 2);
+    const { caretInSourceLine, source, bubble } = await clickLeftDelimiter(page, content);
+    expect(bubble.y > source.y).toBe(content.startsWith('正文'));
+    expect(caretInSourceLine).toBe(true);
   }
 });
 
@@ -1321,14 +1299,19 @@ test('horizontal arrows enter each visible marker character before crossing a li
   const marker = editor.locator('.moki-markdown-marker--with-caret');
   for (const before of ['*', '']) {
     await page.keyboard.press('ArrowLeft');
-    await expect(marker).toHaveAttribute('data-marker-before', before);
+    if (before) await expect(marker).toHaveAttribute('data-marker-before', before);
+    else {
+      await expect(marker).toHaveCount(0);
+      await expect(editor.locator('.moki-markdown-marker:visible')).toHaveCount(0);
+    }
     expect(await position()).toBe(start);
   }
   await page.keyboard.press('ArrowLeft');
   expect(await position()).toBe(start - 2);
   for (const before of ['', '*', '**']) {
     await page.keyboard.press('ArrowRight');
-    await expect(marker).toHaveAttribute('data-marker-before', before);
+    if (before === '*') await expect(marker).toHaveAttribute('data-marker-before', before);
+    else await expect(marker).toHaveCount(0);
     expect(await position()).toBe(start);
   }
   await page.keyboard.press('ArrowRight');
@@ -1410,19 +1393,13 @@ test('moving left from prose lands after the closing code fence and inserts outs
   const editor = await openEditor(page, '`321`1');
   await page.evaluate(() => window.trial.selectTextblock(0, 'end'));
   await page.keyboard.press('ArrowLeft');
-  await expect(editor.locator('.moki-markdown-marker--with-caret')).toHaveAttribute(
-    'data-marker-before',
-    '`',
-  );
+  await expect(editor.locator('.moki-markdown-marker:visible')).toHaveCount(0);
   await page.keyboard.type('A');
   await expect(editor.locator('code')).toHaveText('321');
   expect(await page.evaluate(() => window.trial.markdown().trimEnd())).toBe('`321`A1');
   await page.evaluate(() => window.trial.selectTextblock(0));
   for (let i = 0; i < 4; i++) await page.keyboard.press('ArrowRight');
-  await expect(editor.locator('.moki-markdown-marker--with-caret')).toHaveAttribute(
-    'data-marker-before',
-    '`',
-  );
+  await expect(editor.locator('.moki-markdown-marker:visible')).toHaveCount(0);
   await page.keyboard.type('B');
   expect(await page.evaluate(() => window.trial.markdown().trimEnd())).toBe('`321`BA1');
 });
@@ -1621,7 +1598,7 @@ test('paired deletion removes one emphasis layer, keeps code text and supports u
   await expect(editor.locator('em')).toHaveCount(0);
   await expect(editor.locator('p').first()).toHaveText('213');
   await page.evaluate(() => window.trial.selectTextblock(1));
-  await page.keyboard.press('Delete');
+  await page.keyboard.press('Backspace');
   await expect(editor.locator('p').nth(1)).toHaveText('Task.Run');
   await expect(editor.locator('code')).toHaveCount(0);
   await page.evaluate(() => window.trial.selectTextblock(2));
@@ -1721,7 +1698,7 @@ test('dragging from rendered bold text keeps the native text selection', async (
     .toBe('abcdef');
 });
 
-test('clicking the closing backtick or following prose keeps the intended insertion point', async ({
+test('clicking the closing backtick, code padding, or following prose keeps the intended insertion point', async ({
   page,
 }) => {
   const editor = await openEditor(page, '`321321`3333');
@@ -1729,10 +1706,7 @@ test('clicking the closing backtick or following prose keeps the intended insert
   const lastMarker = editor.locator('.moki-markdown-marker:visible').last();
   const tick = await lastMarker.boundingBox();
   await page.mouse.click(tick.x + tick.width * 0.8, tick.y + tick.height / 2);
-  await expect(editor.locator('.moki-markdown-marker--with-caret')).toHaveAttribute(
-    'data-marker-before',
-    '`',
-  );
+  await expect(editor.locator('.moki-markdown-marker:visible')).toHaveCount(0);
   await page.keyboard.insertText('A');
   expect(await page.evaluate(() => window.trial.markdown().trimEnd())).toBe('`321321`A3333');
 
@@ -1748,6 +1722,76 @@ test('clicking the closing backtick or following prose keeps the intended insert
   await page.mouse.click(point.x, point.y);
   await page.keyboard.insertText('B');
   expect(await page.evaluate(() => window.trial.markdown().trimEnd())).toBe('`321321`A33B33');
+
+  const command = await openEditor(page, '运行 `npm run dev`。常用命令');
+  const padding = await command.locator('code').evaluate((node) => {
+    const range = node.ownerDocument.createRange();
+    range.selectNodeContents(node);
+    const text = range.getBoundingClientRect();
+    const box = node.getBoundingClientRect();
+    return { x: (text.right + box.right) / 2, y: text.top + text.height / 2 };
+  });
+  await page.mouse.move(padding.x, padding.y);
+  await page.mouse.down();
+  await expect(command).toHaveCSS('caret-color', 'rgba(0, 0, 0, 0)');
+  await page.mouse.up();
+  await expect(command).toHaveCSS('caret-color', 'rgb(44, 44, 46)');
+  await expect(command.locator('.moki-markdown-marker:visible')).toHaveCount(0);
+  const sharedBoundary = await page.evaluate(() => window.trial.state().selection.anchor);
+  await page.keyboard.insertText('A');
+  expect(await page.evaluate(() => window.trial.markdown().trimEnd())).toBe('运行 `npm run dev`A。常用命令');
+
+  const glyph = await command.locator('code').evaluate((node) => {
+    const text = node.lastChild;
+    const range = node.ownerDocument.createRange();
+    range.setStart(text, text.length - 1);
+    range.setEnd(text, text.length);
+    const { left, right, top, height } = range.getBoundingClientRect();
+    return { x: (left + 3 * right) / 4, y: top + height / 2 };
+  });
+  await page.mouse.click(glyph.x, glyph.y);
+  await expect.poll(() => visibleMarkers(command)).toEqual(['`', '`']);
+  await expect(command).toHaveCSS('caret-color', 'rgb(44, 44, 46)');
+  expect(await page.evaluate(() => window.trial.state().selection.anchor)).toBe(sharedBoundary);
+  await page.keyboard.insertText('B');
+  expect(await page.evaluate(() => window.trial.markdown().trimEnd())).toBe('运行 `npm run devB`A。常用命令');
+});
+
+test('clicks across an inline-code separator share one caret position and arrows still cross it', async ({ page }) => {
+  const editor = await openEditor(page, '运行 `npm run dev` 然后继续');
+  const gaps = await editor.locator('code').evaluate((code) =>
+    [code.previousSibling, code.nextSibling].map((text, side) => {
+      const range = code.ownerDocument.createRange();
+      const offset = side === 0 ? text.length - 1 : 0;
+      range.setStart(text, offset);
+      range.setEnd(text, offset + 1);
+      const { x, y, height, width } = range.getBoundingClientRect();
+      return [0.2, 0.8].map((ratio) => ({ x: x + width * ratio, y: y + height / 2 }));
+    }),
+  );
+  const position = () => page.evaluate(() => window.trial.state().selection.anchor);
+  const caretColor = await editor.evaluate((element) => getComputedStyle(element).color);
+  const clickGap = async ({ x, y }) => {
+    await page.mouse.click(x, y);
+    await expect(editor).toHaveCSS('caret-color', caretColor);
+    await expect(editor.locator('.moki-markdown-marker:visible')).toHaveCount(0);
+    return position();
+  };
+  const start = await clickGap(gaps[0][0]);
+  expect(await clickGap(gaps[0][1])).toBe(start);
+  await page.keyboard.press('ArrowLeft');
+  expect(await position()).toBe(start - 1);
+  const end = await clickGap(gaps[1][0]);
+  expect(await clickGap(gaps[1][1])).toBe(end);
+  await page.keyboard.press('ArrowRight');
+  expect(await position()).toBe(end + 1);
+
+  await clickGap(gaps[0][0]);
+  await page.keyboard.press('Backspace');
+  await expect(editor.locator('code')).toHaveText('npm run dev');
+  expect(await page.evaluate(() => window.trial.markdown().trimEnd())).toBe(
+    '运行`npm run dev` 然后继续',
+  );
 });
 
 test('two backticks place the caret between them and the next text renders as inline code', async ({
