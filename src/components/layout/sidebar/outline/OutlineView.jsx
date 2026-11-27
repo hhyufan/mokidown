@@ -1,5 +1,6 @@
 import { Fragment, useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
+import { Tooltip } from 'antd';
 import useEditorStore from '@store/useEditorStore';
 import { useEditorBufferContent } from '@hooks/useEditorBufferContent';
 import { useMarkdownAnalysis } from '@hooks/useMarkdownAnalysis';
@@ -166,9 +167,11 @@ function OutlineView() {
             >
               {canCollapse ? renderToggle(index) : <span />}
               <Heading className="outline__heading">
-                <button type="button" className="outline__jump" title={item.text}>
-                  {item.text}
-                </button>
+                <Tooltip title={item.text} placement="top" mouseEnterDelay={0.3}>
+                  <button type="button" className="outline__jump">
+                    {item.text}
+                  </button>
+                </Tooltip>
               </Heading>
               <span className="outline__heading-level" aria-hidden="true">
                 H{item.level}
@@ -198,27 +201,28 @@ function OutlineView() {
                   onClick={(event) => jump(event, item)}
                 >
                   {canCollapse && renderToggle(index)}
-                  <button
-                    type="button"
-                    className="outline__jump"
-                    title={item.text || undefined}
-                    aria-label={
-                      item.text
-                        ? undefined
-                        : t(taskState == null ? 'sidebar.outline.listItem' : 'toolbar.taskList')
-                    }
-                  >
-                    {taskState != null && (
-                      <span
-                        className="md-preview__task-checkbox"
-                        role="checkbox"
-                        aria-checked={taskState}
-                        aria-disabled="true"
-                        aria-label={t('toolbar.taskList')}
-                      />
-                    )}
-                    <span className="outline__text">{item.text || '\u00a0'}</span>
-                  </button>
+                  <Tooltip title={item.text || undefined} placement="top" mouseEnterDelay={0.3}>
+                    <button
+                      type="button"
+                      className="outline__jump"
+                      aria-label={
+                        item.text
+                          ? undefined
+                          : t(taskState == null ? 'sidebar.outline.listItem' : 'toolbar.taskList')
+                      }
+                    >
+                      {taskState != null && (
+                        <span
+                          className="md-preview__task-checkbox"
+                          role="checkbox"
+                          aria-checked={taskState}
+                          aria-disabled="true"
+                          aria-label={t('toolbar.taskList')}
+                        />
+                      )}
+                      <span className="outline__text">{item.text || '\u00a0'}</span>
+                    </button>
+                  </Tooltip>
                 </li>
               );
             })}
