@@ -8,6 +8,7 @@ import { createElement } from 'react';
 import { createRoot } from 'react-dom/client';
 import TablePicker from './TablePicker';
 import { matchesHotkey } from '@hooks/useHotkeys';
+import { markdownPopupScroller } from './editorPopupPlacement';
 
 /**
  * 鼠标离开表格后延迟收起工具的时长。
@@ -185,10 +186,8 @@ export const milkdownTableView = $view(tableSchema.node, () => (initialNode, vie
     const root = pickerRoot; pickerRoot = null;
     edit.setAttribute('aria-expanded', 'false');
     queueMicrotask(() => root.unmount());
-    document.removeEventListener('pointerdown', outside);
     if (!disposed && !dom.matches(':hover')) hideToolsSoon();
   };
-  const outside = (event) => { if (!controls.contains(event.target)) closePicker(); };
   const button = (label, className, action) => {
     const button = document.createElement('button'); button.type = 'button'; button.className = className;
     button.dataset.mokiTooltip = label; button.setAttribute('aria-label', label);
@@ -200,23 +199,13 @@ export const milkdownTableView = $view(tableSchema.node, () => (initialNode, vie
     const pos = getPos();
     if (!view.editable || typeof pos !== 'number') return;
     if (editingTableContext(view.state)?.pos !== pos) ensureCell();
-    /*
-     * 面板高度是固定的（约 340px），表格靠下时向下会伸出编辑区被裁。
-     * 打开前按「按钮到裁剪边界底部」的余量写一个 CSS 变量，面板据此限高并在内部滚动。
-     */
-    let room = null;
-    for (let node = dom.parentElement; node; node = node.parentElement) {
-      const { overflowY } = getComputedStyle(node);
-      if (overflowY === 'auto' || overflowY === 'scroll' || overflowY === 'hidden') {
-        room = node.getBoundingClientRect().bottom - edit.getBoundingClientRect().bottom - 12;
-        break;
-      }
-    }
-    if (room !== null) dom.style.setProperty('--moki-table-picker-room', `${Math.max(180, Math.round(room))}px`);
     edit.setAttribute('aria-expanded', 'true');
     pickerRoot = createRoot(panel);
     pickerRoot.render(createElement(TablePicker, {
+      anchor: edit,
+      scroller: markdownPopupScroller(dom),
       initialRows: node.childCount, initialColumns: node.firstChild.childCount, resize: true,
+      onDismiss: closePicker,
       onClose: () => { closePicker(); view.focus(); },
       onInsert: (rows, columns) => {
         const pos = getPos();
@@ -225,7 +214,6 @@ export const milkdownTableView = $view(tableSchema.node, () => (initialNode, vie
         editTable(view.state, view.dispatch, 'resize', { rows, columns }); closePicker(); view.focus();
       },
     }));
-    document.addEventListener('pointerdown', outside);
   });
   edit.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18M9 3v18M15 3v18M3 15h18"/></svg>';
   edit.setAttribute('aria-expanded', 'false');
@@ -270,7 +258,16 @@ export const milkdownTableView = $view(tableSchema.node, () => (initialNode, vie
 
   return {
     dom, contentDOM,
-    update(next) { if (next.type !== node.type) return false; node = next; controls.hidden = !view.editable; addRow.hidden = true; addCol.hidden = true; hoverCell = null; return true; },
+    update(next) {
+      if (next.type !== node.type) return false;
+      node = next;
+      if (!view.editable) closePicker();
+      controls.hidden = !view.editable;
+      addRow.hidden = true;
+      addCol.hidden = true;
+      hoverCell = null;
+      return true;
+    },
     stopEvent: (event) => controls.contains(event.target),
     ignoreMutation: (mutation) => controls.contains(mutation.target) || (mutation.type === 'attributes' && mutation.target === dom),
     destroy() {

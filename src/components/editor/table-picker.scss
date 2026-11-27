@@ -102,3 +102,11 @@
     font-size: 11px;
   }
 }
+
+.ft__table-panel--anchored {
+  position: fixed;
+  inset: auto;
+  transform: none;
+  overflow-y: auto;
+  visibility: hidden;
+}

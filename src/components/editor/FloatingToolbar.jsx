@@ -114,6 +114,7 @@ function FloatingToolbar({ onInsert, boundsRef }) {
   const visible = useEditorStore((s) => s.toolbarVisible);
   const toggleToolbar = useEditorStore((s) => s.toggleToolbar);
   const toolbarRef = useRef(null);
+  const tableAnchorRef = useRef(null);
   const dragRef = useRef(null);
   const [position, setPosition] = useState(() => readSavedPosition());
   const [headingOpen, setHeadingOpen] = useState(false);
@@ -136,15 +137,6 @@ function FloatingToolbar({ onInsert, boundsRef }) {
     },
     [onInsert],
   );
-
-  useEffect(() => {
-    if (!tableOpen) return undefined;
-    const close = (event) => {
-      if (!event.target.closest('.ft__table-wrap')) setTableOpen(false);
-    };
-    document.addEventListener('pointerdown', close);
-    return () => document.removeEventListener('pointerdown', close);
-  }, [tableOpen]);
 
   /**
    * 对当前选区包裹前后缀，适用于粗体、斜体、链接等行内语法。
@@ -367,7 +359,8 @@ function FloatingToolbar({ onInsert, boundsRef }) {
           <FtBtn
             title={t('toolbar.table')}
             className="ft__btn"
-            onClick={() => {
+            onClick={(event) => {
+              tableAnchorRef.current = event.currentTarget;
               setHeadingOpen(false);
               setTableOpen((open) => !open);
             }}
@@ -387,8 +380,10 @@ function FloatingToolbar({ onInsert, boundsRef }) {
               <line x1="15" y1="3" x2="15" y2="21" />
             </svg>
           </FtBtn>
-          {tableOpen && (
+          {visible && tableOpen && (
             <TablePicker
+              anchor={tableAnchorRef.current}
+              getBounds={bounds}
               onClose={() => setTableOpen(false)}
               onInsert={(rows, columns) =>
                 runAction({

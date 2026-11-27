@@ -10,6 +10,7 @@ import { isImeComposing } from '@utils/keyboard';
 import useConfigStore from '@store/useConfigStore';
 import { activeMarkdownPairs, emptyAsteriskPair, emptyMarkdownMarkPair, markdownAsteriskEdit, markdownBacktickEdit, markdownBrackets, markdownPairDeletion, markdownPairEnabled, matchingMarkdownBracket } from '@utils/markdownPairs';
 import { CODE_FENCE_LANGUAGE_EVENT, completedFenceLanguage, readMarkdownFence } from '@utils/markdownCodeFence';
+import { markdownPopupScroller } from './editorPopupPlacement';
 import { isMathEditing, mathDraftAt, mathDraftRange, mathMarkName } from './milkdownMathMark';
 import { characterEscapeMarkName, syntaxScanText } from './milkdownRawText';
 import { attachWritingCaret } from './milkdownWritingCaret';
@@ -1082,13 +1083,13 @@ export const milkdownLiveSyntax = $prose((ctx) => new Plugin({
           const current = () => !view.isDestroyed && view.state.doc === doc && pendingCodeFence(view)?.$from.pos === pending.$from.pos;
           detail = {
             query: pending.language,
+            scroller: markdownPopupScroller(view.dom),
             containsTarget: (target) => view.dom.contains(target),
             getAnchor: () => {
               if (!current()) return null;
               const { left } = view.coordsAtPos(pending.$from.start(), 1);
               const { top, bottom } = view.coordsAtPos(pending.$from.pos);
-              const pane = view.dom.closest('.md-preview--milkdown')?.getBoundingClientRect();
-              return pane && (bottom <= pane.top || top >= pane.bottom) ? null : { x: left, y: bottom };
+              return { left, top, bottom };
             },
             select: (language) => { if (current()) openCodeFence(view, view.state.selection.$from, language); },
             undo: () => { if (current()) undo(view.state, view.dispatch); },

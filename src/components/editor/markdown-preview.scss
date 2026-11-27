@@ -526,7 +526,10 @@
 }
 
 .md-preview--milkdown-stable-scroll {
+  --milkdown-caret-bottom-gap: calc(var(--editor-scroll-shadow-size, 24px) + 6px);
   overflow-anchor: none;
+  scroll-padding-bottom: var(--milkdown-caret-bottom-gap);
+  padding-bottom: calc(var(--milkdown-caret-bottom-gap) + var(--editor-popup-space, 0px));
 }
 
 .md-preview--milkdown {
@@ -1514,29 +1517,6 @@
   .moki-table__insert--column {
     top: 0;
     transform: translate(-50%, -50%);
-  }
-  // 面板从按钮正下方展开（按钮在 6px 处、26px 高）。
-  .moki-table__picker {
-    position: absolute;
-    top: 36px;
-    left: 6px;
-    pointer-events: auto;
-    z-index: 20;
-  }
-  .moki-table__picker .ft__table-panel {
-    position: relative;
-    top: auto;
-    right: auto;
-    bottom: auto;
-    left: auto;
-    transform: none;
-    z-index: 10;
-    /*
-     * 高度按打开时算出的余量限死（--moki-table-picker-room，见 milkdownTables.js），
-     * 超出则面板内部滚动——固定 340px 的面板在表格靠下时会伸出编辑区被裁掉。
-     */
-    max-height: var(--moki-table-picker-room, 360px);
-    overflow-y: auto;
   }
 }
 .md-preview .ProseMirror .moki-table table {

@@ -1,39 +1,83 @@
-import { useEffect, useLayoutEffect, useRef } from 'react';
+import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { Dropdown } from 'antd';
 import { useTranslation } from 'react-i18next';
 import { markdownFenceLanguages } from '@utils/markdownCodeFence';
+import {
+  clearEditorPopupRoom,
+  editorPopupBounds,
+  editorPopupRoomBelow,
+  makeEditorPopupRoom,
+  placeEditorPopup,
+} from './editorPopupPlacement';
 
 export default function MarkdownCodeLanguageMenu({ request, onClose }) {
   const { t } = useTranslation();
   const anchorRef = useRef(null);
+  const [placement, setPlacement] = useState('bottomLeft');
   const query = request?.query.toLowerCase() || '';
   const languages = markdownFenceLanguages.filter((names) => names.some((name) => name.toLowerCase().startsWith(query)));
   const visible = Boolean(request && (languages.length || !query));
+  const { scroller, releaseRoom } = request ?? {};
+  const estimatedHeight = (languages.length + Number(!query)) * 32 + 8;
+
+  useLayoutEffect(() => {
+    if (!visible || !scroller) return undefined;
+    return releaseRoom ?? (() => clearEditorPopupRoom(scroller));
+  }, [visible, scroller, releaseRoom]);
+
   useLayoutEffect(() => {
     if (!visible) return undefined;
     const anchor = anchorRef.current;
-    const position = () => {
-      const point = request.getAnchor();
-      const available = point ? window.innerHeight - point.y - 12 : 0;
-      anchor.style.visibility = available >= 28 && point.y >= 0 ? 'visible' : 'hidden';
-      if (!point) return;
-      const width = Math.min(160, window.innerWidth - 16);
-      anchor.style.left = `${Math.max(8, Math.min(point.x, window.innerWidth - width - 8))}px`;
-      anchor.style.top = `${point.y}px`;
-      anchor.style.setProperty('--code-language-width', `${width}px`);
-      anchor.style.setProperty('--code-language-height', `${Math.min(300, window.innerHeight * 0.55, available)}px`);
+    const position = (reveal = false) => {
+      let point = request.getAnchor();
+      const bounds = editorPopupBounds(window, scroller?.getBoundingClientRect());
+      if (!point || point.bottom <= bounds.top || point.top >= bounds.bottom) {
+        anchor.style.visibility = 'hidden';
+        return;
+      }
+      const menuHeight = anchor.querySelector('.ant-dropdown-menu')?.scrollHeight || estimatedHeight;
+      const targetHeight = Math.min(300, (bounds.bottom - bounds.top) * 0.55, menuHeight);
+      const needed = targetHeight - editorPopupRoomBelow(bounds, point);
+      if (reveal && needed > 1 && scroller) {
+        if (request.makeRoom) request.makeRoom(needed);
+        else makeEditorPopupRoom(scroller, needed);
+        point = request.getAnchor() ?? point;
+      }
+      const { left, maxWidth, maxHeight, placement: side } = placeEditorPopup(bounds, point, 160, targetHeight);
+      setPlacement(side === 'above' ? 'topLeft' : 'bottomLeft');
+      anchor.style.visibility = maxHeight >= 28 && maxWidth > 0 ? 'visible' : 'hidden';
+      anchor.style.left = `${left}px`;
+      anchor.style.top = `${side === 'above' ? point.top : point.bottom}px`;
+      anchor.style.setProperty('--code-language-width', `${Math.min(160, maxWidth)}px`);
+      anchor.style.setProperty('--code-language-height', `${Math.min(targetHeight, maxHeight)}px`);
     };
-    position();
-    const scroll = request.onScroll?.(position);
-    window.addEventListener('scroll', position, true);
-    window.addEventListener('resize', position);
+    let frame = 0;
+    const resize = () => position(true);
+    const track = () => {
+      if (frame) return;
+      frame = window.requestAnimationFrame(() => {
+        frame = 0;
+        position();
+      });
+    };
+    resize();
+    const measureFrame = window.requestAnimationFrame(resize);
+    const scroll = request.onScroll?.(track);
+    window.addEventListener('scroll', track, true);
+    window.addEventListener('resize', resize);
+    window.visualViewport?.addEventListener('scroll', track);
+    window.visualViewport?.addEventListener('resize', resize);
     return () => {
+      window.cancelAnimationFrame(measureFrame);
+      if (frame) window.cancelAnimationFrame(frame);
       scroll?.dispose();
-      window.removeEventListener('scroll', position, true);
-      window.removeEventListener('resize', position);
+      window.removeEventListener('scroll', track, true);
+      window.removeEventListener('resize', resize);
+      window.visualViewport?.removeEventListener('scroll', track);
+      window.visualViewport?.removeEventListener('resize', resize);
     };
-  }, [request, visible]);
+  }, [request, scroller, visible, estimatedHeight]);
   useEffect(() => {
     if (!visible) return undefined;
     const keyDown = (event) => {
@@ -75,7 +119,7 @@ export default function MarkdownCodeLanguageMenu({ request, onClose }) {
   return createPortal(
     <div ref={anchorRef} style={{ position: 'fixed', zIndex: 1050, visibility: 'hidden' }}>
       <Dropdown
-        open trigger={[]} placement="bottomLeft" autoAdjustOverflow={false}
+        open trigger={[]} placement={placement} autoAdjustOverflow={false}
         getPopupContainer={(trigger) => trigger.parentElement}
         overlayClassName="moki-code-language-dropdown"
         onOpenChange={(open) => { if (!open) onClose(); }}

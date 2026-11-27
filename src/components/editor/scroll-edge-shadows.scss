@@ -2,6 +2,7 @@
 
 .editor-scroll-frame {
   position: relative;
+  --editor-scroll-shadow-size: 24px;
 }
 
 .editor-scroll-edges {
@@ -20,10 +21,10 @@
     transition: opacity 140ms ease;
   }
   &::before {
-    mask-image: linear-gradient(to bottom, black 2px, transparent 24px);
+    mask-image: linear-gradient(to bottom, black 2px, transparent var(--editor-scroll-shadow-size));
   }
   &::after {
-    mask-image: linear-gradient(to top, black 2px, transparent 24px);
+    mask-image: linear-gradient(to top, black 2px, transparent var(--editor-scroll-shadow-size));
   }
   &[data-top]::before,
   &[data-bottom]::after {

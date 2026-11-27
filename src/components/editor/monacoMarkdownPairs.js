@@ -19,6 +19,23 @@ export function bindMonacoMarkdownPairs(monaco, editor, showCodeLanguageMenu) {
   const isMarkdown = () => editor.getModel()?.getLanguageId() === 'markdown';
   let composing = false, disposed = false, popupQueued = false;
   let popupKey = '', fenceContext;
+  let originalPadding;
+  const releaseRoom = () => {
+    if (!originalPadding) return;
+    const padding = originalPadding;
+    originalPadding = undefined;
+    editor.updateOptions({ padding });
+  };
+  const makeRoom = (distance) => {
+    const scrollTop = editor.getScrollTop();
+    const available = Math.max(0, editor.getScrollHeight() - editor.getLayoutInfo().height - scrollTop);
+    if (distance > available) {
+      const padding = editor.getOption(monaco.editor.EditorOption.padding);
+      originalPadding ??= padding;
+      editor.updateOptions({ padding: { ...padding, bottom: padding.bottom + Math.ceil(distance - available) } });
+    }
+    editor.setScrollTop(scrollTop + distance, monaco.editor.ScrollType.Immediate);
+  };
   const updateOptions = () => {
     popupKey = '';
     fenceContext = null;
@@ -77,6 +94,9 @@ export function bindMonacoMarkdownPairs(monaco, editor, showCodeLanguageMenu) {
     };
     showCodeLanguageMenu({
       query: pending.language,
+      scroller: editor.getDomNode(),
+      makeRoom,
+      releaseRoom,
       containsTarget: (target) => editor.getDomNode()?.contains(target),
       onScroll: editor.onDidScrollChange,
       getAnchor: () => {
@@ -85,7 +105,8 @@ export function bindMonacoMarkdownPairs(monaco, editor, showCodeLanguageMenu) {
         const point = editor.getScrolledVisiblePosition({ lineNumber, column });
         const box = editor.getDomNode()?.getBoundingClientRect();
         if (!start || !point || !box || point.top + point.height <= 0 || point.top >= box.height) return null;
-        return { x: box.left + start.left, y: box.top + point.top + point.height };
+        const top = box.top + point.top;
+        return { left: box.left + start.left, top, bottom: top + point.height };
       },
       select: (language) => { if (current()) commitFence(position, pending, language); },
       undo: () => { if (current()) editor.trigger('markdown-smart-pairs', 'undo', null); },
@@ -98,6 +119,7 @@ export function bindMonacoMarkdownPairs(monaco, editor, showCodeLanguageMenu) {
     queueMicrotask(syncPopup);
   };
   const disposables = [
+    editor.onDidDispose(() => { disposed = true; originalPadding = undefined; }),
     editor.onDidChangeModel(updateOptions), editor.onDidChangeModelLanguage(updateOptions),
     editor.onDidChangeCursorPosition(schedulePopup),
     editor.onDidChangeModelContent((event) => {
@@ -170,6 +192,7 @@ export function bindMonacoMarkdownPairs(monaco, editor, showCodeLanguageMenu) {
   return () => {
     disposed = true;
     disposables.forEach((item) => item.dispose());
+    releaseRoom();
     showCodeLanguageMenu(null);
   };
 }
