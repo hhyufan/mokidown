@@ -5,8 +5,10 @@ import remarkMath from 'remark-math';
 import rehypeRaw from 'rehype-raw';
 import rehypeSanitize, { defaultSchema } from 'rehype-sanitize';
 import rehypeKatex from 'rehype-katex';
+import useConfigStore from '@store/useConfigStore';
 import Prism from '@utils/prismGlobal';
 import remarkMarkdownHtml from '@utils/remarkMarkdownHtml';
+import rehypeTaskListTree from '@utils/rehypeTaskListTree';
 import 'katex/dist/katex.min.css';
 import {
   ALLOWED_IMAGE_PROTOCOLS,
@@ -44,6 +46,7 @@ const SNAPSHOT_SANITIZE_SCHEMA = {
     '*': [...(defaultSchema.attributes?.['*'] || []), 'className', 'class', 'id', 'style'],
     code: [...(defaultSchema.attributes?.code || []), 'className', 'class'],
     img: [...(defaultSchema.attributes?.img || []), 'src', 'alt', 'title', 'width', 'height'],
+    li: [...(defaultSchema.attributes?.li || []), ['dataTaskState', 'true', 'false', 'mixed']],
     input: ['type', 'checked', 'disabled', 'className', 'class'],
   },
 };
@@ -148,17 +151,24 @@ const SnapshotMarkdownBody = memo(function SnapshotMarkdownBody({
   documentPath,
   contentRef,
 }) {
+  const cascade = useConfigStore((state) => state.markdownTaskCascade !== false);
+  const rehypePlugins = useMemo(
+    () => [...SNAPSHOT_REHYPE_PLUGINS, [rehypeTaskListTree, { cascade, preserveStates: Boolean(selectionHtml) }]],
+    [cascade, selectionHtml],
+  );
   const components = useMemo(
     () => ({
       img: ({ src, alt, node: _node, ...props }) => (
         <SnapshotMarkdownImage src={src} alt={alt} documentPath={documentPath} {...props} />
       ),
-      input: ({ type, checked, node: _node, ...props }) =>
-        type === 'checkbox' ? (
-          <input type="checkbox" checked={Boolean(checked)} readOnly disabled {...props} />
-        ) : (
-          <input type={type} {...props} />
-        ),
+      input: ({ type, checked, className, 'aria-checked': ariaChecked }) => type === 'checkbox' && (
+        <span
+          role="checkbox"
+          aria-checked={ariaChecked ?? Boolean(checked)}
+          aria-disabled="true"
+          className={className || 'snapshot-card__standalone-checkbox md-preview__task-checkbox'}
+        />
+      ),
     }),
     [documentPath],
   );
@@ -196,7 +206,7 @@ const SnapshotMarkdownBody = memo(function SnapshotMarkdownBody({
     >
       <ReactMarkdown
         remarkPlugins={remarkPlugins}
-        rehypePlugins={SNAPSHOT_REHYPE_PLUGINS}
+        rehypePlugins={rehypePlugins}
         urlTransform={markdownUrlTransform}
         components={components}
       >

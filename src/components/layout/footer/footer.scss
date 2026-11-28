@@ -251,12 +251,13 @@
 
 .footer--workspace {
   display: grid;
-  grid-template-columns: clamp(64px, 28%, 320px) minmax(0, 1fr) clamp(64px, 28%, 320px);
+  container-type: inline-size;
+  grid-template-columns: minmax(max-content, 1fr) minmax(0, max-content) minmax(max-content, 1fr);
   flex-shrink: 0;
 
   .footer__right {
-    width: 100%;
-    justify-content: safe flex-end;
+    width: max-content;
+    max-width: max(0px, calc(100cqi - 90px));
     overflow-x: auto;
     scrollbar-width: none;
 

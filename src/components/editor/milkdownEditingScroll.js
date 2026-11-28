@@ -5,6 +5,7 @@ import { $prose } from '@milkdown/kit/utils';
 
 const scrollKey = new PluginKey('moki-editing-scroll');
 export const milkdownCaretNavigation = 'moki-caret-navigation';
+export const milkdownPreserveScroll = 'moki-preserve-editing-scroll';
 const stablePaneSelector = '.md-preview--milkdown-stable-scroll';
 const growingNodes = new Set([
   'code_block',
@@ -100,7 +101,8 @@ export const milkdownEditingScroll = $prose(
           const root = appendedTo ?? tr;
           const editing =
             (tr.docChanged || (appendedTo && previous.editing)) &&
-            !root.getMeta(milkdownCaretNavigation);
+            !root.getMeta(milkdownCaretNavigation) &&
+            !root.getMeta(milkdownPreserveScroll);
           const paste = root.getMeta('paste') || root.getMeta('uiEvent') === 'paste';
           return {
             editing: Boolean(editing),
@@ -170,10 +172,27 @@ export const milkdownEditingScroll = $prose(
           pending.top = pane.scrollTop;
         };
         const resize = win.ResizeObserver ? new win.ResizeObserver(onResize) : null;
+        const releaseOffscreenCaret = () => {
+          if (followCaret || view.composing) return;
+          const active = pane.ownerDocument.activeElement;
+          if (!active || !view.dom.contains(active)) return;
+          const cmRoot = active.closest('.cm-editor');
+          if (cmRoot) {
+            const cm = CodeMirrorView.findFromDOM(cmRoot);
+            if (!cm || cm.composing || !cm.state.selection.main.empty) return;
+          } else if (active !== view.dom || !view.state.selection.empty) return;
+          const caret = caretRect(view, active);
+          const { top, bottom } = pane.getBoundingClientRect();
+          if (!caret || caret.bottom <= top || caret.top >= bottom) {
+            clear();
+            active.blur();
+          }
+        };
         resize?.observe(view.dom);
         for (const event of ['pointerdown', 'wheel', 'touchmove'])
           pane.addEventListener(event, clear, true);
         pane.addEventListener('beforeinput', beforeInput);
+        pane.addEventListener('scroll', releaseOffscreenCaret);
 
         return {
           update(next, previous) {
@@ -198,6 +217,7 @@ export const milkdownEditingScroll = $prose(
             for (const event of ['pointerdown', 'wheel', 'touchmove'])
               pane.removeEventListener(event, clear, true);
             pane.removeEventListener('beforeinput', beforeInput);
+            pane.removeEventListener('scroll', releaseOffscreenCaret);
           },
         };
       },

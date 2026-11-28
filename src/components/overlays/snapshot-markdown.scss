@@ -8,6 +8,8 @@
   --text: var(--snap-heading);
   --text-sec: var(--snap-muted);
   --accent: var(--snap-accent);
+  --surface: var(--snap-surface);
+  --border: var(--snap-border);
   line-height: 1.72;
   white-space: normal;
   color: var(--snap-text);
@@ -67,13 +69,57 @@
     }
   }
 
-  :is(li.task-list-item, li[data-item-type='task']) {
+  ul,
+  ol {
+    --task-checkbox-gutter: 1.7em;
+    --task-branch-indent: 1.45em;
+  }
+
+  :is(ul, ol):has(> li[data-task-state]) {
+    padding-inline-start: var(--task-checkbox-gutter);
+  }
+
+  @include markdown.task-checkbox;
+
+  li[data-task-state] {
+    position: relative;
     list-style: none;
-    input[type='checkbox'] {
-      accent-color: var(--snap-accent);
-      margin: 0 7px 0 -1.35em;
-      vertical-align: middle;
+
+    > p:first-of-type {
+      margin-block-start: 0;
     }
+
+    > p:last-of-type {
+      margin-block-end: 0;
+    }
+
+    > .md-preview__task-checkbox {
+      position: absolute;
+      inset-block-start: 0.5lh;
+      inset-inline-start: calc(-1 * var(--task-checkbox-gutter));
+      transform: translateY(-50%);
+    }
+
+    &[data-task-state='true'] > .md-preview__task-label {
+      color: var(--snap-muted);
+      text-decoration: line-through var(--snap-muted);
+    }
+
+    &[data-task-state='true'] > .md-preview__task-label :is(strong, code) {
+      color: inherit;
+    }
+  }
+
+  @include markdown.task-tree-branches;
+
+  li[data-task-state] > :is(ul, ol) > li {
+    margin-block-start: 0;
+  }
+
+  .snapshot-card__standalone-checkbox {
+    position: relative;
+    display: inline-block;
+    vertical-align: middle;
   }
 
   code {

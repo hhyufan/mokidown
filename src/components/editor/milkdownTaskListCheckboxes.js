@@ -10,6 +10,7 @@ import { isImeComposing } from '@utils/keyboard';
 import { collectTasks, toggleTaskBranch } from '@utils/taskListTree';
 import { observeTaskListStrikes } from './taskListStrike';
 import { observeTaskListCheckboxes } from './taskListCheckboxMotion';
+import { milkdownPreserveScroll } from './milkdownEditingScroll';
 
 const taskListKey = new PluginKey('mokiTaskListCheckboxes');
 const cascadeEnabled = () => useConfigStore.getState().markdownTaskCascade !== false;
@@ -53,8 +54,7 @@ function toggle(view, pos) {
   };
   if (cascadeEnabled()) toggleTaskBranch(task, setChecked);
   else setChecked(task, !task.checked);
-  if (tr.docChanged) view.dispatch(tr);
-  view.focus();
+  if (tr.docChanged) view.dispatch(tr.setMeta(milkdownPreserveScroll, true));
 }
 
 function decorations(doc) {

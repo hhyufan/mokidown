@@ -425,63 +425,18 @@
     transform: translateY(-50%);
   }
 
-  // An elbow on each row joins the branches, including when a task wraps.
+  @include markdown.task-tree-branches;
+
   :is(li.task-list-item, li[data-item-type='task'])
-    > :is(ul, ol):has(:is(.task-list-item, [data-item-type='task'])) {
-    :where(&) {
-      display: grid;
-    }
-    --task-row-gap: 0.25em;
-    align-content: start;
-    row-gap: var(--task-row-gap);
-    margin-inline-start: calc(7px - var(--task-checkbox-gutter));
-    padding-inline-start: calc(var(--task-branch-indent) + var(--task-checkbox-gutter));
-
+    > :is(ul, ol):has(:is(.task-list-item, [data-item-type='task']))
     > li {
-      position: relative;
-      // Grid fixes the row gap even when a row ends in a nested list with margins.
-      margin-block-end: 0;
-
-      > .md-preview__fold,
-      > p > .md-preview__fold {
-        inset-inline-end: auto;
-        inset-inline-start: calc(
-          0.5px - var(--task-branch-indent) - var(--task-checkbox-gutter) - 0.5lh
-        );
-        z-index: 2;
-      }
-
-      &::before,
-      &::after {
-        content: '';
-        position: absolute;
-        inset-inline-start: calc(-1 * (var(--task-branch-indent) + var(--task-checkbox-gutter)));
-        inset-block-start: 0;
-        pointer-events: none;
-      }
-
-      &::before {
-        inset-block-start: 0.5lh;
-        inline-size: var(--task-branch-indent);
-        border-block-start: 1px solid var(--border);
-      }
-
-      &::after {
-        block-size: calc(100% + var(--task-row-gap));
-        border-inline-start: 1px solid var(--border);
-      }
-
-      &:first-child::after {
-        inset-block-start: calc(-0.5em - 0.5lh);
-        block-size: calc(100% + var(--task-row-gap) + 0.5em + 0.5lh);
-      }
-
-      &:last-child::after {
-        block-size: 0.5lh;
-      }
-      &:only-child::after {
-        block-size: calc(1lh + 0.5em);
-      }
+    > .md-preview__fold,
+    > p > .md-preview__fold {
+      inset-inline-end: auto;
+      inset-inline-start: calc(
+        0.5px - var(--task-branch-indent) - var(--task-checkbox-gutter) - 0.5lh
+      );
+      z-index: 2;
     }
   }
 
