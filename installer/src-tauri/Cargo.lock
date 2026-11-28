@@ -1860,11 +1860,13 @@ name = "mokidown-installer"
 version = "0.2.0"
 dependencies = [
  "base64 0.22.1",
+ "dirs",
  "serde",
  "tauri",
  "tauri-build",
  "tauri-plugin-dialog",
  "tempfile",
+ "windows-sys 0.61.2",
  "winreg",
 ]
 

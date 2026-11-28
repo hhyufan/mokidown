@@ -1,10 +1,22 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
-use std::{path::PathBuf, process::Command, sync::{atomic::{AtomicBool, Ordering}, Arc, Mutex}, time::Duration};
+use std::{
+    path::{Path, PathBuf},
+    process::Command,
+    sync::{
+        atomic::{AtomicBool, Ordering},
+        Arc, Mutex,
+    },
+    time::Duration,
+};
 use tauri::{Emitter, Manager};
 
 const PAYLOAD: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/payload.exe"));
-#[derive(Default, Clone)]
-struct InstallState { running: Arc<AtomicBool>, installed: Arc<Mutex<Option<PathBuf>>> }
+#[derive(Clone)]
+struct InstallState {
+    work_dir: PathBuf,
+    running: Arc<AtomicBool>,
+    installed: Arc<Mutex<Option<PathBuf>>>,
+}
 #[derive(Clone, serde::Serialize)]
 struct Progress { stage: String, percent: u8 }
 /// 启动时的上下文：是不是被更新器拉起来的，以及该装到哪个目录。
@@ -14,68 +26,120 @@ struct StartupInfo { update: bool, directory: String }
 fn emit(app: &tauri::AppHandle, stage: &str, percent: u8) {
     let _ = app.emit("install-progress", Progress { stage: stage.into(), percent });
 }
-fn default_directory() -> Option<PathBuf> {
-    std::env::var_os("LOCALAPPDATA").map(|base| PathBuf::from(base).join("mokidown"))
+fn local_data_directory() -> Option<PathBuf> {
+    dirs::data_local_dir()
+        .or_else(|| std::env::var_os("LOCALAPPDATA").map(PathBuf::from))
+        .filter(|path| path.is_absolute())
 }
-fn stage_payload() -> Result<tempfile::TempDir, String> {
+
+fn default_directory() -> Option<PathBuf> {
+    local_data_directory().map(|path| path.join("mokidown"))
+}
+
+fn installer_workspace() -> Result<tempfile::TempDir, String> {
+    let system_temp = std::env::temp_dir();
+    let roots = [
+        local_data_directory().map(|path| path.join("com.mokidown.installer").join("work")),
+        std::env::var_os("TEMP")
+            .map(PathBuf::from)
+            .filter(|path| path != &system_temp),
+        Some(system_temp),
+        // The user's profile may still be writable if both AppData and TEMP are redirected.
+        dirs::home_dir().map(|path| path.join(".mokidown").join("installer")),
+    ];
+    let mut errors = Vec::new();
+    for root in roots.into_iter().flatten().filter(|path| path.is_absolute()) {
+        let workspace = (|| {
+            std::fs::create_dir_all(&root)?;
+            let workspace = tempfile::Builder::new()
+                .prefix("mokidown-setup-")
+                .tempdir_in(&root)?;
+            tempfile::NamedTempFile::new_in(workspace.path())?.close()?;
+            Ok::<_, std::io::Error>(workspace)
+        })();
+        match workspace {
+            Ok(workspace) => return Ok(workspace),
+            Err(error) => errors.push(format!("{}\n{error}", root.display())),
+        }
+    }
+    if errors.is_empty() {
+        return Err("无法找到当前用户的缓存目录。".into());
+    }
+    Err(format!(
+        "无法创建可写的安装缓存。已尝试以下目录：\n\n{}",
+        errors.join("\n\n")
+    ))
+}
+
+fn stage_payload(root: &Path) -> Result<tempfile::TempDir, String> {
     if PAYLOAD.is_empty() {
         return Err("当前开发构建未包含安装文件，请运行 npm run installer:bundle".into());
     }
     let stage = tempfile::Builder::new()
-        .prefix("mokidown-setup-")
-        .tempdir()
-        .or_else(|error| {
-            let root = std::env::var_os("LOCALAPPDATA").ok_or(error)?;
-            let cache = PathBuf::from(root)
-                .join("com.mokidown.installer")
-                .join("staging");
-            std::fs::create_dir_all(&cache)?;
-            tempfile::Builder::new()
-                .prefix("mokidown-setup-")
-                .tempdir_in(cache)
-        })
+        .prefix("payload-")
+        .tempdir_in(root)
         .map_err(|error| format!("无法创建安装缓存：{error}"))?;
     std::fs::write(stage.path().join("setup.exe"), PAYLOAD)
         .map_err(|error| format!("无法解包安装文件：{error}"))?;
     Ok(stage)
 }
 
+fn silent_payload_command(stage: &tempfile::TempDir) -> Command {
+    let mut command = Command::new(stage.path().join("setup.exe"));
+    // NSIS unpacks its plugins into TEMP. The wrapper launches the editor
+    // separately from a silent install, with the original environment.
+    command
+        .arg("/S")
+        .env("TEMP", stage.path())
+        .env("TMP", stage.path());
+    command
+}
+
 #[cfg(windows)]
-fn webview2_available() -> bool {
+fn webview2_available() -> std::io::Result<bool> {
+    use std::io::ErrorKind;
     use winreg::{
         enums::{HKEY_CURRENT_USER, HKEY_LOCAL_MACHINE, KEY_READ, KEY_WOW64_32KEY},
         RegKey,
     };
     let key = r"Software\Microsoft\EdgeUpdate\Clients\{F3017226-FE2A-4295-8BDF-00C3A9A7E4C5}";
-    [
+    let mut probe_error = None;
+    for (hive, flags) in [
         (HKEY_CURRENT_USER, KEY_READ),
         (HKEY_LOCAL_MACHINE, KEY_READ | KEY_WOW64_32KEY),
-    ]
-    .into_iter()
-    .any(|(hive, flags)| {
-        RegKey::predef(hive)
+    ] {
+        match RegKey::predef(hive)
             .open_subkey_with_flags(key, flags)
             .and_then(|key| key.get_value::<String, _>("pv"))
-            .is_ok_and(|version| {
-                version
-                    .split('.')
-                    .any(|part| part.parse::<u32>().is_ok_and(|part| part != 0))
-            })
-    })
+        {
+            Ok(version) if version.split('.').any(|part| part.parse::<u32>().is_ok_and(|n| n > 0)) => {
+                return Ok(true);
+            }
+            Err(error) if error.kind() != ErrorKind::NotFound => probe_error = Some(error),
+            _ => {}
+        }
+    }
+    probe_error.map_or(Ok(false), Err)
 }
 
 #[cfg(windows)]
-fn run_embedded_installer() -> Result<(), String> {
+fn run_embedded_installer(root: &Path) -> Result<(), String> {
     use std::os::windows::process::CommandExt;
-    let stage = stage_payload()?;
-    let mut installer = Command::new(stage.path().join("setup.exe"));
-    let update_target = if is_update_launch() {
+    let stage = stage_payload(root)?;
+    let update = is_update_launch();
+    let mut installer = if update {
+        silent_payload_command(&stage)
+    } else {
+        Command::new(stage.path().join("setup.exe"))
+    };
+    let update_target = if update {
         let folder = updater_directory()
             .or_else(default_directory)
             .ok_or("无法读取当前用户的安装目录")?;
         let folder = validate_directory(&folder.to_string_lossy())?;
+        check_install_directory(&folder)?;
         installer
-            .args(["/S", "/UPDATE"])
+            .arg("/UPDATE")
             .raw_arg(format!("/D={}", folder.display()));
         Some(folder.join("mokidown.exe"))
     } else {
@@ -120,6 +184,51 @@ fn show_startup_error(error: &str) {
         unsafe {
             MessageBoxW(std::ptr::null_mut(), message.as_ptr(), title.as_ptr(), 0x10);
         }
+    }
+}
+
+#[cfg(windows)]
+fn is_low_integrity_process() -> bool {
+    use std::os::windows::io::{AsRawHandle, FromRawHandle, OwnedHandle};
+    use windows_sys::Win32::{
+        Security::{
+            GetSidSubAuthority, GetSidSubAuthorityCount, GetTokenInformation,
+            TokenIntegrityLevel, SECURITY_MAX_SID_SIZE, TOKEN_MANDATORY_LABEL, TOKEN_QUERY,
+        },
+        System::{
+            SystemServices::SECURITY_MANDATORY_MEDIUM_RID,
+            Threading::{GetCurrentProcess, OpenProcessToken},
+        },
+    };
+
+    #[repr(C)]
+    struct IntegrityInfo {
+        label: TOKEN_MANDATORY_LABEL,
+        sid: [u8; SECURITY_MAX_SID_SIZE as usize],
+    }
+
+    unsafe {
+        let mut token = std::ptr::null_mut();
+        if OpenProcessToken(GetCurrentProcess(), TOKEN_QUERY, &mut token) == 0 {
+            return false;
+        }
+        let token = OwnedHandle::from_raw_handle(token);
+        let mut integrity: IntegrityInfo = std::mem::zeroed();
+        let mut written = 0;
+        if GetTokenInformation(
+            token.as_raw_handle(),
+            TokenIntegrityLevel,
+            (&mut integrity as *mut IntegrityInfo).cast(),
+            std::mem::size_of::<IntegrityInfo>() as u32,
+            &mut written,
+        ) == 0
+        {
+            return false;
+        }
+        let sid = integrity.label.Label.Sid;
+        let count = *GetSidSubAuthorityCount(sid);
+        count != 0
+            && *GetSidSubAuthority(sid, u32::from(count - 1)) < SECURITY_MANDATORY_MEDIUM_RID as u32
     }
 }
 /**
@@ -187,6 +296,12 @@ fn validate_directory(value: &str) -> Result<PathBuf,String> {
     if path.is_file() { return Err("安装位置指向一个文件，请选择文件夹".into()); }
     Ok(path)
 }
+fn check_install_directory(path: &Path) -> Result<(), String> {
+    std::fs::create_dir_all(path)
+        .and_then(|_| tempfile::NamedTempFile::new_in(path))
+        .and_then(tempfile::NamedTempFile::close)
+        .map_err(|error| format!("无法写入安装目录 {}：{error}", path.display()))
+}
 fn read_progress(app: &tauri::AppHandle, file: &std::path::Path, previous: &mut String) {
     if let Ok(content)=std::fs::read_to_string(file) {
         // Read complete ASCII records only; NSIS may still be appending a line.
@@ -219,11 +334,11 @@ async fn install_application(app: tauri::AppHandle, state: tauri::State<'_,Insta
     let running=state.running.clone();
     let result=tauri::async_runtime::spawn_blocking(move || {
         emit(&app,"preparing",3);
-        let temp = stage_payload()?;
-        let setup=temp.path().join("setup.exe");
+        check_install_directory(&folder)?;
+        let temp = stage_payload(&state.work_dir)?;
         let progress=temp.path().join("progress.txt");
-        let mut command=Command::new(&setup);
-        command.arg("/S").arg(format!("/MOKI_PROGRESS={}",progress.display()));
+        let mut command=silent_payload_command(&temp);
+        command.arg(format!("/MOKI_PROGRESS={}",progress.display()));
         // 转发 /UPDATE：让 NSIS 走原地升级，不卸载、保留快捷方式与安装位置。
         if update { command.arg("/UPDATE"); }
         #[cfg(windows)] {
@@ -261,17 +376,52 @@ fn launch_application(state:tauri::State<'_,InstallState>, after_update:Option<b
     if after_update.unwrap_or(false) { command.arg("--moki-after-update"); }
     command.spawn().map_err(|e|e.to_string())?;Ok(())
 }
-fn main() {
+fn main() -> std::process::ExitCode {
+    use std::process::ExitCode;
+
     #[cfg(windows)]
-    if !webview2_available() {
-        if let Err(error) = run_embedded_installer() {
-            show_startup_error(&error);
-        }
-        return;
+    if is_low_integrity_process() {
+        show_startup_error("Windows 以低完整性运行了此安装器，限制了对用户目录的写入。请使用输出到普通用户目录的安装包，例如在「下载」中生成的版本。");
+        return ExitCode::FAILURE;
     }
-    let result = tauri::Builder::default()
-        .manage(InstallState::default())
+
+    let workspace = match installer_workspace() {
+        Ok(workspace) => workspace,
+        Err(error) => {
+            show_startup_error(&error);
+            return ExitCode::FAILURE;
+        }
+    };
+    #[cfg(windows)]
+    let runtime = webview2_available();
+    #[cfg(windows)]
+    if matches!(runtime, Ok(false)) {
+        if let Err(error) = run_embedded_installer(workspace.path()) {
+            show_startup_error(&error);
+            return ExitCode::FAILURE;
+        }
+        return ExitCode::SUCCESS;
+    }
+    let profile_path = workspace.path().join("webview2");
+    let mut context = tauri::generate_context!();
+    let window = context.config().app.windows[0].clone();
+    context.config_mut().app.windows[0].create = false;
+    let app = tauri::Builder::default()
+        .manage(InstallState {
+            work_dir: workspace.path().to_path_buf(),
+            running: Arc::default(),
+            installed: Arc::default(),
+        })
         .plugin(tauri_plugin_dialog::init())
+        .setup(move |app| {
+            let result = tauri::WebviewWindowBuilder::from_config(app, &window)
+                .and_then(|builder| builder.data_directory(profile_path).build());
+            if let Err(error) = result {
+                show_startup_error(&error.to_string());
+                app.handle().exit(1);
+            }
+            Ok(())
+        })
         .invoke_handler(tauri::generate_handler![
             startup_info,
             install_application,
@@ -288,15 +438,25 @@ fn main() {
                 }
             }
         })
-        .run(tauri::generate_context!());
-    if let Err(error) = result {
-        #[cfg(windows)]
-        if !PAYLOAD.is_empty() {
-            if let Err(fallback_error) = run_embedded_installer() {
-                show_startup_error(&format!("{error}\n\n{fallback_error}"));
+        .build(context);
+    match app {
+        Ok(app) => {
+            let code = app.run_return(|_, _| {});
+            drop(workspace);
+            if code == 0 {
+                ExitCode::SUCCESS
+            } else {
+                ExitCode::FAILURE
             }
-            return;
         }
-        show_startup_error(&error.to_string());
+        Err(error) => {
+            #[cfg(windows)]
+            if let Err(probe_error) = runtime {
+                show_startup_error(&format!("WebView2 检测失败：{probe_error}\n\n{error}"));
+                return ExitCode::FAILURE;
+            }
+            show_startup_error(&error.to_string());
+            ExitCode::FAILURE
+        }
     }
 }

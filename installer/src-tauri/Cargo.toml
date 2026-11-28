@@ -12,10 +12,12 @@ tauri = { version = "2.10", features = [] }
 tauri-plugin-dialog = "2"
 serde = { version = "1", features = ["derive"] }
 tempfile = "3"
+dirs = "6"
 base64 = "0.22"
 
 [target.'cfg(windows)'.dependencies]
 winreg = "0.55"
+windows-sys = { version = "0.61", features = ["Win32_Security", "Win32_System_SystemServices", "Win32_System_Threading"] }
 
 [profile.release]
 opt-level = "s"
