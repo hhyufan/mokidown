@@ -2010,8 +2010,15 @@ function MilkdownInner(
   const outlineMap = useRef(null);
 
   useEffect(() => {
-    if (isComparison || editorInfo.loading || readOnly) return undefined;
+    if (editorInfo.loading || readOnly) return undefined;
     const editor = editorRef.current;
+    if (isComparison) {
+      const wrapper = wrapperRef.current;
+      if (!editor || !wrapper) return undefined;
+      return registerSnapshotSource(wrapper, () =>
+        extractMilkdownSnapshot(editor, null, documentPath.split(/[\\/]/).pop(), documentPath),
+      );
+    }
     const stopFlusher = registerEditorBufferFlusher(
       () => activeTabId,
       () => editor?.action(publishEditorContent),

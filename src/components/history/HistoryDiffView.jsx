@@ -35,6 +35,14 @@ import { mountHistorySourceArrows } from './historySourceArrows';
 import { mountHistorySourceFoldLabels } from './historySourceFoldLabels';
 import MokiStatusEmpty from '@components/moki/MokiStatusEmpty';
 import MilkdownTooltips from '@components/editor/MilkdownTooltips';
+import MonacoContextMenu from '@components/editor/MonacoContextMenu';
+import { monacoEditingCommands, pasteMonacoClipboard } from '@components/editor/monacoImagePaste';
+import { handleEditingShortcut } from '@utils/basicEditingShortcuts';
+import { matchesHotkey, replacedHotkey } from '@hooks/useHotkeys';
+import { isCapturingShortcut } from '@/configs/hotkeys';
+import { isImeComposing } from '@utils/keyboard';
+import { MONACO_ACTION_IDS } from '@/services/monacoHotkeys';
+import { readMonacoSnapshot, registerSnapshotSource } from '@utils/snapshotCapture';
 import MarkdownHistoryDiff, {
   HISTORY_FOLD_CONTEXT,
   HISTORY_FOLD_MINIMUM,
@@ -51,6 +59,7 @@ const normalizeLines = (text) => text.replace(/\r\n|\r/g, '\n');
 const NO_CHANGES = [];
 const COMPARISON_OPEN_TIMEOUT_MS = 15000;
 const defaultFoldState = () => ({ defaultExpanded: false, overrides: new Map() });
+const sourceHotkeys = Object.keys(MONACO_ACTION_IDS);
 
 function comparablePath(path) {
   const normalized = String(path || '').replaceAll('\\', '/');
@@ -86,6 +95,8 @@ function MonacoHistoryDiff({
   original,
   modified,
   fileName,
+  documentPath,
+  active,
   theme,
   fontSize,
   fontFamily,
@@ -106,6 +117,9 @@ function MonacoHistoryDiff({
   const { t } = useTranslation();
   const containerRef = useRef(null);
   const diffRef = useRef(null);
+  const contextEditorRef = useRef(null);
+  const [contextMenu, setContextMenu] = useState(null);
+  const closeContextMenu = useCallback(() => setContextMenu(null), []);
   const originalModelRef = useRef(null);
   const modifiedModelRef = useRef(null);
   const runtimeRef = useRef(null);
@@ -121,6 +135,8 @@ function MonacoHistoryDiff({
     original,
     modified,
     language,
+    fileName,
+    documentPath,
     t,
     theme,
     fontSize,
@@ -202,6 +218,25 @@ function MonacoHistoryDiff({
         modifiedModelRef.current = modifiedModel;
         const originalEditor = diff.getOriginalEditor(),
           modifiedEditor = diff.getModifiedEditor();
+        contextEditorRef.current = modifiedEditor;
+        modifiedEditor.updateOptions?.({ contextmenu: false });
+        const contextListener = modifiedEditor.onContextMenu?.((event) => {
+          const mouse = event.event.browserEvent ?? event.event;
+          mouse.preventDefault();
+          mouse.stopPropagation();
+          setContextMenu({ x: mouse.clientX, y: mouse.clientY });
+        });
+        if (contextListener) listeners.push(contextListener);
+        const modifiedDom = modifiedEditor.getDomNode?.();
+        if (modifiedDom) {
+          const stopSnapshot = registerSnapshotSource(modifiedDom, () =>
+            readMonacoSnapshot(modifiedEditor, {
+              name: latestRef.current.fileName,
+              path: latestRef.current.documentPath,
+            }),
+          );
+          listeners.push({ dispose: stopSnapshot });
+        }
         listeners.push({
           dispose: installIndentRainbow(originalEditor, monaco),
         });
@@ -429,6 +464,7 @@ function MonacoHistoryDiff({
       originalModelRef.current?.dispose();
       modifiedModelRef.current?.dispose();
       diffRef.current = null;
+      contextEditorRef.current = null;
       runtimeRef.current = null;
       foldLabelsRef.current = null;
       originalModelRef.current = null;
@@ -489,6 +525,35 @@ function MonacoHistoryDiff({
     return () => onErrorChange?.('');
   }, [onErrorChange, error]);
 
+  useEffect(() => {
+    if (!active || noChanges) closeContextMenu();
+  }, [active, closeContextMenu, noChanges]);
+
+  const handleSourceKeyDown = (event) => {
+    const editor = contextEditorRef.current;
+    const keyboard = event.nativeEvent;
+    if (!editor?.hasTextFocus() || event.defaultPrevented || isImeComposing(keyboard)
+      || isCapturingShortcut()) return;
+    if (handleEditingShortcut(keyboard, (action, custom) => {
+      if (!custom) return false;
+      if (busy && action !== 'copy' && action !== 'selectAll') return true;
+      if (action === 'paste') {
+        void pasteMonacoClipboard(editor).catch((error) => console.warn('[paste]', error));
+      } else {
+        editor.trigger('shortcut', monacoEditingCommands[action], null);
+      }
+      return true;
+    })) {
+      event.stopPropagation();
+      return;
+    }
+    const action = matchesHotkey(keyboard, ...sourceHotkeys);
+    if (!action && !replacedHotkey(keyboard, ...sourceHotkeys)) return;
+    event.preventDefault();
+    event.stopPropagation();
+    if (action) void editor.getAction(MONACO_ACTION_IDS[action])?.run();
+  };
+
   return (
     <>
       <div className="history-diff__surface editor-scroll-frame" hidden={noChanges}>
@@ -500,6 +565,7 @@ function MonacoHistoryDiff({
           inert={!ready ? '' : undefined}
           data-comparison-zoom="edit"
           hidden={noChanges}
+          onKeyDownCapture={handleSourceKeyDown}
         />
         {ready && !noChanges && <ScrollEdgeShadows editor={diffRef.current?.getModifiedEditor()} />}
       </div>
@@ -507,6 +573,15 @@ function MonacoHistoryDiff({
         rootRef={containerRef}
         targetSelector=".fold-unchanged"
         labelKey="history.foldUnchangedRegion"
+      />
+      <MonacoContextMenu
+        visible={active && !noChanges && Boolean(contextMenu)}
+        x={contextMenu?.x}
+        y={contextMenu?.y}
+        onClose={closeContextMenu}
+        editorRef={contextEditorRef}
+        documentInfo={{ name: fileName, path: documentPath }}
+        readOnly={busy}
       />
     </>
   );
@@ -1190,6 +1265,8 @@ export default function HistoryDiffView({ active = true, comparison }) {
           original={diff.content}
           modified={modified}
           fileName={external?.modifiedName ?? tab?.name}
+          documentPath={external?.modifiedPath ?? tab?.path}
+          active={active}
           theme={theme}
           fontSize={typography.fontSize}
           fontFamily={fontFamily}

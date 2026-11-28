@@ -31,6 +31,20 @@ export function registerSnapshotSource(kind, getter) {
   };
 }
 
+export function readMonacoSnapshot(editor, tab) {
+  const model = editor?.getModel();
+  if (!model) return null;
+  const selection = editor.getSelection();
+  const hasSelection = Boolean(selection && !selection.isEmpty());
+  const content = hasSelection ? model.getValueInRange(selection) : model.getValue();
+  return {
+    ...markdownPayload(tab, content, hasSelection),
+    mode: 'code',
+    language: model.getLanguageId() || 'plaintext',
+    startLine: hasSelection ? selection.startLineNumber : 1,
+  };
+}
+
 /**
  * 去掉多行代码块的公共前导缩进，保留相对缩进层级。
  */
@@ -179,18 +193,15 @@ export function captureRenderedSelection(root, tab, range = selectedRange(root))
   }
   container.append(fragment);
   prepareRenderedBlocks(container);
-  for (const checkbox of container.querySelectorAll('button.md-preview__task-checkbox')) {
-    const input = container.ownerDocument.createElement('input');
-    input.type = 'checkbox';
-    if (checkbox.getAttribute('aria-checked') === 'true') input.setAttribute('checked', '');
-    input.disabled = true;
-    checkbox.replaceWith(input);
+  for (const row of container.querySelectorAll('li[data-item-type="task"]')) {
+    row.dataset.taskState ||= row.dataset.checked === 'true' ? 'true' : 'false';
   }
   container.querySelectorAll([
     '[hidden]', '.md-preview__fold', '.md-preview__fold-ellipsis', '.md-preview__folded-code-summary',
     '.md-preview__html-edit', '.md-preview__html-panel', '.lang-tag', '.editor-context-menu',
     '.md-code-execution-mount', '.moki-markdown-marker', '.md-preview__selection-markers',
     '.md-preview__selection-cells',
+    '.md-preview__task-checkbox',
     '.moki-code-fold', '.milkdown-code-block .language-picker',
   ].join(',')).forEach((element) => element.remove());
   trimEmptySelectionEdge(container, 'firstChild');
@@ -235,6 +246,12 @@ export function extractActiveEditorSnapshotPayload() {
       return null;
     }
   };
+
+  const focusedSource = activeEl?.closest('.monaco-editor, .md-preview--milkdown');
+  const selectedSource = selectionAnchor?.closest('.md-preview--milkdown');
+  const scopedPayload = trySource(focusedSource) ||
+    (!selection?.isCollapsed && trySource(selectedSource));
+  if (scopedPayload) return scopedPayload;
 
   let payload = null;
   if (!selection?.isCollapsed && selectionAnchor?.closest('.md-preview:not(.md-preview--milkdown)')) {

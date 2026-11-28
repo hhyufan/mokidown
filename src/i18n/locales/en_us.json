@@ -781,6 +781,7 @@
   "empty.searchIdle.hint": "Type a keyword, press Enter to open; Alt + 1 / 2 switches mode.",
   "editor.menu.preview": "Markdown preview context menu",
   "editor.menu.wysiwyg": "Markdown editing context menu",
+  "editor.menu.source": "Source editor context menu",
   "editor.menu.tree": "Tree node context menu",
   "editor.menu.copyAll": "Copy all",
   "editor.menu.heading2": "Heading 2",

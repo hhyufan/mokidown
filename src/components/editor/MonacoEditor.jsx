@@ -58,7 +58,7 @@ import { bindMonacoBase64Folds } from './monacoBase64Folds';
 import { monacoEditingCommands, pasteMonacoClipboard, pasteMonacoImages } from './monacoImagePaste';
 import { handleEditingShortcut } from '@utils/basicEditingShortcuts';
 import { bindMonacoFoldControls, restoreMonacoViewState } from './markdownSplitSync';
-import { registerSnapshotSource } from '@utils/snapshotCapture';
+import { readMonacoSnapshot, registerSnapshotSource } from '@utils/snapshotCapture';
 import { computeRanges } from 'monaco-editor/esm/vs/editor/contrib/folding/browser/indentRangeProvider.js';
 import { conf as markdownLanguage } from 'monaco-editor/esm/vs/basic-languages/markdown/markdown.js';
 
@@ -367,21 +367,8 @@ const MonacoEditorComponent = forwardRef(function MonacoEditorComponent(
       () => editor.saveViewState(),
     );
     const stopSnapshotSource = registerSnapshotSource('monaco', () => {
-      const model = editor.getModel();
-      if (!model) return null;
-      const selection = editor.getSelection();
-      const hasSelection = Boolean(selection && !selection.isEmpty());
-      const content = hasSelection ? model.getValueInRange(selection) : model.getValue();
       const tab = useEditorStore.getState().tabs.find((item) => item.id === currentTabIdRef.current);
-      return {
-        mode: 'code',
-        content,
-        language: model.getLanguageId() || 'plaintext',
-        fileName: tab?.name || '',
-        documentPath: tab?.path || '',
-        startLine: hasSelection ? selection.startLineNumber : 1,
-        isSelection: hasSelection,
-      };
+      return readMonacoSnapshot(editor, tab);
     });
     editor.onDidChangeCursorSelection(requestDocumentViewStateSave);
     editor.onDidScrollChange(requestDocumentViewStateSave);

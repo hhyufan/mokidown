@@ -16,7 +16,7 @@ import { HOTKEY_ACTIONS } from '@/configs/hotkeys';
 import { toMonacoKeybinding } from '@utils/monacoKeybindings';
 
 /** 由 Monaco 官方实现、我们只负责换键位的动作。 */
-const MONACO_ACTION_IDS = {
+export const MONACO_ACTION_IDS = {
   formatDocument: 'editor.action.formatDocument',
   toggleLineComment: 'editor.action.commentLine',
   toggleBlockComment: 'editor.action.blockComment',
