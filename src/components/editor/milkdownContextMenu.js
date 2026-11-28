@@ -166,12 +166,16 @@ export function milkdownContextItems({
   const cm = cmElement ? CodeMirrorView.findFromDOM(cmElement) : null;
   const editorState = useEditorStore.getState();
   const activeTab = editorState.tabs.find((tab) => tab.id === editorState.activeTabId);
+  const tab = {
+    name: documentPath?.split(/[\\/]/).pop() || activeTab?.name,
+    path: documentPath || activeTab?.path,
+  };
   const rangeInCode = cm && domRange &&
     cm.contentDOM.contains(domRange.startContainer) && cm.contentDOM.contains(domRange.endContainer);
-  const rangePayload = domRange && !rangeInCode && captureRenderedSelection(selectionRoot, activeTab, domRange);
+  const rangePayload = domRange && !rangeInCode && captureRenderedSelection(selectionRoot, tab, domRange);
   const nativeHtmlRange = domRange && selectedMarkdownHtml(selectionRoot, domRange);
   const htmlPayload = !cm && !domRange &&
-    renderedHtmlSelection(view, { name: activeTab?.name, path: documentPath }, target);
+    renderedHtmlSelection(view, tab, target);
   if (cm && cm.state.selection.main.empty) {
     const position = cm.posAtCoords({ x, y });
     if (position != null) cm.dispatch({ selection: { anchor: position } });
@@ -181,13 +185,13 @@ export function milkdownContextItems({
   }
   const selection = cm ? cm.state.selection : view.state.selection;
   // Screenshot commands can run from these snapshots without refocusing a live view.
-  const renderedPayload = rangePayload || htmlPayload || (!cm && captureRenderedSelection(view.dom, activeTab));
+  const renderedPayload = rangePayload || htmlPayload || (!cm && captureRenderedSelection(view.dom, tab));
   const snapshotState = {
     state: view.state,
     codeState: cm?.state,
     language: cm && codeBlockLanguageForCm(view, cmElement),
     serialize,
-    tab: { name: activeTab?.name, path: documentPath || activeTab?.path },
+    tab,
   };
   const readSnapshot = () => renderedPayload || snapshotFromEditorState(snapshotState);
   const doc = cm ? cm.state.doc : view.state.doc;
