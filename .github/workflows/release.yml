@@ -45,55 +45,31 @@ jobs:
         run: |
           if ([string]::IsNullOrWhiteSpace($env:WINDOWS_CERTIFICATE) -or
               [string]::IsNullOrWhiteSpace($env:WINDOWS_CERTIFICATE_PASSWORD)) {
-            # 没有代码签名证书也允许发布：安装包依旧带 Tauri 的更新签名
-            # （那个用于校验更新包完整性，是另一回事），只是 Windows 安装时会提示
-            # "未知发布者"。把这两个 secret 配上就会自动启用签名。
-            Write-Warning '未配置 WINDOWS_CERTIFICATE，本次以未签名状态发布。'
-            Write-Output '::warning title=未配置代码签名证书::安装包将以未签名状态发布，Windows 会提示“未知发布者”。'
-            exit 0
+            throw 'Authenticode signing requires WINDOWS_CERTIFICATE and WINDOWS_CERTIFICATE_PASSWORD for public Windows releases.'
           }
           $pfxPath = Join-Path $env:RUNNER_TEMP 'mokidown-code-signing.pfx'
           try {
             [IO.File]::WriteAllBytes($pfxPath, [Convert]::FromBase64String($env:WINDOWS_CERTIFICATE))
             $password = ConvertTo-SecureString $env:WINDOWS_CERTIFICATE_PASSWORD -AsPlainText -Force
-            $certificate = Import-PfxCertificate -FilePath $pfxPath -CertStoreLocation Cert:\CurrentUser\My -Password $password
+            $imported = Import-PfxCertificate -FilePath $pfxPath -CertStoreLocation Cert:\CurrentUser\My -Password $password
           } finally {
             Remove-Item -LiteralPath $pfxPath -ErrorAction SilentlyContinue
           }
-          if (!$certificate -or !$certificate.HasPrivateKey -or $certificate.NotAfter -le (Get-Date)) {
-            throw 'The imported code-signing certificate is missing its private key or has expired.'
-          }
           $codeSigningOid = '1.3.6.1.5.5.7.3.3'
-          if (!($certificate.EnhancedKeyUsageList | Where-Object { $_.Value -eq $codeSigningOid })) {
-            throw 'The imported certificate is not valid for code signing.'
+          $signers = @($imported | Where-Object {
+            $_.HasPrivateKey -and $_.NotAfter -gt (Get-Date) -and
+            ($_.EnhancedKeyUsageList.Value -contains $codeSigningOid)
+          })
+          if ($signers.Count -ne 1) {
+            throw 'The PFX must contain exactly one unexpired code-signing certificate with its private key.'
           }
-          $overlay = @{
-            bundle = @{
-              windows = @{
-                certificateThumbprint = $certificate.Thumbprint
-                digestAlgorithm = 'sha256'
-                timestampUrl = 'http://timestamp.digicert.com'
-              }
-            }
-          } | ConvertTo-Json -Compress -Depth 6
-          "TAURI_CONFIG=$overlay" >> $env:GITHUB_ENV
+          $certificate = $signers[0]
+          "MOKI_WINDOWS_CERT_THUMBPRINT=$($certificate.Thumbprint)" >> $env:GITHUB_ENV
       - name: Build the single branded installer
         env:
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
         run: node scripts/build-react-installer.mjs
-      - name: Sign React installer
-        shell: pwsh
-        env:
-          WINDOWS_CERTIFICATE: ${{ secrets.WINDOWS_CERTIFICATE }}
-        run: |
-          if ([string]::IsNullOrWhiteSpace($env:WINDOWS_CERTIFICATE)) { exit 0 }
-          $config = $env:TAURI_CONFIG | ConvertFrom-Json
-          $thumbprint = $config.bundle.windows.certificateThumbprint
-          if (!$thumbprint) { throw 'Missing Windows signing certificate thumbprint.' }
-          $version = (Get-Content -LiteralPath src-tauri/tauri.conf.json -Raw | ConvertFrom-Json).version
-          $installer = Get-Item -LiteralPath "src-tauri/target/release/react/MokiDown_${version}_x64-setup.exe"
-          & scripts/sign-windows-installer.ps1 -InstallerPath $installer.FullName -Thumbprint $thumbprint
       - name: Sign the React installer with the updater key
         shell: pwsh
         env:

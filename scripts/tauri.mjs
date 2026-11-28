@@ -5,13 +5,17 @@ import { initializeMsvc, ensureCargoOnPath } from './windows-msvc.mjs';
 const args = process.argv.slice(2);
 
 // `npm run tauri build` is the release command: branded React installer plus
-// the refreshed website demo. Use `--app` (or `--bundles`) for a raw Tauri
-// build.
-if (args[0] === 'build' && !args.includes('--app') && !args.includes('--bundles')) {
+// the refreshed website demo. A standalone build uses the same signing step.
+const standaloneBuild = args.length === 2 && ['--app', '--no-bundle'].includes(args[1]);
+if (args[0] === 'build' && (args.length === 1 || standaloneBuild)) {
   const { spawnSync } = await import('node:child_process');
-  const result = spawnSync(process.execPath, [fileURLToPath(new URL('./build-release.mjs', import.meta.url))], {
+  const [entry, ...options] = standaloneBuild
+    ? ['./build-react-installer.mjs', '--app-only']
+    : ['./build-release.mjs'];
+  const result = spawnSync(process.execPath, [fileURLToPath(new URL(entry, import.meta.url)), ...options], {
     stdio: 'inherit',
   });
+  if (result.error) throw result.error;
   process.exit(result.status ?? 1);
 }
 

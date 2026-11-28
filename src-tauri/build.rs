@@ -6,5 +6,10 @@ fn main() {
     // 这种「明明加了权限却不生效」的怪象。
     println!("cargo:rerun-if-changed=capabilities/");
     println!("cargo:rerun-if-changed=tauri.conf.json");
-    tauri_build::build()
+    let manifest = "windows/as-invoker.manifest";
+    println!("cargo:rerun-if-changed={manifest}");
+    let windows = tauri_build::WindowsAttributes::new()
+        .app_manifest(include_str!("windows/as-invoker.manifest"));
+    tauri_build::try_build(tauri_build::Attributes::new().windows_attributes(windows))
+        .expect("Could not build MokiDown resources");
 }

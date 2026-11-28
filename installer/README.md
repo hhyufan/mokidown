@@ -17,6 +17,7 @@ npm run installer:dev         # browser preview; installation is explicitly simu
 npm run installer:tauri:dev   # desktop window; needs a built payload to install
 npm run installer:build       # React production build
 npm run installer:bundle      # build application, silent payload and standalone EXE
+npm run tauri build -- --app   # build the standalone editor EXE without an installer
 ```
 
 `npm run tauri:build` builds the branded React installer only; no MSI is built.
@@ -33,14 +34,33 @@ the original directory, launches the app and closes without action buttons.
 First installation asks only for the location and initial consent, then also
 launches the app automatically. No separate manual update package is published.
 
-Release signing order is: finish the EXE, apply Authenticode when configured,
-then sign those exact bytes with the Tauri updater key. The update manifest
+The editor, branded installer and its NSIS payload declare `asInvoker`.
+The installer writes to the current user's install location and checks that
+the selected directory is writable before launching the silent payload.
+
+The Windows release workflow requires a trusted code-signing certificate via
+`WINDOWS_CERTIFICATE` (base64 PFX) and `WINDOWS_CERTIFICATE_PASSWORD`.
+It verifies the Authenticode signature and timestamp before signing the
+final installer bytes with the Tauri updater key. The update manifest
 points directly to that versioned GitHub asset. Local builds do not publish
 unsigned update manifests.
 
 For a signed local build, set `MOKI_WINDOWS_CERT_THUMBPRINT` to the thumbprint of
-an Authenticode certificate available to Windows SignTool before running the
-build. The script verifies the publisher signature and timestamp on the final EXE.
+an Authenticode certificate available to Windows SignTool. Both build commands
+use this certificate for their Windows executables. Unsigned local builds and
+downloads from a new publisher may trigger
+[Microsoft Defender SmartScreen](https://learn.microsoft.com/windows/apps/package-and-deploy/smartscreen-reputation).
+
+Windows launches an EXE with Low integrity when the file inherits a Low label
+from its build directory. That process cannot write to ordinary user folders
+even when the user's ACL grants access. Set `MOKI_WINDOWS_OUTPUT_DIR` to an
+absolute path in an ordinary user folder to create the local build outputs there.
+Run the build from a regular PowerShell window.
+
+```powershell
+$env:MOKI_WINDOWS_OUTPUT_DIR = Join-Path $env:USERPROFILE 'Downloads/MokiDown-build'
+npm run installer:bundle
+```
 
 ## Installation behavior
 
@@ -55,10 +75,13 @@ Closing the installer is blocked while installation runs.
 React-driven installs refuse to force-kill a running editor. Updater behavior
 without the React progress argument remains unchanged. Backend failures stay in
 the React UI and allow retry. Rust validates paths; no shell executes path text.
-The custom UI requires WebView2. If WebView2 is missing or the custom window
-fails to start, the branded EXE starts its embedded NSIS installer. NSIS can
-install WebView2 before launching MokiDown. The payload remains an internal
-build artifact.
+The custom UI requires WebView2. The installer probes current-user directories
+for write access and uses one temporary workspace per launch for the WebView2
+profile, NSIS payload and the silent install's temporary files. If every
+candidate fails, the startup dialog lists their paths and the Windows errors.
+When WebView2 is missing, the branded EXE starts its embedded NSIS installer.
+NSIS can install WebView2 before launching MokiDown. Other window startup
+failures are reported in a native dialog.
 
 The payload template is based on tauri-bundler **2.10.1** (MIT / Apache-2.0).
 Keep its upgrade, WebView2, association and uninstall logic in sync when upgrading

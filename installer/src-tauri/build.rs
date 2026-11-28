@@ -12,5 +12,9 @@ fn main() {
     } else {
         std::fs::write(output, []).unwrap();
     }
-    tauri_build::build()
+    println!("cargo:rerun-if-changed=../../src-tauri/windows/as-invoker.manifest");
+    let windows = tauri_build::WindowsAttributes::new()
+        .app_manifest(include_str!("../../src-tauri/windows/as-invoker.manifest"));
+    tauri_build::try_build(tauri_build::Attributes::new().windows_attributes(windows))
+        .expect("Could not build MokiDown Setup resources");
 }
