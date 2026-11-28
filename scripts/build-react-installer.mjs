@@ -51,6 +51,8 @@ function checkExecutable(file, { verifyOnly = false } = {}) {
   const commandArgs = [
     '-NoProfile',
     '-NonInteractive',
+    '-ExecutionPolicy',
+    'Bypass',
     '-File',
     path.join(root, 'scripts/windows-executable.ps1'),
     '-ExecutablePath',
