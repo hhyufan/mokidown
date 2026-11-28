@@ -344,7 +344,10 @@ pub fn create_reader(
             .build()
             .map_err(|e| e.to_string())?;
         #[cfg(windows)]
-        crate::style_window_frame(&window);
+        {
+            crate::window_frame::configure(&window, document.opening.is_none());
+            crate::webview_defaults::prepare_editor_resize(&window);
+        }
         Ok::<_, String>(label.clone())
     })();
     if result.is_err() {
@@ -1169,13 +1172,15 @@ fn ensure_main(app: &AppHandle) -> Result<WebviewWindow, String> {
     .inner_size(1200.0, 800.0)
     .min_inner_size(800.0, 600.0)
     .decorations(false)
-    .shadow(false);
+    .shadow(false)
+    .visible(false);
     let main = crate::webview_defaults::app_window(builder)
         .build()
         .map_err(|e| e.to_string())?;
     #[cfg(windows)]
     {
-        crate::style_window_frame(&main);
+        crate::window_frame::configure(&main, true);
+        crate::webview_defaults::prepare_editor_resize(&main);
     }
     Ok(main)
 }

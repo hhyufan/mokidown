@@ -39,6 +39,8 @@ mod terminal;
 mod text_file;
 mod webview_defaults;
 #[cfg(windows)]
+mod window_frame;
+#[cfg(windows)]
 mod windows_external;
 #[cfg(desktop)]
 mod workspace_git;
@@ -1818,64 +1820,6 @@ async fn open_external(url: String) -> Result<(), String> {
     open::that(url).map_err(|e| format!("Failed to open URL: {}", e))
 }
 
-/// 调整无边框窗口的 DWM 外观。
-///
-/// 背景：Windows 下 Tauri 把「无边框窗口的 1px 边框」和 DWM 阴影绑在一起，
-/// 只要 `shadow: true`，Win11 就会沿窗口画一圈系统强调色（通常为蓝色）的边框。
-/// 因此窗口配置里关闭了 `shadow`（见 tauri.conf.json）。
-///
-/// - `DWMWA_WINDOW_CORNER_PREFERENCE` 显式要求圆角，补回关闭阴影后失去的
-///   Win11 圆角外观；
-/// - `DWMWA_BORDER_COLOR` 置为 `DWMWA_COLOR_NONE`，万一以后重新开启阴影，
-///   边框依然不会出现。
-/// - 关闭主窗口的系统过渡，避免缩放时混合尺寸不同的两帧。
-///
-/// 旧版 Windows 不认识这些属性，调用失败时静默忽略。
-#[cfg(windows)]
-fn style_window_frame(window: &tauri::WebviewWindow<tauri::Wry>) {
-    use std::ffi::c_void;
-
-    #[link(name = "dwmapi")]
-    extern "system" {
-        fn DwmSetWindowAttribute(
-            hwnd: *mut c_void,
-            attribute: u32,
-            value: *const c_void,
-            size: u32,
-        ) -> i32;
-    }
-
-    const DWMWA_TRANSITIONS_FORCEDISABLED: u32 = 3;
-    const DWMWA_WINDOW_CORNER_PREFERENCE: u32 = 33;
-    const DWMWA_BORDER_COLOR: u32 = 34;
-    const DWMWCP_ROUND: u32 = 2;
-    const DWMWA_COLOR_NONE: u32 = 0xFFFF_FFFE;
-
-    let Ok(hwnd) = window.hwnd() else {
-        return;
-    };
-    // 各版本 windows crate 的 `HWND` 内层可能是指针或整数，统一取整数值。
-    let raw = hwnd.0 as isize;
-    if raw == 0 {
-        return;
-    }
-
-    for (attribute, value) in [
-        (DWMWA_TRANSITIONS_FORCEDISABLED, 1),
-        (DWMWA_WINDOW_CORNER_PREFERENCE, DWMWCP_ROUND),
-        (DWMWA_BORDER_COLOR, DWMWA_COLOR_NONE),
-    ] {
-        unsafe {
-            DwmSetWindowAttribute(
-                raw as *mut c_void,
-                attribute,
-                std::ptr::addr_of!(value).cast::<c_void>(),
-                std::mem::size_of::<u32>() as u32,
-            );
-        }
-    }
-}
-
 /// 品牌更名前的 bundle identifier，用来定位旧的应用数据目录。
 ///
 /// 旧目录只是从 `app_data_dir()` 的父目录推导出来的“迁移来源”，
@@ -2017,8 +1961,8 @@ pub fn run() {
 
     #[allow(unused_mut)]
     let mut context = tauri::generate_context!();
-    #[cfg(all(windows, debug_assertions))]
-    let development_windows = context
+    #[cfg(windows)]
+    let startup_windows = context
         .config_mut()
         .app
         .windows
@@ -2055,20 +1999,33 @@ pub fn run() {
             updater.build()
         });
 
-    // 启动期初始化：Windows 下补回关闭阴影后失去的窗口圆角，
-    // 并确保 DWM 不绘制强调色边框。
+    // Configure the native window frame before showing the editor.
     builder = builder.setup(move |app| {
-        #[cfg(all(windows, debug_assertions))]
-        for config in &development_windows {
-            let builder = tauri::WebviewWindowBuilder::from_config(app, config)?;
-            webview_defaults::app_window(builder).build()?;
+        #[cfg(windows)]
+        for config in &startup_windows {
+            let window = tauri::WebviewWindowBuilder::from_config(app, config)
+                .and_then(|builder| webview_defaults::app_window(builder).build());
+            if let Err(error) = window {
+                if config.label == "splash" {
+                    log::warn!("[startup] Could not create splash window: {error}");
+                    continue;
+                }
+                #[cfg(not(debug_assertions))]
+                {
+                    startup::show_startup_error(&error);
+                    app.handle().exit(1);
+                    return Ok(());
+                }
+                #[cfg(debug_assertions)]
+                return Err(error.into());
+            }
         }
         // 品牌更名导致 app_data_dir() 指向新目录：先把旧目录里的本地历史与草稿搬过来。
         migrate_legacy_app_data(app.handle());
         let main_window = app.get_webview_window("main");
         #[cfg(windows)]
         if let Some(window) = main_window.as_ref() {
-            style_window_frame(window);
+            window_frame::configure(window, true);
             webview_defaults::prepare_editor_resize(window);
         }
         // Both windows start hidden; the decoded splash and mounted App announce
@@ -2257,9 +2214,18 @@ pub fn run() {
             language_plugins::uninstall_language_plugin,
         ]);
 
-    let app = builder
-        .build(context)
-        .expect("error while building tauri application");
+    let app = match builder.build(context) {
+        Ok(app) => app,
+        Err(error) => {
+            #[cfg(all(windows, not(debug_assertions)))]
+            {
+                startup::show_startup_error(&error);
+                std::process::exit(1);
+            }
+            #[cfg(not(all(windows, not(debug_assertions))))]
+            panic!("error while building tauri application: {error}");
+        }
+    };
 
     app.run(|_app_handle, _event| {
         // macOS 的“打开方式”不经过命令行参数，而是由系统通过 odoc 事件

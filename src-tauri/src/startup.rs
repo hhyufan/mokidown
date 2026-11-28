@@ -7,6 +7,19 @@ use crate::startup_gate::StartupGate;
 #[derive(Default)]
 pub struct StartupState(Mutex<StartupGate>);
 
+#[cfg(all(windows, not(debug_assertions)))]
+pub fn show_startup_error(error: &tauri::Error) {
+    use windows_sys::Win32::UI::WindowsAndMessaging::{MessageBoxW, MB_ICONERROR, MB_OK};
+
+    log::error!("[startup] {error}");
+    let title: Vec<_> = "MokiDown".encode_utf16().chain([0]).collect();
+    let message: Vec<_> = format!("MokiDown could not start.\n\n{error}")
+        .encode_utf16()
+        .chain([0])
+        .collect();
+    unsafe { MessageBoxW(0, message.as_ptr(), title.as_ptr(), MB_OK | MB_ICONERROR) };
+}
+
 /// 更新器装完后拉起应用时带的参数。React 安装器用这个值告诉主程序
 /// 「这次是被更新拉起来的」。
 pub const AFTER_UPDATE_FLAG: &str = "--moki-after-update";

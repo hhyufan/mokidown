@@ -766,8 +766,17 @@ fn start(id: String, session: Session, profile: std::path::PathBuf) {
             },
         ));
         let path = HSTRING::from(profile.as_os_str());
+        let options: ICoreWebView2EnvironmentOptions = {
+            let opts = webview2_com::CoreWebView2EnvironmentOptions::default();
+            unsafe {
+                opts.set_additional_browser_arguments(
+                    crate::webview_defaults::WINDOWS_BROWSER_ARGS.to_string(),
+                );
+            }
+            opts.into()
+        };
         let result = unsafe {
-            CreateCoreWebView2EnvironmentWithOptions(PCWSTR::null(), &path, None, &callback)
+            CreateCoreWebView2EnvironmentWithOptions(PCWSTR::null(), &path, &options, &callback)
         };
         if let Err(error) = result {
             environment_ready(Err(error.to_string()));
